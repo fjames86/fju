@@ -1,0 +1,25 @@
+
+RPC_DEFINES=-g
+
+USE_SHAUTH=yes
+SHAUTH=
+
+.if $(USE_SHAUTH) == yes
+SHAUTH=shauth.c -lcrypto
+RPC_DEFINES+=-DUSE_SHAUTH
+.endif
+
+all: rpcd client
+
+rpcd: rpc.c rpc.h rpcd.c
+	cc -o rpcd $(RPC_DEFINES) rpc.c rpcd.c $(SHAUTH)
+
+client: client.c rpc.c rpc.h
+	cc -o client $(RPC_DEFINES) client.c rpc.c $(SHAUTH)
+
+.PHONY: tar clean
+tar:
+	tar -czvf rpc.tar.gz rpc.h rpc.c Makefile rpcd.c client.c shauth.h shauth.c 
+
+clean:
+	rm client rpcd

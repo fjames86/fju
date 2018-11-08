@@ -1,0 +1,16 @@
+
+How to write GTK+ applications
+
+1. Install gtk development libraries
+
+2. Install glade gui. This is a gui painter for gtk.
+It generates xml files which can be linked into application binaries
+for use in generating gtk guis.
+
+3. in glade, specify callback handler function names for the "signals" you want
+each control (widget) to handle. E.g. the main application window needs to handle
+the destroy signal so that it can call gtk_main_quit() to cause the main loop to exit.
+Buttons will want to handle the clicked signal etc.
+
+4. Add lines to resources.xml file to include the .glade files in the compiled binary.
+

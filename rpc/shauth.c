@@ -1,3 +1,44 @@
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2018 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+
+/*
+ * This file defines a custom authentication provider shauth ("shared secret authentication").
+ * It is more an example than something which should be used seriously, although 
+ * it should be sufficiently secure to be used reasonably confidently. 
+ * The basic premise is both client and server have knowledge of a shared secret.
+ * The client generates a random session key and encrypts a header containing 
+ * this session key and sends this to the server in the initial handshake message.
+ * The server decrypts this message using the secret key and verifies successful
+ * decryption by comparing a timestamp against the current time. The timestamp 
+ * must be within a specified clock skew (e.g. 5 minutes). The timestamp 
+ * must also match a timestamp verifier (timestamp - 1). 
+ * Once authenticated, the client is assigned a random nickname (uint32_t) 
+ * which the client can use for subsequent communication without having to 
+ * reauthenticate. 
+ * This is similar to how "real" auth flavours work, e.g. RPC_AUTH_DES or RPC_AUTH_GSS.
+ */
 
 #include "shauth.h"
 

@@ -25,6 +25,15 @@
  * 
  */
 
+
+/*
+ * This file defines a CLI tool for encrypting files using a password 
+ * derived key. The file is prepended with a header containing a randomly 
+ * generated single-use key, encrypted with the password dervied key. The
+ * file contents is then encrypted using this temporary key. The file contents
+ * is also checksummed with an hmac to test for file data integrity. 
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

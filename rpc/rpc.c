@@ -239,6 +239,8 @@ int rpc_encode_msg( struct xdr_s *xdr, struct rpc_msg *x ) {
 	sts = rpc_encode_mismatch( xdr, &x->u.reply.u.accept.u.mismatch );
 	if( sts ) return sts;
 	break;
+      default:
+	break;
       }
       break;
     case RPC_MSG_REJECT:
@@ -253,6 +255,8 @@ int rpc_encode_msg( struct xdr_s *xdr, struct rpc_msg *x ) {
 	sts = xdr_encode_int32( xdr, x->u.reply.u.reject.u.auth_error );
 	break;
       }
+      break;
+    default:
       break;
     }
     break;
@@ -297,6 +301,8 @@ int rpc_decode_msg( struct xdr_s *xdr, struct rpc_msg *x ) {
 	sts = rpc_decode_mismatch( xdr, &x->u.reply.u.accept.u.mismatch );
 	if( sts ) return sts;
 	break;
+      default:
+	break;
       }
       break;
     case RPC_MSG_REJECT:
@@ -309,6 +315,8 @@ int rpc_decode_msg( struct xdr_s *xdr, struct rpc_msg *x ) {
 	break;
       case RPC_REJECT_AUTH_ERROR:
 	sts = xdr_decode_int32( xdr, (int32_t *)&x->u.reply.u.reject.u.auth_error );
+	break;
+      default:
 	break;
       }
       break;
@@ -593,7 +601,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 }
 
 
-int rpc_recv_reply( struct rpc_inc *inc ) {
+int rpc_process_reply( struct rpc_inc *inc ) {
   int sts;
   
   sts = rpc_decode_msg( &inc->xdr, &inc->msg );
@@ -871,10 +879,11 @@ int rpc_call_tcp( struct rpc_inc *inc ) {
 #endif
   int sts;
   struct sockaddr_in sin;
-  int len, offset;
+  int offset;
   uint8_t lbuf[4];
   struct xdr_s tmpx;
-    
+  uint32_t len;
+  
   fd = socket( AF_INET, SOCK_STREAM, 0 );
   if( fd < 0 ) return -1;
     
@@ -963,7 +972,7 @@ int rpcbind_call_dump( struct sockaddr_in *addr, struct rpcbind_mapping *mlist, 
   sts = rpc_call_tcp( &inc );
   if( sts ) goto done;
   
-  sts = rpc_recv_reply( &inc );
+  sts = rpc_process_reply( &inc );
   if( sts ) goto done;
   
   /* decode result from xdr */

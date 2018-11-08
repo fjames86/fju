@@ -352,6 +352,8 @@ static void rpc_init_listen( void ) {
       if( sts < 0 ) usage( "Failed to bind to UDP6 port %d: %s", ntohs( rpc.listen[i].addr.sin6.sin6_port ), strerror( errno ) );
       
       break;
+    default:
+      break;
     }
   }   
 
@@ -404,6 +406,8 @@ static void rpc_poll( int timeout ) {
       break;
     case RPC_NSTATE_CONNECT:
       pfd[i].events = POLLOUT;
+      break;
+    default:
       break;
     }
 
@@ -506,6 +510,8 @@ static void rpc_poll( int timeout ) {
 	}
 
 	break;
+      default:
+	break;
       }
 
     } else if( pfd[i].revents & POLLOUT ) {
@@ -554,6 +560,8 @@ static void rpc_poll( int timeout ) {
 	  
 	  if( c->cdata.cb ) c->cdata.cb( c );
 	}
+	break;
+      default:
 	break;
       }
 
@@ -703,6 +711,8 @@ static void rpc_run( void ) {
 	case RPC_LISTEN_TCP6:
 	  map.port = ntohs( rpc.listen[i].addr.sin6.sin6_port );
 	  map.prot = IPPROTO_TCP;
+	  break;
+	default:
 	  break;
 	}
 

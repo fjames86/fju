@@ -216,7 +216,7 @@ int rpc_complete_call( struct rpc_inc *inc, int handle );
 int rpc_init_accept_reply( struct rpc_inc *inc, uint32_t xid, int accept_stat, struct rpc_mismatch *mm, int *handle );
 int rpc_complete_accept_reply( struct rpc_inc *inc, int handle );
 int rpc_init_reject_reply( struct rpc_inc *inc, uint32_t xid, int32_t auth_stat );
-int rpc_recv_reply( struct rpc_inc *inc );
+int rpc_process_reply( struct rpc_inc *inc );
 int rpc_process_incoming( struct rpc_inc *inc );
 
 struct rpcbind_mapping {

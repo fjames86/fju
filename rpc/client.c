@@ -82,7 +82,7 @@ int main( int argc, char **argv ) {
     exit( 1 );
   }
 
-  sts = rpc_recv_reply( &inc );
+  sts = rpc_process_reply( &inc );
   if( sts ) {
     printf( "Failed to receive reply\n" );
     exit( 1 );

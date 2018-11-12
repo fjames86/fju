@@ -1083,7 +1083,7 @@ void rpc_iterator_service( void ) {
   now = rpc_now();
   it = itlist;
   while( it ) {
-    if( it->timeout >= now ) {
+    if( (it->timeout == 0) || (it->timeout >= now) ) {
       it->timeout = now + it->period;
       it->cb( it );
     }
@@ -1102,7 +1102,7 @@ int rpc_iterator_timeout( void ) {
   it = itlist;
   now = rpc_now();
   while( it ) {
-    if( it->timeout >= now ) {
+    if( (it->timeout == 0) || (it->timeout >= now) ) {
       timeout = 0;
       break;
     } else if( (int)(now - it->timeout) > timeout ) {

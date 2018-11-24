@@ -30,12 +30,20 @@
  * encryption or checksumming.
  */
 
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
+
 #include "rpc.h"
 
 #include <errno.h>
 #include <stdarg.h>
 #include <time.h>
+
+#ifndef WIN32
 #include <poll.h>
+#endif
 
 void xdr_init( struct xdr_s *xdr, uint8_t *buf, int size ) {
   xdr->buf = buf;
@@ -839,12 +847,13 @@ int rpc_call_udp( struct rpc_inc *inc ) {
   SOCKET fd;
 #else
   int fd;
+  struct pollfd pfd[1];
 #endif
   int sts;
   struct sockaddr_in sin;
   int len, offset;
   struct xdr_s tmpx;
-  struct pollfd pfd[1];
+
   
   fd = socket( AF_INET, SOCK_DGRAM, 0 );
   if( fd < 0 ) return -1;
@@ -865,7 +874,7 @@ int rpc_call_udp( struct rpc_inc *inc ) {
     
     evt = WSACreateEvent();
     WSAEventSelect( fd, evt, FD_READ );
-    WSAWaitForMultipleObjects( 1, &evt, TRUE, 5000, FALSE );
+    WSAWaitForMultipleEvents( 1, &evt, TRUE, 5000, FALSE );
     WSAEnumNetworkEvents( fd, evt, &events );
     WSACloseEvent( evt );
   }
@@ -1042,11 +1051,11 @@ int rpcbind_call_set( struct sockaddr_in *addr, struct rpcbind_mapping *m ) {
 
 uint64_t rpc_now( void ) {
 #ifdef WIN32
-  return GetTickCount64();
+  return GetTickCount();
 #else
   struct timespec tm;
   clock_gettime( CLOCK_MONOTONIC, &tm );
-  return (uint64_t)(tm.tv_sec + (tm.tv_nsec / (1000ULL * 1000ULL)));
+  return (uint64_t)((tm.tv_sec * 1000ULL) + (tm.tv_nsec / (1000ULL * 1000ULL)));
 #endif
 }
 
@@ -1083,7 +1092,7 @@ void rpc_iterator_service( void ) {
   now = rpc_now();
   it = itlist;
   while( it ) {
-    if( (it->timeout == 0) || (it->timeout >= now) ) {
+    if( (it->timeout == 0) || (now >= it->timeout) ) {
       it->timeout = now + it->period;
       it->cb( it );
     }
@@ -1102,7 +1111,7 @@ int rpc_iterator_timeout( void ) {
   it = itlist;
   now = rpc_now();
   while( it ) {
-    if( (it->timeout == 0) || (it->timeout >= now) ) {
+    if( (it->timeout == 0) || (now >= it->timeout) ) {
       timeout = 0;
       break;
     } else if( (int)(now - it->timeout) > timeout ) {
@@ -1219,3 +1228,20 @@ void rpc_waiter_service( void ) {
 
 
   
+int rpc_errno( void ) {
+#ifdef WIN32
+    return (int)WSAGetLastError();
+#else
+    return errno;
+#endif
+}
+
+char *rpc_strerror( int sts ) {
+    static char buf[256];
+#ifdef WIN32
+    FormatMessageA( FORMAT_MESSAGE_FROM_SYSTEM, NULL, sts, 0, buf, 256, NULL );
+#else
+    strcpy( buf, strerror( sts ) );
+#endif
+    return buf;
+}

@@ -93,6 +93,14 @@ int main( int argc, char **argv ) {
   inc.pvr = shauth_provider();
   inc.pcxt = &sa;
 #endif
+
+#ifdef WIN32
+  {
+      WSADATA wsadata;
+      WSAStartup( MAKEWORD(2,2), &wsadata );
+  }
+#endif
+
   
   xdr_init( &inc.xdr, rpc_buf, sizeof(rpc_buf) );
   rpc_init_call( &inc, 100000, 2, 4, &handle );

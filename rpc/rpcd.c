@@ -32,8 +32,17 @@
  * is filled out with the reply data and should then be used to send back to the client.
  */
 
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#include <ws2tcpip.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
+
+#ifndef WIN32
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -44,8 +53,8 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <fcntl.h>
-#include <stdarg.h>
 #include <inttypes.h>
+#endif
 
 #include "rpc.h"
 
@@ -66,12 +75,18 @@ typedef enum {
 } rpc_listen_t;
 
 struct rpc_listen {
+#ifdef WIN32
+    SOCKET fd;
+#else
   int fd;
+#endif
   rpc_listen_t type;
   union {
     struct sockaddr_in sin;
     struct sockaddr_in6 sin6;
+#ifndef WIN32
     struct sockaddr_un sun;
+#endif
   } addr;
 };
 
@@ -95,7 +110,11 @@ struct rpc_conn;
 struct rpc_conn {
   struct rpc_conn *next;
 
+#ifdef WIN32
+    SOCKET fd;
+#else
   int fd;
+#endif
   rpc_nstate_t nstate;
 
   rpc_cstate_t cstate;
@@ -126,18 +145,25 @@ static struct {
   struct rpc_conn *flist;    /* free list */
 
   char *shauth_secret;
-  
+
+#ifdef WIN32
+    HANDLE evt;
+#endif
+    
   struct rpc_conn conntab[RPC_MAX_CONN];
   uint8_t buftab[RPC_MAX_CONN][RPC_MAX_BUF];
 
 } rpc;
 
-
+#ifdef WIN32
+typedef int socklen_t;
+#endif
 
 static void rpc_run( void );
 static void rpc_accept( struct rpc_listen *lis );
 
 
+#ifndef WIN32
 static void rpc_sig( int sig, siginfo_t *info, void *context ) {
 
   (void)(info);
@@ -151,20 +177,25 @@ static void rpc_sig( int sig, siginfo_t *info, void *context ) {
   }
 
 }
+#endif
 
 static void usage( char *fmt, ... ) {
   va_list args;
 
   printf( "Usage: rpcd [-u port] [-u6 port]\n"
 	  "            [-t port] [-t6 port]\n"
+#ifndef WIN32
 	  "            [-L path]\n"
+#endif
 	  "            [-f]\n"
 	  "\n"
 	  "  Where:\n"
 	  "            -f               Run in foreground\n"
 	  "            -u -u6           Listen on IP/UDP or IPv6/UDP\n"
 	  "            -t -t6           Listen on IP/TCP or IPv6/TCP\n"
+#ifndef WIN32
 	  "            -L path          Listen on AF_UNIX socket file\n"
+#endif
 #ifdef USE_SHAUTH
 	  "            -s secret        Shared secret\n"
 #endif
@@ -183,7 +214,9 @@ static void usage( char *fmt, ... ) {
 }
 
 int main( int argc, char **argv ) {
+#ifndef WIN32
   struct sigaction sa;
+#endif
   int i;
 
   /* parse command line */
@@ -225,6 +258,7 @@ int main( int argc, char **argv ) {
       rpc.listen[rpc.nlisten].addr.sin6.sin6_family = AF_INET6;
       rpc.listen[rpc.nlisten].addr.sin6.sin6_port = htons( atoi( argv[i] ) );
       rpc.nlisten++;
+#ifndef WIN32
     } else if( strcmp( argv[i], "-L" ) == 0 ) {
       if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
 
@@ -234,6 +268,7 @@ int main( int argc, char **argv ) {
       rpc.listen[rpc.nlisten].addr.sun.sun_family = AF_UNIX;
       strncpy( rpc.listen[rpc.nlisten].addr.sun.sun_path, argv[i], sizeof(rpc.listen[rpc.nlisten].addr.sun.sun_path) );
       rpc.nlisten++;
+#endif
     } else if( strcmp( argv[i], "-f" ) == 0 ) {
       rpc.foreground = 1;
 #ifdef USE_SHAUTH
@@ -251,6 +286,8 @@ int main( int argc, char **argv ) {
 
   
   if( !rpc.foreground ) {
+#ifdef WIN32
+#else
     pid_t pid = fork();
     if( pid < 0 ) exit( 1 );
     if( pid != 0 ) exit( 0 );
@@ -266,8 +303,10 @@ int main( int argc, char **argv ) {
     close( STDIN_FILENO ); open( "/dev/null", O_RDONLY );
     close( STDOUT_FILENO ); open( "/dev/null", O_WRONLY );
     close( STDERR_FILENO ); open( "/dev/null", O_WRONLY );
+#endif
   }
 
+#ifndef WIN32
   sa.sa_sigaction = rpc_sig;
   sa.sa_flags = SA_SIGINFO;
   sigemptyset( &sa.sa_mask );
@@ -279,7 +318,8 @@ int main( int argc, char **argv ) {
   sigaction( SIGHUP, &sa, NULL );
   sigaction( SIGBUS, &sa, NULL );
   sigaction( SIGPIPE, &sa, NULL );
-
+#endif
+  
   rpc_run();
 
   return 0;
@@ -312,16 +352,16 @@ static void rpc_init_listen( void ) {
       rpc_log( LOG_LVL_INFO, "Listening on TCP port %d", (int)ntohs( rpc.listen[i].addr.sin.sin_port ) );
 
       rpc.listen[i].fd = socket( AF_INET, SOCK_STREAM, 0 );
-      if( rpc.listen[i].fd < 0 ) usage( "Failed to open TCP socket: %s", strerror( errno ) );
+      if( rpc.listen[i].fd < 0 ) usage( "Failed to open TCP socket: %s", rpc_strerror( rpc_errno() ) );
 
       sts = 1;
-      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, &sts, sizeof(sts) );
+      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, (char *)&sts, sizeof(sts) );
       
       sts = bind( rpc.listen[i].fd, (struct sockaddr *)&rpc.listen[i].addr.sin, sizeof(rpc.listen[i].addr.sin) );
-      if( sts < 0 ) usage( "Failed to bind to TCP port %d: %s", ntohs( rpc.listen[i].addr.sin.sin_port ), strerror( errno ) );
+      if( sts < 0 ) usage( "Failed to bind to TCP port %d: %s", ntohs( rpc.listen[i].addr.sin.sin_port ), rpc_strerror( rpc_errno() ) );
 
       sts = listen( rpc.listen[i].fd, SOMAXCONN );
-      if( sts < 0 ) usage( "Failed to listen on TCP port %d: %s", ntohs( rpc.listen[i].addr.sin.sin_port ), strerror( errno ) );
+      if( sts < 0 ) usage( "Failed to listen on TCP port %d: %s", ntohs( rpc.listen[i].addr.sin.sin_port ), rpc_strerror( rpc_errno() ) );
 
       break;
 
@@ -329,46 +369,48 @@ static void rpc_init_listen( void ) {
       rpc_log( LOG_LVL_INFO, "Listening on TCP6 port %d", (int)ntohs( rpc.listen[i].addr.sin6.sin6_port ) );
 
       rpc.listen[i].fd = socket( AF_INET6, SOCK_STREAM, 0 );
-      if( rpc.listen[i].fd < 0 ) usage( "Failed to open TCP6 socket: %s", strerror( errno ) );
+      if( rpc.listen[i].fd < 0 ) usage( "Failed to open TCP6 socket: %s", rpc_strerror( rpc_errno() ) );
       
       sts = 1;
-      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, &sts, sizeof(sts) );
+      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, (char *)&sts, sizeof(sts) );
       
       sts = bind( rpc.listen[i].fd, (struct sockaddr *)&rpc.listen[i].addr.sin6, sizeof(rpc.listen[i].addr.sin6) );
-      if( sts < 0 ) usage( "Failed to bind to TCP6 port %d: %s", ntohs( rpc.listen[i].addr.sin6.sin6_port ), strerror( errno ) );
+      if( sts < 0 ) usage( "Failed to bind to TCP6 port %d: %s", ntohs( rpc.listen[i].addr.sin6.sin6_port ), rpc_strerror( rpc_errno() ) );
 
       sts = listen( rpc.listen[i].fd, SOMAXCONN );
-      if( sts < 0 ) usage( "Failed to listen on TCP6 port %d: %s", ntohs( rpc.listen[i].addr.sin6.sin6_port ), strerror( errno ) );
+      if( sts < 0 ) usage( "Failed to listen on TCP6 port %d: %s", ntohs( rpc.listen[i].addr.sin6.sin6_port ), rpc_strerror( rpc_errno() ) );
 
       break;
 
+#ifndef WIN32
     case RPC_LISTEN_UNIX:
       rpc_log( LOG_LVL_INFO, "Listening on UNIX path %s", rpc.listen[i].addr.sun.sun_path );
 
       rpc.listen[i].fd = socket( AF_UNIX, SOCK_STREAM, 0 );
-      if( rpc.listen[i].fd < 0 ) usage( "Failed to open UNIX socket: %s", strerror( errno ) );
+      if( rpc.listen[i].fd < 0 ) usage( "Failed to open UNIX socket: %s", rpc_strerror( rpc_errno() ) );
 
       sts = 1;
-      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, &sts, sizeof(sts) );
+      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, (char *)&sts, sizeof(sts) );
 
       sts = bind( rpc.listen[i].fd, (struct sockaddr *)&rpc.listen[i].addr.sun, sizeof(rpc.listen[i].addr.sun) );
-      if( sts < 0 ) usage( "Failed to bind to UNIX %s: %s", rpc.listen[i].addr.sun.sun_path, strerror( errno ) );
+      if( sts < 0 ) usage( "Failed to bind to UNIX %s: %s", rpc.listen[i].addr.sun.sun_path, rpc_strerror( rpc_errno() ) );
 
       sts = listen( rpc.listen[i].fd, SOMAXCONN );
-      if( sts < 0 ) usage( "Failed to listen on UNIX %s: %s", rpc.listen[i].addr.sun.sun_path, strerror( errno ) );
+      if( sts < 0 ) usage( "Failed to listen on UNIX %s: %s", rpc.listen[i].addr.sun.sun_path, rpc_strerror( rpc_errno() ) );
       break;
-
+#endif
+      
     case RPC_LISTEN_UDP:
       rpc_log( LOG_LVL_INFO, "Listening on UDP port %d", (int)ntohs( rpc.listen[i].addr.sin.sin_port ) );
 
       rpc.listen[i].fd = socket( AF_INET, SOCK_DGRAM, 0 );
-      if( rpc.listen[i].fd < 0 ) usage( "Failed to open UDP socket: %s", strerror( errno ) );
+      if( rpc.listen[i].fd < 0 ) usage( "Failed to open UDP socket: %s", rpc_strerror( rpc_errno() ) );
 
       sts = 1;
-      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, &sts, sizeof(sts) );
+      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, (char *)&sts, sizeof(sts) );
 
       sts = bind( rpc.listen[i].fd, (struct sockaddr *)&rpc.listen[i].addr.sin, sizeof(rpc.listen[i].addr.sin) );
-      if( sts < 0 ) usage( "Failed to bind to UDP port %d: %s", ntohs( rpc.listen[i].addr.sin.sin_port ), strerror( errno ) );
+      if( sts < 0 ) usage( "Failed to bind to UDP port %d: %s", ntohs( rpc.listen[i].addr.sin.sin_port ), rpc_strerror( rpc_errno() ) );
       
       break;
 
@@ -376,13 +418,13 @@ static void rpc_init_listen( void ) {
       rpc_log( LOG_LVL_INFO, "Listening on UDP6 port %d", (int)ntohs( rpc.listen[i].addr.sin6.sin6_port ) );
 
       rpc.listen[i].fd = socket( AF_INET6, SOCK_DGRAM, 0 );
-      if( rpc.listen[i].fd < 0 ) usage( "Failed to open UDP6 socket: %s", strerror( errno ) );
+      if( rpc.listen[i].fd < 0 ) usage( "Failed to open UDP6 socket: %s", rpc_strerror( rpc_errno() ) );
       
       sts = 1;
-      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, &sts, sizeof(sts) );
+      setsockopt( rpc.listen[i].fd, SOL_SOCKET, SO_REUSEADDR, (char *)&sts, sizeof(sts) );
 
       sts = bind( rpc.listen[i].fd, (struct sockaddr *)&rpc.listen[i].addr.sin6, sizeof(rpc.listen[i].addr.sin6) );
-      if( sts < 0 ) usage( "Failed to bind to UDP6 port %d: %s", ntohs( rpc.listen[i].addr.sin6.sin6_port ), strerror( errno ) );
+      if( sts < 0 ) usage( "Failed to bind to UDP6 port %d: %s", ntohs( rpc.listen[i].addr.sin6.sin6_port ), rpc_strerror( rpc_errno() ) );
       
       break;
     default:
@@ -408,232 +450,329 @@ static void rpc_init_listen( void ) {
 
 }
 
+#ifdef WIN32
+#define POLLIN        0x0001
+#define POLLOUT       0x0004
+#define POLLERR       0x0008
+#define POLLHUP       0x0010
+#endif
+
 static void rpc_poll( int timeout ) {
-  int i, sts, npfd;
-  struct pollfd pfd[RPC_MAX_LISTEN + RPC_MAX_CONN];
-  struct xdr_s tmpx;
-  uint8_t tmpbuf[4];
-  struct rpc_conn *c, *prev, *next;
+    int i, sts;
+    int npfd;
+#ifdef WIN32
+    WSANETWORKEVENTS events;
+#else
+    struct pollfd pfd[RPC_MAX_LISTEN + RPC_MAX_CONN];
+#endif
+    int revents[RPC_MAX_LISTEN + RPC_MAX_CONN];
+    struct xdr_s tmpx;
+    uint8_t tmpbuf[4];
+    struct rpc_conn *c, *prev, *next;
 
-  memset( pfd, 0, sizeof(pfd) );
-  for( i = 0; i < RPC_MAX_LISTEN; i++ ) {
-    if( i < rpc.nlisten ) {
-      pfd[i].fd = rpc.listen[i].fd;
-      pfd[i].events = POLLIN;
-      pfd[i].revents = 0;
-    } else pfd[i].fd = -1;
-  }
-
-  i = RPC_MAX_LISTEN;
-  c = rpc.clist;
-  npfd = RPC_MAX_LISTEN;
-  while( c ) {
-    pfd[i].fd = c->fd;
-
-    switch( c->nstate ) {
-    case RPC_NSTATE_RECV:
-      pfd[i].events = POLLIN;
-      break;
-    case RPC_NSTATE_SEND:
-      pfd[i].events = POLLOUT;
-      break;
-    case RPC_NSTATE_CONNECT:
-      pfd[i].events = POLLOUT;
-      break;
-    default:
-      break;
-    }
-
-    pfd[i].revents = 0;
-
-    c = c->next;
-    i++;
-    npfd++;
-  }
-
-
-  sts = poll( pfd, npfd, timeout );
-  if( sts <= 0 ) return;
-
-  /* process connections first */
-  i = RPC_MAX_LISTEN;
-  c = rpc.clist;
-  while( c ) {
-    if( (pfd[i].revents & POLLERR) || (pfd[i].revents & POLLHUP) ) {
-      c->cstate = RPC_CSTATE_CLOSE;
-    } else if( pfd[i].revents & POLLIN ) {
-
-      switch( c->cstate ) {
-      case RPC_CSTATE_RECVLEN:
-	sts = recv( c->fd, c->buf, 4, 0 );
-	if( sts < 0 ) {
-	  if( (errno == EAGAIN) || (errno == EINTR) ) break;
-	  c->cstate = RPC_CSTATE_CLOSE;
-	  break;
-	} else if( sts == 0 ) {
-	  c->cstate = RPC_CSTATE_CLOSE;
+#ifndef WIN32
+    memset( pfd, 0, sizeof(pfd) );
+#endif
+    for( i = 0; i < RPC_MAX_LISTEN; i++ ) {
+	if( i < rpc.nlisten ) {
+#ifdef WIN32
+	    WSAEventSelect( rpc.listen[i].fd, rpc.evt, FD_READ );
+#else
+	    pfd[i].fd = rpc.listen[i].fd;
+	    pfd[i].events = POLLIN;
+	    pfd[i].revents = 0;
+#endif
 	} else {
-	  xdr_init( &tmpx, c->buf, 4 );
-	  xdr_decode_uint32( &tmpx, &c->cdata.count );
-	  if( !(c->cdata.count & 0x80000000) ) {
-	    c->cstate = RPC_CSTATE_CLOSE;
-	    break;
-	  }
-
-	  c->cdata.count &= ~0x80000000;
-	  if( c->cdata.count > RPC_MAX_BUF ) {
-	    c->cstate = RPC_CSTATE_CLOSE;
-	    break;
-	  }
-	  
-	  c->cdata.offset = 0;
-	  c->cstate = RPC_CSTATE_RECV;
+#ifndef WIN32
+	    pfd[i].fd = -1;
+#endif
 	}
-	break;
-      case RPC_CSTATE_RECV:
-	sts = recv( c->fd, c->buf + c->cdata.offset, RPC_MAX_BUF - c->cdata.offset, 0 );
-	if( sts < 0 ) {
-	  if( (errno == EAGAIN) || (errno == EINTR) ) break;
-	  c->cstate = RPC_CSTATE_CLOSE;
-	  break;
-	} else if( sts == 0 ) {
-	  c->cstate = RPC_CSTATE_CLOSE;
-	  break;
-	}
-	
-	c->cdata.offset += sts;
-	if( c->cdata.offset == c->cdata.count ) {
-	  /* msg complete - process */
-	  xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
-	  c->inc.xdr.count = c->cdata.count;
-	  sts = rpc_process_incoming( &c->inc );
-	  if( sts == 0 ) {
-
-	    c->cdata.count = c->inc.xdr.offset;
-	    c->cdata.offset = 0;
-	    c->cstate = RPC_CSTATE_SENDLEN;
-	    c->nstate = RPC_NSTATE_SEND;
-
-	    /* optimistically send count */
-	    xdr_init( &tmpx, tmpbuf, 4 );
-	    xdr_encode_uint32( &tmpx, c->cdata.count | 0x80000000 );
-
-	    sts = send( c->fd, tmpbuf, 4, 0 );
-	    if( sts < 0 ) {
-	      if( (errno == EAGAIN) || (errno == EINTR) ) break;
-	      c->cstate = RPC_CSTATE_CLOSE;
-	      break;
-	    }
-
-	    c->cstate = RPC_CSTATE_SEND;
-	    sts = send( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
-	    if( sts < 0 ) {
-	      if( (errno == EAGAIN) || (errno == EINTR) ) break;
-	      c->cstate = RPC_CSTATE_CLOSE;
-	      break;
-	    }
-
-	    c->cdata.offset += sts;
-	    if( c->cdata.offset == c->cdata.count ) {
-	      c->nstate = RPC_NSTATE_RECV;
-	      c->cstate = RPC_CSTATE_RECVLEN;
-	    }
-	  }
-
-	}
-
-	break;
-      default:
-	break;
-      }
-
-    } else if( pfd[i].revents & POLLOUT ) {
-
-      switch( c->cstate ) {
-      case RPC_CSTATE_SENDLEN:
-	xdr_init( &tmpx, tmpbuf, 4 );
-	xdr_encode_uint32( &tmpx, c->cdata.count | 0x80000000 );
-	sts = send( c->fd, tmpbuf, 4, 0 );
-	if( sts < 0 ) {
-	  if( (errno == EAGAIN) || (errno == EINTR) ) break;
-	  c->cstate = RPC_CSTATE_CLOSE;
-	  break;
-	}
-	c->cstate = RPC_CSTATE_SEND;
-
-	/* fall through */
-      case RPC_CSTATE_SEND:	
-	sts = send( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
-	if( sts < 0 ) {
-	  if( (errno == EAGAIN) || (errno == EINTR) ) break;
-	  c->cstate = RPC_CSTATE_CLOSE;
-	  break;
-	}
-	
-	c->cdata.offset += sts;
-	if( c->cdata.offset == c->cdata.count ) {
-	  c->nstate = RPC_NSTATE_RECV;
-	  c->cstate = RPC_CSTATE_RECVLEN;
-	}
-	break;
-      case RPC_CSTATE_CONNECT:
-	/* non-blocking connect completed */
-	{
-	  socklen_t slen;
-	  sts = 0;
-	  slen = sizeof(sts);
-	  getsockopt( c->fd, SOL_SOCKET, SO_ERROR, &sts, &slen );
-	  if( sts ) {
-	    rpc_log( LOG_LVL_ERROR, "Connect failed: %s", strerror( sts ) );
-	    c->cstate = RPC_CSTATE_CLOSE;
-	  } else {
-	    c->nstate = RPC_NSTATE_RECV;
-	    c->cstate = RPC_CSTATE_RECVLEN;
-	  }
-	  
-	  if( c->cdata.cb ) c->cdata.cb( c );
-	}
-	break;
-      default:
-	break;
-      }
-
     }
 
-    c = c->next;
-    i++;
-  }
+    i = RPC_MAX_LISTEN;
+    c = rpc.clist;
+    npfd = RPC_MAX_LISTEN;
+    while( c ) {
+#ifdef WIN32
+	switch( c->nstate ) {
+	case RPC_NSTATE_RECV:
+	    WSAEventSelect( c->fd, rpc.evt, FD_READ );
+	    break;
+	case RPC_NSTATE_SEND:
+	    WSAEventSelect( c->fd, rpc.evt, FD_WRITE );
+	    break;
+	case RPC_NSTATE_CONNECT:
+	    WSAEventSelect( c->fd, rpc.evt, FD_CONNECT );
+	    break;
+	default:
+	    break;
+	}
+#else
+	pfd[i].fd = c->fd;
 
-  for( i = 0; i < rpc.nlisten; i++ ) {
-    if( pfd[i].revents & POLLIN ) {
-      /* ready to accept */
-      rpc_accept( &rpc.listen[i] );
+	switch( c->nstate ) {
+	case RPC_NSTATE_RECV:
+	    pfd[i].events = POLLIN;
+	    break;
+	case RPC_NSTATE_SEND:
+	    pfd[i].events = POLLOUT;
+	    break;
+	case RPC_NSTATE_CONNECT:
+	    pfd[i].events = POLLOUT;
+	    break;
+	default:
+	    break;
+	}
+
+	pfd[i].revents = 0;
+#endif
+    
+	c = c->next;
+	i++;
+	npfd++;
     }
-  }
 
-  /* Close pending connections */
-  c = rpc.clist;
-  prev = NULL;
-  while( c ) {
-    next = c->next;
+#ifdef WIN32
+    sts = WSAWaitForMultipleEvents( 1, &rpc.evt, FALSE, timeout, FALSE );
+    if( sts == WSA_WAIT_TIMEOUT ) return;
+    if( sts != WSA_WAIT_EVENT_0 ) return;
+#else
+    sts = poll( pfd, npfd, timeout );
+    if( sts <= 0 ) return;
+#endif
 
-    if( c->cstate == RPC_CSTATE_CLOSE ) {
-      close( c->fd );
-      /* invoke callback if required */
-      if( c->cdata.cb ) c->cdata.cb( c );
-
-      if( prev ) prev->next = c->next;
-      else rpc.clist = c->next;
+    memset( revents, 0, sizeof(revents) );
+#ifdef WIN32
+    for( i = 0; i < rpc.nlisten; i++ ) {
+	int j;
       
-      c->next = rpc.flist;
-      rpc.flist = c;
-
-      c = next;
-    } else {
-      prev = c;
-      c = c->next;
+	WSAEnumNetworkEvents( rpc.listen[i].fd, rpc.evt, &events );
+	if( events.lNetworkEvents & FD_READ ) revents[i] |= POLLIN;
+	if( events.lNetworkEvents & FD_WRITE ) revents[i] |= POLLOUT;
+	if( events.lNetworkEvents & FD_ACCEPT ) revents[i] |= POLLIN;
+	if( events.lNetworkEvents & FD_CONNECT ) revents[i] |= POLLOUT;
+	if( events.lNetworkEvents & FD_CLOSE ) revents[i] |= POLLHUP;
+	for( j = 0; j < 6; j++ ) {
+	    if( events.iErrorCode[j] ) revents[i] |= POLLERR;
+	}
     }
-  }
+    i = RPC_MAX_LISTEN;
+    c = rpc.clist;
+    while( c ) {
+	WSAEnumNetworkEvents( c->fd, rpc.evt, &events );
+	revents[i] = events.lNetworkEvents;
+	c = c->next;
+	i++;
+    }
+#else
+    for( i = 0; i < npfd; i++ ) {
+	revents[i] = pfd[i].revents;
+    }
+#endif
+  
+    /* process connections first */
+    i = RPC_MAX_LISTEN;
+    c = rpc.clist;
+    while( c ) {
+	if( (revents[i] & POLLERR) || (revents[i] & POLLHUP) ) {
+	    c->cstate = RPC_CSTATE_CLOSE;
+	} else if( revents[i] & POLLIN ) {
+
+	    switch( c->cstate ) {
+	    case RPC_CSTATE_RECVLEN:
+		sts = recv( c->fd, c->buf, 4, 0 );
+		if( sts < 0 ) {
+#ifdef WIN32
+		    if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
+#else
+		    if( (error == EAGAIN) || (errno == EINTR) ) break;
+#endif
+		    c->cstate = RPC_CSTATE_CLOSE;
+		    break;
+		} else if( sts == 0 ) {
+		    c->cstate = RPC_CSTATE_CLOSE;
+		} else {
+		    xdr_init( &tmpx, c->buf, 4 );
+		    xdr_decode_uint32( &tmpx, &c->cdata.count );
+		    if( !(c->cdata.count & 0x80000000) ) {
+			c->cstate = RPC_CSTATE_CLOSE;
+			break;
+		    }
+
+		    c->cdata.count &= ~0x80000000;
+		    if( c->cdata.count > RPC_MAX_BUF ) {
+			c->cstate = RPC_CSTATE_CLOSE;
+			break;
+		    }
+	  
+		    c->cdata.offset = 0;
+		    c->cstate = RPC_CSTATE_RECV;
+		}
+		break;
+	    case RPC_CSTATE_RECV:
+		sts = recv( c->fd, c->buf + c->cdata.offset, RPC_MAX_BUF - c->cdata.offset, 0 );
+		if( sts < 0 ) {
+#ifdef WIN32
+		    if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
+#else
+		    if( (errno == EAGAIN) || (errno == EINTR) ) break;
+#endif
+		    c->cstate = RPC_CSTATE_CLOSE;
+		    break;
+		} else if( sts == 0 ) {
+		    c->cstate = RPC_CSTATE_CLOSE;
+		    break;
+		}
+	
+		c->cdata.offset += sts;
+		if( c->cdata.offset == c->cdata.count ) {
+		    /* msg complete - process */
+		    xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
+		    c->inc.xdr.count = c->cdata.count;
+		    sts = rpc_process_incoming( &c->inc );
+		    if( sts == 0 ) {
+
+			c->cdata.count = c->inc.xdr.offset;
+			c->cdata.offset = 0;
+			c->cstate = RPC_CSTATE_SENDLEN;
+			c->nstate = RPC_NSTATE_SEND;
+
+			/* optimistically send count */
+			xdr_init( &tmpx, tmpbuf, 4 );
+			xdr_encode_uint32( &tmpx, c->cdata.count | 0x80000000 );
+
+			sts = send( c->fd, tmpbuf, 4, 0 );
+			if( sts < 0 ) {
+#ifdef WIN32
+			    if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
+#else
+			    if( (errno == EAGAIN) || (errno == EINTR) ) break;
+#endif
+			    c->cstate = RPC_CSTATE_CLOSE;
+			    break;
+			}
+
+			c->cstate = RPC_CSTATE_SEND;
+			sts = send( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
+			if( sts < 0 ) {
+#ifdef WIN32
+			    if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
+#else
+			    if( (errno == EAGAIN) || (errno == EINTR) ) break;
+#endif
+			    c->cstate = RPC_CSTATE_CLOSE;
+			    break;
+			}
+
+			c->cdata.offset += sts;
+			if( c->cdata.offset == c->cdata.count ) {
+			    c->nstate = RPC_NSTATE_RECV;
+			    c->cstate = RPC_CSTATE_RECVLEN;
+			}
+		    }
+
+		}
+
+		break;
+	    default:
+		break;
+	    }
+
+	} else if( revents[i] & POLLOUT ) {
+
+	    switch( c->cstate ) {
+	    case RPC_CSTATE_SENDLEN:
+		xdr_init( &tmpx, tmpbuf, 4 );
+		xdr_encode_uint32( &tmpx, c->cdata.count | 0x80000000 );
+		sts = send( c->fd, tmpbuf, 4, 0 );
+		if( sts < 0 ) {
+#ifdef WIN32
+		    if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
+#else
+		    if( (errno == EAGAIN) || (errno == EINTR) ) break;
+#endif
+		    c->cstate = RPC_CSTATE_CLOSE;
+		    break;
+		}
+		c->cstate = RPC_CSTATE_SEND;
+
+		/* fall through */
+	    case RPC_CSTATE_SEND:	
+		sts = send( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
+		if( sts < 0 ) {
+#ifdef WIN32
+		    if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
+#else
+		    if( (errno == EAGAIN) || (errno == EINTR) ) break;
+#endif
+		    c->cstate = RPC_CSTATE_CLOSE;
+		    break;
+		}
+	
+		c->cdata.offset += sts;
+		if( c->cdata.offset == c->cdata.count ) {
+		    c->nstate = RPC_NSTATE_RECV;
+		    c->cstate = RPC_CSTATE_RECVLEN;
+		}
+		break;
+	    case RPC_CSTATE_CONNECT:
+		/* non-blocking connect completed */
+	    {
+		socklen_t slen;
+		sts = 0;
+		slen = sizeof(sts);
+		getsockopt( c->fd, SOL_SOCKET, SO_ERROR, (char *)&sts, &slen );
+		if( sts ) {
+		    rpc_log( LOG_LVL_ERROR, "Connect failed: %s", rpc_strerror( rpc_errno() ) );
+		    c->cstate = RPC_CSTATE_CLOSE;
+		} else {
+		    c->nstate = RPC_NSTATE_RECV;
+		    c->cstate = RPC_CSTATE_RECVLEN;
+		}
+	  
+		if( c->cdata.cb ) c->cdata.cb( c );
+	    }
+	    break;
+	    default:
+		break;
+	    }
+
+	}
+
+	c = c->next;
+	i++;
+    }
+
+    for( i = 0; i < rpc.nlisten; i++ ) {
+	if( revents[i] & POLLIN ) {
+	    /* ready to accept */
+	    rpc_accept( &rpc.listen[i] );
+	}
+    }
+
+    /* Close pending connections */
+    c = rpc.clist;
+    prev = NULL;
+    while( c ) {
+	next = c->next;
+
+	if( c->cstate == RPC_CSTATE_CLOSE ) {
+	    close( c->fd );
+	    /* invoke callback if required */
+	    if( c->cdata.cb ) c->cdata.cb( c );
+
+	    if( prev ) prev->next = c->next;
+	    else rpc.clist = c->next;
+      
+	    c->next = rpc.flist;
+	    rpc.flist = c;
+
+	    c = next;
+	} else {
+	    prev = c;
+	    c = c->next;
+	}
+    }
   
 
 }
@@ -673,7 +812,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       sts = rpc_process_incoming( &c->inc );
       if( sts == 0 ) {
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
-	if( sts < 0 ) rpc_log( LOG_LVL_ERROR, "sendto: %s", strerror( errno ) );
+	if( sts < 0 ) rpc_log( LOG_LVL_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       } else {
 	rpc_log( LOG_LVL_INFO, "rpc_process_incoming failed" );
       }
@@ -682,6 +821,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
     break;
   case RPC_LISTEN_TCP:
   case RPC_LISTEN_TCP6:
+#ifndef WIN32
   case RPC_LISTEN_UNIX:
     {
       rpc_log( LOG_LVL_INFO, "Accept TCP/UNIX" );
@@ -702,6 +842,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->next = rpc.clist;
       rpc.clist = c;
     }
+#endif
     break;
   }
 }
@@ -715,6 +856,14 @@ static void rpc_run( void ) {
   struct sockaddr_in sin;
   struct rpcbind_mapping map;
 
+#ifdef WIN32
+  {
+      WSADATA wsadata;
+      WSAStartup( MAKEWORD(2,2), &wsadata );
+      rpc.evt = WSACreateEvent();
+  }
+#endif
+  
   /* register programs */
   rpcbind_register();
   //  nfs_register();
@@ -836,18 +985,28 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, void (*cb)( struct rpc_c
   if( c->fd < 0 ) goto failure;
   
   /* set non-blocking */
+#ifdef WIN32
+#warning "Implement non-blocking connects on windows" 
+#else
   sts = fcntl( c->fd, F_GETFL, 0 );
   fcntl( c->fd, F_SETFL, sts|O_NONBLOCK );
-
+#endif
   c->cdata.cb = cb;
   c->cdata.cxt = cxt;
 
   sts = connect( c->fd, addr, alen );
   if( sts < 0 ) {
+#ifdef WIN32
+      if( WSAGetLastError() != WSAEWOULDBLOCK ) {
+	  close( c->fd );
+	  goto failure;
+      }	  
+#else
     if( errno != EWOULDBLOCK ) {
       close( c->fd );
       goto failure;
     }
+#endif
     c->cstate = RPC_CSTATE_CONNECT;
     c->nstate = RPC_NSTATE_CONNECT;
   } else {

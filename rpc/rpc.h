@@ -298,5 +298,8 @@ int rpc_await_reply( struct rpc_waiter *waiter );
 int rpc_waiter_invoke( uint32_t xid, struct rpc_inc *inc );
 void rpc_waiter_service( void );
 
+int rpc_errno( void );
+char *rpc_strerror( int sts );
+
 #endif
 

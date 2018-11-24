@@ -1,0 +1,17 @@
+
+RPC_DEFINES=-g -DWIN32
+
+all: rpcd client
+
+rpcd: rpc.c rpc.h rpcd.c
+	cc -o rpcd $(RPC_DEFINES) rpc.c rpcd.c -lws2_32
+
+client: client.c rpc.c rpc.h
+	cc -o client $(RPC_DEFINES) client.c rpc.c -lws2_32
+
+.PHONY: tar clean
+tar:
+	tar -czvf rpc.tar.gz rpc.h rpc.c Makefile rpcd.c client.c shauth.h shauth.c 
+
+clean:
+	rm client rpcd

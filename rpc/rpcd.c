@@ -130,7 +130,7 @@ struct rpc_conn {
 
   struct rpc_inc inc;
 
-  uint32_t count;    /* data count */
+  uint32_t count;    /* size of buf */
   uint8_t *buf; 
 };
 
@@ -338,6 +338,7 @@ static void rpc_init_listen( void ) {
     memset( c, 0, sizeof(*c) );
     c->next = rpc.flist;
     c->buf = rpc.buftab[i];
+    c->count = sizeof(rpc.buftab[i]);
     rpc.flist = c;
   }
 

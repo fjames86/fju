@@ -586,7 +586,7 @@ static void rpc_poll( int timeout ) {
 #ifdef WIN32
 		    if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
 #else
-		    if( (error == EAGAIN) || (errno == EINTR) ) break;
+		    if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
 		    c->cstate = RPC_CSTATE_CLOSE;
 		    break;

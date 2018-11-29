@@ -29,6 +29,7 @@
 #ifdef WIN32
 #include <Winsock2.h>
 #include <Windows.h>
+#include <ws2def.h>
 #else
 #include <unistd.h>
 #include <sys/socket.h>
@@ -175,11 +176,13 @@ struct rpc_inc {
   void *pcxt;                    /* authentication context */
     
   /* remote address */
-  struct sockaddr_storage raddr;
+  SOCKADDR_STORAGE raddr;
+  //struct sockaddr_storage raddr;
   unsigned int raddr_len;
     
   /* local address */
-  struct sockaddr_storage laddr;
+  SOCKADDR_STORAGE laddr;
+  //struct sockaddr_storage laddr;
   unsigned int laddr_len;
 };
 

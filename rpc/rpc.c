@@ -31,6 +31,7 @@
  */
 
 #ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
 #include <Winsock2.h>
 #include <Windows.h>
 #endif
@@ -126,7 +127,7 @@ int xdr_decode_boolean( struct xdr_s *xdr, int *x ) {
 int xdr_encode_string( struct xdr_s *xdr, char *str ) {
   int sts;
   uint32_t len, xlen;
-  len = strlen( str );
+  len = (uint32_t)strlen( str );
   sts = xdr_encode_uint32( xdr, len );
   if( sts ) return sts;
   xlen = len;
@@ -220,7 +221,7 @@ int rpc_encode_opaque_auth( struct xdr_s *xdr, struct rpc_opaque_auth *x ) {
 }
 int rpc_decode_opaque_auth( struct xdr_s *xdr, struct rpc_opaque_auth *x ) {
   int sts;
-  sts = xdr_decode_uint32( xdr, &x->flavour );
+  sts = xdr_decode_uint32( xdr, (uint32_t *)&x->flavour );
   if( sts ) return sts;
   x->len = sizeof(x->data);
   sts = xdr_decode_opaque( xdr, x->data, (int *)&x->len );
@@ -851,9 +852,6 @@ int rpc_call_udp( struct rpc_inc *inc ) {
 #endif
   int sts;
   struct sockaddr_in sin;
-  int len, offset;
-  struct xdr_s tmpx;
-
   
   fd = socket( AF_INET, SOCK_DGRAM, 0 );
   if( fd < 0 ) return -1;
@@ -957,7 +955,7 @@ int rpc_call_tcp( struct rpc_inc *inc ) {
     
   len &= ~0x80000000;
     
-  if( len > inc->xdr.buf_size ) {
+  if( (int)len > inc->xdr.buf_size ) {
     sts = -1;
     goto done;
   }
@@ -965,7 +963,7 @@ int rpc_call_tcp( struct rpc_inc *inc ) {
   xdr_reset( &inc->xdr );
 
   offset = 0;
-  while( offset < len ) {
+  while( offset < (int)len ) {
     sts = recv( fd, inc->xdr.buf + offset, len - offset, 0 );
     if( sts < 0 ) {
 #ifdef WIN32
@@ -1126,7 +1124,6 @@ int rpc_iterator_timeout( void ) {
 
 void rpc_log( int lvl, char *fmt, ... ) {
   va_list args;
-  int sts;
   char timestr[64];
   struct tm *tm;
   time_t now;

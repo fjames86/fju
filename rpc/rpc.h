@@ -176,13 +176,19 @@ struct rpc_inc {
   void *pcxt;                    /* authentication context */
     
   /* remote address */
+#ifdef WIN32
   SOCKADDR_STORAGE raddr;
-  //struct sockaddr_storage raddr;
+#else
+  struct sockaddr_storage raddr;
+#endif
   unsigned int raddr_len;
     
   /* local address */
+#ifdef WIN32
   SOCKADDR_STORAGE laddr;
-  //struct sockaddr_storage laddr;
+#else
+  struct sockaddr_storage laddr;
+#endif
   unsigned int laddr_len;
 };
 

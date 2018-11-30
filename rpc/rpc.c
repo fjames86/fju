@@ -1049,7 +1049,7 @@ int rpcbind_call_set( struct sockaddr_in *addr, struct rpcbind_mapping *m ) {
 
 uint64_t rpc_now( void ) {
 #ifdef WIN32
-  return GetTickCount();
+  return GetTickCount64();
 #else
   struct timespec tm;
   clock_gettime( CLOCK_MONOTONIC, &tm );

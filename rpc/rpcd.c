@@ -148,6 +148,8 @@ static struct {
 
 #ifdef WIN32
 	HANDLE evt;
+	SERVICE_STATUS_HANDLE hsvc;
+	SERVICE_STATUS svcsts;
 #endif
 
 	struct rpc_conn conntab[RPC_MAX_CONN];
@@ -157,6 +159,7 @@ static struct {
 
 #ifdef WIN32
 typedef int socklen_t;
+static void WINAPI rpcd_svc( DWORD argc, char **argv );
 #endif
 
 static void rpc_run( void );
@@ -292,6 +295,11 @@ int main( int argc, char **argv ) {
 
 	if( !rpc.foreground ) {
 #ifdef WIN32
+		SERVICE_TABLE_ENTRYA svctab[2];
+		memset( svctab, 0, sizeof(svctab) );
+		svctab[0].lpServiceName = "rpcd";
+		svctab[0].lpServiceProc = rpcd_svc;
+		StartServiceCtrlDispatcherA( svctab );
 #else
 		pid_t pid = fork();
 		if( pid < 0 ) exit( 1 );
@@ -329,6 +337,37 @@ int main( int argc, char **argv ) {
 
 	return 0;
 }
+
+
+#ifdef WIN32
+static void WINAPI rpcd_svc_ctrl( DWORD req ) {
+	switch( req ) {
+	case SERVICE_CONTROL_STOP:
+	case SERVICE_CONTROL_SHUTDOWN:
+		rpc.exiting = 1;
+		break;
+	default:
+		SetServiceStatus( rpc.hsvc, &rpc.svcsts );
+		break;
+	}
+}
+
+static void WINAPI rpcd_svc( DWORD argc, char **argv ) {
+
+	rpc.hsvc = RegisterServiceCtrlHandlerA( "rpcd", rpcd_svc_ctrl );
+
+	rpc.svcsts.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
+	rpc.svcsts.dwCurrentState = SERVICE_RUNNING;
+	rpc.svcsts.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN|SERVICE_ACCEPT_STOP;
+	SetServiceStatus( rpc.hsvc, &rpc.svcsts );
+
+	rpc_run();
+
+	rpc.svcsts.dwCurrentState = SERVICE_STOPPED;
+	SetServiceStatus( rpc.hsvc, &rpc.svcsts );
+}
+#endif
+
 
 
 
@@ -457,10 +496,15 @@ static void rpc_init_listen( void ) {
 }
 
 #ifdef WIN32
-#define POLLIN        0x0001
-#define POLLOUT       0x0004
-#define POLLERR       0x0008
-#define POLLHUP       0x0010
+#define RPC_POLLIN        0x0001
+#define RPC_POLLOUT       0x0004
+#define RPC_POLLERR       0x0008
+#define RPC_POLLHUP       0x0010
+#else
+#define RPC_POLLIN        POLLIN
+#define RPC_POLLOUT       POLLOUT
+#define RPC_POLLERR       POLLERR
+#define RPC_POLLHUP       POLLHUP
 #endif
 
 static void rpc_poll( int timeout ) {
@@ -485,7 +529,7 @@ static void rpc_poll( int timeout ) {
 			WSAEventSelect( rpc.listen[i].fd, rpc.evt, FD_READ );
 #else
 			pfd[i].fd = rpc.listen[i].fd;
-			pfd[i].events = POLLIN;
+			pfd[i].events = RPC_POLLIN;
 			pfd[i].revents = 0;
 #endif
 		}
@@ -519,13 +563,13 @@ static void rpc_poll( int timeout ) {
 
 		switch( c->nstate ) {
 		case RPC_NSTATE_RECV:
-			pfd[i].events = POLLIN;
+			pfd[i].events = RPC_POLLIN;
 			break;
 		case RPC_NSTATE_SEND:
-			pfd[i].events = POLLOUT;
+			pfd[i].events = RPC_POLLOUT;
 			break;
 		case RPC_NSTATE_CONNECT:
-			pfd[i].events = POLLOUT;
+			pfd[i].events = RPC_POLLOUT;
 			break;
 		default:
 			break;
@@ -554,13 +598,13 @@ static void rpc_poll( int timeout ) {
 		int j;
 
 		WSAEnumNetworkEvents( rpc.listen[i].fd, rpc.evt, &events );
-		if( events.lNetworkEvents & FD_READ ) revents[i] |= POLLIN;
-		if( events.lNetworkEvents & FD_WRITE ) revents[i] |= POLLOUT;
-		if( events.lNetworkEvents & FD_ACCEPT ) revents[i] |= POLLIN;
-		if( events.lNetworkEvents & FD_CONNECT ) revents[i] |= POLLOUT;
-		if( events.lNetworkEvents & FD_CLOSE ) revents[i] |= POLLHUP;
+		if( events.lNetworkEvents & FD_READ ) revents[i] |= RPC_POLLIN;
+		if( events.lNetworkEvents & FD_WRITE ) revents[i] |= RPC_POLLOUT;
+		if( events.lNetworkEvents & FD_ACCEPT ) revents[i] |= RPC_POLLIN;
+		if( events.lNetworkEvents & FD_CONNECT ) revents[i] |= RPC_POLLOUT;
+		if( events.lNetworkEvents & FD_CLOSE ) revents[i] |= RPC_POLLHUP;
 		for( j = 0; j < 6; j++ ) {
-			if( events.iErrorCode[j] ) revents[i] |= POLLERR;
+			if( events.iErrorCode[j] ) revents[i] |= RPC_POLLERR;
 		}
 	}
 	i = RPC_MAX_LISTEN;
@@ -581,10 +625,10 @@ static void rpc_poll( int timeout ) {
 	i = RPC_MAX_LISTEN;
 	c = rpc.clist;
 	while( c ) {
-		if( (revents[i] & POLLERR) || (revents[i] & POLLHUP) ) {
+		if( (revents[i] & RPC_POLLERR) || (revents[i] & RPC_POLLHUP) ) {
 			c->cstate = RPC_CSTATE_CLOSE;
 		}
-		else if( revents[i] & POLLIN ) {
+		else if( revents[i] & RPC_POLLIN ) {
 
 			switch( c->cstate ) {
 			case RPC_CSTATE_RECVLEN:
@@ -690,7 +734,7 @@ static void rpc_poll( int timeout ) {
 			}
 
 		}
-		else if( revents[i] & POLLOUT ) {
+		else if( revents[i] & RPC_POLLOUT ) {
 
 			switch( c->cstate ) {
 			case RPC_CSTATE_SENDLEN:
@@ -757,7 +801,7 @@ static void rpc_poll( int timeout ) {
 	}
 
 	for( i = 0; i < rpc.nlisten; i++ ) {
-		if( revents[i] & POLLIN ) {
+		if( revents[i] & RPC_POLLIN ) {
 			/* ready to accept */
 			rpc_accept( &rpc.listen[i] );
 		}
@@ -868,7 +912,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
 
 static void rpc_run( void ) {
 	struct rpc_conn *c;
-	int i, sts;
+	int i;
 	int timeout;
 	struct rpc_program *pglist;
 	struct rpc_version *vlist;

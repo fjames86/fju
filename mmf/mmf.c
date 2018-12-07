@@ -2,6 +2,18 @@
 #include "mmf.h"
 
 #ifdef WIN32
+#else
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
+
+#include <sys/file.h>
+#include <sys/mman.h>
+#endif
+
+#ifdef WIN32
 int mmf_open( char *path, struct mmf_s *mmf ) {
 
 	memset( mmf, 0, sizeof(*mmf) );
@@ -90,7 +102,7 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 	
 	fsize = lseek( mmf->fd, 0, SEEK_END );
 	if( fsize < size ) {
-		pwrite( mff->fd, "", 1, size - 1 );
+		pwrite( mmf->fd, "", 1, size - 1 );
 	}
 	mmf->file = mmap( NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, mmf->fd, 0 );
 	mmf->msize = size;

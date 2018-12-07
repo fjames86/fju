@@ -58,15 +58,19 @@ int mmf_close( struct mmf_s *mmf ) {
 
 int mmf_lock( struct mmf_s *mmf ) {
 	OVERLAPPED overlap;
+	BOOL b;
 	memset( &overlap, 0, sizeof(overlap) );	
-	LockFileEx( mmf->fd, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlap );
+	b = LockFileEx( mmf->fd, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &overlap );
+	if( !b ) return -1;
 	return 0;
 }
 
 int mmf_unlock( struct mmf_s *mmf ) {
 	OVERLAPPED overlap;
+	BOOL b;
 	memset( &overlap, 0, sizeof(overlap) );
-	UnlockFileEx( mmf->fd, 0, 0, 1, &overlap );
+	b = UnlockFileEx( mmf->fd, 0, 0, 1, &overlap );
+	if( !b ) return -1;
 	return 0;
 }
 
@@ -84,8 +88,10 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 		WriteFile( mmf->fd, "", 1, NULL, &overlap );
 	}
 
-	mmf->mapping = CreateFileMappingA( mmf->fd, NULL, 0, 0, 0, NULL );
-	mmf->file = MapViewOfFile( mmf->mapping, 0, 0, 0, size );
+	mmf->mapping = CreateFileMappingA( mmf->fd, NULL, PAGE_READWRITE, 0, 0, NULL );
+	if( !mmf->mapping ) return -1;
+	mmf->file = MapViewOfFile( mmf->mapping, FILE_MAP_READ|FILE_MAP_WRITE, 0, 0, size );
+	if( !mmf->file ) return -1;
 	mmf->msize = size;
 	return 0;
 }

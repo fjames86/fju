@@ -120,8 +120,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 			/* service networking */
 			winrpc_service();
 		} else {
-			/* Timeout? */
-			//rpc_async_service();
+			/* Timeout - do nothing */
 		}
 
 	} while( !winrpc.exiting );
@@ -148,6 +147,18 @@ void winrpc_set_font( HWND hwnd ) {
 static void winrpc_main_create( HWND hwnd ) {
 	HWND h;
 	LVCOLUMNW lvc;
+	HMENU menu, m;
+
+	/* add menu bar */
+	menu = CreateMenu();
+	m = CreateMenu();
+	AppendMenuA( m, MF_STRING, (UINT_PTR)2, "E&xit" );
+	AppendMenuA( menu, MF_POPUP,(UINT_PTR) m, "&File" );
+	m = CreateMenu();
+	AppendMenuA( m, MF_STRING, (UINT_PTR)3, "&About" );
+	AppendMenuA( menu, MF_POPUP, (UINT_PTR)m, "&Help" );
+	SetMenu( hwnd, menu );
+
 
 	h = CreateWindowW( WC_BUTTONW, L"Discover", WS_VISIBLE|WS_CHILD, 25, 25, 100, 23, hwnd, (HMENU)1, NULL, NULL );
 	winrpc_set_font( h );
@@ -161,7 +172,7 @@ static void winrpc_main_create( HWND hwnd ) {
 	winrpc.hwnds[WINRPC_PORT] = h;
 
 	winrpc.hwnds[WINRPC_REPORT] = CreateWindowExA( WS_EX_CLIENTEDGE, WC_LISTVIEWA, "", WS_VISIBLE|WS_CHILD|LVS_SINGLESEL|LVS_REPORT|LVS_SHOWSELALWAYS|LVS_NOSORTHEADER,
-		25, 60, 500, 300, hwnd, NULL, NULL, NULL );
+		25, 60, 500, 280, hwnd, NULL, NULL, NULL );
 	ListView_SetExtendedListViewStyle( winrpc.hwnds[WINRPC_REPORT], LVS_EX_FULLROWSELECT );
 
 	memset( &lvc, 0, sizeof(lvc) );
@@ -252,6 +263,19 @@ static void winrpc_main_command( HWND hwnd, int cmd ) {
 		/* send discover call */
 		winrpc_send_discover();
 
+		break;
+	case 2:
+		/* menu exit */
+		DestroyWindow( hwnd );
+		break;
+	case 3:
+		/* about */
+		MessageBoxA( hwnd, 
+				"Win32 ONC/RPC discovery utility.\n"
+				"\n"
+				"Copyright (C) Frank James, 2018.",
+				"About", 
+				MB_OK|MB_ICONINFORMATION );
 		break;
 	}
 

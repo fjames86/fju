@@ -532,7 +532,7 @@ static void rpc_poll( int timeout ) {
 			WSAEventSelect( rpc.listen[i].fd, rpc.evt, FD_READ );
 #else
 			pfd[i].fd = rpc.listen[i].fd;
-			pfd[i].events = RPC_POLLIN;
+			pfd[i].events = POLLIN;
 			pfd[i].revents = 0;
 #endif
 		}
@@ -566,13 +566,13 @@ static void rpc_poll( int timeout ) {
 
 		switch( c->nstate ) {
 		case RPC_NSTATE_RECV:
-			pfd[i].events = RPC_POLLIN;
+			pfd[i].events = POLLIN;
 			break;
 		case RPC_NSTATE_SEND:
-			pfd[i].events = RPC_POLLOUT;
+			pfd[i].events = POLLOUT;
 			break;
 		case RPC_NSTATE_CONNECT:
-			pfd[i].events = RPC_POLLOUT;
+			pfd[i].events = POLLOUT;
 			break;
 		default:
 			break;

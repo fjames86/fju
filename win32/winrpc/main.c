@@ -70,6 +70,9 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	cls.lpszClassName = L"WINRPC";
 	cls.hbrBackground = GetSysColorBrush( COLOR_3DFACE );
 	cls.hCursor = LoadCursorW( NULL, (LPCWSTR)IDC_ARROW );
+	cls.hIcon = winrpc_icon();
+	cls.hIconSm = winrpc_icon();
+
 	RegisterClassExW( &cls );
 
 	h = CreateWindowExW( 0, L"WINRPC", L"WinRPC", WS_VISIBLE|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX, 200, 200, 560, 420, NULL, 0, hInstance, NULL );
@@ -347,3 +350,4 @@ static void winrpc_service( void ) {
 
 	}
 }
+

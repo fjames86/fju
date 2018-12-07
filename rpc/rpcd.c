@@ -358,7 +358,7 @@ static void WINAPI rpcd_svc( DWORD argc, char **argv ) {
 
 	rpc.svcsts.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
 	rpc.svcsts.dwCurrentState = SERVICE_RUNNING;
-	rpc.svcsts.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN|SERVICE_ACCEPT_STOP;
+	rpc.svcsts.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
 	SetServiceStatus( rpc.hsvc, &rpc.svcsts );
 
 	rpc_run();
@@ -929,7 +929,6 @@ static void rpc_run( void ) {
 
 	/* register programs */
 	rpcbind_register();
-	//  nfs_register();
 
 	memset( &sin, 0, sizeof(sin) );
 	sin.sin_family = AF_INET;
@@ -1046,7 +1045,7 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, void( *cb )(struct rpc_c
 	struct rpc_conn *c;
 	int sts;
 
-	/* start by allocatign a connection descriptor */
+	/* start by allocating a connection descriptor */
 	c = rpc.flist;
 	if( !c ) return -1;
 	rpc.flist = c->next;

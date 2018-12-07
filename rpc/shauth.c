@@ -42,6 +42,111 @@
 
 #include "shauth.h"
 
+
+#ifdef WIN32
+
+struct _sha_iovec {
+	uint8_t *buf;
+	int n;
+};
+
+static void _sha1( uint8_t *hash, struct _sha_iovec *iov, int n ) {
+	BCRYPT_ALG_HANDLE handle;
+	BCRYPT_HASH_HANDLE hhash;
+	int i;
+
+	BCryptOpenAlgorithmProvider( &handle, BCRYPT_SHA1_ALGORITHM, NULL, 0 );
+	BCryptCreateHash( handle, &hhash, NULL, 0, NULL, 0, 0 );
+
+	for( i = 0; i < n; i++ ) {
+		BCryptHashData( hhash, iov[i].buf, iov[i].n, 0 );
+	}
+	BCryptFinishHash( hhash, hash, 20, 0 );
+	BCryptDestroyHash( hhash );
+	BCryptCloseAlgorithmProvider( handle, 0 );
+}
+
+static void sha1_hmac( uint8_t *hash, uint8_t *key, uint8_t *buf, int n ) {
+	/* HMAC = Hash( (key XOR opad) || Hash( (key XOR ipad) || message ) ) */
+	uint8_t opad[16], ipad[16];
+	int i;
+	uint8_t rhash[32];
+	struct _sha_iovec iov[2];
+
+	memset( hash, 0, 32 );
+
+	/* XOR key with ipad and opad */
+	for( i = 0; i < 16; i++ ) {
+		opad[i] = 0x5c ^ key[i];
+		ipad[i] = 0x36 ^ key[i];
+	}
+
+	/* Hash ipad||message */
+	iov[0].buf = ipad;
+	iov[0].n = 16;
+	iov[1].buf = buf;
+	iov[1].n = n;
+	_sha1( rhash, iov, 2 );
+
+	/* Hash opad || Hash(ipad||message) */
+	iov[0].buf = opad;
+	iov[0].n = 16;
+	iov[1].buf = rhash;
+	iov[1].n = 16;
+	_sha1( hash, iov, 2 );
+}
+
+static void aes_encrypt( uint8_t *key, uint8_t *buf, int n ) {
+	BCRYPT_ALG_HANDLE handle;
+	BCRYPT_KEY_HANDLE hkey;
+	uint8_t iv[16];
+	ULONG result;
+	uint8_t *outp;
+
+	BCryptOpenAlgorithmProvider( &handle, BCRYPT_AES_ALGORITHM, NULL, 0 );
+	BCryptGenerateSymmetricKey( handle, &hkey, NULL, 0, key, 16, 0 );
+
+	memset( iv, 0, sizeof(iv) );
+	outp = malloc( n );
+	BCryptEncrypt( hkey, buf, n, NULL, iv, 16, outp, n, &result, 0 );
+	memcpy( buf, outp, n );
+	free( outp );
+
+	BCryptDestroyKey( hkey );
+	BCryptCloseAlgorithmProvider( handle, 0 );
+}
+
+
+static void aes_decrypt( uint8_t *key, uint8_t *buf, int n ) {
+	BCRYPT_ALG_HANDLE handle;
+	BCRYPT_KEY_HANDLE hkey;
+	uint8_t iv[16];
+	ULONG result;
+	uint8_t *outp;
+
+	BCryptOpenAlgorithmProvider( &handle, BCRYPT_AES_ALGORITHM, NULL, 0 );
+	BCryptGenerateSymmetricKey( handle, &hkey, NULL, 0, key, 16, 0 );
+
+	memset( iv, 0, sizeof(iv) );
+	outp = malloc( n );
+	BCryptDecrypt( hkey, buf, n, NULL, iv, 16, outp, n, &result, 0 );
+	memcpy( buf, outp, n );
+	free( outp );
+
+	BCryptDestroyKey( hkey );
+	BCryptCloseAlgorithmProvider( handle, 0 );
+}
+
+static void shauth_rand( void *buf, int n ) {
+	BCRYPT_ALG_HANDLE handle;
+
+	BCryptOpenAlgorithmProvider( &handle, BCRYPT_RNG_ALGORITHM, NULL, 0 );
+	BCryptGenRandom( handle, buf, n, 0 );
+	BCryptCloseAlgorithmProvider( handle, 0 );
+}
+
+#else
+
 #include <openssl/evp.h>
 #include <openssl/conf.h>
 #include <openssl/evp.h>
@@ -55,17 +160,6 @@
 
 
 #include <fcntl.h>
-
-static uint8_t shauth_shared_key[32];
-
-void shauth_init( struct shauth_context *cxt, uint8_t *key ) {
-  memset( cxt, 0, sizeof(*cxt) );
-  memcpy( cxt->key, key, sizeof(cxt->key) );
-  cxt->cipher = SHAUTH_CIPHER_AES128|SHAUTH_DIGEST_SHA1;
-  cxt->window = 500;
-  cxt->service = SHAUTH_SERVICE_NONE;
-}
-
 
 /* provider methods follow */
 
@@ -176,6 +270,20 @@ static void shauth_rand( void *buf, int n ) {
     fd = open( "/dev/urandom", O_RDONLY, 0600 );
   }
   read( fd, buf, n );
+}
+#endif
+
+
+
+
+static uint8_t shauth_shared_key[32];
+
+void shauth_init( struct shauth_context *cxt, uint8_t *key ) {
+  memset( cxt, 0, sizeof(*cxt) );
+  memcpy( cxt->key, key, sizeof(cxt->key) );
+  cxt->cipher = SHAUTH_CIPHER_AES128|SHAUTH_DIGEST_SHA1;
+  cxt->window = 500;
+  cxt->service = SHAUTH_SERVICE_NONE;
 }
 
 static int shauth_encrypt( uint8_t *buf, int size, uint8_t *key, int cipher ) {

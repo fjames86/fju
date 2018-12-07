@@ -133,9 +133,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\rpc\rpc.c" />
+    <ClCompile Include="..\..\rpc\shauth.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\rpc\rpc.h" />
+    <ClInclude Include="..\..\rpc\shauth.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -300,6 +300,7 @@ int main( int argc, char **argv ) {
 		svctab[0].lpServiceName = "rpcd";
 		svctab[0].lpServiceProc = rpcd_svc;
 		StartServiceCtrlDispatcherA( svctab );
+		return 0;
 #else
 		pid_t pid = fork();
 		if( pid < 0 ) exit( 1 );
@@ -345,6 +346,8 @@ static void WINAPI rpcd_svc_ctrl( DWORD req ) {
 	case SERVICE_CONTROL_STOP:
 	case SERVICE_CONTROL_SHUTDOWN:
 		rpc.exiting = 1;
+		rpc.svcsts.dwCurrentState = SERVICE_STOP_PENDING;
+		SetServiceStatus( rpc.hsvc, &rpc.svcsts );
 		break;
 	default:
 		SetServiceStatus( rpc.hsvc, &rpc.svcsts );

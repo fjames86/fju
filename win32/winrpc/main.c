@@ -234,17 +234,6 @@ static void winrpc_send_discover( void ) {
 	SendMessageA( winrpc.hwnds[WINRPC_IP], IPM_GETADDRESS, 0, (LPARAM)&sts );
 	sin.sin_addr.s_addr = htonl( sts );
 
-#if 0
-#if 0
-	sin.sin_addr.s_addr = htonl( INADDR_BROADCAST );
-#else
-	sin.sin_addr.S_un.S_un_b.s_b1 = 192;
-	sin.sin_addr.S_un.S_un_b.s_b2 = 168;
-	sin.sin_addr.S_un.S_un_b.s_b3 = 0; //0;
-	sin.sin_addr.S_un.S_un_b.s_b4 = 255; //24;
-#endif
-#endif
-
 	sts = sendto( winrpc.fd, inc.xdr.buf, inc.xdr.offset, 0, (struct sockaddr *)&sin, sizeof(sin) );
 	if( sts < 0 ) {
 		sts = WSAGetLastError();

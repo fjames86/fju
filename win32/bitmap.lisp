@@ -1,3 +1,10 @@
+;;;; Copyright Frank James 2018 
+
+;;; This file defines a program for generating C code for 32bpp bitmap resources
+;;; in win32 gui applications. The reason for doing it this way, as opposed to 
+;;; the standard resource compiler, is that it actually works for images with alpha (transparency).
+;;;
+
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (ql:quickload "nibbles"))
@@ -8,10 +15,11 @@
 
 (in-package #:bitmap)
 
-(defun generate-bitmap-resource (filename &key (stream *standard-output*) name icon-p)
+(defun generate-bitmap-resource (filename &key (stream *standard-output*) (name "NAME") icon-p)
   "Parse a bitmap file and generate C code so that the resource can be embedded
 within a C win32 program rather than having to deliver the image separately. 
 The function prints out the code to be inserted into your project.
+Generate the bitmap using gimp and save as a bmp file in 32bpp format (8a 8r 8g 8b).
 " 
   (with-open-file (f filename :direction :input :element-type '(unsigned-byte 8))
     (let ((len (file-length f)))
@@ -45,7 +53,7 @@ The function prints out the code to be inserted into your project.
 		    aa)))
 	  
 	  ;; print output for use with a C compiler 
-	  (format stream "static uint8_t ~A_bits[] = {~%" (or name "NAME"))
+	  (format stream "static uint8_t ~A_bits[] = {~%" name)
 	  (do ((i offset (+ i 16))
 	       (len (length bmp)))
 	      ((>= i len))
@@ -57,7 +65,7 @@ The function prints out the code to be inserted into your project.
 	  (format stream "};~%")
 
 	  ;; print function
-	  (format stream "HBITMAP ~A_bm( void ) {~%" (or name "NAME"))
+	  (format stream "HBITMAP ~A_bm( void ) {~%" name)
 	  (format stream "    static HBITMAP hbm;~%")
 	  (format stream "    BITMAPINFO bmi;~%")
 	  (format stream "    void *pbits;~%")
@@ -71,19 +79,19 @@ The function prints out the code to be inserted into your project.
 	  (format stream "        bmi.bmiHeader.biWidth = ~A;~%" width)
 	  (format stream "~%")
 	  (format stream "        hbm = CreateDIBSection( NULL, &bmi, 0, &pbits, NULL, 0 );~%")
-	  (format stream "        SetDIBits( NULL, hbm, 0, ~A, ~A_bits, &bmi, BI_RGB );~%" height (or name "NAME"))
+	  (format stream "        SetDIBits( NULL, hbm, 0, ~A, ~A_bits, &bmi, BI_RGB );~%" height name)
 	  (format stream "    }~%")
 	  (format stream "    return hbm;~%")
 	  (format stream "}~%")
 	  (when icon-p
-	    (format stream "HICON ~A_icon( void ) {~%" (or name "NAME"))
+	    (format stream "HICON ~A_icon( void ) {~%" name)
 	    (format stream "    static HICON hicon;~%")
 	    (format stream "    if( !hicon ) {~%")
 	    (format stream "        ICONINFO ico;~%")
 	    (format stream "        memset( &ico, 0, sizeof(ico) );~%")
 	    (format stream "        ico.fIcon = TRUE;~%")
-	    (format stream "        ico.hbmMask = ~A_bm();~%" (or name "NAME"))
-	    (format stream "        ico.hbmColor = ~A_bm();~%" (or name "NAME"))
+	    (format stream "        ico.hbmMask = ~A_bm();~%" name)
+	    (format stream "        ico.hbmColor = ~A_bm();~%" name)
 	    (format stream "        hicon = CreateIconIndirect( &ico );~%")
 	    (format stream "    }~%")
 	    (format stream "    return hicon;~%")

@@ -71,6 +71,7 @@ int mmf_unlock( struct mmf_s *mmf ) {
 	memset( &overlap, 0, sizeof(overlap) );
 	b = UnlockFileEx( mmf->fd, 0, 0, 1, &overlap );
 	if( !b ) return -1;
+	if( mmf->file ) FlushViewOfFile( mmf->file, mmf->msize );
 	return 0;
 }
 
@@ -122,7 +123,9 @@ int mmf_unlock( struct mmf_s *mmf ) {
 	do {
 		sts = flock( mmf->fd, LOCK_UN );
 	} while( (sts < 0) && (errno == EINTR) );
-	return sts;
+	if( sts ) return sts;
+	if( mmf->file ) msync( mmf->file, mmf->msize, MS_SYNC );
+	return 0;
 }
 
 int mmf_remap( struct mmf_s *mmf, int size ) {

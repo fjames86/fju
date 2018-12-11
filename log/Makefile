@@ -1,0 +1,16 @@
+
+.PHONY: clean all
+
+all: fjlog liblog.a
+
+clean: 
+	rm fjlog liblog.a 
+
+liblog.a: log.c log.h
+	gcc -c -o log.o -g -I ../mmf log.c
+	ar rcs liblog.a log.o
+
+fjlog: fjlog.c liblog.a
+	gcc -o fjlog fjlog.c -g -I../mmf -L. -llog -L../mmf -lmmf 
+
+

@@ -89,6 +89,12 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
     if( sts ) goto bad;
   }
 
+#ifdef WIN32
+  log->pid = GetCurrentProcessId();
+#else
+  log->pid = getpid();
+#endif
+
   return 0;
 
  bad:
@@ -233,7 +239,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   int idx;
 
   entry->timestamp = time( NULL );
-  entry->pid = getpid();
+  entry->pid = log->pid;
   hdr = (struct _header *)log->mmf.file;
   cnt = 1 + (entry->msglen / LOG_LBASIZE);
   if( entry->msglen % LOG_LBASIZE ) cnt++;

@@ -35,6 +35,7 @@
 
 struct log_s {
   struct mmf_s mmf;
+  uint32_t pid;
 };
 
 struct log_opts {

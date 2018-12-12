@@ -33,15 +33,16 @@
 
 #define LOG_LBASIZE 64 
 
+/* caller data */
 struct log_s {
   struct mmf_s mmf;
   uint32_t pid;
 };
 
 struct log_opts {
-  uint32_t mask;
+  uint32_t mask;                   /* bitmask of opening options */
 #define LOG_OPT_LBACOUNT 0x0001
-  uint32_t lbacount;
+  uint32_t lbacount;               /* if creating log (opening for first time), use this many blocks */
 };
 
 struct log_prop {
@@ -65,7 +66,7 @@ struct log_entry {
 #define LOG_LVL_WARN      0x00000003
 #define LOG_LVL_ERROR     0x00000004
 #define LOG_LVL_FATAL     0x00000005
-#define LOG_BINARY        0x00000010    /* if set, msg contains opaque binary data, otherwise nul-termianted string */ 
+#define LOG_BINARY        0x00000010    /* if set, msg contains opaque binary data, otherwise nul-terminated string */ 
 
   char *msg;                            /* msg buffer */
   int msglen;                           /* length of buffer */
@@ -89,7 +90,9 @@ int log_prop( struct log_s *log, struct log_prop *prop );
  */
 int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, int *nelist );
 
-/* write msg */
+/*
+ * write msg. msg, msglen and flags must be set on input. pid, timestamp, id are set on output.
+ */
 int log_write( struct log_s *log, struct log_entry *entry );
 
 /* utility funtions for writing formatted strings */

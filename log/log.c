@@ -23,6 +23,11 @@
  *
  */
 
+#ifdef WIN32
+#include <WinSock2.h>
+#include <Windows.h>
+#endif
+
 #include "log.h"
 
 #include <string.h>
@@ -60,6 +65,8 @@ struct _entry {
 int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   int sts;
   struct _header *hdr;
+
+  if( !path ) return -1;
 
   memset( log, 0, sizeof(*log) );
 

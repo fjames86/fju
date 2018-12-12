@@ -42,6 +42,8 @@ static struct {
 #define CMD_PROP      5
   struct log_s log;
   int flags;
+  uint64_t start_id;
+  int nmsgs;
 } fju;
 
 static void usage( char *fmt, ... ) {
@@ -55,13 +57,19 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
   }
 
-  printf( "fjlog [-p path] [-f | -w | -r]\n" 
-	  "  Where:\n"
+  printf( "fjlog OPTIONS [-b] [-i id] [-n nmsgs]      Read entry.\n"
+	  "              -w [-b]                      Write entry, data from stdin.\n" 
+          "              -f                           Follow log.\n"
+	  "              -r                           Reset log, clearing all messages.\n"
+	  "              -u                           Show log properties.\n" 
+	  "\n" 
+	  "  OPTIONS\n"
 	  "     -p path          Use log file by path name.\n"
-	  "     -f               Follow log.\n"
-	  "     -w               Write entry, data from stdin.\n"
-	  "     -r               Reset log\n" 
-	  "     -u               Show properties\n" 
+	  "\n" 
+	  "  Where:\n"
+	  "     -b               Read/write binary.\n" 
+	  "     -i id            Read starting from msg ID\n" 
+	  "     -n nmsgs         Read no more than nmsgs\n" 
 	  "\n" );
   exit( 0 );
 }
@@ -92,6 +100,14 @@ int main( int argc, char **argv ) {
       fju.cmd = CMD_RESET;
     } else if( strcmp( argv[i], "-u" ) == 0 ) {
       fju.cmd = CMD_PROP;
+    } else if( strcmp( argv[i], "-i" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      fju.start_id = strtoull( argv[i], NULL, 16 );
+    } else if( strcmp( argv[i], "-n" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      fju.nmsgs = strtoul( argv[i], NULL, 10 );
     } else {
       usage( NULL );
     }
@@ -105,7 +121,7 @@ int main( int argc, char **argv ) {
 
   switch( fju.cmd ) {
   case CMD_READ:
-    cmd_read( 0, NULL );
+    cmd_read( fju.start_id, NULL );
     break;
   case CMD_WRITE:
     cmd_write();
@@ -123,11 +139,23 @@ int main( int argc, char **argv ) {
       printf( "Version %d Seq %"PRIu64" LBACount %u Start %u Count %u\n", 
 	      prop.version, prop.seq, prop.lbacount, prop.start, prop.count );
     }
+    break;
   }
 
   log_close( &fju.log );
 
   return 0;
+}
+
+static char *lvlstr( int lvl ) {
+  switch( lvl ) {
+  case LOG_LVL_TRACE: return "TRACE";
+  case LOG_LVL_DEBUG: return "DEBUG";
+  case LOG_LVL_INFO: return "INFO ";
+  case LOG_LVL_WARN: return "WARN ";
+  case LOG_LVL_ERROR: return "ERROR";
+  }
+  return "ERROR";
 }
 
 static void cmd_read( uint64_t id, uint64_t *newid ) {
@@ -138,7 +166,9 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
   struct tm *tm;
   char timestr[128];
   int msglen;
+  int nmsgs;
 
+  nmsgs = 0;
   memset( &entry, 0, sizeof(entry) );
   msglen = 1024;
   msg = malloc( msglen );
@@ -159,24 +189,31 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
     if( sts ) break;
     if( n == 0 ) break;
 
-    ut = (time_t)entry.timestamp;
-    tm = localtime( (time_t *)&ut );
-    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
-
-    if( entry.flags & LOG_BINARY ) {
-      int i;
-      printf( "%s %u:%x\n  0000  ", timestr, entry.pid, entry.flags & LOG_LVL_MASK );
-      for( i = 0; i < entry.msglen; i++ ) {
-	if( ((i % 8) == 0) && ((i % 16) != 0) ) printf( "  " );
-	if( i && ((i % 16) == 0) ) printf( "\n  %04o  ", i + 1 );
-
-	printf( "%02x ", (uint8_t)entry.msg[i] );
-      }
-      printf( "\n" );
+    if( fju.flags & LOG_BINARY ) {
+      write( STDOUT_FILENO, entry.msg, entry.msglen );
     } else {
-      printf( "%s %u:%x %s\n", timestr, entry.pid, entry.flags & LOG_LVL_MASK, entry.msg );
+      ut = (time_t)entry.timestamp;
+      tm = localtime( (time_t *)&ut );
+      strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+      
+      if( entry.flags & LOG_BINARY ) {
+	int i;
+	printf( "%s %-4u:%s %"PRIx64"\n  0000  ", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
+	for( i = 0; i < entry.msglen; i++ ) {
+	  if( ((i % 8) == 0) && ((i % 16) != 0) ) printf( "  " );
+	  if( i && ((i % 16) == 0) ) printf( "\n  %04o  ", i );
+	  
+	  printf( "%02x ", (uint8_t)entry.msg[i] );
+	}
+	printf( "\n" );
+      } else {
+	printf( "%s %-4u:%s %"PRIx64" %s\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, entry.msg );
+      }
     }
     id = entry.id;
+
+    nmsgs++;
+    if( fju.nmsgs && (nmsgs >= fju.nmsgs) ) break;
   } while( 1 );
   
   if( newid ) *newid = id;

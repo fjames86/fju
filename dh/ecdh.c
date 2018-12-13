@@ -28,15 +28,25 @@
  * to generate keys and derive the common secret 
  */
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <ntstatus.h>
+#include <WinSock2.h>
+#include <Windows.h>
+#include <bcrypt.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdint.h>
 
+#ifndef WIN32
 #include <openssl/evp.h>
 #include <openssl/ec.h>
 #include <openssl/bn.h>
-
+#endif
 
 static void usage( char *fmt, ... ) {
   if( fmt ) {
@@ -55,6 +65,42 @@ static void usage( char *fmt, ... ) {
 
 #define KEYLEN 32 
 
+#ifdef WIN32
+static int ecdh_generate( uint8_t *local_secret, uint8_t *local_public ) {
+	BCRYPT_ALG_HANDLE handle;
+	BCRYPT_KEY_HANDLE hkey;
+	char *pout, *p;
+	int outlen;
+	NTSTATUS sts;
+	BCRYPT_ECCKEY_BLOB *eccp;
+
+	sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDH_P256_ALGORITHM, NULL, 0 );
+
+	sts = BCryptGenerateKeyPair( handle, &hkey, 256, 0 );
+	sts = BCryptFinalizeKeyPair( hkey, 0 );
+
+	sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPRIVATE_BLOB, NULL, 0, &outlen, 0 );
+	pout = malloc( outlen );
+	sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPRIVATE_BLOB, pout, outlen, &outlen, 0 );
+	eccp = (BCRYPT_ECCKEY_BLOB *)pout;	
+	p = pout + sizeof(*eccp);
+	memcpy( local_secret, p, 32 );
+
+	sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPUBLIC_BLOB, NULL, 0, &outlen, 0 );
+	pout = malloc( outlen );
+	sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPUBLIC_BLOB, pout, outlen, &outlen, 0 );
+	eccp = (BCRYPT_ECCKEY_BLOB *)pout;	
+	p = pout + sizeof(*eccp);
+	memcpy( local_public, p, 32 );
+
+	sts = BCryptCloseAlgorithmProvider( handle, 0 );
+
+	return 0;
+}
+static int ecdh_common( uint8_t *local_secret, uint8_t *remote_public, uint8_t *common ) {
+	return -1;
+}
+#else
 static int ecdh_generate( uint8_t *local_secret, uint8_t *local_public ) {
   EC_KEY *hkey;
   EC_POINT *ecp_public;
@@ -114,6 +160,7 @@ static int ecdh_common( uint8_t *local_secret, uint8_t *remote_public, uint8_t *
 
   return 0;
 }
+#endif
 
 static void hex2bn( char *hex, unsigned char *bn ) {
   int i;

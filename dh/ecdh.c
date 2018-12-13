@@ -107,7 +107,7 @@ static int ecdh_generate( uint8_t *local_secret, uint8_t *local_public ) {
   BIGNUM *bn_secret;
   int nbytes;
   BN_CTX *bncxt;
-  char tmpkey[KEYLEN+1];
+  char tmpkey[2*KEYLEN+1];
 
   hkey = EC_KEY_new_by_curve_name( NID_X9_62_prime256v1 );
   EC_KEY_generate_key( hkey );
@@ -118,12 +118,12 @@ static int ecdh_generate( uint8_t *local_secret, uint8_t *local_public ) {
 
   ecp_public = (EC_POINT *)EC_KEY_get0_public_key( hkey );
   bncxt = BN_CTX_new();
-  EC_POINT_point2oct( EC_KEY_get0_group( hkey ), 
-		      ecp_public,
-		      POINT_CONVERSION_COMPRESSED, 
-		      tmpkey, KEYLEN + 1, 
-		      bncxt );
-  memcpy( local_public, tmpkey + 1, KEYLEN );
+  nbytes = EC_POINT_point2oct( EC_KEY_get0_group( hkey ), 
+			       ecp_public,
+			       POINT_CONVERSION_UNCOMPRESSED, 
+			       tmpkey, 2*KEYLEN + 1, 
+			       bncxt );
+  memcpy( local_public, tmpkey + 1, 2*KEYLEN );
   BN_CTX_free( bncxt );
 
   EC_KEY_free( hkey );
@@ -137,7 +137,7 @@ static int ecdh_common( uint8_t *local_secret, uint8_t *remote_public, uint8_t *
   int klen;
   EC_GROUP *group;
   BN_CTX *bncxt;
-  char tmpkey[KEYLEN+1];
+  char tmpkey[2*KEYLEN+1];
 
   hkey = EC_KEY_new_by_curve_name( NID_X9_62_prime256v1 );
   bn_local_secret = BN_bin2bn( local_secret, KEYLEN, NULL );
@@ -147,9 +147,9 @@ static int ecdh_common( uint8_t *local_secret, uint8_t *remote_public, uint8_t *
   bncxt = BN_CTX_new();
   group = (EC_GROUP *)EC_KEY_get0_group( hrkey );
   ecp_remote_public = EC_POINT_new( group );
-  tmpkey[0] = POINT_CONVERSION_COMPRESSED;
-  memcpy( tmpkey + 1, remote_public, KEYLEN );
-  EC_POINT_oct2point( group, ecp_remote_public, tmpkey, KEYLEN + 1, bncxt );
+  tmpkey[0] = POINT_CONVERSION_UNCOMPRESSED;
+  memcpy( tmpkey + 1, remote_public, 2*KEYLEN );
+  EC_POINT_oct2point( group, ecp_remote_public, tmpkey, 2*KEYLEN + 1, bncxt );
   BN_CTX_free( bncxt );
   EC_KEY_set_public_key( hrkey, ecp_remote_public );
 
@@ -162,41 +162,46 @@ static int ecdh_common( uint8_t *local_secret, uint8_t *remote_public, uint8_t *
 }
 #endif
 
-static void hex2bn( char *hex, unsigned char *bn ) {
-  int i;
+static void hex2bn( char *hex, unsigned char *bn, int len ) {
+  int i, j;
   unsigned char x;
-  for( i = 0; i < KEYLEN; i++ ) {
+  for( i = 0; i < len; i++ ) {
     x = 0;
-    if( hex[i] != '\0' ) {
-      if( hex[i] >= '0' && hex[i] <= '9' ) x = hex[i] - '0';
-      else if( hex[i] >= 'a' && hex[i] <= 'f' ) x = hex[i] - 'a';
-      else if( hex[i] >= 'A' && hex[i] <= 'F' ) x = hex[i] - 'A';
+    j = 2 * i;
+    if( hex[j] != '\0' ) {
+      if( hex[j] >= '0' && hex[j] <= '9' ) x = hex[j] - '0';
+      else if( hex[j] >= 'a' && hex[j] <= 'f' ) x = 10 + (hex[j] - 'a');
+      else if( hex[j] >= 'A' && hex[j] <= 'F' ) x = 10 + (hex[j] - 'A');
       else usage( "Unable to parse \"%s\"", hex );
     }
-    if( hex[i + 1] != '\0' ) {
-      x >>= 4;
-      if( hex[i+1] >= '0' && hex[i+1] <= '9' ) x |= hex[i+1] - '0';
-      else if( hex[i+1] >= 'a' && hex[i+1] <= 'f' ) x |= hex[i+1] - 'a';
-      else if( hex[i+1] >= 'A' && hex[i+1] <= 'F' ) x |= hex[i+1] - 'A';
+    x = x << 4;
+    if( hex[2*i + 1] != '\0' ) {
+      j = (2*i) + 1;
+      if( hex[j] >= '0' && hex[j] <= '9' ) x |= hex[j] - '0';
+      else if( hex[j] >= 'a' && hex[j] <= 'f' ) x |= 10 + (hex[j] - 'a');
+      else if( hex[j] >= 'A' && hex[j] <= 'F' ) x |= 10 + (hex[j] - 'A');
       else usage( "Unable to parse \"%s\"", hex );
     }
     bn[i] = x;
-    if( (hex[i] == '\0') || (hex[i+1] == '\0') ) break;
+    if( (hex[2*i] == '\0') || (hex[(2*i)+1] == '\0') ) break;
   }
 }
 
-static void bn2hex( char *bn, char *hex ) {
+static void bn2hex( char *bn, char *hex, int len ) {
   int i;
+  unsigned int x;
   strcpy( hex, "" );
-  for( i = 0; i < KEYLEN; i++ ) {
-    sprintf( hex + strlen( hex ), "%02x", (unsigned int)((unsigned char)bn[i]) );
+  for( i = 0; i < len; i++ ) {
+    x = (unsigned int)((unsigned char)bn[i]);
+    sprintf( hex + 2*i, "%02x", x );
   }
+  hex[len*2] = '\0';
 }
 
 int main( int argc, char **argv ) {
   int i;
   char secret[KEYLEN];
-  char public[KEYLEN];
+  char public[2*KEYLEN];
   char common[KEYLEN];
   int sp, pp;
   char hex[256];
@@ -212,12 +217,12 @@ int main( int argc, char **argv ) {
     if( strcmp( argv[i], "-s" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      hex2bn( argv[i], secret );
+      hex2bn( argv[i], secret, KEYLEN );
       sp = 1;
     } else if( strcmp( argv[i], "-p" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      hex2bn( argv[i], public );
+      hex2bn( argv[i], public, 2*KEYLEN );
       pp = 1;
     } else usage( NULL );
     i++;
@@ -225,13 +230,13 @@ int main( int argc, char **argv ) {
 
   if( pp && sp ) {
     ecdh_common( secret, public, common );
-    bn2hex( common, hex );
+    bn2hex( common, hex, KEYLEN );
     printf( "COMMON %s\n", hex );
   } else {
     ecdh_generate( secret, public );
-    bn2hex( secret, hex );
+    bn2hex( secret, hex, KEYLEN );
     printf( "SECRET %s\n", hex );
-    bn2hex( public, hex );
+    bn2hex( public, hex, 2*KEYLEN );
     printf( "PUBLIC %s\n", hex );
   }
 

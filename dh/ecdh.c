@@ -46,6 +46,7 @@
 #include <openssl/evp.h>
 #include <openssl/ec.h>
 #include <openssl/bn.h>
+#include <openssl/sha.h>
 #endif
 
 static void usage( char *fmt, ... ) {
@@ -143,7 +144,7 @@ static int ecdh_common( struct ecdh_keybuf *local_secret, struct ecdh_keybuf *re
 	return -1;
 }
 #else
-static int ecdh_generate( struct ecdh_keybuf *local_secret, ecdh_keybuf *local_public ) {
+static int ecdh_generate( struct ecdh_keybuf *local_secret, struct ecdh_keybuf *local_public ) {
   EC_KEY *hkey;
   EC_POINT *ecp_public;
   BIGNUM *bn_secret;
@@ -174,7 +175,7 @@ static int ecdh_generate( struct ecdh_keybuf *local_secret, ecdh_keybuf *local_p
   return 0;
 }
 
-static int ecdh_common( struct ecdh_keybuf *local_secret, struct ecdk_keybuf *remote_public, struct ecdh_keybuf *common ) {
+static int ecdh_common( struct ecdh_keybuf *local_secret, struct ecdh_keybuf *remote_public, struct ecdh_keybuf *common ) {
   EC_KEY *hkey, *hrkey;
   BIGNUM *bn_local_secret;
   EC_POINT *ecp_remote_public;
@@ -222,6 +223,8 @@ static void hex2bn( char *hex, struct ecdh_keybuf *buf ) {
   int i, j;
   unsigned char x;
   for( i = 0; i < sizeof(buf->buf); i++ ) {
+    if( (hex[2*i] == '\0') ) break;
+
     x = 0;
     j = 2 * i;
     if( hex[j] != '\0' ) {
@@ -239,7 +242,7 @@ static void hex2bn( char *hex, struct ecdh_keybuf *buf ) {
       else usage( "Unable to parse \"%s\"", hex );
     }
     buf->buf[i] = x;
-    if( (hex[2*i] == '\0') || (hex[(2*i)+1] == '\0') ) break;
+    if( (hex[(2*i)+1] == '\0') ) break;
   }
   buf->len = i;
 }

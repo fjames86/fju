@@ -24,13 +24,16 @@
  */
 
 #ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
 #include <WinSock2.h>
 #include <Windows.h>
 #endif
 
 #include "log.h"
 
+#include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #define LOG_LBASIZE 64 
 
@@ -205,7 +208,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
 
       idx = (idx + 1) % hdr->lbacount;
       q = elist[i].msg;
-      for( j = 0; j < e->count; j++ ) {
+      for( j = 0; j < (int)e->count; j++ ) {
 	p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
 	if( len > 0 ) {
 	  k = len;
@@ -218,10 +221,10 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
       
       /* if non-binary append a null terminator */
       if( !(elist[i].flags & LOG_BINARY) ) {
-	if( e->msglen < elist[i].msglen ) elist[i].msg[e->msglen] = '\0';
+	if( (int)e->msglen < elist[i].msglen ) elist[i].msg[e->msglen] = '\0';
       }
 
-      if( e->msglen < elist[i].msglen ) elist[i].msglen = e->msglen;
+      if( (int)e->msglen < elist[i].msglen ) elist[i].msglen = e->msglen;
 
 
     }
@@ -255,19 +258,19 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   if( sts ) return sts;
 
   /* check enough space */
-  if( cnt > hdr->lbacount ) goto done;
+  if( cnt > (int)hdr->lbacount ) goto done;
 
   /* get next location */
   idx = (hdr->start + hdr->count) % hdr->lbacount;
 
   /* check we won't overwrite the current starting block */
-  if( (hdr->lbacount - hdr->count) < cnt ){
+  if( (int)(hdr->lbacount - hdr->count) < cnt ){
     do {
       /* oh dear - we will overwrite, keep advancing the starting point until there is space */
       e = (struct _entry *)((char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * hdr->start));
       hdr->start = (hdr->start + e->count) %  hdr->lbacount;
       hdr->count -= e->count;
-    } while( (hdr->lbacount - hdr->count) < cnt );
+    } while( (int)(hdr->lbacount - hdr->count) < cnt );
   }
   hdr->count += cnt;
   hdr->seq++;
@@ -278,7 +281,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   e->count = cnt;
   e->id = ((hdr->seq & 0xffffffff) << 32) | idx;
   e->timestamp = time( NULL );
-  e->pid = getpid();
+  e->pid = log->pid;
   e->flags = entry->flags;
   e->msglen = entry->msglen;
   len = e->msglen;
@@ -310,7 +313,7 @@ int log_writev( struct log_s *log, int lvl, char *fmt, va_list args ) {
   vsprintf( buf, fmt, args );  
   memset( &entry, 0, sizeof(entry) );
   entry.msg = buf;
-  entry.msglen = strlen(buf);
+  entry.msglen = (int)strlen(buf);
   entry.flags = lvl & (~LOG_BINARY);
   return log_write( log, &entry );  
 }

@@ -16,6 +16,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libmmf", "libmmf\libmmf.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{2AF8A2F9-355A-4B9F-8705-2065D4C129DE}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "liblog", "liblog\liblog.vcxproj", "{2FC14865-015B-4849-9FB6-B2C960AA9ADF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -86,6 +88,18 @@ Global
 		{2AF8A2F9-355A-4B9F-8705-2065D4C129DE}.Release|Win32.Build.0 = Release|Win32
 		{2AF8A2F9-355A-4B9F-8705-2065D4C129DE}.Release|x64.ActiveCfg = Release|x64
 		{2AF8A2F9-355A-4B9F-8705-2065D4C129DE}.Release|x64.Build.0 = Release|x64
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Debug|Win32.ActiveCfg = Debug|Win32
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Debug|Win32.Build.0 = Debug|Win32
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Debug|x64.ActiveCfg = Debug|x64
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Debug|x64.Build.0 = Debug|x64
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Release|Win32.ActiveCfg = Release|Win32
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Release|Win32.Build.0 = Release|Win32
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Release|x64.ActiveCfg = Release|x64
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

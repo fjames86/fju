@@ -182,6 +182,7 @@ static int ecdh_common( struct ecdh_keybuf *local_secret, struct ecdk_keybuf *re
   EC_GROUP *group;
   BN_CTX *bncxt;
   char tmpkey[2*KEYLEN+1];
+  SHA_CTX sha1cxt;
 
   hkey = EC_KEY_new_by_curve_name( NID_X9_62_prime256v1 );
   bn_local_secret = BN_bin2bn( local_secret->buf, KEYLEN, NULL );
@@ -199,6 +200,16 @@ static int ecdh_common( struct ecdh_keybuf *local_secret, struct ecdk_keybuf *re
 
   klen = ECDH_compute_key( common->buf, KEYLEN, EC_KEY_get0_public_key( hrkey ), hkey, NULL );
   common->len = KEYLEN;
+
+  /* 
+   * this seems odd, but we have to do it for windows compatibility. instead of computing the common key
+   * we instead compute the sha1 hash of the common secret. this is because the windows API cannot/does not (wtf!?) 
+   * give us this info, it can only give us a derived value e.g. a sha1 hash 
+   */
+  SHA1_Init( &sha1cxt );
+  SHA1_Update( &sha1cxt, common->buf, common->len );
+  SHA1_Final( common->buf, &sha1cxt );
+  common->len = 20;
 
   EC_KEY_free( hkey );
   EC_KEY_free( hrkey );
@@ -298,7 +309,7 @@ int main( int argc, char **argv ) {
 
   if( pp && sp ) {
     ecdh_common( &secret, &public, &common );
-    bn2hex( &common, hex, common.len );
+    bn2hex( common.buf, hex, common.len );
     printf( "COMMON %s\n", hex );
   } else {
     ecdh_generate( &secret, &public );

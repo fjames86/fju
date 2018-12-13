@@ -31,6 +31,7 @@
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #include <ntstatus.h>
+#define WIN32_NO_STATUS /* stop windows.h complaining about multiple definitions of ntstatus values */
 #include <WinSock2.h>
 #include <Windows.h>
 #include <bcrypt.h>

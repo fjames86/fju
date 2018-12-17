@@ -224,14 +224,18 @@ void sha1( uint8_t *hash, struct sec_buf *iov, int n ) {
 }
 #endif
 
-void sha1_hmac( uint8_t *hash, uint8_t *key, char *buf, int len ) {
+void sha1_hmac( uint8_t *hash, uint8_t *key, struct sec_buf *iov, int n ) {
 	/* HMAC = Hash( (key XOR opad) || Hash( (key XOR ipad) || message ) ) */
 	uint8_t opad[SEC_AES_MAX_KEY], ipad[SEC_AES_MAX_KEY];
 	int i;
 	uint8_t rhash[SEC_SHA1_MAX_HASH];
-        struct sec_buf iov[2];
+	struct sec_buf *piov;
+
+	if( n < 1 ) return;
 
 	memset( hash, 0, SEC_SHA1_MAX_HASH );
+
+	piov = malloc( sizeof(*piov) * (n + 1) );
 
 	/* XOR key with ipad and opad */
 	for( i = 0; i < SEC_AES_MAX_KEY; i++ ) {
@@ -240,18 +244,22 @@ void sha1_hmac( uint8_t *hash, uint8_t *key, char *buf, int len ) {
 	}
 
 	/* Hash ipad||message */
-	iov[0].buf = ipad;
-	iov[0].len = SEC_AES_MAX_KEY;
-	iov[1].buf = buf;
-	iov[1].len = len;
-	sha1( rhash, iov, 2 );
+	piov[0].buf = ipad;
+	piov[0].len = SEC_AES_MAX_KEY;
+	for( i = 0; i < n; i++ ) {
+	  piov[i + 1].buf = iov[i].buf;
+	  piov[i + 1].len = iov[i].len;
+	}
+	sha1( rhash, piov, n + 1 );
 
 	/* Hash opad || Hash(ipad||message) */
-	iov[0].buf = opad;
-	iov[0].len = SEC_AES_MAX_KEY;
-	iov[1].buf = rhash;
-	iov[1].len = SEC_SHA1_MAX_HASH;
-	sha1( hash, iov, 2 );
+	piov[0].buf = opad;
+	piov[0].len = SEC_AES_MAX_KEY;
+	piov[1].buf = rhash;
+	piov[1].len = SEC_SHA1_MAX_HASH;
+	sha1( hash, piov, 2 );
+
+	free( piov );
 }
 
 

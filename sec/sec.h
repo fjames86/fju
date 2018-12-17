@@ -18,7 +18,7 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
 
 #define SEC_SHA1_MAX_HASH 20
 void sha1( uint8_t *hash, struct sec_buf *iov, int n );
-void sha1_hmac( uint8_t *hash, uint8_t *key, char *buf, int len );
+void sha1_hmac( uint8_t *hash, uint8_t *key, struct sec_buf *iov, int n );
 
 #define SEC_AES_MAX_KEY 16
 void aes_encrypt( uint8_t *key, uint8_t *buf, int n );

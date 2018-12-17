@@ -58,7 +58,7 @@ int main( int argc, char **argv ) {
 
   sec_rand( buf_priv1, sizeof(buf_priv1) );
   sha1( buf_priv1, &priv1, 1 );
-  sha1_hmac( buf_priv2, buf_com1, buf_priv1, sizeof(buf_priv1) );
+  sha1_hmac( buf_priv2, buf_com1, &priv1, 1 );
   
   
 

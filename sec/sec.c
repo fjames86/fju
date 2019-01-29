@@ -29,7 +29,10 @@
 #endif
 
 
-
+void sec_buf_init( struct sec_buf *sbuf, char *buf, int len ) {
+	sbuf->buf = buf;
+	sbuf->len = len;
+}
 
 #include "sec.h"
 
@@ -62,7 +65,7 @@ int ecdh_generate( struct sec_buf *local_priv, struct sec_buf *local_public ) {
   sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPUBLIC_BLOB, pout, outlen, &outlen, 0 );
   eccp = (BCRYPT_ECCKEY_BLOB *)pout;	
   memcpy( local_public->buf, pout + sizeof(*eccp), SEC_ECDH_MAX_PUBKEY );
-  local_pubkey->len = SEC_EDCH_MAX_PUBKEY;
+  local_public->len = SEC_ECDH_MAX_PUBKEY;
   
   BCryptDestroyKey( hkey );
   sts = BCryptCloseAlgorithmProvider( handle, 0 );
@@ -71,7 +74,7 @@ int ecdh_generate( struct sec_buf *local_priv, struct sec_buf *local_public ) {
 }
 
 
-int ecdh_common( struct sec_buf *local_priv, uint8_t *remote_public, struct sec_buf *common ) {
+int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, struct sec_buf *common ) {
   BCRYPT_ALG_HANDLE handle;
   BCRYPT_KEY_HANDLE hkey, hrkey;
   BCRYPT_SECRET_HANDLE skey;

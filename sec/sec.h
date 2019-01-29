@@ -9,6 +9,7 @@ struct sec_buf {
   int len;
   char *buf;
 };
+void sec_buf_init( struct sec_buf *sbuf, char *buf, int len );
 
 #define SEC_ECDH_MAX_PRIVKEY 96
 #define SEC_ECDH_MAX_PUBKEY  64 

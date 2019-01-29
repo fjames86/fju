@@ -28,13 +28,14 @@
 #include <fcntl.h>
 #endif
 
+#include "sec.h"
 
 void sec_buf_init( struct sec_buf *sbuf, char *buf, int len ) {
 	sbuf->buf = buf;
 	sbuf->len = len;
 }
 
-#include "sec.h"
+
 
 
 #define SEC_ECDH_KEYLEN 32 

@@ -262,7 +262,11 @@ static void cmd_tail( void ) {
       seq = prop.seq;
     }
 
+#ifdef WIN32
+    Sleep( 1000 );
+#else
     sleep( 1 );
+#endif
   } while( 1 );
   
 }

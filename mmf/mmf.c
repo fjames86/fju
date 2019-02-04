@@ -69,7 +69,7 @@ int mmf_unlock( struct mmf_s *mmf ) {
 	OVERLAPPED overlap;
 	BOOL b;
 	memset( &overlap, 0, sizeof(overlap) );
-	b = UnlockFileEx( mmf->fd, 0, 0, 1, &overlap );
+	b = UnlockFileEx( mmf->fd, 0, 1, 0, &overlap );
 	if( !b ) return -1;
 	if( mmf->file ) FlushViewOfFile( mmf->file, mmf->msize );
 	return 0;

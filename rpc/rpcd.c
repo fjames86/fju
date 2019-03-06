@@ -136,6 +136,7 @@ struct rpc_conn {
 
 static struct {
 	int foreground;
+	int no_rpcregister;
 	volatile int exiting;
 
 	struct rpc_listen listen[RPC_MAX_LISTEN];   /* listening fds */
@@ -191,6 +192,7 @@ static void usage( char *fmt, ... ) {
 		"            [-L path]\n"
 #endif
 		"            [-f]\n"
+		"            [-R]\n"
 		"\n"
 		"  Where:\n"
 		"            -f               Run in foreground\n"
@@ -202,6 +204,7 @@ static void usage( char *fmt, ... ) {
 #ifdef USE_SHAUTH
 		"            -s secret        Shared secret\n"
 #endif
+		"            -R               Don't register with rpcbind service.\n" 		
 		"\n" );
 
 
@@ -284,6 +287,8 @@ int main( int argc, char **argv ) {
 			if( i >= argc ) usage( NULL );
 			rpc.shauth_secret = argv[i];
 #endif
+		} else if( strcmp( argv[i], "-R" ) == 0 ) {
+	        	rpc.no_rpcregister = 1;
 		}
 		else usage( NULL );
 
@@ -963,7 +968,7 @@ static void rpc_run( void ) {
 					break;
 				}
 
-				rpcbind_call_set( &sin, &map );
+				if( !rpc.no_rpcregister ) rpcbind_call_set( &sin, &map );
 			}
 
 			vlist = vlist->next;

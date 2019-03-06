@@ -52,6 +52,12 @@ struct log_prop {
   uint32_t lbacount;
   uint32_t start;   /* starting index */
   uint32_t count;   /* block count */
+  uint64_t last_id;
+};
+
+struct log_iov {
+  char *buf;
+  int len;
 };
 
 struct log_entry {
@@ -68,8 +74,12 @@ struct log_entry {
 #define LOG_LVL_FATAL     0x00000005
 #define LOG_BINARY        0x00000010    /* if set, msg contains opaque binary data, otherwise nul-terminated string */ 
 
-  char *msg;                            /* msg buffer */
-  int msglen;                           /* length of buffer */
+  /* io buffers */
+  int niov;
+  struct log_iov *iov;
+
+  int msglen;                           /* total length of message */
+  uint64_t prev_id;
 };
 
 /* open/close file */
@@ -90,6 +100,14 @@ int log_prop( struct log_s *log, struct log_prop *prop );
  */
 int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, int *nelist );
 
+/* read end message i.e. most recently written */
+int log_read_end( struct log_s *log, uint64_t id, struct log_entry *elist, int n, int *nelist );
+
+/* read a specific entry */
+int log_read_entry( struct log_s *log, uint64_t id, struct log_entry *entry );
+/* read a specific entry into single buffer */
+int log_read_buf( struct log_s *log, uint64_t id, char *buf, int len, int *msglen );
+
 /*
  * write msg. msg, msglen and flags must be set on input. pid, timestamp, id are set on output.
  */
@@ -98,6 +116,9 @@ int log_write( struct log_s *log, struct log_entry *entry );
 /* utility funtions for writing formatted strings */
 int log_writev( struct log_s *log, int lvl, char *fmt, va_list args );
 int log_writef( struct log_s *log, int lvl, char *fmt, ... );
+
+/* write single buffer */
+int log_write_buf( struct log_s *log, int lvl, char *buf, int len, uint64_t *id );
 
 #endif
 

@@ -49,6 +49,7 @@ int mmf_close( struct mmf_s *mmf );
 int mmf_lock( struct mmf_s *mmf );
 int mmf_unlock( struct mmf_s *mmf );
 int mmf_remap( struct mmf_s *mmf, int size );
+int mmf_sync( struct mmf_s *mmf );
 
 #endif
 

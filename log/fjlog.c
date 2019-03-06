@@ -32,6 +32,17 @@
 
 #include "log.h"
 
+uint64_t rpc_now( void ) {
+#ifdef WIN32
+  return GetTickCount64();
+#else
+  struct timespec tm;
+  clock_gettime( CLOCK_MONOTONIC, &tm );
+  return (uint64_t)((tm.tv_sec * 1000ULL) + (tm.tv_nsec / (1000ULL * 1000ULL)));
+#endif
+}
+
+
 static struct {
   char *filepath;
   int cmd;
@@ -40,10 +51,13 @@ static struct {
 #define CMD_TAIL      3 
 #define CMD_RESET     4
 #define CMD_PROP      5
+#define CMD_TEST      6 
   struct log_s log;
   int flags;
-  uint64_t start_id;
+  uint64_t start_id;  
   int nmsgs;
+  int read_reverse;
+  int print_quiet;
 } fju;
 
 static void usage( char *fmt, ... ) {
@@ -65,6 +79,7 @@ static void usage( char *fmt, ... ) {
 	  "\n" 
 	  "  OPTIONS\n"
 	  "     -p path          Use log file by path name.\n"
+	  "     -R               Read reverse.\n" 
 	  "\n" 
 	  "  Where:\n"
 	  "     -b               Read/write binary.\n" 
@@ -77,11 +92,15 @@ static void usage( char *fmt, ... ) {
 static void cmd_read( uint64_t id, uint64_t *newid );
 static void cmd_write( void );
 static void cmd_tail( void );
+static void cmd_test( void );
 
 int main( int argc, char **argv ) {
   int i;
   int sts;
-
+  int logsize = 2*1024*1024;
+  struct log_opts opts;
+  
+  memset( &opts, 0, sizeof(opts) );
   fju.cmd = CMD_READ;
 
   i = 1;
@@ -108,6 +127,25 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       fju.nmsgs = strtoul( argv[i], NULL, 10 );
+    } else if( strcmp( argv[i], "-s" ) == 0 ) {
+      char *terminator;
+      i++;
+      if( i >= argc ) usage( NULL );
+      logsize = strtoul( argv[i], &terminator, 10 );
+      switch( *terminator ) {
+      case 'M':
+      case 'm':
+	logsize *= 1024;
+      case 'k':
+      case 'K':
+	logsize *= 1024;	
+      }
+    } else if( strcmp( argv[i], "-R" ) == 0 ) {
+      fju.read_reverse = 1;
+    } else if( strcmp( argv[i], "-q" ) == 0 ) {
+      fju.print_quiet = 1;
+    } else if( strcmp( argv[i], "-t" ) == 0 ) {
+      fju.cmd = CMD_TEST;
     } else {
       usage( NULL );
     }
@@ -116,7 +154,9 @@ int main( int argc, char **argv ) {
 
   if( !fju.filepath ) fju.filepath = "fju.log";
 
-  sts = log_open( fju.filepath, NULL, &fju.log );
+  opts.mask = LOG_OPT_LBACOUNT;
+  opts.lbacount = logsize / LOG_LBASIZE;
+  sts = log_open( fju.filepath, &opts, &fju.log );
   if( sts ) usage( "Failed to open" );
 
   switch( fju.cmd ) {
@@ -136,9 +176,18 @@ int main( int argc, char **argv ) {
     {
       struct log_prop prop;
       log_prop( &fju.log, &prop );
-      printf( "Version %d Seq %"PRIu64" LBACount %u Start %u Count %u\n", 
-	      prop.version, prop.seq, prop.lbacount, prop.start, prop.count );
+      printf( "Version %d Seq %"PRIu64" LBACount %u (%uMB) Start %u Count %u LastID %"PRIx64"\n", 
+	      prop.version,
+	      prop.seq,
+	      prop.lbacount,
+	      (prop.lbacount * LOG_LBASIZE) / (1024*1024),
+	      prop.start,
+	      prop.count,
+	      prop.last_id );
     }
+    break;
+  case CMD_TEST:
+    cmd_test();
     break;
   }
 
@@ -165,17 +214,19 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
   time_t ut;
   struct tm *tm;
   char timestr[128];
-  int msglen;
-  int nmsgs;
+  int msglen, nmsgs;
+  struct log_iov iov[1];
 
   nmsgs = 0;
   memset( &entry, 0, sizeof(entry) );
   msglen = 1024;
   msg = malloc( msglen );
   do {
-    entry.msglen = 0;
-    sts = log_read( &fju.log, id, &entry, 1, &n );
-    if( sts ) break;
+    entry.niov = 0;
+    sts = fju.read_reverse ?
+      log_read_end( &fju.log, id, &entry, 1, &n ) : 
+      log_read( &fju.log, id, &entry, 1, &n );
+    if( sts < 0 ) break;
     if( n == 0 ) break;
 
     if( entry.msglen > msglen ) {
@@ -183,14 +234,18 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
       msg = realloc( msg, msglen );
     }
     
-    entry.msg = msg;
-    entry.msglen = msglen;
-    sts = log_read( &fju.log, id, &entry, 1, &n );
-    if( sts ) break;
+    entry.iov = iov;
+    entry.iov[0].buf = msg;
+    entry.iov[0].len = msglen;
+    entry.niov = 1;
+    sts = fju.read_reverse ?
+      log_read_end( &fju.log, id, &entry, 1, &n ) : 
+      log_read( &fju.log, id, &entry, 1, &n );
+    if( sts < 0 ) break;
     if( n == 0 ) break;
 
     if( fju.flags & LOG_BINARY ) {
-      write( STDOUT_FILENO, entry.msg, entry.msglen );
+      if( !fju.print_quiet ) write( STDOUT_FILENO, msg, entry.msglen );
     } else {
       ut = (time_t)entry.timestamp;
       tm = localtime( (time_t *)&ut );
@@ -198,20 +253,28 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
       
       if( entry.flags & LOG_BINARY ) {
 	int i;
-	printf( "%s %-4u:%s %"PRIx64"\n  0000  ", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
-	for( i = 0; i < entry.msglen; i++ ) {
-	  if( ((i % 8) == 0) && ((i % 16) != 0) ) printf( "  " );
-	  if( i && ((i % 16) == 0) ) printf( "\n  %04o  ", i );
-	  
-	  printf( "%02x ", (uint8_t)entry.msg[i] );
+	printf( "%s %-4u:%s %"PRIx64"\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
+	if( !fju.print_quiet ) {
+	  printf( "  0000  " );
+	  for( i = 0; i < entry.msglen; i++ ) {
+	    if( ((i % 8) == 0) && ((i % 16) != 0) ) printf( "  " );
+	    if( i && ((i % 16) == 0) ) printf( "\n  %04o  ", i );
+	    
+	    printf( "%02x ", (uint8_t)msg[i] );
+	  }
+	  printf( "\n" );
 	}
-	printf( "\n" );
       } else {
-	printf( "%s %-4u:%s %"PRIx64" %s\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, entry.msg );
+	if( !fju.print_quiet ) printf( "%s %-4u:%s %"PRIx64" %s\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, msg );
       }
     }
-    id = entry.id;
-
+    if( fju.read_reverse ) {
+      id = entry.prev_id;
+      if( id == 0 ) break;
+    } else {
+      id = entry.id;
+    }
+    
     nmsgs++;
     if( fju.nmsgs && (nmsgs >= fju.nmsgs) ) break;
   } while( 1 );
@@ -222,23 +285,29 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 }
 
 static void cmd_write( void ) {
-  char buf[1024];
+  char *buf;
+  int msglen = 16*1024;
   int offset = 0;
   int sts;
   struct log_entry entry;
-
+  struct log_iov iov[1];
+  
+  buf = malloc( msglen );
   do {
-    sts = read( STDIN_FILENO, buf + offset, sizeof(buf) - offset );
+    sts = read( STDIN_FILENO, buf + offset, msglen - offset );
     if( sts <= 0 ) break;
     offset += sts;
-  } while( offset < sizeof(buf) );
+  } while( offset < msglen );
 
   memset( &entry, 0, sizeof(entry) );
-  entry.msglen = offset;
-  entry.msg = buf;
+  entry.iov = iov;
+  entry.iov[0].len = offset;
+  entry.iov[0].buf = buf;
+  entry.niov = 1;
   entry.flags = fju.flags | LOG_LVL_INFO;
   sts = log_write( &fju.log, &entry );
   if( sts ) usage( "Failed to write entry" );
+  free( buf );
 }
 
 static void cmd_tail( void ) {
@@ -269,4 +338,31 @@ static void cmd_tail( void ) {
 #endif
   } while( 1 );
   
+}
+
+static void cmd_test( void ) {
+  uint64_t start_time, end_time;
+  int niters = 1000000;
+  struct log_entry en;
+  struct log_iov iov[1];
+  char tmpbuf[32];
+  int i;
+  
+  memset( tmpbuf, 12, 32 );
+  iov[0].buf = tmpbuf;
+  iov[0].len = 32;
+  en.iov = iov;
+  en.niov = 1;
+  en.flags = LOG_BINARY;
+  
+  start_time = rpc_now();
+  for( i = 0; i < niters; i++ ) {
+    log_write( &fju.log, &en );
+  }
+  end_time = rpc_now();
+  printf( "niters=%d total=%dms writes/s=%d  per-write=%lf ms\n",
+	  niters,
+	  (int)(end_time - start_time),
+	  (int)((double)niters / ((double)(end_time - start_time) / 1000.0)),
+	  ((double)(end_time - start_time)) / (double)niters );  
 }

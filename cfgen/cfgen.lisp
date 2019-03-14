@@ -73,7 +73,7 @@
   (format t "struct ~A_file {~%" *prefix*)
   (format t "    struct ~A_header header;~%" *prefix*)
   (dolist (entry entries)
-    (format t "    struct ~A_~A ~A[~A_MAX_~A]~%"
+    (format t "    struct ~A_~A ~A[~A_MAX_~A];~%"
 	    *prefix*
 	    entry
 	    entry
@@ -184,7 +184,7 @@
 	  (type-name keytype) (if (eq keytype :string) "*" "")
 	  key
 	  *prefix* name name)
-  (format t "    int sts;~%")
+  (format t "    int sts, i;~%")
   (format t "    if( glob.ocount <= 0 ) return -1;~%")
   (format t "    ~A_lock();~%" *prefix*)
   (format t "    sts = -1;~%")
@@ -216,7 +216,7 @@
   (format t "        memset( ~A, 0, sizeof(*~A) );~%" name name)
   (format t "        ~A->tag = glob.file->header.seq;~%" name)
   (format t "        glob.file->header.seq++;~%")
-  (format t "        glob.file->~A_count++;~%" name)
+  (format t "        glob.file->header.~A_count++;~%" name)
   (format t "        sts = 0;~%")
   (format t "    }~%")
   (format t "    ~A_unlock();~%" *prefix*)
@@ -299,7 +299,11 @@
 
 (defun emit-code-file (entries extras)
   (format t "~%")
-  (format t "include \"~A.h\"~%" *prefix*)
+  (format t "#include \"~A.h\"~%" *prefix*)
+  (format t "#include <stdint.h>~%")
+  (format t "#include <stdlib.h>~%")
+  (format t "#include <string.h>~%")
+  (format t "#include <mmf.h>~%")
   (format t "~%")
   (dolist (entry entries)
     (format t "#define ~A_MAX_~A 32~%" (string-upcase *prefix*) (string-upcase entry)))
@@ -348,14 +352,37 @@
 
 (defun emit-files (&key prefix header-extras entries)
   (let ((*prefix* prefix))
-    (with-output-to-file (*standard-output* (format nil "~A.h" prefix)
+    (with-open-file (*standard-output* (format nil "~A.h" prefix)
 					    :direction :output
 					    :if-exists :supersede)
       (emit-header-file entries header-extras))
-    (with-output-to-file (*standard-output* (format nil "~A.c" prefix)
+    (with-open-file (*standard-output* (format nil "~A.c" prefix)
 					    :direction :output
 					    :if-exists :supersede)
-      (emit-code-file entries header-extras))))
+      (emit-code-file (mapcar #'car entries) header-extras))))
+
+(defun emit-files-stream (stream &key prefix header-extras entries)
+  (let ((*prefix* prefix)
+	(*standard-output* stream))
+    (emit-header-file entries header-extras)
+    (emit-code-file (mapcar #'car entries) header-extras)))
+
+(defmacro gen (prefix header-extras &rest entries)
+  `(emit-files ;;-stream *standard-output*
+		      :prefix ,(string-downcase (string prefix))
+		      :header-extras (list ,@(mapcar (lambda (extra)
+						       (destructuring-bind (name type &optional array-length) extra
+							 `(list ,(string-downcase (string name)) ,type ,array-length)))
+						     header-extras))
+		      :entries (list ,@(mapcar (lambda (entry)
+						 (destructuring-bind (entry-name &rest fields) entry
+						   `(list ,(string-downcase (string entry-name))
+							  (list ,@(mapcar (lambda (field)
+									    (destructuring-bind (field-name field-type &optional field-array-length) field
+									      `(list ,(string-downcase (string field-name)) ,field-type ,field-array-length)))
+									  fields)))))
+					       entries))))
+
 
 
 					    

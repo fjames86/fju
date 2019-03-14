@@ -345,7 +345,73 @@
     (emit-entry-rem entry "tag" :uint64)
     (format t "~%")))
 
-    
+;; -------------------------------------------------------
+
+(defun emit-usage ()
+  (format t "static void usage( char *fmt, ... ) {~%")
+  (format t "    printf( \"Usage: \\n\"~%")
+  (format t "    if( fmt ) {~%")
+  (format t "        va_list args;~%")
+  (format t "        printf( \"Error: \" );~%")
+  (format t "        va_start( args, fmt );~%")
+  (format t "        vprintf( fmt, args );~%")
+  (format t "        va_end( args );~%")
+  (format t "        printf( \"\\n\" );~%")
+  (format t "    }~%")
+  (format t "    exit( 0 );~%")
+  (format t "}~%"))
+
+(defun emit-main (entries)
+  (flet ((emit-add-body (entry)
+	   (format t "            struct ~A_~A entry;~%" *prefix* entry)
+	   (format t "            memset( &entry, 0, sizeof(entry) );~%")
+	   (format t "            i++;~%")
+	   (format t "            while( i < argc ) {~%")
+	   (format t "            }~%")
+	   (format t "            sts = ~A_~A_add( &entry );~%" *prefix* entry)
+	   (format t "            if( sts ) usage( \"Failed to add ~A\" );~%" entry))
+	 (emit-rem-body (entry)
+	   (format t "            uint64_t tag;~%")
+	   (format t "            i++;~%")
+	   (format t "            if( i >= argc ) usage( NULL );~%")
+	   (format t "            tag = strtoull( argv[i], NULL, 16 );~%")
+	   (format t "            sts = ~A_~A_rem( tag );~%" *prefix* entry)
+	   (format t "            if( sts ) usage( \"Failed to rem ~A\" );~%" entry)))
+	   
+    (format t "int main( int argc, char **argv ) {~%")
+    (format t "    int sts, i;~%")
+    (format t "~%")
+    (format t "    sts = ~A_open();~%" *prefix*)
+    (format t "    if( sts ) usage( \"Failed to open\" );~%")
+    (format t "~%")
+    (format t "    i = 1;~%")
+    (format t "    if( i >= argc ) usage( NULL );~%")
+    (format t "    if( strcmp( argv[i], \"list\" ) ) {~%")
+    (format t "        cmd_list();~%")
+    (format t "    } else if( strcmp( argv[i], \"add\" ) == 0 ) {~%")
+    (format t "        i++;~%")
+    (format t "        if( i >= argc ) usage( NULL );~%")
+    (format t "        if( strcmp( argv[i], \"~A\" ) == 0 ) {~%" (first entries))
+    (emit-add-body (first entries))
+    (dolist (entry (cdr entries))
+      (format t "        } else if( strcmp( argv[i], \"~A\" ) == 0 ) {~%" entry)
+      (emit-add-body entry))
+    (format t "        } else usage( NULL );~%")
+    (format t "    } else if( strcmp( argv[i], \"rem\" ) == 0 ) {~%")
+    (format t "        i++;~%")
+    (format t "        if( i >= argc ) usage( NULL );~%")
+    (format t "        if( strcmp( argv[i], \"~A\" ) == 0 ) {~%" (first entries))
+    (emit-rem-body (first entries))
+    (dolist (entry (cdr entries))
+      (format t "        } else if( strcmp( argv[i], \"~A\" ) == 0 ) {~%" entry)
+      (emit-rem-body entry))
+    (format t "        } else usage( NULL );~%")
+    (format t "    } else if( strcmp( argv[i], \"set\" ) == 0 ) {~%")
+    (format t "    } else usage( NULL );~%")
+    (format t "    ~A_close();~%" *prefix*)
+    (format t "    return 0;~%")
+    (format t "}~%")))
+
   
 ;; ------------------------------------
 
@@ -387,3 +453,4 @@
 
 					    
 					    
+;; -----------------------------------------------

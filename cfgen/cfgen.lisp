@@ -95,7 +95,7 @@
     (format t "    uint32_t ~A_count;~%" (entry-name entry)))
   (dolist (extra extras)
     (cond
-      ((entry-array-length extra)
+      ((field-array-length extra)
        (format t "    ~A ~A[~A];~%"
 	       (field-type-name extra)
 	       (field-name extra)
@@ -114,7 +114,7 @@
     (format t "    prop->~A_count = glob.file->header.~A_count;~%" (entry-name entry) (entry-name entry)))
   (dolist (extra extras)
     (cond
-      ((entry-array-length extra)
+      ((field-array-length extra)
        (format t "    memcpy( prop->~A, glob.file->header.~A, sizeof(glob.file->header.~A[0]) * ~A );~%"
 	       (field-name extra)
 	       (field-name extra)

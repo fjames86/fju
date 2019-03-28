@@ -34,7 +34,7 @@
 
 uint64_t rpc_now( void ) {
 #ifdef WIN32
-  return GetTickCount64();
+  return GetTickCount();
 #else
   struct timespec tm;
   clock_gettime( CLOCK_MONOTONIC, &tm );
@@ -286,7 +286,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 
 static void cmd_write( void ) {
   char *buf;
-  int msglen = 16*1024;
+  int msglen = 4*4096;
   int offset = 0;
   int sts;
   struct log_entry entry;
@@ -294,11 +294,16 @@ static void cmd_write( void ) {
   
   buf = malloc( msglen );
   do {
+    if( (msglen - offset) < 4096 ) {
+      msglen += 4096;
+      buf = realloc( buf, msglen );
+    }
+    
     sts = read( STDIN_FILENO, buf + offset, msglen - offset );
     if( sts <= 0 ) break;
     offset += sts;
   } while( offset < msglen );
-
+  
   memset( &entry, 0, sizeof(entry) );
   entry.iov = iov;
   entry.iov[0].len = offset;

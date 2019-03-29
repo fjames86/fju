@@ -42,7 +42,11 @@ struct log_s {
 struct log_opts {
   uint32_t mask;                   /* bitmask of opening options */
 #define LOG_OPT_LBACOUNT 0x0001
+#define LOG_OPT_FLAGS    0x0002 
   uint32_t lbacount;               /* if creating log (opening for first time), use this many blocks */
+  uint32_t flags;
+#define LOG_FLAG_CIRCULAR 0x0000
+#define LOG_FLAG_FIXED    0x0001 
 };
 
 struct log_prop {
@@ -53,6 +57,7 @@ struct log_prop {
   uint32_t start;   /* starting index */
   uint32_t count;   /* block count */
   uint64_t last_id;
+  uint32_t flags;
 };
 
 struct log_iov {

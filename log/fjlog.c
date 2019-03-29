@@ -75,7 +75,8 @@ static void usage( char *fmt, ... ) {
 	  "              -w [-b]                      Write entry, data from stdin.\n" 
           "              -f                           Follow log.\n"
 	  "              -r                           Reset log, clearing all messages.\n"
-	  "              -u                           Show log properties.\n" 
+	  "              -u                           Show log properties.\n"
+	  "              -F                           Create a fixed (non-circular) log.\n" 
 	  "\n" 
 	  "  OPTIONS\n"
 	  "     -p path          Use log file by path name.\n"
@@ -99,6 +100,7 @@ int main( int argc, char **argv ) {
   int sts;
   int logsize = 2*1024*1024;
   struct log_opts opts;
+  uint32_t logflags = 0;
   
   memset( &opts, 0, sizeof(opts) );
   fju.cmd = CMD_READ;
@@ -146,6 +148,8 @@ int main( int argc, char **argv ) {
       fju.print_quiet = 1;
     } else if( strcmp( argv[i], "-t" ) == 0 ) {
       fju.cmd = CMD_TEST;
+    } else if( strcmp( argv[i], "-F" ) == 0 ) {
+      logflags |= LOG_FLAG_FIXED;     
     } else {
       usage( NULL );
     }
@@ -155,7 +159,9 @@ int main( int argc, char **argv ) {
   if( !fju.filepath ) fju.filepath = "fju.log";
 
   opts.mask = LOG_OPT_LBACOUNT;
+  opts.mask |= LOG_OPT_FLAGS;
   opts.lbacount = logsize / LOG_LBASIZE;
+  opts.flags = logflags;
   sts = log_open( fju.filepath, &opts, &fju.log );
   if( sts ) usage( "Failed to open" );
 
@@ -176,14 +182,15 @@ int main( int argc, char **argv ) {
     {
       struct log_prop prop;
       log_prop( &fju.log, &prop );
-      printf( "Version %d Seq %"PRIu64" LBACount %u (%uMB) Start %u Count %u LastID %"PRIx64"\n", 
+      printf( "Version %d Seq %"PRIu64" LBACount %u (%uMB) Start %u Count %u LastID %"PRIx64" Flags 0x%04x\n", 
 	      prop.version,
 	      prop.seq,
 	      prop.lbacount,
 	      (prop.lbacount * LOG_LBASIZE) / (1024*1024),
 	      prop.start,
 	      prop.count,
-	      prop.last_id );
+	      prop.last_id,
+	      prop.flags );
     }
     break;
   case CMD_TEST:
@@ -302,7 +309,7 @@ static void cmd_write( void ) {
     sts = read( STDIN_FILENO, buf + offset, msglen - offset );
     if( sts <= 0 ) break;
     offset += sts;
-  } while( offset < msglen );
+  } while( 1 ); 
   
   memset( &entry, 0, sizeof(entry) );
   entry.iov = iov;

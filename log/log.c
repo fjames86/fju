@@ -62,8 +62,9 @@ struct _header {
   uint64_t last_id;   /* most recently written msg */
   uint32_t lock_pid; 
   uint32_t lock_mode;
+  uint32_t flags;
   
-  uint32_t spare[52]; /* future expansion */
+  uint32_t spare[51]; /* future expansion */
 };
 
 struct _entry {
@@ -147,6 +148,8 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
     hdr->seq = 1;
     hdr->start = 0;
     hdr->count = 0;
+    hdr->flags = (opts && (opts->mask & LOG_OPT_FLAGS)) ? opts->flags : 0;
+    
     sts = mmf_remap( &log->mmf, (sizeof(struct _header) + LOG_LBASIZE * hdr->lbacount) );
     if( sts ) goto bad;
   } else if( hdr->version != LOG_VERSION ) {
@@ -211,6 +214,7 @@ int log_prop( struct log_s *log, struct log_prop *prop ) {
   prop->count = hdr->count;
   prop->lbacount = hdr->lbacount;
   prop->last_id = hdr->last_id;
+  prop->flags = hdr->flags;
   
   log_unlock( log );
 
@@ -400,6 +404,12 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
 
   /* check we won't overwrite the current starting block */
   if( (int)(hdr->lbacount - hdr->count) < cnt ){
+
+    if( hdr->flags & LOG_FLAG_FIXED ) {
+      /* fixed log - no space left so bail out here */
+      goto done;
+    }
+    
     do {
       /* oh dear - we will overwrite, keep advancing the starting point until there is space */
       e = (struct _entry *)((char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * hdr->start));

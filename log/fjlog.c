@@ -252,10 +252,24 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
     if( n == 0 ) break;
 
     if( fju.flags & LOG_BINARY ) {
-      if( !fju.print_quiet ) write( STDOUT_FILENO, msg, entry.msglen );
+      if( !fju.print_quiet ) {
+#ifdef WIN32
+		  WriteFile( GetStdHandle( STD_OUTPUT_HANDLE ), msg, entry.msglen, NULL, NULL );
+#else
+		  write( STDOUT_FILENO, msg, entry.msglen );
+#endif
+	  }
     } else {
       ut = (time_t)entry.timestamp;
+#ifdef WIN32
+	  {
+		  static struct tm u_tm;		 
+		  localtime_s( &u_tm, (time_t *)&ut );
+		  tm = &u_tm;
+	  }
+#else
       tm = localtime( (time_t *)&ut );
+#endif
       strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
       
       if( entry.flags & LOG_BINARY ) {
@@ -306,7 +320,15 @@ static void cmd_write( void ) {
       buf = realloc( buf, msglen );
     }
     
+#ifdef WIN32
+	{
+		int b;
+		b = ReadFile( GetStdHandle( STD_INPUT_HANDLE ), buf + offset, msglen - offset, &sts, NULL );
+		if( !b ) sts = -1;
+	}
+#else
     sts = read( STDIN_FILENO, buf + offset, msglen - offset );
+#endif
     if( sts <= 0 ) break;
     offset += sts;
   } while( 1 ); 

@@ -502,7 +502,7 @@
      (format t "    strncpy( entry.~A, argval, sizeof(entry.~A) - 1 );~%"
 	     (field-name field) (field-name field)))
     ((eq (field-type field) :uint64)
-     (format t "    entry.~A = strtoull( argval, NULL, 10 );~%"
+     (format t "    entry.~A = strtoull( argval, NULL, 16 );~%"
 	     (field-name field)))
     (t 
      (format t "    entry.~A = strtoul( argval, NULL, 10 );~%"
@@ -521,12 +521,12 @@
     (format t "        m = ~A_~A_list( lst, n );~%" *prefix* (entry-name entry))
     (format t "        if( m < n ) n = m;~%")
     (format t "        for( i = 0; i < n; i++ ) {~%")
-    (format t "            printf( \"%-16s %-4d: TAG=%\"PRIx64\" ~{~A=%~A ~}\\n\", \"~A\", i, lst[i].tag~{, lst[i].~A~} );~%" 
+    (format t "            printf( \"%-16s %-8\"PRIx64\" ~{~A=%~A ~}\\n\", \"~A\", lst[i].tag~{, lst[i].~A~} );~%" 
 	    (mapcan (lambda (field)
 		      (list (field-name field)
 			    (case (field-type field)
 			      (:string "s")
-			      (:uint64 "\"PRIu64\"")
+			      (:uint64 "\"PRIx64\"")
 			      (otherwise "d"))))
 		    (entry-fields entry))
 	    (entry-name entry)
@@ -548,7 +548,10 @@
   (dolist (extra extras)
     (format t "     printf( \"~A=%~A\\n\", prop.~A );~%"
 	    (field-name extra)
-	    (if (eq (field-type extra) :string) "s" "d")
+	    (cond
+	      ((eq (field-type extra) :string) "s")
+	      ((eq (field-type extra) :uint64) "\"PRIx64\"")
+	      (t "d")
 	    (field-name extra)))
   (format t "}~%"))
 
@@ -579,13 +582,13 @@
 	       (:string (format t "                      if( argval ) strncpy( entry.~A, argval, sizeof(entry.~A) );~%"
 				(field-name field)
 				(field-name field)))
-	       (:uint64 (format t "                      if( argval ) entry.~A = strtoull( argval, NULL, 10 );~%" (field-name field)))
+	       (:uint64 (format t "                      if( argval ) entry.~A = strtoull( argval, NULL, 16 );~%" (field-name field)))
 	       (otherwise (format t "                      if( argval ) entry.~A = strtoul( argval, NULL, 10 );~%" (field-name field)))))
 	   (dolist (field (cdr (entry-fields entry)))
 	     (format t "                } else if( strcmp( argname, \"~A\" ) == 0 ) {~%" (field-name field))
 	     (case (field-type field)
 	       (:string (format t "                      if( argval ) strncpy( entry.~A, argval, sizeof(entry.~A) );~%" (field-name field) (field-name field)))
-	       (:uint64 (format t "                      if( argval ) entry.~A = strtoull( argval, NULL, 10 );~%" (field-name field)))
+	       (:uint64 (format t "                      if( argval ) entry.~A = strtoull( argval, NULL, 16 );~%" (field-name field)))
 	       (otherwise (format t "                      if( argval ) entry.~A = strtoul( argval, NULL, 10 );~%" (field-name field)))))
 	   (format t "                 } else { printf( \"Unknown field name %s\\n\", argname ); usage( NULL ); }~%")
 	   (format t "                 i++;~%")

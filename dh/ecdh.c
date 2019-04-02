@@ -28,27 +28,13 @@
  * to generate keys and derive the common secret 
  */
 
-#ifdef WIN32
-#define _CRT_SECURE_NO_WARNINGS
-#include <ntstatus.h>
-#define WIN32_NO_STATUS /* stop windows.h complaining about multiple definitions of ntstatus values */
-#include <WinSock2.h>
-#include <Windows.h>
-#include <bcrypt.h>
-#endif
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
 
-#ifndef WIN32
-#include <openssl/evp.h>
-#include <openssl/ec.h>
-#include <openssl/bn.h>
-#include <openssl/sha.h>
-#endif
+#include <sec.h>
 
 static void usage( char *fmt, ... ) {
   if( fmt ) {
@@ -65,166 +51,12 @@ static void usage( char *fmt, ... ) {
   exit( 0 );
 }
 
-#define KEYLEN 32 
-struct ecdh_keybuf {
-	uint8_t buf[4*KEYLEN];
-	int len;
-};
 
-#ifdef WIN32
-static int ecdh_generate( struct ecdh_keybuf *local_secret, struct ecdh_keybuf *local_public ) {  
-	BCRYPT_ALG_HANDLE handle;
-	BCRYPT_KEY_HANDLE hkey;
-	char pout[sizeof(BCRYPT_ECCKEY_BLOB) + KEYLEN*3];
-	int outlen;
-	NTSTATUS sts;
-	BCRYPT_ECCKEY_BLOB *eccp;
-	char *p;
-
-	sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDH_P256_ALGORITHM, NULL, 0 );
-
-	sts = BCryptGenerateKeyPair( handle, &hkey, 256, 0 );
-	sts = BCryptFinalizeKeyPair( hkey, 0 );
-
-	outlen = sizeof(*eccp) + KEYLEN*3;
-	sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPRIVATE_BLOB, pout, outlen, &outlen, 0 );
-	p = pout + sizeof(*eccp) + KEYLEN;
-	eccp = (BCRYPT_ECCKEY_BLOB *)pout;	
-	memcpy( local_secret->buf, pout + sizeof(*eccp), 3*KEYLEN );
-	local_secret->len = 3*KEYLEN;
-
-	outlen = sizeof(*eccp) + 2*KEYLEN;
-	sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPUBLIC_BLOB, pout, outlen, &outlen, 0 );
-	eccp = (BCRYPT_ECCKEY_BLOB *)pout;	
-	memcpy( local_public->buf, pout + sizeof(*eccp), 2*KEYLEN );
-	local_public->len = 2*KEYLEN;
-
-	BCryptDestroyKey( hkey );
-	sts = BCryptCloseAlgorithmProvider( handle, 0 );
-
-	return 0;
-}
-static int ecdh_common( struct ecdh_keybuf *local_secret, struct ecdh_keybuf *remote_public, struct ecdh_keybuf *common ) {
-	BCRYPT_ALG_HANDLE handle;
-	BCRYPT_KEY_HANDLE hkey, hrkey;
-	BCRYPT_SECRET_HANDLE skey;
-	int outlen;
-	NTSTATUS sts;
-	BCRYPT_ECCKEY_BLOB *eccp;
-	char pout[3*KEYLEN + sizeof(BCRYPT_ECCKEY_BLOB)];
-	int nbytes;
-
-	sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDH_P256_ALGORITHM, NULL, 0 );
-
-	outlen = sizeof(*eccp) + 3*KEYLEN;
-	eccp = (BCRYPT_ECCKEY_BLOB *)pout;
-	eccp->dwMagic = BCRYPT_ECDH_PRIVATE_P256_MAGIC;
-	eccp->cbKey = KEYLEN;
-	memcpy( pout + sizeof(*eccp), local_secret->buf, 3*KEYLEN );
-	sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPRIVATE_BLOB, &hkey, pout, outlen, 0 );
-
-	outlen = sizeof(*eccp) + 2*KEYLEN;
-	eccp = (BCRYPT_ECCKEY_BLOB *)pout;
-	eccp->dwMagic = BCRYPT_ECDH_PUBLIC_P256_MAGIC;
-	eccp->cbKey = KEYLEN;
-	memcpy( pout + sizeof(*eccp), remote_public->buf, 2*KEYLEN );
-	sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPUBLIC_BLOB, &hrkey, pout, outlen, 0 );
-
-	/* derive common key */
-	sts = BCryptSecretAgreement( hkey, hrkey, &skey, 0 );
-
-	sts = BCryptDeriveKey( skey, BCRYPT_KDF_HASH, NULL, common->buf, sizeof(common->buf), &nbytes, 0 );
-	common->len = nbytes;
-
-	BCryptDestroyKey( hkey );
-	BCryptDestroyKey( hrkey );
-	BCryptDestroySecret( skey );
-	BCryptCloseAlgorithmProvider( handle, 0 );
-
-
-	return -1;
-}
-#else
-static int ecdh_generate( struct ecdh_keybuf *local_secret, struct ecdh_keybuf *local_public ) {
-  EC_KEY *hkey;
-  EC_POINT *ecp_public;
-  BIGNUM *bn_secret;
-  int nbytes;
-  BN_CTX *bncxt;
-  char tmpkey[2*KEYLEN+1];
-
-  hkey = EC_KEY_new_by_curve_name( NID_X9_62_prime256v1 );
-  EC_KEY_generate_key( hkey );
-  bn_secret = (BIGNUM *)EC_KEY_get0_private_key( hkey );
-  
-  nbytes = BN_num_bytes( bn_secret );
-  BN_bn2bin( bn_secret, local_secret->buf );
-  local_secret->len = KEYLEN;
-
-  ecp_public = (EC_POINT *)EC_KEY_get0_public_key( hkey );
-  bncxt = BN_CTX_new();
-  nbytes = EC_POINT_point2oct( EC_KEY_get0_group( hkey ), 
-			       ecp_public,
-			       POINT_CONVERSION_UNCOMPRESSED, 
-			       tmpkey, 2*KEYLEN + 1, 
-			       bncxt );
-  memcpy( local_public->buf, tmpkey + 1, 2*KEYLEN );
-  local_public->len = 2*KEYLEN;
-  BN_CTX_free( bncxt );
-
-  EC_KEY_free( hkey );
-  return 0;
-}
-
-static int ecdh_common( struct ecdh_keybuf *local_secret, struct ecdh_keybuf *remote_public, struct ecdh_keybuf *common ) {
-  EC_KEY *hkey, *hrkey;
-  BIGNUM *bn_local_secret;
-  EC_POINT *ecp_remote_public;
-  int klen;
-  EC_GROUP *group;
-  BN_CTX *bncxt;
-  char tmpkey[2*KEYLEN+1];
-  SHA_CTX sha1cxt;
-
-  hkey = EC_KEY_new_by_curve_name( NID_X9_62_prime256v1 );
-  bn_local_secret = BN_bin2bn( local_secret->buf, KEYLEN, NULL );
-  EC_KEY_set_private_key( hkey, bn_local_secret );
-
-  hrkey = EC_KEY_new_by_curve_name( NID_X9_62_prime256v1 );
-  bncxt = BN_CTX_new();
-  group = (EC_GROUP *)EC_KEY_get0_group( hrkey );
-  ecp_remote_public = EC_POINT_new( group );
-  tmpkey[0] = POINT_CONVERSION_UNCOMPRESSED;
-  memcpy( tmpkey + 1, remote_public->buf, 2*KEYLEN );
-  EC_POINT_oct2point( group, ecp_remote_public, tmpkey, 2*KEYLEN + 1, bncxt );
-  BN_CTX_free( bncxt );
-  EC_KEY_set_public_key( hrkey, ecp_remote_public );
-
-  klen = ECDH_compute_key( common->buf, KEYLEN, EC_KEY_get0_public_key( hrkey ), hkey, NULL );
-  common->len = KEYLEN;
-
-  /* 
-   * this seems odd, but we have to do it for windows compatibility. instead of computing the common key
-   * we instead compute the sha1 hash of the common secret. this is because the windows API cannot/does not (wtf!?) 
-   * give us this info, it can only give us a derived value e.g. a sha1 hash 
-   */
-  SHA1_Init( &sha1cxt );
-  SHA1_Update( &sha1cxt, common->buf, common->len );
-  SHA1_Final( common->buf, &sha1cxt );
-  common->len = 20;
-
-  EC_KEY_free( hkey );
-  EC_KEY_free( hrkey );
-
-  return 0;
-}
-#endif
-
-static void hex2bn( char *hex, struct ecdh_keybuf *buf ) {
+static void hex2bn( char *hex, struct sec_buf *buf ) {
   int i, j;
   unsigned char x;
-  for( i = 0; i < sizeof(buf->buf); i++ ) {
-    if( (hex[2*i] == '\0') ) break;
+  for( i = 0; i < buf->len; i++ ) {
+    if( hex[2*i] == '\0' ) break;
 
     x = 0;
     j = 2 * i;
@@ -243,7 +75,7 @@ static void hex2bn( char *hex, struct ecdh_keybuf *buf ) {
       else usage( "Unable to parse \"%s\"", hex );
     }
     buf->buf[i] = x;
-    if( (hex[(2*i)+1] == '\0') ) break;
+    if( hex[(2*i)+1] == '\0' ) break;
   }
   buf->len = i;
 }
@@ -261,13 +93,20 @@ static void bn2hex( char *bn, char *hex, int len ) {
 
 int main( int argc, char **argv ) {
   int i;
-  struct ecdh_keybuf secret, public, common;
+  char secret_buf[SEC_ECDH_MAX_PRIVKEY];
+  char pub_buf[SEC_ECDH_MAX_PUBKEY];
+  char common_buf[SEC_ECDH_MAX_COMMON];
+  struct sec_buf secret, public, common;
   int sp, pp;
   char hex[256];
 
-  memset( &secret, 0, sizeof(secret) );
-  memset( &public, 0, sizeof(public) );
-  memset( &common, 0, sizeof(common) );
+  memset( secret_buf, 0, sizeof(secret_buf) );
+  memset( common_buf, 0, sizeof(common_buf) );
+  memset( pub_buf, 0, sizeof(pub_buf) );
+  sec_buf_init( &secret, secret_buf, sizeof(secret_buf) );  
+  sec_buf_init( &public, pub_buf, sizeof(pub_buf) );
+  sec_buf_init( &common, common_buf, sizeof(common_buf) );
+  
   sp = 0;
   pp = 0;
 
@@ -286,30 +125,6 @@ int main( int argc, char **argv ) {
     } else usage( NULL );
     i++;
   }
-
-#if 0
-  {
-	  struct ecdh_keybuf secret1, secret2;
-	  struct ecdh_keybuf public1, public2;
-	  struct ecdh_keybuf common1, common2;
-	  memset( &secret1, 0, sizeof(secret1) );
-	  memset( &secret2, 0, sizeof(secret2) );
-	  memset( &public1, 0, sizeof(public1) );
-	  memset( &public2, 0, sizeof(public2) );
-	  memset( &common1, 0, sizeof(common1) );
-	  memset( &common2, 0, sizeof(common2) );
-		ecdh_generate( &secret1, &public1 );
-		ecdh_generate( &secret2, &public2 );
-		ecdh_common( &secret1, &public2, &common1 );
-		ecdh_common( &secret2, &public1, &common2 );
-
-		bn2hex( common1.buf, hex, common1.len );
-		printf( "%s\n", hex );
-		bn2hex( common2.buf, hex, common2.len );
-		printf( "%s\n", hex );
-
-  }
-#endif
 
   if( pp && sp ) {
     ecdh_common( &secret, &public, &common );

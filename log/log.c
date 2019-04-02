@@ -83,8 +83,16 @@ struct _entry {
 #if 1
 
 static int log_lock( struct log_s *log ) {
+  struct _header *hdr;
+  
   int sts = mmf_lock( &log->mmf );
   if( sts ) printf( "log_lock: %d\n", sts );
+
+  hdr = (struct _header *)log->mmf.file;
+  if( log->mmf.msize < (sizeof(*hdr) + LOG_LBASIZE * hdr->lbacount) ) {
+    mmf_remap( &log->mmf, sizeof(*hdr) + LOG_LBASIZE * hdr->lbacount );
+  }
+  
   return sts;
 }
 static int log_unlock( struct log_s *log ) {
@@ -397,8 +405,19 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   if( sts ) return sts;
 
   /* check enough space */
-  if( cnt > (int)hdr->lbacount ) goto done;
-
+  if( ((hdr->flags & (LOG_FLAG_FIXED|LOG_FLAG_GROW)) == (LOG_FLAG_FIXED|LOG_FLAG_GROW)) &&
+      (cnt > (hdr->lbacount - hdr->count)) ) {
+    /* remap and update header */
+    uint32_t nlbacount;
+    nlbacount = ((cnt > hdr->lbacount ? cnt : hdr->lbacount) * 3) / 2;    
+    printf( "remapping lbacount %d->%d\n", hdr->lbacount, nlbacount );
+    mmf_remap( &log->mmf, (sizeof(struct _header) + LOG_LBASIZE * nlbacount) );
+    hdr = (struct _header *)log->mmf.file;
+    hdr->lbacount = nlbacount;    
+  } else {
+    if( cnt > (int)hdr->lbacount ) goto done;
+  }
+  
   /* get next location */
   idx = (hdr->start + hdr->count) % hdr->lbacount;
 

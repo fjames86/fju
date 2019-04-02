@@ -46,7 +46,8 @@ struct log_opts {
   uint32_t lbacount;               /* if creating log (opening for first time), use this many blocks */
   uint32_t flags;
 #define LOG_FLAG_CIRCULAR 0x0000
-#define LOG_FLAG_FIXED    0x0001 
+#define LOG_FLAG_FIXED    0x0001
+#define LOG_FLAG_GROW     0x0002   /* dynamically grow, requires LOG_FLAG_FIXED */
 };
 
 struct log_prop {

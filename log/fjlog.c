@@ -76,7 +76,9 @@ static void usage( char *fmt, ... ) {
           "              -f                           Follow log.\n"
 	  "              -r                           Reset log, clearing all messages.\n"
 	  "              -u                           Show log properties.\n"
-	  "              -F                           Create a fixed (non-circular) log.\n" 
+	  "              -F                           Create a fixed (non-circular) log.\n"
+	  "              -G                           Create a growing (non-circular) log.\n"
+	  "              -s size                      Create with size\n" 
 	  "\n" 
 	  "  OPTIONS\n"
 	  "     -p path          Use log file by path name.\n"
@@ -149,7 +151,9 @@ int main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-t" ) == 0 ) {
       fju.cmd = CMD_TEST;
     } else if( strcmp( argv[i], "-F" ) == 0 ) {
-      logflags |= LOG_FLAG_FIXED;     
+      logflags |= LOG_FLAG_FIXED;
+    } else if( strcmp( argv[i], "-G" ) == 0 ) {
+      logflags |= LOG_FLAG_FIXED|LOG_FLAG_GROW;
     } else {
       usage( NULL );
     }

@@ -26,7 +26,6 @@ struct hostreg_host {
     uint32_t addr[8];
 };
 
-
 struct hostreg_prop {
     uint32_t version;
 #define HOSTREG_VERSION 1
@@ -46,11 +45,10 @@ int hostreg_prop( struct hostreg_prop *prop );
 int hostreg_reset( void );
 
 int hostreg_host_list( struct hostreg_host *list, int n );
-int hostreg_host_by_tag( uint64_t tag, struct hostreg_host *entry );
 int hostreg_host_by_id( uint64_t id, struct hostreg_host *host );
 int hostreg_host_by_name( char *name, struct hostreg_host *host );
 int hostreg_host_put( struct hostreg_host *entry );
-int hostreg_host_rem( uint64_t tag );
+int hostreg_host_rem( uint64_t id );
 
 #endif
 

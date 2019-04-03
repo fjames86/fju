@@ -1,4 +1,12 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+
+#include <WinSock2.h>
+#include <Windows.h>
+#include <iphlpapi.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,9 +16,12 @@
 #include <mmf.h>
 #include <sec.h>
 #include <sys/types.h>
+
+#ifndef WIN32
 #include <ifaddrs.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#endif
 
 #include "hostreg.h"
 
@@ -60,6 +71,13 @@ static char *mynet_ntop( uint32_t inaddr, char *str );
 
 int main( int argc, char **argv ) {
     int sts, i;
+
+#ifdef WIN32
+	{
+		WSADATA wsadata;
+		WSAStartup( MAKEWORD( 2, 2 ), &wsadata );
+	}
+#endif
 
     sts = hostreg_open();
     if( sts ) usage( "Failed to open" );
@@ -207,6 +225,30 @@ static void cmd_prop( void ) {
      printf( "name=%s ", hex );
      bn2hex( (char *)prop.pubkey, hex, prop.publen );
      printf( "pubkey=%s ", hex );
+
+#ifdef WIN32
+	 {
+		 char *buf = malloc( 32 * 1024 );
+		 IP_ADAPTER_ADDRESSES *ipa = buf;		
+		 IP_ADAPTER_UNICAST_ADDRESS *ipu;
+		 DWORD plen;
+
+		 plen = 32 * 1024;
+		 GetAdaptersAddresses( 0, 0, NULL, ipa, &plen );
+		 while( ipa ) {
+			 ipu = ipa->FirstUnicastAddress;
+			 while( ipu ) {
+				 if( ipu->Address.lpSockaddr->sa_family == AF_INET ) {
+					 mynet_ntop( &ipu->Address.lpSockaddr->sa_data, hex );
+					 printf( "addr=%s ", hex );
+				 }
+				 ipu = ipu->Next;
+			 }
+			 ipa = ipa->Next;
+		 }
+		 free( buf );
+	 }
+#else
      getifaddrs( &ifl );
      ifa = ifl;
      while( ifa ) {
@@ -218,6 +260,7 @@ static void cmd_prop( void ) {
        ifa = ifa->ifa_next;
      }
      freeifaddrs( ifl );
+#endif
      printf( "\n" );
 }
 

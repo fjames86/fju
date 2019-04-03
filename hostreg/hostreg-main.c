@@ -7,13 +7,18 @@
 #include <inttypes.h>
 #include <mmf.h>
 #include <sec.h>
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
 #include "hostreg.h"
 
 static void print_host( struct hostreg_host *host );
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
-	    "          reset\n" 
+	    "          reset [full]\n" 
             "          add [id=ID] [name=NAME] [pubkey=PUBKEY] [addr=ADDR] ]\n"
             "          set ID [name=NAME] [pubkey=PUBKEY] [addr=ADDR] ]\n"
             "          rem ID\n"
@@ -67,7 +72,15 @@ int main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "prop" ) == 0 ) {
         cmd_prop();
     } else if( strcmp( argv[i], "reset" ) == 0 ) {
-	hostreg_reset();
+        int full = 0;
+	i++;
+	while( i < argc ) {
+	  if( strcmp( argv[i], "full" ) == 0 ) {
+	    full = 1;
+	  } else usage( NULL );
+	  i++;
+	}
+	hostreg_reset( full );
     } else if( strcmp( argv[i], "add" ) == 0 ) {
 	struct hostreg_host entry;
 	char argname[64], *argval;
@@ -84,7 +97,7 @@ int main( int argc, char **argv ) {
 		
 		if( !argval ) usage( NULL );
 		
-		buf.buf = entry.pubkey;
+		buf.buf = (char *)entry.pubkey;
 		buf.len = sizeof(entry.pubkey);
 		hex2bn( argval, &buf );
 		entry.publen = buf.len;
@@ -125,7 +138,7 @@ int main( int argc, char **argv ) {
 	    } else if( strcmp( argname, "pubkey" ) == 0 ) {
 		struct sec_buf buf;		     
 		if( !argval ) usage( NULL );
-		buf.buf = entry.pubkey;
+		buf.buf = (char *)entry.pubkey;
 		buf.len = sizeof(entry.pubkey);
 		hex2bn( argval, &buf );
 		entry.publen = buf.len;
@@ -151,7 +164,7 @@ static void print_host( struct hostreg_host *host ) {
     int j;
     
     memset( hex, 0, sizeof(hex) );
-    bn2hex( host->pubkey, hex, host->publen );
+    bn2hex( (char *)host->pubkey, hex, host->publen );
     printf( "ID=%"PRIx64" name=%s pubkey=%s ",
 	    host->id, host->name, hex );
     for( j = 0; j < host->naddr; j++ ) {
@@ -180,24 +193,39 @@ static void cmd_list( void ) {
 static void cmd_prop( void ) {
      struct hostreg_prop prop;
      char hex[256];
+     struct ifaddrs *ifl, *ifa;
+     struct sockaddr_in *sinp;
      
      hostreg_prop( &prop );
      printf( "seq=%"PRIu64"\n", prop.seq );
      printf( "host=%d/%d\n", prop.host_count, prop.host_max );
-     printf( "localid=%"PRIx64"\n", prop.localid );
+     bn2hex( (char *)prop.privkey, hex, prop.privlen );
+     printf( "privkey=%s\n", hex );
 
-     bn2hex( prop.pubkey, hex, prop.publen );
-     printf( "pubkey=%s\n", hex );
-
-     bn2hex( prop.privkey, hex, prop.privlen );
-     printf( "privkey=%s\n", prop.privkey );
+     printf( "id=%"PRIx64" ", prop.localid );
+     gethostname( hex, sizeof(hex) );
+     printf( "name=%s ", hex );
+     bn2hex( (char *)prop.pubkey, hex, prop.publen );
+     printf( "pubkey=%s ", hex );
+     getifaddrs( &ifl );
+     ifa = ifl;
+     while( ifa ) {
+       sinp = (struct sockaddr_in *)ifa->ifa_addr;
+       if( sinp && sinp->sin_family == AF_INET ) {
+	 mynet_ntop( sinp->sin_addr.s_addr, hex );
+	 printf( "addr=%s ", hex );
+       }
+       ifa = ifa->ifa_next;
+     }
+     freeifaddrs( ifl );
+     printf( "\n" );
 }
 
 static void hex2bn( char *hex, struct sec_buf *buf ) {
   int i, j;
   unsigned char x;
   for( i = 0; i < buf->len; i++ ) {
-    if( (hex[2*i] == '\0') ) break;
+    if( hex[2*i] == '\0' ) break;
 
     x = 0;
     j = 2 * i;
@@ -216,7 +244,7 @@ static void hex2bn( char *hex, struct sec_buf *buf ) {
       else usage( "Unable to parse \"%s\"", hex );
     }
     buf->buf[i] = x;
-    if( (hex[(2*i)+1] == '\0') ) break;
+    if( hex[(2*i)+1] == '\0' ) break;
   }
   buf->len = i;
 }
@@ -233,11 +261,8 @@ static void bn2hex( char *bn, char *hex, int len ) {
 }
 
 static char *mynet_ntop( uint32_t inaddr, char *str ) {
-    sprintf( str, "%d.%d.%d.%d",
-	     (inaddr >> 24) & 0xff,
-	     (inaddr >> 16) & 0xff,
-	     (inaddr >> 8) & 0xff,
-	     (inaddr) & 0xff );
+  uint8_t *inp = (uint8_t *)&inaddr;
+    sprintf( str, "%d.%d.%d.%d", inp[0], inp[1], inp[2], inp[3] );
     return str;	     
 }
 
@@ -265,7 +290,7 @@ static int mynet_pton( char *str, uint8_t *inaddr ) {
 
 	    if( i == 3 ) break;
 	}
-	inaddr[3 - j] = strtoul( tmp, NULL, 10 );
+	inaddr[j] = strtoul( tmp, NULL, 10 );
     }
 
     return 0;

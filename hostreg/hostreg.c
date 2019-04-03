@@ -70,12 +70,12 @@ int hostreg_open( void ) {
         glob.file->header.host_max = HOSTREG_MAX_HOST;
         glob.file->header.host_count = 0;
 
-//	sec_rand( &glob.file->header.localid, sizeof(uint64_t) );
-	priv.buf = glob.file->header.privkey;
+	sec_rand( &glob.file->header.localid, sizeof(uint64_t) );
+	priv.buf = (char *)glob.file->header.privkey;
 	priv.len = sizeof(glob.file->header.privkey);
-	pub.buf = glob.file->header.pubkey;
+	pub.buf = (char *)glob.file->header.pubkey;
 	pub.len = sizeof(glob.file->header.pubkey);
-//	ecdh_generate( &priv, &pub );
+	ecdh_generate( &priv, &pub );
 	glob.file->header.privlen = priv.len;
 	glob.file->header.publen = pub.len;
     } else if( glob.file->header.version != HOSTREG_VERSION ) {
@@ -99,7 +99,9 @@ int hostreg_close( void ) {
     return 0;
 }
 
-int hostreg_reset( void ) {
+int hostreg_reset( int full ) {
+    struct sec_buf priv, pub;
+  
     if( glob.ocount <= 0 ) return -1;
     hostreg_lock();
     glob.file->header.magic = HOSTREG_MAGIC;
@@ -107,6 +109,16 @@ int hostreg_reset( void ) {
     glob.file->header.seq = 1;
     glob.file->header.host_max = HOSTREG_MAX_HOST;
     glob.file->header.host_count = 0;
+    if( full ) {
+        sec_rand( &glob.file->header.localid, sizeof(uint64_t) );
+	priv.buf = (char *)glob.file->header.privkey;
+	priv.len = sizeof(glob.file->header.privkey);
+	pub.buf = (char *)glob.file->header.pubkey;
+	pub.len = sizeof(glob.file->header.pubkey);
+	ecdh_generate( &priv, &pub );
+	glob.file->header.privlen = priv.len;
+	glob.file->header.publen = pub.len;
+    }
     hostreg_unlock();
     return 0;
 }

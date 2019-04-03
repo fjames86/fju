@@ -42,7 +42,7 @@ struct hostreg_prop {
 int hostreg_open( void );
 int hostreg_close( void );
 int hostreg_prop( struct hostreg_prop *prop );
-int hostreg_reset( void );
+int hostreg_reset( int full );
 
 int hostreg_host_list( struct hostreg_host *list, int n );
 int hostreg_host_by_id( uint64_t id, struct hostreg_host *host );

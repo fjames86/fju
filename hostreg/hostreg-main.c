@@ -326,12 +326,12 @@ static int mynet_pton( char *str, uint8_t *inaddr ) {
 		p++;
 		break;
 	    }
-	    
-	    tmp[i] = *p;
+
+	    if( i <= 3 ) {
+	      tmp[i] = *p;
+	    }
 	    i++;
 	    p++;
-
-	    if( i == 3 ) break;
 	}
 	inaddr[j] = strtoul( tmp, NULL, 10 );
     }

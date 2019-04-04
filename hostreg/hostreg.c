@@ -311,4 +311,5 @@ int hostreg_host_local( struct hostreg_host *host ) {
   }
 #endif
 
+  return 0;
 }

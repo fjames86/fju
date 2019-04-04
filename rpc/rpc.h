@@ -42,10 +42,10 @@
 #include <time.h>
 #include <stdint.h>
 
-#define LOG_LVL_INFO 1
-#define LOG_LVL_DEBUG 1
-#define LOG_LVL_ERROR 2
-#define LOG_LVL_WARN 2
+#define RPC_LOG_INFO  1
+#define RPC_LOG_DEBUG 1
+#define RPC_LOG_ERROR 2
+#define RPC_LOG_WARN  2
 
 
 struct xdr_s {

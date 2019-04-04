@@ -32,10 +32,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
+#include <inttypes.h>
 
 #include "rpc.h"
-
 #include "shauth.h"
+#include <hrauth.h>
+#include <hostreg.h>
+
+static void usage( char *fmt, ... ) {
+  va_list args;
+
+  printf( "Usage: client [-p port] [-s SHAUTH-SECRET | -h HRAUTH-HOSTID]\n" 
+	  "\n" );
+
+
+  if( fmt ) {
+    va_start( args, fmt );
+    printf( "Error: " );
+    vprintf( fmt, args );
+    va_end( args );
+    printf( "\n" );
+  }
+
+  exit( 0 );
+}
+
 
 static uint8_t rpc_buf[32*1024];
 
@@ -103,19 +125,10 @@ int main( int argc, char **argv ) {
   int i, sts, handle;
   struct rpcbind_mapping mlist[16];
   struct shauth_context sa;
+  struct hrauth_context hrauth;
   uint8_t sa_key[32] = { 0 };
+  int port = 8000;
   
-  memset( &inc, 0, sizeof(inc) );
-
-  /* if secret provided, used shauth */
-  if( argc > 1 ) {
-    parse_secret( argv[1], sa_key );
-    shauth_init( &sa, sa_key );
-    sa.service = SHAUTH_SERVICE_PRIV;
-    inc.pvr = shauth_provider();
-    inc.pcxt = &sa;
-  }
-
 #ifdef WIN32
   {
       WSADATA wsadata;
@@ -123,6 +136,40 @@ int main( int argc, char **argv ) {
   }
 #endif
 
+  memset( &inc, 0, sizeof(inc) );
+
+  hostreg_open();
+  
+  i = 1;
+  while( i < argc ) {
+    if( strcmp( argv[i], "-p" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      port = strtoul( argv[i], NULL, 10 );
+    } else if( strcmp( argv[i], "-s" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+
+      parse_secret( argv[1], sa_key );
+      shauth_init( &sa, sa_key );
+      sa.service = SHAUTH_SERVICE_PRIV;
+      inc.pvr = shauth_provider();
+      inc.pcxt = &sa;
+    } else if( strcmp( argv[i], "-h" ) == 0 ) {
+      uint64_t remoteid;
+      
+      i++;
+      if( i >= argc ) usage( NULL );
+
+      remoteid = strtoull( argv[i], NULL, 16 );
+      sts = hrauth_init( &hrauth, remoteid );
+      if( sts ) usage( "Unknown remote host %"PRIx64"", remoteid );
+      inc.pvr = hrauth_provider();
+      inc.pcxt = &hrauth;
+    } else usage( NULL );
+    
+    i++;
+  }
   
   xdr_init( &inc.xdr, rpc_buf, sizeof(rpc_buf) );
   rpc_init_call( &inc, 100000, 2, 4, &handle );
@@ -130,7 +177,7 @@ int main( int argc, char **argv ) {
 
   sinp = (struct sockaddr_in *)&inc.raddr;
   sinp->sin_family = AF_INET;
-  sinp->sin_port = htons( 8000 );
+  sinp->sin_port = htons( port );
   sinp->sin_addr.s_addr = htonl( INADDR_LOOPBACK );
   inc.raddr_len = sizeof(*sinp);
   

@@ -286,14 +286,14 @@ static void rpc_init_listen( void ) {
 	}
 
 	if( !rpc.nlisten ) {
-		rpc_log( LOG_LVL_WARN, "Not listening on any ports" );
+	  rpc_log( RPC_LOG_WARN, "Not listening on any ports" );
 	}
 
 	/* listen on ports */
 	for( i = 0; i < rpc.nlisten; i++ ) {
 		switch( rpc.listen[i].type ) {
 		case RPC_LISTEN_TCP:
-			rpc_log( LOG_LVL_INFO, "Listening on TCP port %d", (int)ntohs( rpc.listen[i].addr.sin.sin_port ) );
+			rpc_log( RPC_LOG_INFO, "Listening on TCP port %d", (int)ntohs( rpc.listen[i].addr.sin.sin_port ) );
 
 			rpc.listen[i].fd = socket( AF_INET, SOCK_STREAM, 0 );
 			if( rpc.listen[i].fd < 0 ) usage( "Failed to open TCP socket: %s", rpc_strerror( rpc_errno() ) );
@@ -310,7 +310,7 @@ static void rpc_init_listen( void ) {
 			break;
 
 		case RPC_LISTEN_TCP6:
-			rpc_log( LOG_LVL_INFO, "Listening on TCP6 port %d", (int)ntohs( rpc.listen[i].addr.sin6.sin6_port ) );
+			rpc_log( RPC_LOG_INFO, "Listening on TCP6 port %d", (int)ntohs( rpc.listen[i].addr.sin6.sin6_port ) );
 
 			rpc.listen[i].fd = socket( AF_INET6, SOCK_STREAM, 0 );
 			if( rpc.listen[i].fd < 0 ) usage( "Failed to open TCP6 socket: %s", rpc_strerror( rpc_errno() ) );
@@ -328,7 +328,7 @@ static void rpc_init_listen( void ) {
 
 #ifndef WIN32
 		case RPC_LISTEN_UNIX:
-			rpc_log( LOG_LVL_INFO, "Listening on UNIX path %s", rpc.listen[i].addr.sun.sun_path );
+			rpc_log( RPC_LOG_INFO, "Listening on UNIX path %s", rpc.listen[i].addr.sun.sun_path );
 
 			rpc.listen[i].fd = socket( AF_UNIX, SOCK_STREAM, 0 );
 			if( rpc.listen[i].fd < 0 ) usage( "Failed to open UNIX socket: %s", rpc_strerror( rpc_errno() ) );
@@ -345,7 +345,7 @@ static void rpc_init_listen( void ) {
 #endif
 
 		case RPC_LISTEN_UDP:
-			rpc_log( LOG_LVL_INFO, "Listening on UDP port %d", (int)ntohs( rpc.listen[i].addr.sin.sin_port ) );
+			rpc_log( RPC_LOG_INFO, "Listening on UDP port %d", (int)ntohs( rpc.listen[i].addr.sin.sin_port ) );
 
 			rpc.listen[i].fd = socket( AF_INET, SOCK_DGRAM, 0 );
 			if( rpc.listen[i].fd < 0 ) usage( "Failed to open UDP socket: %s", rpc_strerror( rpc_errno() ) );
@@ -359,7 +359,7 @@ static void rpc_init_listen( void ) {
 			break;
 
 		case RPC_LISTEN_UDP6:
-			rpc_log( LOG_LVL_INFO, "Listening on UDP6 port %d", (int)ntohs( rpc.listen[i].addr.sin6.sin6_port ) );
+			rpc_log( RPC_LOG_INFO, "Listening on UDP6 port %d", (int)ntohs( rpc.listen[i].addr.sin6.sin6_port ) );
 
 			rpc.listen[i].fd = socket( AF_INET6, SOCK_DGRAM, 0 );
 			if( rpc.listen[i].fd < 0 ) usage( "Failed to open UDP6 socket: %s", rpc_strerror( rpc_errno() ) );
@@ -678,7 +678,7 @@ static void rpc_poll( int timeout ) {
 									   slen = sizeof(sts);
 									   getsockopt( c->fd, SOL_SOCKET, SO_ERROR, (char *)&sts, &slen );
 									   if( sts ) {
-										   rpc_log( LOG_LVL_ERROR, "Connect failed: %s", rpc_strerror( rpc_errno() ) );
+										   rpc_log( RPC_LOG_ERROR, "Connect failed: %s", rpc_strerror( rpc_errno() ) );
 										   c->cstate = RPC_CSTATE_CLOSE;
 									   }
 									   else {
@@ -748,7 +748,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
 	{
 							socklen_t slen;
 
-							rpc_log( LOG_LVL_INFO, "Accept UDP" );
+							rpc_log( RPC_LOG_INFO, "Accept UDP" );
 
 							c = rpc.flist;
 							if( !c ) return;
@@ -769,14 +769,14 @@ static void rpc_accept( struct rpc_listen *lis ) {
 							c->inc.xdr.count = c->cdata.count;
 
 							/* process message and send reply */
-							rpc_log( LOG_LVL_INFO, "Process UDP call" );
+							rpc_log( RPC_LOG_INFO, "Process UDP call" );
 							sts = rpc_process_incoming( &c->inc );
 							if( sts == 0 ) {
 								sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
-								if( sts < 0 ) rpc_log( LOG_LVL_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
+								if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
 							}
 							else {
-								rpc_log( LOG_LVL_INFO, "rpc_process_incoming failed" );
+								rpc_log( RPC_LOG_INFO, "rpc_process_incoming failed" );
 							}
 
 	}
@@ -786,7 +786,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
 #ifndef WIN32
 	case RPC_LISTEN_UNIX:
 	{
-							rpc_log( LOG_LVL_INFO, "Accept TCP/UNIX" );
+							rpc_log( RPC_LOG_INFO, "Accept TCP/UNIX" );
 
 							/* get connection descriptor */
 							c = rpc.flist;

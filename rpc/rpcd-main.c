@@ -1,6 +1,7 @@
 
 #include "rpcd.h"
 #include "shauth.h"
+#include <hrauth.h>
 
 #define SHAUTH_SECRET "123abcd123"
 
@@ -35,6 +36,8 @@ static void init_cb( void ) {
     }
     shauth_register( key );
   }
+
+  hrauth_register();
 
 }
 

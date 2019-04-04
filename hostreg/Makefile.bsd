@@ -1,7 +1,7 @@
 
 .PHONY: all clean
 
-all: hostreg libhostreg.a
+all: hostreg libhostreg.a libhrauth.a 
 
 clean:
 	rm hostreg libhostreg.a hostreg.o
@@ -10,6 +10,10 @@ libhostreg.a: hostreg.c hostreg.h
 	cc -c hostreg.c -I../mmf -I../sec 
 	ar rcs libhostreg.a hostreg.o
 
+libhrauth.a: hrauth.c hrauth.h libhostreg.a
+	cc -c hrauth.c -I../rpc -I../sec -I../mmf 
+	ar rcs libhrauth.a hrauth.o
+	
 hostreg: hostreg-main.c libhostreg.a
 	cc -o hostreg -g hostreg-main.c -L. -lhostreg -L../mmf -lmmf -I../mmf -I../sec -L../sec -lsec -lcrypto
 	

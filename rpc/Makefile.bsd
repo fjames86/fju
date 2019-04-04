@@ -2,10 +2,10 @@
 all: rpcd client librpc.a 
 
 rpcd: librpc.a rpcd-main.c 
-	cc -o rpcd -g rpcd-main.c -lcrypto -L. -lrpc 
+	cc -o rpcd -g rpcd-main.c -lcrypto -L. -lrpc -L../hostreg -lhostreg -lhrauth -I../hostreg -I. -L../sec -lsec -I../sec -I../mmf -L../mmf -lmmf 
 
 client: client.c librpc.a 
-	cc -o client -g client.c -lcrypto -L. -lrpc 
+	cc -o client -g client.c -lcrypto -L. -lrpc -I../hostreg -L../hostreg -lhostreg -lhrauth -I. -I../mmf -L../mmf -lmmf -I../sec -L../sec -lsec 
 
 librpc.a: rpc.c rpcd.c rpc.h rpcd.h shauth.c shauth.h 
 	cc -c rpc.c rpcd.c shauth.c 

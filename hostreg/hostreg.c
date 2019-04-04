@@ -1,8 +1,28 @@
 
-#include "hostreg.h"
-#include <stdint.h>
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+
+#include <WinSock2.h>
+#include <Windows.h>
+#include <iphlpapi.h>
+#endif
+
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <inttypes.h>
+
+#ifndef WIN32
+#include <sys/types.h>
+#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#endif
+
+
+#include "hostreg.h"
 #include <mmf.h>
 #include <sec.h>
 
@@ -237,3 +257,58 @@ int hostreg_host_rem( uint64_t id ) {
     return sts;
 }
 
+int hostreg_host_local( struct hostreg_host *host ) {
+  struct hostreg_prop prop;
+  struct sockaddr_in *sinp;
+     
+  hostreg_prop( &prop );
+  memset( host, 0, sizeof(*host) );
+     
+  host->id = prop.localid;
+  gethostname( host->name, sizeof(host->name) );
+  memcpy( host->pubkey, prop.pubkey, prop.publen );
+
+#ifdef WIN32
+  {
+    char *buf = malloc( 32 * 1024 );
+    IP_ADAPTER_ADDRESSES *ipa = buf;		
+    IP_ADAPTER_UNICAST_ADDRESS *ipu;
+    DWORD plen;
+
+    plen = 32 * 1024;
+    GetAdaptersAddresses( 0, 0, NULL, ipa, &plen );
+    while( ipa ) {
+      ipu = ipa->FirstUnicastAddress;
+      while( ipu ) {
+	if( ipu->Address.lpSockaddr->sa_family == AF_INET ) {
+	  if( host->naddr < HOSTREG_MAX_ADDR ) {
+	    memcpy( &host[host->naddr], &ipu->Address.lpSockaddr->sa_data, 4 );
+	    host->naddr++;
+	  }
+	}
+	ipu = ipu->Next;
+      }
+      ipa = ipa->Next;
+    }
+    free( buf );
+  }
+#else
+  {
+    struct ifaddrs *ifl, *ifa;
+    getifaddrs( &ifl );
+    ifa = ifl;
+    while( ifa ) {
+      sinp = (struct sockaddr_in *)ifa->ifa_addr;
+      if( sinp && sinp->sin_family == AF_INET ) {
+	if( host->naddr < HOSTREG_MAX_ADDR ) {
+	  memcpy( &host[host->naddr], &sinp->sin_addr.s_addr, 4 );
+	  host->naddr++;
+	}
+      }
+      ifa = ifa->ifa_next;
+    }
+    freeifaddrs( ifl );
+  }
+#endif
+
+}

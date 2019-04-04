@@ -533,7 +533,7 @@ static int shauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* lookup existing context */
     sa = shauth_context_by_nickname( auth.u.nickname );
     if( !sa ) return -1;
-    rpc_log( LOG_LVL_DEBUG, "shauth: nickname=%d", auth.u.nickname );
+    rpc_log( RPC_LOG_DEBUG, "shauth: nickname=%d", auth.u.nickname );
     break;
   case SHAUTH_FULL:
     /* allocate new context */
@@ -547,7 +547,7 @@ static int shauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     sa->window = cred.window;
     sa->cipher = cred.cipher;
     shauth_rand( &sa->nickname, 4 );
-    rpc_log( LOG_LVL_DEBUG, "shauth: full service=%d window=%d cipher=%08x nickname=%d",
+    rpc_log( RPC_LOG_DEBUG, "shauth: full service=%d window=%d cipher=%08x nickname=%d",
 	     cred.service,
 	     cred.window,
 	     cred.cipher,
@@ -565,12 +565,12 @@ static int shauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
   now = time( NULL );
   if( ((now > verf.timestamp) ? (now - verf.timestamp) : (verf.timestamp - now)) > sa->window ) {
     /* clock skew */
-    rpc_log( LOG_LVL_DEBUG, "clock skew now=%d verf.timestamp=%d", (int)now, (int)verf.timestamp );
+    rpc_log( RPC_LOG_DEBUG, "clock skew now=%d verf.timestamp=%d", (int)now, (int)verf.timestamp );
     sa->nickname = 0;
     return -1;
   }
   if( verf.tverf != (verf.timestamp - 1) ) {
-    rpc_log( LOG_LVL_DEBUG, "invalid tverf %d != %d", verf.tverf, verf.timestamp );
+    rpc_log( RPC_LOG_DEBUG, "invalid tverf %d != %d", verf.tverf, verf.timestamp );
     sa->nickname = 0;
     return -1;
   }

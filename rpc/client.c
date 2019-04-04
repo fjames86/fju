@@ -196,7 +196,7 @@ int main( int argc, char **argv ) {
   /* decode results */
   sts = rpcbind_decode_mapping_list( &inc.xdr, mlist, 16 );
   for( i = 0; i < sts; i++ ) {
-    printf( "%-8d %-8d %-8d %-8d\n", mlist[i].prog, mlist[i].vers, mlist[i].prot, mlist[i].port );
+    printf( "%-12d %-8d %-8d %-8d\n", mlist[i].prog, mlist[i].vers, mlist[i].prot, mlist[i].port );
   }
   
   return 0;

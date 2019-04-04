@@ -64,6 +64,7 @@ typedef int socklen_t;
 static void WINAPI rpcd_svc( DWORD argc, char **argv );
 #endif
 
+static void rpcd_run( void );
 static void rpc_accept( struct rpc_listen *lis );
 
 
@@ -116,7 +117,7 @@ static void usage( char *fmt, ... ) {
 	exit( 0 );
 }
 
-int rpcd_init( int argc, char **argv, void (*init_cb)(void) ) {
+int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
@@ -232,6 +233,8 @@ int rpcd_init( int argc, char **argv, void (*init_cb)(void) ) {
 	sigaction( SIGPIPE, &sa, NULL );
 #endif
 
+	rpcd_run();
+	
 	return 0;
 }
 
@@ -809,7 +812,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
 	}
 }
 
-void rpcd_run( void ) {
+static void rpcd_run( void ) {
 	struct rpc_conn *c;
 	int i;
 	int timeout;

@@ -101,8 +101,7 @@ struct rpc_conn {
 };
 
 
-int rpcd_init( int argc, char **argv, void (*init_cb)(void) );
-void rpcd_run( void );
+int rpcd_main( int argc, char **argv, void (*init_cb)(void) );
 int rpc_connect( struct sockaddr *addr, socklen_t alen, void( *cb )(struct rpc_conn *c), void *cxt );
 
 

@@ -43,11 +43,8 @@ static void init_cb( void ) {
 
 int main( int argc, char **argv ) {
 
-  /* initialize file descriptors etc */
-  rpcd_init( argc, argv, init_cb );
-
   /* run daemon */
-  rpcd_run();
+  rpcd_main( argc, argv, init_cb );
   
   return 0;
 }

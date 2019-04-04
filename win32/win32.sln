@@ -42,6 +42,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "fjlog", "fjlog\fjlog.vcxpro
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "fjlogui", "fjlogui\fjlogui.vcxproj", "{AF439554-2A91-4A0B-A1C5-B160B1D3BE36}"
+	ProjectSection(ProjectDependencies) = postProject
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF} = {2FC14865-015B-4849-9FB6-B2C960AA9ADF}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libsec", "libsec\libsec.vcxproj", "{48DBE53F-8203-4643-A831-B967145920A5}"
 EndProject

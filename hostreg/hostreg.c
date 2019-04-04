@@ -318,7 +318,7 @@ int hostreg_host_common( uint64_t hostid, char *common, int *size ) {
   int sts;
   struct hostreg_prop prop;
   struct hostreg_host host;
-  struct sec_buf buf[2];
+  struct sec_buf buf[3];
   
   sts = hostreg_host_by_id( hostid, &host );
   if( sts ) return sts;

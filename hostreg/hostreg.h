@@ -54,6 +54,7 @@ int hostreg_host_by_id( uint64_t id, struct hostreg_host *host );
 int hostreg_host_by_name( char *name, struct hostreg_host *host );
 int hostreg_host_put( struct hostreg_host *entry );
 int hostreg_host_rem( uint64_t id );
+int hostreg_host_common( uint64_t hostid, char *common, int *size );
 
 #endif
 

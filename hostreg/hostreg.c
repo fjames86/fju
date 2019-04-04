@@ -313,3 +313,24 @@ int hostreg_host_local( struct hostreg_host *host ) {
 
   return 0;
 }
+
+int hostreg_host_common( uint64_t hostid, char *common, int *size ) {
+  int sts;
+  struct hostreg_prop prop;
+  struct hostreg_host host;
+  struct sec_buf buf[2];
+  
+  sts = hostreg_host_by_id( hostid, &host );
+  if( sts ) return sts;
+
+  hostreg_prop( &prop );
+
+  sec_buf_init( &buf[0], (char *)prop.privkey, prop.privlen );
+  sec_buf_init( &buf[1], (char *)host.pubkey, prop.publen );
+  memset( common, 0, *size );
+  sec_buf_init( &buf[2], common, *size );
+  ecdh_common( &buf[0], &buf[1], &buf[2] );
+  *size = buf[2].len;
+  
+  return 0;
+}

@@ -33,6 +33,7 @@ static void usage( char *fmt, ... ) {
             "          add [id=ID] [name=NAME] [pubkey=PUBKEY] [addr=ADDR] ]\n"
             "          set ID [name=NAME] [pubkey=PUBKEY] [addr=ADDR] ]\n"
             "          rem ID\n"
+	    "          common ID\n" 
     );
 
     if( fmt ) {
@@ -68,6 +69,7 @@ static void hex2bn( char *hex, struct sec_buf *buf );
 static void bn2hex( char *bn, char *hex, int len );
 static int mynet_pton( char *str, uint8_t *inaddr );
 static char *mynet_ntop( uint32_t inaddr, char *str );
+static void cmd_common( uint64_t id );
 
 int main( int argc, char **argv ) {
     int sts, i;
@@ -171,6 +173,12 @@ int main( int argc, char **argv ) {
 	}
 	sts = hostreg_host_put( &entry );
 	if( sts ) usage( "Failed to set host" );
+    } else if( strcmp( argv[i], "common" ) == 0 ) {
+	uint64_t id;
+	i++;
+	if( i >= argc ) usage( NULL );
+	id = strtoull( argv[i], NULL, 16 );
+	cmd_common( id );
     } else usage( NULL );
 
     hostreg_close();
@@ -185,6 +193,7 @@ static void print_host( struct hostreg_host *host ) {
     bn2hex( (char *)host->pubkey, hex, host->publen );
     printf( "ID=%"PRIx64" name=%s pubkey=%s ",
 	    host->id, host->name, hex );
+
     for( j = 0; j < host->naddr; j++ ) {
 	mynet_ntop( host->addr[j], hex );
 	printf( "addr=%s ", hex );
@@ -337,4 +346,17 @@ static int mynet_pton( char *str, uint8_t *inaddr ) {
     }
 
     return 0;
+}
+
+static void cmd_common( uint64_t id ) {
+  uint8_t common[32];
+  int sts, size;
+  char hex[256];
+  
+  size = sizeof(common);
+  sts = hostreg_host_common( id, (char *)common, &size );
+  if( sts ) usage( "Unknown host \"%"PRIx64"\"", id );
+
+  bn2hex( (char *)common, hex, size );
+  printf( "%s\n", hex );  
 }

@@ -68,14 +68,14 @@ static void hostreg_unlock( void ) {
 int hostreg_open( void ) {
     int sts;
     struct sec_buf priv, pub;
-    
+
     if( glob.ocount < 0 ) return -1;
     if( glob.ocount > 0 ) {
         glob.ocount++;
         return 0;
     }
-    
-    sts = mmf_open( "hostreg.dat", &glob.mmf );
+
+    sts = mmf_open( mmf_default_path( "hostreg.dat" ), &glob.mmf );
     if( sts ) return sts;
     
     sts = mmf_remap( &glob.mmf, sizeof(*glob.file) );

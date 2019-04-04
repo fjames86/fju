@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "librpc", "librpc\librpc.vcxproj", "{82BE9BD1-BFF7-4C5D-95FC-369F5589C4C4}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "winrpc", "winrpc\winrpc.vcxproj", "{F55C6E42-F80F-423D-BFC8-6C6C9B6E8BA1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{82BE9BD1-BFF7-4C5D-95FC-369F5589C4C4} = {82BE9BD1-BFF7-4C5D-95FC-369F5589C4C4}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rpcd", "rpcd\rpcd.vcxproj", "{3770EA50-4E37-49B0-8637-F9663BB0712C}"
 	ProjectSection(ProjectDependencies) = postProject

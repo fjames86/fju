@@ -23,9 +23,14 @@
  *
  */
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "mmf.h"
 
 #ifdef WIN32
+#include <Shlobj.h>
 #else
 #include <stdlib.h>
 #include <fcntl.h>
@@ -101,6 +106,27 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 	return 0;
 }
 
+char *mmf_default_path( char *filename ) {
+	static char path[256];
+
+	wchar_t *wp;
+	DWORD sts;
+
+	strcpy( path, "" );
+	sts = SHGetKnownFolderPath( &FOLDERID_ProgramData, 0, NULL, &wp );
+	if( sts ) return -1;
+
+	wcstombs( path, wp, sizeof(path) );
+	if( filename ) {
+		strcat( path, "\\" );
+		strcat( path, filename );
+	}
+
+	CoTaskMemFree( wp );
+
+	return path;
+}
+
 #else
 int mmf_open( char *path, struct mmf_s *mmf ) {
 	mmf->fd = open( path, O_RDWR|O_CREAT, 0600 );
@@ -148,6 +174,18 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 	mmf->file = mmap( NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, mmf->fd, 0 );
 	mmf->msize = size;
 	return 0;
+}
+
+char *mmf_default_path( char *filename ) {
+	static char path[256];
+
+	strcat( path, "/etc" );
+	if( filename ) {
+		strcat( path, "/" );
+		strcat( path, filename );
+	}
+
+	return path;
 }
 
 #endif

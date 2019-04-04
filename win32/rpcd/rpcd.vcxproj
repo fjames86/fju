@@ -148,7 +148,7 @@
     <ClInclude Include="..\..\rpc\rpc.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\rpc\rpcd.c" />
+    <ClCompile Include="..\..\rpc\rpcd-main.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

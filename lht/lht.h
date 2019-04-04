@@ -30,6 +30,8 @@ struct lht_s {
   int nbuckets;
   
   uint32_t count;
+  uint32_t memcount;
+  uint32_t rehash_threshold;
 };
 
 int lht_open( char *path, struct lht_s *lht );

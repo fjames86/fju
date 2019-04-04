@@ -15,6 +15,7 @@ static struct {
 #define CMD_GET       3 
 #define CMD_REM       4
 #define CMD_RESET     5
+#define CMD_PROP      6 
   int flags;
   char *key;
   struct lht_s lht;
@@ -81,6 +82,8 @@ int main( int argc, char **argv ) {
       glob.key = argv[i];
     } else if( strcmp( argv[i], "reset" ) == 0 ) {
       glob.cmd = CMD_RESET;
+    } else if( strcmp( argv[i], "prop" ) == 0 ) {
+      glob.cmd = CMD_PROP;
     } else usage( NULL );
   }
   
@@ -106,6 +109,43 @@ int main( int argc, char **argv ) {
   case CMD_RESET:
     lht_reset( &glob.lht );
     break;
+  case CMD_PROP:
+    {
+      struct log_prop prop;
+      char *unit = "";
+      int mem;
+      log_prop( &glob.lht.log, &prop );
+
+      mem = glob.lht.memcount;
+      if( mem > 1024 ) {
+	mem /= 1024;
+	unit = "k";
+      }
+      if( mem > 1024 ) {
+	mem /= 1024;
+	unit = "M";
+      }      
+      printf( "LHT EntryCount %d/%d (%d%%) MemCount %d%s (%d bytes)\n",
+	      glob.lht.count, glob.lht.nbuckets, (100 * glob.lht.count) / glob.lht.nbuckets,
+	      mem, unit, glob.lht.memcount );
+
+      mem = prop.count * LOG_LBASIZE;
+      unit = "";
+      if( mem > 1024 ) {
+	mem /= 1024;
+	unit = "k";
+      }
+      if( mem > 1024 ) {
+	mem /= 1024;
+	unit = "M";
+      }
+      printf( "LOG Seq %"PRIu64" LBACount %u (%uM) Count %u (%d%s)\n", 
+	      prop.seq,
+	      prop.lbacount,
+	      (prop.lbacount * LOG_LBASIZE) / (1024*1024),
+	      prop.count,
+	      mem, unit );
+    }
   }
 
   lht_close( &glob.lht );
@@ -183,7 +223,9 @@ static void cmd_write( void ) {
     offset += sts;
   } while( 1 ); 
 
-  lht_put( &glob.lht, glob.key, buf, offset );
+  sts = lht_put( &glob.lht, glob.key, buf, offset );
+  if( sts ) usage( "Failed to put entry" );
+  
   free( buf );
 }
 

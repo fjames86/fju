@@ -7,31 +7,57 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <assert.h>
 
 #include "lht.h"
 
+#define LHT_REHASH_THRESHOLD 75
+
 static uint32_t lht_hash( char *key );
 static void lht_replay( struct lht_s *lht );
-static void lht_cmd_put( struct lht_s *lht, char *key, char *buf, int len );
-static void lht_cmd_rem( struct lht_s *lht, char *key );
+static int lht_cmd_put( struct lht_s *lht, char *key, char *buf, int len );
+static int lht_cmd_rem( struct lht_s *lht, char *key );
+
+static void *lht_malloc( struct lht_s *lht, int count ) {
+  void *p;
+  
+  lht->memcount += count;
+  p = malloc( count );
+  memset( p, 0, count );
+  return p;
+}
+static void *lht_realloc( struct lht_s *lht, void *ptr, int oldcount, int count ) {
+  void *p;
+  
+  lht->memcount -= oldcount;
+  p = realloc( ptr, count );
+  lht->memcount += count;
+  
+  return p;
+}
+
+static void lht_free( struct lht_s *lht, void *ptr, int count ) {
+  lht->memcount -= count;
+  free( ptr );
+}
 
 int lht_open( char *path, struct lht_s *lht ) {
   int sts;
   struct log_opts opts;
 
   memset( lht, 0, sizeof(*lht) );
+  lht->rehash_threshold = LHT_REHASH_THRESHOLD;
   
   memset( &opts, 0, sizeof(opts) );
   opts.mask = LOG_OPT_FLAGS|LOG_OPT_LBACOUNT;
   opts.lbacount = (2*1024*1024) / LOG_LBASIZE;
   opts.flags = LOG_FLAG_FIXED;  
-  sts = log_open( path ? path : "lgt.dat", &opts, &lht->log );
+  sts = log_open( path ? path : "lht.dat", &opts, &lht->log );
   if( sts ) return sts;
 
   /* setup buckets */
   lht->nbuckets = LHT_NBUCKETS;
-  lht->buckets = malloc( sizeof(*lht->buckets) * lht->nbuckets );
-  memset( lht->buckets, 0, sizeof(*lht->buckets) * lht->nbuckets );
+  lht->buckets = lht_malloc( lht, sizeof(*lht->buckets) * lht->nbuckets );
   
   /* replay any existing log entries */
   lht_replay( lht );
@@ -51,19 +77,23 @@ int lht_close( struct lht_s *lht ) {
     entry = lht->buckets[i];
     while( entry ) {
       next = entry->next;
-      free( entry->buf );
-      free( entry );
+      lht_free( lht, entry->buf, entry->len );
+      lht_free( lht, entry, sizeof(*entry) );
+      lht->count--;
+	
       entry = next;
     }
   }
-  free( lht->buckets );
+  lht_free( lht, lht->buckets, sizeof(*lht->buckets) * lht->nbuckets );
 
+  assert( lht->memcount == 0 );
+  
   log_close( &lht->log );
   return 0;  
 }
 
 int lht_reset( struct lht_s *lht ) {
-  int i;
+  int i, sts;
   struct lht_entry *entry;
   
   /* reset log */
@@ -73,7 +103,8 @@ int lht_reset( struct lht_s *lht ) {
   for( i = 0; i < lht->nbuckets; i++ ) {
     entry = lht->buckets[i];
     while( entry ) {
-      lht_cmd_put( lht, entry->key, (char *)entry->buf, entry->len );
+      sts = lht_cmd_put( lht, entry->key, (char *)entry->buf, entry->len );
+      if( sts ) return sts;
       entry = entry->next;
     }
   }
@@ -84,6 +115,7 @@ int lht_reset( struct lht_s *lht ) {
 static int lht_put2( struct lht_s *lht, char *key, char *buf, int len, int cmd ) {
   uint32_t idx, hash;
   struct lht_entry *entry;
+  int sts;
   
   /* update in memory, then write log entry */
   hash = lht_hash( key );
@@ -92,18 +124,19 @@ static int lht_put2( struct lht_s *lht, char *key, char *buf, int len, int cmd )
   entry = lht->buckets[idx];
   while( entry ) {
     if( (entry->hash == hash) && (strcmp( entry->key, key ) == 0) ) {
-      free( entry->buf );
-      entry->buf = malloc( len );
+      lht_free( lht, entry->buf, entry->len );
+      entry->buf = lht_malloc( lht, len );
       memcpy( entry->buf, buf, len );
       entry->len = len;
-      return 0;
+      goto done;
     }
+    entry = entry->next;
   }
 
-  entry = malloc( sizeof(*entry) );
+  entry = lht_malloc( lht, sizeof(*entry) );
   entry->hash = hash;
   strncpy( entry->key, key, sizeof(entry->key) - 1 );
-  entry->buf = malloc( len );
+  entry->buf = lht_malloc( lht, len );
   memcpy( entry->buf, buf, len );
   entry->len = len;
 
@@ -113,12 +146,16 @@ static int lht_put2( struct lht_s *lht, char *key, char *buf, int len, int cmd )
   lht->count++;
 
   /* rehash if population count is over 75% */
-  if( lht->count > ((lht->nbuckets * 3) / 4) ) {
+  if( (100 * lht->count) / lht->nbuckets > lht->rehash_threshold ) {
     lht_rehash( lht, 0 );
   }
-  
+
+ done:
   /* write command */
-  if( cmd ) lht_cmd_put( lht, key, buf, len );
+  if( cmd ) {
+    sts = lht_cmd_put( lht, key, buf, len );
+    if( sts ) return sts;
+  }
   
   return 0;  
 }
@@ -148,7 +185,7 @@ static int lht_rem2( struct lht_s *lht, char *key, int cmd ) {
   /* remove from memory, then write log entry */
   uint32_t hash, idx;
   struct lht_entry *entry, *prev;
-  int found = 0;
+  int found = 0, sts;
 
   hash = lht_hash( key );
   idx = hash % lht->nbuckets;
@@ -159,16 +196,17 @@ static int lht_rem2( struct lht_s *lht, char *key, int cmd ) {
       if( prev ) prev->next = entry->next;
       else lht->buckets[idx] = entry->next;
 
-      free( entry->buf );
-      free( entry );
+      lht_free( lht, entry->buf, entry->len );
+      lht_free( lht, entry, sizeof(*entry) );
       found = 1;
       lht->count--;
       break;
     }
   }
 
-  if( found ) {    
-    if( cmd ) lht_cmd_rem( lht, key );
+  if( found && cmd ) {    
+    sts = lht_cmd_rem( lht, key );
+    if( sts ) return sts;
   }
 
   return found ? 0 : -1;
@@ -215,7 +253,7 @@ static void lht_replay( struct lht_s *lht ) {
   
   /* read from current id to end, applying each entry */
   len = 4096;
-  buf = malloc( len );
+  buf = lht_malloc( lht, len );
   
   while( 1 ) {
     iov[0].buf = (char *)&cmd;
@@ -230,8 +268,9 @@ static void lht_replay( struct lht_s *lht ) {
     case LHT_CMD_PUT:
       /* re-read with data buffer */
       if( len < cmd.len ) {
+	int oldlen = len;
 	len = (cmd.len * 3) / 2;
-	buf = realloc( buf, len );
+	buf = lht_realloc( lht, buf, oldlen, len );
       }
       iov[1].buf = buf;
       iov[1].len = len;
@@ -250,12 +289,12 @@ static void lht_replay( struct lht_s *lht ) {
     lht->log_id = entry.id;
   }
 
-  free( buf );
+  lht_free( lht, buf, len );
   
 }
 
 
-static void lht_cmd_put( struct lht_s *lht, char *key, char *buf, int len ) {
+static int lht_cmd_put( struct lht_s *lht, char *key, char *buf, int len ) {
   struct log_entry entry;
   struct log_iov iov[2];
   struct lht_cmd cmd;
@@ -274,11 +313,11 @@ static void lht_cmd_put( struct lht_s *lht, char *key, char *buf, int len ) {
   iov[1].len = len;
   entry.iov = iov;
   entry.niov = 2;
-  
-  log_write( &lht->log, &entry );  
+
+  return log_write( &lht->log, &entry );  
 }
 
-static void lht_cmd_rem( struct lht_s *lht, char *key ) {
+static int lht_cmd_rem( struct lht_s *lht, char *key ) {
   struct log_entry entry;
   struct log_iov iov[1];
   struct lht_cmd cmd;
@@ -296,8 +335,7 @@ static void lht_cmd_rem( struct lht_s *lht, char *key ) {
   entry.iov = iov;
   entry.niov = 1;
   
-  log_write( &lht->log, &entry );  
-  
+  return log_write( &lht->log, &entry );    
 }
 
 int lht_rehash( struct lht_s *lht, int nbuckets ) {
@@ -311,7 +349,7 @@ int lht_rehash( struct lht_s *lht, int nbuckets ) {
 
   lht->nbuckets = (lht->nbuckets * 3) / 2;
   if( nbuckets > lht->nbuckets ) lht->nbuckets = nbuckets;
-  lht->buckets = malloc( sizeof(*lht->buckets) * lht->nbuckets );
+  lht->buckets = lht_malloc( lht, sizeof(*lht->buckets) * lht->nbuckets );
   memset( lht->buckets, 0, sizeof(*lht->buckets) * lht->nbuckets );
   
   for( i = 0; i < n; i++ ) {
@@ -327,7 +365,7 @@ int lht_rehash( struct lht_s *lht, int nbuckets ) {
     }
   }
 
-  free( bkts );
+  lht_free( lht, bkts, sizeof(*bkts) * n );
   
   return 0;
 }

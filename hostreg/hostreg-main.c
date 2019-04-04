@@ -15,9 +15,9 @@
 #include <inttypes.h>
 #include <mmf.h>
 #include <sec.h>
-#include <sys/types.h>
 
 #ifndef WIN32
+#include <sys/types.h>
 #include <ifaddrs.h>
 #include <sys/socket.h>
 #include <netinet/in.h>

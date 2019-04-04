@@ -32,107 +32,7 @@
  * is filled out with the reply data and should then be used to send back to the client.
  */
 
-#ifdef WIN32
-#include <Winsock2.h>
-#include <Windows.h>
-#include <ws2tcpip.h>
-#endif
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-
-#ifndef WIN32
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <poll.h>
-#include <signal.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#endif
-
-#include "rpc.h"
-
-#ifdef USE_SHAUTH
-#include "shauth.h"
-#endif
-
-#define RPC_MAX_BUF (1024*1024)
-#define RPC_MAX_CONN 32 
-#define RPC_MAX_LISTEN 8
-
-typedef enum {
-	RPC_LISTEN_UDP = 1,
-	RPC_LISTEN_UDP6 = 2,
-	RPC_LISTEN_TCP = 3,
-	RPC_LISTEN_TCP6 = 4,
-	RPC_LISTEN_UNIX = 5,
-} rpc_listen_t;
-
-struct rpc_listen {
-#ifdef WIN32
-	SOCKET fd;
-#else
-	int fd;
-#endif
-	rpc_listen_t type;
-	union {
-		struct sockaddr_in sin;
-		struct sockaddr_in6 sin6;
-#ifndef WIN32
-		struct sockaddr_un sun;
-#endif
-	} addr;
-};
-
-/* networking state */
-typedef enum {
-	RPC_NSTATE_RECV = 1,
-	RPC_NSTATE_SEND = 2,
-	RPC_NSTATE_CONNECT = 3,
-} rpc_nstate_t;
-
-typedef enum {
-	RPC_CSTATE_RECVLEN = 1,
-	RPC_CSTATE_RECV = 2,
-	RPC_CSTATE_SENDLEN = 3,
-	RPC_CSTATE_SEND = 4,
-	RPC_CSTATE_CONNECT = 5,
-	RPC_CSTATE_CLOSE = 6,
-} rpc_cstate_t;
-
-struct rpc_conn;
-struct rpc_conn {
-	struct rpc_conn *next;
-
-#ifdef WIN32
-	SOCKET fd;
-#else
-	int fd;
-#endif
-	rpc_nstate_t nstate;
-
-	rpc_cstate_t cstate;
-	struct {
-		uint32_t count;       /* amount to send/recv */
-		uint32_t offset;      /* how much has been sent/recv */
-		uint64_t timeout;     /* when to give up */
-
-		/* callback on completion */
-		void( *cb )(struct rpc_conn *c);
-		void *cxt;
-	} cdata;
-
-	struct rpc_inc inc;
-
-	uint32_t count;    /* size of buf */
-	uint8_t *buf;
-};
+#include "rpcd.h"
 
 static struct {
 	int foreground;
@@ -145,8 +45,9 @@ static struct {
 	struct rpc_conn *clist;    /* active connection list */
 	struct rpc_conn *flist;    /* free list */
 
-	char *shauth_secret;
+	void (*init_cb)( void );
 
+        
 #ifdef WIN32
 	HANDLE evt;
 	SERVICE_STATUS_HANDLE hsvc;
@@ -163,7 +64,6 @@ typedef int socklen_t;
 static void WINAPI rpcd_svc( DWORD argc, char **argv );
 #endif
 
-static void rpc_run( void );
 static void rpc_accept( struct rpc_listen *lis );
 
 
@@ -201,9 +101,6 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            -L path          Listen on AF_UNIX socket file\n"
 #endif
-#ifdef USE_SHAUTH
-		"            -s secret        Shared secret\n"
-#endif
 		"            -R               Don't register with rpcbind service.\n" 		
 		"\n" );
 
@@ -219,11 +116,13 @@ static void usage( char *fmt, ... ) {
 	exit( 0 );
 }
 
-int main( int argc, char **argv ) {
+int rpcd_init( int argc, char **argv, void (*init_cb)(void) ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
 	int i;
+
+	rpc.init_cb = init_cb;
 
 	/* parse command line */
 	i = 1;
@@ -281,12 +180,6 @@ int main( int argc, char **argv ) {
 		}
 		else if( strcmp( argv[i], "-f" ) == 0 ) {
 			rpc.foreground = 1;
-#ifdef USE_SHAUTH
-		} else if( strcmp( argv[i], "-s" ) == 0 ) {
-			i++;
-			if( i >= argc ) usage( NULL );
-			rpc.shauth_secret = argv[i];
-#endif
 		} else if( strcmp( argv[i], "-R" ) == 0 ) {
 	        	rpc.no_rpcregister = 1;
 		}
@@ -339,8 +232,6 @@ int main( int argc, char **argv ) {
 	sigaction( SIGPIPE, &sa, NULL );
 #endif
 
-	rpc_run();
-
 	return 0;
 }
 
@@ -369,7 +260,7 @@ static void WINAPI rpcd_svc( DWORD argc, char **argv ) {
 	rpc.svcsts.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
 	SetServiceStatus( rpc.hsvc, &rpc.svcsts );
 
-	rpc_run();
+	rpcd_run();
 
 	rpc.svcsts.dwCurrentState = SERVICE_STOPPED;
 	SetServiceStatus( rpc.hsvc, &rpc.svcsts );
@@ -918,7 +809,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
 	}
 }
 
-static void rpc_run( void ) {
+void rpcd_run( void ) {
 	struct rpc_conn *c;
 	int i;
 	int timeout;
@@ -934,9 +825,9 @@ static void rpc_run( void ) {
 		rpc.evt = WSACreateEvent();
 	}
 #endif
-
-	/* register programs */
-	rpcbind_register();
+		
+	/* register programs and initialize */
+	if( rpc.init_cb ) rpc.init_cb();
 
 	memset( &sin, 0, sizeof(sin) );
 	sin.sin_family = AF_INET;
@@ -976,37 +867,6 @@ static void rpc_run( void ) {
 
 		pglist = pglist->next;
 	}
-
-	/* register providers */
-#ifdef USE_SHAUTH
-	{
-		uint8_t key[32];
-		memset( key, 0, sizeof(key) );
-		if( rpc.shauth_secret ) {
-			/* must look like a hex string */
-			char *p, *terminator;
-			char tmp[4];
-			p = rpc.shauth_secret;
-			for( i = 0; i < 32; i++ ) {
-				memset( tmp, 0, 4 );
-				if( *p ) {
-					tmp[0] = *p;
-					p++;
-				}
-				if( *p ) {
-					tmp[1] = *p;
-					p++;
-				}
-
-				key[i] = (uint8_t)strtoul( tmp, &terminator, 16 );
-				if( *terminator ) usage( "Failed to parse secret" );
-
-				if( !*p ) break;
-			}
-		}
-		shauth_register( key );
-	}
-#endif
 
 	/* listen on ports */
 	rpc_init_listen();

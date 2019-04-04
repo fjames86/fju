@@ -1,25 +1,19 @@
 
-RPC_DEFINES=-g
+all: rpcd client librpc.a 
 
-USE_SHAUTH=yes
-SHAUTH=
+rpcd: librpc.a rpcd-main.c 
+	gcc -o rpcd -g rpcd-main.c -lcrypto -L. -lrpc 
 
-ifeq ($(USE_SHAUTH),yes)
-SHAUTH=shauth.c -lcrypto
-RPC_DEFINES+=-DUSE_SHAUTH
-endif
+client: client.c librpc.a 
+	gcc -o client -g client.c -lcrypto -L. -lrpc 
 
-all: rpcd client
+librpc.a: rpc.c rpcd.c rpc.h rpcd.h shauth.c shauth.h 
+	gcc -c rpc.c rpcd.c shauth.c 
+	ar rcs librpc.a rpc.o rpcd.o shauth.o 
 
-rpcd: rpc.c rpc.h rpcd.c
-	cc -o rpcd $(RPC_DEFINES) rpc.c rpcd.c $(SHAUTH)
-
-client: client.c rpc.c rpc.h
-	cc -o client $(RPC_DEFINES) client.c rpc.c $(SHAUTH)
-
-.PHONY: tar clean
+.PHONY: tar clean all 
 tar:
-	tar -czvf rpc.tar.gz rpc.h rpc.c Makefile rpcd.c client.c shauth.h shauth.c 
+	tar -czvf rpc.tar.gz rpc.h rpc.c Makefile rpcd.c client.c shauth.h shauth.c rpcd-main.c 
 
 clean:
-	rm client rpcd
+	rm client rpcd rpc.o rpcd.o librpc.a shauth.o 

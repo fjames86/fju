@@ -35,9 +35,7 @@
 
 #include "rpc.h"
 
-#ifdef USE_SHAUTH
 #include "shauth.h"
-#endif
 
 static uint8_t rpc_buf[32*1024];
 
@@ -75,24 +73,48 @@ static int rpcbind_decode_mapping_list( struct xdr_s *xdr, struct rpcbind_mappin
   return i;
 }
 
+static void parse_secret( char *str, uint8_t *key ) {
+  char *p, *terminator;
+  int i;
+  char tmp[4];
+  
+  p = str;
+  for( i = 0; i < 32; i++ ) {
+    memset( tmp, 0, 4 );
+    if( *p ) {
+      tmp[0] = *p;
+      p++;
+    }
+    if( *p ) {
+      tmp[1] = *p;
+      p++;
+    }
+    
+    key[i] = (uint8_t)strtoul( tmp, &terminator, 16 );
+    if( *terminator ) break;
+    
+    if( !*p ) break;
+  }
+}
+
 int main( int argc, char **argv ) {
   struct rpc_inc inc;
   struct sockaddr_in *sinp;
   int i, sts, handle;
   struct rpcbind_mapping mlist[16];
-#ifdef USE_SHAUTH
   struct shauth_context sa;
   uint8_t sa_key[32] = { 0 };
-#endif
-
   
   memset( &inc, 0, sizeof(inc) );
-#ifdef USE_SHAUTH
-  shauth_init( &sa, sa_key );
-  sa.service = SHAUTH_SERVICE_PRIV;
-  inc.pvr = shauth_provider();
-  inc.pcxt = &sa;
-#endif
+
+  /* if secret provided, used shauth */
+  if( argc > 1 ) {
+    parse_secret( argv[1], sa_key );
+    shauth_init( &sa, sa_key );
+    sa.service = SHAUTH_SERVICE_PRIV;
+    inc.pvr = shauth_provider();
+    inc.pcxt = &sa;
+  }
 
 #ifdef WIN32
   {
@@ -105,7 +127,6 @@ int main( int argc, char **argv ) {
   xdr_init( &inc.xdr, rpc_buf, sizeof(rpc_buf) );
   rpc_init_call( &inc, 100000, 2, 4, &handle );
   rpc_complete_call( &inc, handle );
-
 
   sinp = (struct sockaddr_in *)&inc.raddr;
   sinp->sin_family = AF_INET;

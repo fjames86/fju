@@ -412,6 +412,7 @@ static int hrauth_mout( struct rpc_provider *pvr, struct xdr_s *xdr, int start, 
   }
 
   /* now prepend the hash */
+  memset( hash, 0, sizeof(hash) );
   hrauth_digest( hash, xdr->buf + start, count, sa->session_key, sa->cipher );
   memmove( xdr->buf + start + sizeof(hash), xdr->buf + start, count );
   memcpy( xdr->buf + start, hash, sizeof(hash) );
@@ -438,6 +439,7 @@ static int hrauth_min( struct rpc_provider *pvr, struct xdr_s *xdr, int start, i
   count -= sizeof(hash);
 
   /* Check hash */
+  memset( hash, 0, sizeof(hash) );
   hrauth_digest( hash, xdr->buf + xdr->offset, count, sa->session_key, sa->cipher );
   if( memcmp( xdr->buf + start, hash, sizeof(hash) ) != 0 ) return -1;
 

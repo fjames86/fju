@@ -41,9 +41,9 @@ struct hostreg_header {
     /* header fields */
     uint64_t localid;
     uint32_t publen;
-    uint8_t pubkey[64];
+    uint8_t pubkey[HOSTREG_MAX_PUBKEY];
     uint32_t privlen;
-    uint8_t privkey[96];
+    uint8_t privkey[HOSTREG_MAX_PRIVKEY];
 };
 
 
@@ -152,9 +152,9 @@ int hostreg_prop( struct hostreg_prop *prop ) {
     prop->host_count = glob.file->header.host_count;
     prop->localid = glob.file->header.localid;
     prop->publen = glob.file->header.publen;
-    memcpy( prop->pubkey, glob.file->header.pubkey, sizeof(glob.file->header.pubkey[0]) * 64 );
+    memcpy( prop->pubkey, glob.file->header.pubkey, glob.file->header.publen );
     prop->privlen = glob.file->header.privlen;
-    memcpy( prop->privkey, glob.file->header.privkey, sizeof(glob.file->header.privkey[0]) * 96 );
+    memcpy( prop->privkey, glob.file->header.privkey, glob.file->header.privlen );
     hostreg_unlock();
     return 0;
 }

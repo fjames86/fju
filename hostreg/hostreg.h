@@ -19,7 +19,7 @@
 
 #define HOSTREG_MAX_ADDR       8
 #define HOSTREG_MAX_PUBKEY     64
-#define HOSTREG_MAX_PRIVKEY    96
+#define HOSTREG_MAX_PRIVKEY    32
 
 struct hostreg_host {
     uint64_t id;

@@ -8,7 +8,7 @@
 static void init_cb( void ) {
   /* register rpc programs */
   rpcbind_register();
-
+  
   /* register providers */
   {
     uint8_t key[32];

@@ -59,8 +59,8 @@ int ecdh_generate( struct sec_buf *local_priv, struct sec_buf *local_public ) {
   sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPRIVATE_BLOB, pout, outlen, &outlen, 0 );
   p = pout + sizeof(*eccp) + SEC_ECDH_KEYLEN;
   eccp = (BCRYPT_ECCKEY_BLOB *)pout;	
-  memcpy( local_priv->buf, pout + sizeof(*eccp), 3*SEC_ECDH_KEYLEN );
-  local_priv->len = 3*SEC_ECDH_KEYLEN;
+  memcpy( local_priv->buf, pout + sizeof(*eccp) + 2*SEC_ECDH_KEYLEN, SEC_ECDH_KEYLEN );
+  local_priv->len = SEC_ECDH_KEYLEN;
   
   outlen = sizeof(*eccp) + 2*SEC_ECDH_KEYLEN;
   sts = BCryptExportKey( hkey, NULL, BCRYPT_ECCPUBLIC_BLOB, pout, outlen, &outlen, 0 );
@@ -85,7 +85,7 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   char pout[3*SEC_ECDH_KEYLEN + sizeof(BCRYPT_ECCKEY_BLOB)];
   int nbytes;
 
-  if( local_priv->len != (SEC_ECDH_KEYLEN*3) ) return -1;
+  if( local_priv->len != (SEC_ECDH_KEYLEN) ) return -1;
   if( remote_public->len != (SEC_ECDH_KEYLEN*2) ) return -1;
 
   sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDH_P256_ALGORITHM, NULL, 0 );
@@ -94,7 +94,8 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   eccp = (BCRYPT_ECCKEY_BLOB *)pout;
   eccp->dwMagic = BCRYPT_ECDH_PRIVATE_P256_MAGIC;
   eccp->cbKey = SEC_ECDH_KEYLEN;
-  memcpy( pout + sizeof(*eccp), local_priv->buf, 3*SEC_ECDH_KEYLEN );
+  memcpy( pout + sizeof( *eccp ), remote_public->buf, 2 * SEC_ECDH_KEYLEN );
+  memcpy( pout + sizeof(*eccp) + 2*SEC_ECDH_KEYLEN, local_priv->buf, SEC_ECDH_KEYLEN );
   sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPRIVATE_BLOB, &hkey, pout, outlen, 0 );
   
   outlen = sizeof(*eccp) + 2*SEC_ECDH_KEYLEN;
@@ -106,7 +107,7 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   
   /* derive common key */
   sts = BCryptSecretAgreement( hkey, hrkey, &skey, 0 );
-  
+
   sts = BCryptDeriveKey( skey, BCRYPT_KDF_HASH, NULL, common->buf, SEC_ECDH_MAX_COMMON, &nbytes, 0 );  
   common->len = SEC_ECDH_MAX_COMMON;
   

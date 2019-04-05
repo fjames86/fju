@@ -8,7 +8,7 @@ client: client.c librpc.a
 	cc -o client -g client.c -lcrypto -L. -lrpc -I../hostreg -L../hostreg -lhostreg -lhrauth -I. -I../mmf -L../mmf -lmmf -I../sec -L../sec -lsec 
 
 librpc.a: rpc.c rpcd.c rpc.h rpcd.h shauth.c shauth.h 
-	cc -c rpc.c rpcd.c shauth.c 
+	cc -c -g rpc.c rpcd.c shauth.c 
 	ar rcs librpc.a rpc.o rpcd.o shauth.o 
 	
 .PHONY: tar clean all 

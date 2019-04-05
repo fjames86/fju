@@ -43,7 +43,8 @@
 static void usage( char *fmt, ... ) {
   va_list args;
 
-  printf( "Usage: client [-p port] [-s SHAUTH-SECRET | -h HRAUTH-HOSTID]\n" 
+  printf( "Usage: client [-a addr] [-p port] [-s SHAUTH-SECRET | -h HRAUTH-HOSTID]\n"
+	  "       [-L service-level]\n"
 	  "\n" );
 
 
@@ -118,6 +119,36 @@ static void parse_secret( char *str, uint8_t *key ) {
     if( !*p ) break;
   }
 }
+static int mynet_pton( char *str, uint8_t *inaddr ) {
+    char *p;
+    char tmp[4];
+    int i, j;
+    
+    p = str;
+    memset( inaddr, 0, 4 );
+    
+    for( j = 0; j < 4; j++ ) {
+	memset( tmp, 0, sizeof(tmp) );
+	i = 0;
+	while( 1 ) {
+	    if( *p == '\0' ) break;
+	    if( *p == '.' ) {
+		p++;
+		break;
+	    }
+
+	    if( i <= 3 ) {
+	      tmp[i] = *p;
+	    }
+	    i++;
+	    p++;
+	}
+	inaddr[j] = strtoul( tmp, NULL, 10 );
+    }
+
+    return 0;
+}
+
 
 int main( int argc, char **argv ) {
   struct rpc_inc inc;
@@ -128,6 +159,8 @@ int main( int argc, char **argv ) {
   struct hrauth_context hrauth;
   uint8_t sa_key[32] = { 0 };
   int port = 8000;
+  uint32_t addr = htonl( INADDR_LOOPBACK );
+  int service_level = 0;
   
 #ifdef WIN32
   {
@@ -146,13 +179,17 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       port = strtoul( argv[i], NULL, 10 );
+    } else if( strcmp( argv[i], "-a" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      mynet_pton( argv[i], (uint8_t *)&addr );
     } else if( strcmp( argv[i], "-s" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
 
       parse_secret( argv[1], sa_key );
       shauth_init( &sa, sa_key );
-      sa.service = SHAUTH_SERVICE_PRIV;
+      sa.service = service_level; 
       inc.pvr = shauth_provider();
       inc.pcxt = &sa;
     } else if( strcmp( argv[i], "-h" ) == 0 ) {
@@ -164,8 +201,16 @@ int main( int argc, char **argv ) {
       remoteid = strtoull( argv[i], NULL, 16 );
       sts = hrauth_init( &hrauth, remoteid );
       if( sts ) usage( "Unknown remote host %"PRIx64"", remoteid );
+      hrauth.service = service_level; 
       inc.pvr = hrauth_provider();
       inc.pcxt = &hrauth;
+    } else if( strcmp( argv[i], "-L" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      if( strcmp( argv[i], "none" ) == 0 ) service_level = 0;
+      else if( strcmp( argv[i], "integ" ) == 0 ) service_level = 1;
+      else if( strcmp( argv[i], "priv" ) == 0 ) service_level = 2;
+      else usage( NULL );      
     } else usage( NULL );
     
     i++;
@@ -178,7 +223,7 @@ int main( int argc, char **argv ) {
   sinp = (struct sockaddr_in *)&inc.raddr;
   sinp->sin_family = AF_INET;
   sinp->sin_port = htons( port );
-  sinp->sin_addr.s_addr = htonl( INADDR_LOOPBACK );
+  sinp->sin_addr.s_addr = addr;
   inc.raddr_len = sizeof(*sinp);
   
   sts = rpc_call_udp( &inc );

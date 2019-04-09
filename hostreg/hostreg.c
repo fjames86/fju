@@ -19,6 +19,7 @@
 #include <ifaddrs.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <net/if.h>
 #endif
 
 
@@ -279,7 +280,7 @@ int hostreg_host_local( struct hostreg_host *host ) {
     plen = 32 * 1024;
     GetAdaptersAddresses( 0, 0, NULL, ipa, &plen );
     while( ipa ) {
-	  if(ipa->OperStatus == IfOperStatusUp) {
+	  if(ipa->OperStatus == IfOperStatusUp && ipa->IfType != IF_TYPE_SOFTWARE_LOOPBACK) {
         ipu = ipa->FirstUnicastAddress;	  
         while( ipu ) {		 
           if( (ipu->Address.lpSockaddr->sa_family == AF_INET) && (host->naddr < HOSTREG_MAX_ADDR) ) {
@@ -301,7 +302,7 @@ int hostreg_host_local( struct hostreg_host *host ) {
     ifa = ifl;
     while( ifa ) {
       sinp = (struct sockaddr_in *)ifa->ifa_addr;
-      if( sinp && sinp->sin_family == AF_INET ) {
+      if( sinp && sinp->sin_family == AF_INET && ifa->ifa_flags & IFF_UP && !(ifa->ifa_flags & IFF_LOOPBACK) ) {
 	if( host->naddr < HOSTREG_MAX_ADDR ) {
 	  host->addr[host->naddr] = sinp->sin_addr.s_addr;
 	  host->naddr++;

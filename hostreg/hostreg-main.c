@@ -222,55 +222,18 @@ static void cmd_prop( void ) {
      char hex[256];
      struct ifaddrs *ifl, *ifa;
      struct sockaddr_in *sinp;
-     
+	 struct hostreg_host host;
+
      hostreg_prop( &prop );
      printf( "seq=%"PRIu64"\n", prop.seq );
      printf( "host=%d/%d\n", prop.host_count, prop.host_max );
      bn2hex( (char *)prop.privkey, hex, prop.privlen );
      printf( "privkey=%s\n", hex );
 
-     printf( "id=%"PRIx64" ", prop.localid );
-     gethostname( hex, sizeof(hex) );
-     printf( "name=%s ", hex );
-     bn2hex( (char *)prop.pubkey, hex, prop.publen );
-     printf( "pubkey=%s ", hex );
+	 hostreg_host_local( &host );
+	 print_host( &host );
 
-#ifdef WIN32
-	 {
-		 char *buf = malloc( 32 * 1024 );
-		 IP_ADAPTER_ADDRESSES *ipa = buf;		
-		 IP_ADAPTER_UNICAST_ADDRESS *ipu;
-		 DWORD plen;
-
-		 plen = 32 * 1024;
-		 GetAdaptersAddresses( 0, 0, NULL, ipa, &plen );
-		 while( ipa ) {
-			 ipu = ipa->FirstUnicastAddress;
-			 while( ipu ) {
-				 if( ipu->Address.lpSockaddr->sa_family == AF_INET ) {
-					 mynet_ntop( &ipu->Address.lpSockaddr->sa_data, hex );
-					 printf( "addr=%s ", hex );
-				 }
-				 ipu = ipu->Next;
-			 }
-			 ipa = ipa->Next;
-		 }
-		 free( buf );
-	 }
-#else
-     getifaddrs( &ifl );
-     ifa = ifl;
-     while( ifa ) {
-       sinp = (struct sockaddr_in *)ifa->ifa_addr;
-       if( sinp && sinp->sin_family == AF_INET ) {
-	 mynet_ntop( sinp->sin_addr.s_addr, hex );
-	 printf( "addr=%s ", hex );
-       }
-       ifa = ifa->ifa_next;
-     }
-     freeifaddrs( ifl );
-#endif
-     printf( "\n" );
+	 printf( "\n" );
 }
 
 static void hex2bn( char *hex, struct sec_buf *buf ) {

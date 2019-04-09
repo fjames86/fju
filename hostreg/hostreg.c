@@ -274,20 +274,22 @@ int hostreg_host_local( struct hostreg_host *host ) {
     IP_ADAPTER_ADDRESSES *ipa = buf;		
     IP_ADAPTER_UNICAST_ADDRESS *ipu;
     DWORD plen;
+	struct sockaddr_in *sinp;
 
     plen = 32 * 1024;
     GetAdaptersAddresses( 0, 0, NULL, ipa, &plen );
     while( ipa ) {
-      ipu = ipa->FirstUnicastAddress;
-      while( ipu ) {
-	if( ipu->Address.lpSockaddr->sa_family == AF_INET ) {
-	  if( host->naddr < HOSTREG_MAX_ADDR ) {
-	    memcpy( &host[host->naddr], &ipu->Address.lpSockaddr->sa_data, 4 );
-	    host->naddr++;
+	  if(ipa->OperStatus == IfOperStatusUp) {
+        ipu = ipa->FirstUnicastAddress;	  
+        while( ipu ) {		 
+          if( (ipu->Address.lpSockaddr->sa_family == AF_INET) && (host->naddr < HOSTREG_MAX_ADDR) ) {
+  	        sinp = (struct sockaddr_in *)ipu->Address.lpSockaddr;
+            host->addr[host->naddr] = sinp->sin_addr.s_addr;
+		    host->naddr++;
+		  }
+	      ipu = ipu->Next;
+	    }
 	  }
-	}
-	ipu = ipu->Next;
-      }
       ipa = ipa->Next;
     }
     free( buf );

@@ -59,6 +59,7 @@ struct log_prop {
   uint32_t count;   /* block count */
   uint64_t last_id;
   uint32_t flags;
+  uint64_t tag;
 };
 
 struct log_iov {

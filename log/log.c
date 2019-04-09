@@ -63,8 +63,10 @@ struct _header {
   uint32_t lock_pid; 
   uint32_t lock_mode;
   uint32_t flags;
+  uint32_t unused;
+  uint64_t tag;
   
-  uint32_t spare[51]; /* future expansion */
+  uint32_t spare[48]; /* future expansion */
 };
 
 struct _entry {
@@ -156,6 +158,7 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
     hdr->seq = 1;
     hdr->start = 0;
     hdr->count = 0;
+    hdr->tag = time( NULL );
     hdr->flags = (opts && (opts->mask & LOG_OPT_FLAGS)) ? opts->flags : 0;
     
     sts = mmf_remap( &log->mmf, (sizeof(struct _header) + LOG_LBASIZE * hdr->lbacount) );
@@ -201,6 +204,7 @@ int log_reset( struct log_s *log ) {
   hdr->start = 0;
   hdr->count = 0;
   hdr->seq = 1;
+  hdr->tag = time( NULL );
   
   log_unlock( log );
   return 0;
@@ -223,6 +227,7 @@ int log_prop( struct log_s *log, struct log_prop *prop ) {
   prop->lbacount = hdr->lbacount;
   prop->last_id = hdr->last_id;
   prop->flags = hdr->flags;
+  prop->tag = hdr->tag;
   
   log_unlock( log );
 

@@ -186,8 +186,9 @@ int main( int argc, char **argv ) {
     {
       struct log_prop prop;
       log_prop( &fju.log, &prop );
-      printf( "Version %d Seq %"PRIu64" LBACount %u (%uMB) Start %u Count %u LastID %"PRIx64" Flags 0x%04x\n", 
+      printf( "Version %d Tag %"PRIx64" Seq %"PRIu64" LBACount %u (%uMB) Start %u Count %u LastID %"PRIx64" Flags 0x%04x\n", 
 	      prop.version,
+	      prop.tag, 
 	      prop.seq,
 	      prop.lbacount,
 	      (prop.lbacount * LOG_LBASIZE) / (1024*1024),
@@ -278,7 +279,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
       
       if( entry.flags & LOG_BINARY ) {
 	int i;
-	printf( "%s % 6u:%s %"PRIx64"\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
+	printf( "%s %6u:%s %"PRIx64"\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
 	if( !fju.print_quiet ) {
 	  printf( "  0000  " );
 	  for( i = 0; i < entry.msglen; i++ ) {
@@ -290,7 +291,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 	  printf( "\n" );
 	}
       } else {
-	if( !fju.print_quiet ) printf( "%s % 6u:%s %"PRIx64" %s\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, msg );
+	if( !fju.print_quiet ) printf( "%s %6u:%s %"PRIx64" %s\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, msg );
       }
     }
     if( fju.read_reverse ) {

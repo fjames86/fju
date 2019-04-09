@@ -461,13 +461,13 @@
   (format t "static void usage( char *fmt, ... ) {~%")
   (format t "    printf( \"Usage:    prop\\n\" ~%")
   (dolist (entry entries)
-    (format t "            \"          add ~A ~{[~A=~A] ~}]\\n\"~%"
+    (format t "            \"          add ~A ~{[~A=~A] ~}\\n\"~%"
 	    (entry-name entry)
 	    (mapcan (lambda (field)
 		      (list (field-name field)
 			    (field-name-upcase field)))
 		    (entry-fields entry)))
-    (format t "            \"          set ~A TAG ~{[~A=~A] ~}]\\n\"~%"
+    (format t "            \"          set ~A TAG ~{[~A=~A] ~}\\n\"~%"
 	    (entry-name entry)
 	    (mapcan (lambda (field)
 		      (list (field-name field)
@@ -543,7 +543,7 @@
   (format t "     ~A_prop( &prop );~%" *prefix*)
   (format t "     printf( \"seq=%\"PRIu64\"\\n\", prop.seq );~%")
   (dolist (entry entries)
-    (format t "     printf( \"~A=%d / %d\\n\", prop.~A_count, prop.~A_max );~%"
+    (format t "     printf( \"~A=%d/%d\\n\", prop.~A_count, prop.~A_max );~%"
 	    (entry-name entry) (entry-name entry) (entry-name entry)))
   (dolist (extra extras)
     (format t "     printf( \"~A=%~A\\n\", prop.~A );~%"
@@ -551,7 +551,7 @@
 	    (cond
 	      ((eq (field-type extra) :string) "s")
 	      ((eq (field-type extra) :uint64) "\"PRIx64\"")
-	      (t "d")
+	      (t "d"))
 	    (field-name extra)))
   (format t "}~%"))
 
@@ -692,7 +692,27 @@
     (emit-cmd-prop entries extras)
     (format t "~%")))
 
-  
+;; ----------------------------------------
+
+
+(defun emit-makefile ()
+  (format t "~%")
+  (format t ".PHONY: all clean~%")
+  (format t "~%")
+  (format t "all: ~A lib~A.a~%" *prefix* *prefix*)
+  (format t "~%")
+  (format t "clean:~%")
+  (format t "~Crm -f ~A lib~A.a ~A.o~%" #\tab *prefix* *prefix* *prefix*)
+  (format t "~%")
+  (format t "lib~A.a: ~A.c ~A.h~%" *prefix* *prefix* *prefix*)
+  (format t "~Ccc -c ~A.c -I../mmf~%" #\tab *prefix*)
+  (format t "~Car rcs lib~A.a ~A.o~%" #\tab *prefix* *prefix*)
+  (format t "~%")
+  (format t "~A: ~A-main.c lib~A.a~%" *prefix* *prefix* *prefix*)
+  (format t "~Ccc -o ~A ~A-main.c -L. -l~A -I../mmf -L../mmf -lmmf~%"
+	  #\tab *prefix* *prefix* *prefix*)
+  (format t "~%"))
+
 ;; ------------------------------------
 
 
@@ -709,13 +729,19 @@
     (with-open-file (*standard-output* (format nil "~A-main.c" prefix)
 				       :direction :output
 				       :if-exists :supersede)
-      (emit-main entries header-extras))))
+      (emit-main entries header-extras))
+    (with-open-file (*standard-output* (format nil "Makefile.~A" prefix)
+				       :direction :output
+				       :if-exists :supersede)
+      (emit-makefile))))
 
 (defun emit-files-stdout (&key prefix header-extras entries)
   (let ((*prefix* prefix))
     (emit-header-file entries header-extras)
     (emit-code-file entries header-extras)
-    (emit-main entries header-extras)))
+    (emit-main entries header-extras)
+    (emit-makefile)))
+
 
 (defmacro gen ((prefix &optional stdoutp) header-extras &rest entries)
   `(,(if stdoutp 'emit-files-stdout 'emit-files)

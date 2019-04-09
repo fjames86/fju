@@ -1,13 +1,16 @@
 
-.PHONY: all clean
+.PHONY: all clean install 
 
 all: hostreg libhostreg.a libhrauth.a 
 
 clean:
-	rm hostreg libhostreg.a hostreg.o
+	rm -f hostreg libhostreg.a hostreg.o hrauth.o /usr/local/bin/hostreg 
 
+install: hostreg
+	 cp hostreg /usr/local/bin 
+	 
 libhostreg.a: hostreg.c hostreg.h
-	cc -c hostreg.c -I../mmf -I../sec 
+	cc -c -g hostreg.c -I../mmf -I../sec 
 	ar rcs libhostreg.a hostreg.o
 
 libhrauth.a: hrauth.c hrauth.h libhostreg.a

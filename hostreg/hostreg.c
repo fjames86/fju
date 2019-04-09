@@ -303,7 +303,7 @@ int hostreg_host_local( struct hostreg_host *host ) {
       sinp = (struct sockaddr_in *)ifa->ifa_addr;
       if( sinp && sinp->sin_family == AF_INET ) {
 	if( host->naddr < HOSTREG_MAX_ADDR ) {
-	  memcpy( &host[host->naddr], &sinp->sin_addr.s_addr, 4 );
+	  host->addr[host->naddr] = sinp->sin_addr.s_addr;
 	  host->naddr++;
 	}
       }

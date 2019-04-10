@@ -268,7 +268,8 @@ int hostreg_host_local( struct hostreg_host *host ) {
   host->id = prop.localid;
   gethostname( host->name, sizeof(host->name) );
   memcpy( host->pubkey, prop.pubkey, prop.publen );
-
+  host->publen = prop.publen;
+  
 #ifdef WIN32
   {
     char *buf = malloc( 32 * 1024 );

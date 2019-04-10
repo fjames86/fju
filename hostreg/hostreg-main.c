@@ -144,6 +144,7 @@ int main( int argc, char **argv ) {
 	struct hostreg_host entry;
 	char argname[64], *argval;
 	uint64_t id;
+	int setaddr = 0;
 	memset( &entry, 0, sizeof(entry) );
 	i++;
 	if( i >= argc ) usage( NULL );
@@ -164,6 +165,10 @@ int main( int argc, char **argv ) {
 		entry.publen = buf.len;
 	    } else if( strcmp( argname, "addr" ) == 0 ) {
 		if( !argval ) usage( NULL );
+		if( !setaddr ) {
+		  entry.naddr = 0;
+		  setaddr = 1;
+		}
 		if( entry.naddr < 8 ) {
 		    mynet_pton( argval, (uint8_t *)&entry.addr[entry.naddr] );
 		    entry.naddr++;

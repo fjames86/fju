@@ -33,6 +33,8 @@
 #include <unistd.h>
 #endif
 
+#include <stdarg.h>
+
 struct mmf_s {
 #ifdef WIN32
 	HANDLE fd;
@@ -50,7 +52,7 @@ int mmf_lock( struct mmf_s *mmf );
 int mmf_unlock( struct mmf_s *mmf );
 int mmf_remap( struct mmf_s *mmf, int size );
 int mmf_sync( struct mmf_s *mmf );
-char *mmf_default_path( char *filename );
+char *mmf_default_path( char *filename, ... );
 
 #endif
 

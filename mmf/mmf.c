@@ -118,8 +118,21 @@ char *mmf_default_path( char *filename ) {
 
 	wcstombs( path, wp, sizeof(path) );
 	if( filename ) {
-		strcat( path, "\\" );
-		strcat( path, filename );
+	  va_list args;
+	  char *p;
+	  
+	  strcat( path, "\\" );
+	  strcat( path, filename );
+	  
+	  va_start( args, filename );
+	  do {
+	    p = va_arg( args, char * );
+	    if( p ) {
+	      strcat( path, "\\" );
+	      strcat( path, p );
+	    }
+	  } while( p );
+	  va_end( args );
 	}
 
 	CoTaskMemFree( wp );
@@ -176,13 +189,26 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 	return 0;
 }
 
-char *mmf_default_path( char *filename ) {
+char *mmf_default_path( char *filename, ... ) {
 	static char path[256];
 
 	strcpy( path, "/etc" );
 	if( filename ) {
-		strcat( path, "/" );
-		strcat( path, filename );
+	  va_list args;
+	  char *p;
+	  
+	  strcat( path, "/" );
+	  strcat( path, filename );
+	  
+	  va_start( args, filename );
+	  do {
+	    p = va_arg( args, char * );
+	    if( p ) {
+	      strcat( path, "/" );
+	      strcat( path, p );
+	    }
+	  } while( p );
+	  va_end( args );
 	}
 
 	return path;

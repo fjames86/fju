@@ -76,7 +76,7 @@ int hostreg_open( void ) {
         return 0;
     }
 
-    sts = mmf_open( mmf_default_path( "hostreg.dat" ), &glob.mmf );
+    sts = mmf_open( mmf_default_path( "hostreg.dat", NULL ), &glob.mmf );
     if( sts ) return sts;
     
     sts = mmf_remap( &glob.mmf, sizeof(*glob.file) );

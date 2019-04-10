@@ -179,7 +179,7 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 char *mmf_default_path( char *filename ) {
 	static char path[256];
 
-	strcat( path, "/etc" );
+	strcpy( path, "/etc" );
 	if( filename ) {
 		strcat( path, "/" );
 		strcat( path, filename );

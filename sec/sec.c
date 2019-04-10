@@ -134,7 +134,7 @@ int ecdh_generate( struct sec_buf *local_priv, struct sec_buf *local_public ) {
   bn_secret = (BIGNUM *)EC_KEY_get0_private_key( hkey );
   
   nbytes = BN_num_bytes( bn_secret );
-  BN_bn2bin( bn_secret, local_priv->buf );
+  BN_bn2bin( bn_secret, (uint8_t *)local_priv->buf );
   local_priv->len = SEC_ECDH_KEYLEN;
 
   ecp_public = (EC_POINT *)EC_KEY_get0_public_key( hkey );
@@ -142,7 +142,7 @@ int ecdh_generate( struct sec_buf *local_priv, struct sec_buf *local_public ) {
   nbytes = EC_POINT_point2oct( EC_KEY_get0_group( hkey ), 
 			       ecp_public,
 			       POINT_CONVERSION_UNCOMPRESSED, 
-			       tmpkey, 2*SEC_ECDH_KEYLEN + 1, 
+			       (uint8_t *)tmpkey, 2*SEC_ECDH_KEYLEN + 1, 
 			       bncxt );
 
   memcpy( local_public->buf, tmpkey + 1, 2*SEC_ECDH_KEYLEN );
@@ -168,7 +168,7 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
 
 
   hkey = EC_KEY_new_by_curve_name( NID_X9_62_prime256v1 );
-  bn_local_secret = BN_bin2bn( local_priv->buf, SEC_ECDH_KEYLEN, NULL );
+  bn_local_secret = BN_bin2bn( (uint8_t *)local_priv->buf, SEC_ECDH_KEYLEN, NULL );
   EC_KEY_set_private_key( hkey, bn_local_secret );
 
   hrkey = EC_KEY_new_by_curve_name( NID_X9_62_prime256v1 );
@@ -177,11 +177,11 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   ecp_remote_public = EC_POINT_new( group );
   tmpkey[0] = POINT_CONVERSION_UNCOMPRESSED;
   memcpy( tmpkey + 1, remote_public->buf, 2*SEC_ECDH_KEYLEN );
-  EC_POINT_oct2point( group, ecp_remote_public, tmpkey, 2*SEC_ECDH_KEYLEN + 1, bncxt );
+  EC_POINT_oct2point( group, ecp_remote_public, (uint8_t *)tmpkey, 2*SEC_ECDH_KEYLEN + 1, bncxt );
   BN_CTX_free( bncxt );
   EC_KEY_set_public_key( hrkey, ecp_remote_public );
 
-  klen = ECDH_compute_key( tmpkey, SEC_ECDH_KEYLEN, EC_KEY_get0_public_key( hrkey ), hkey, NULL );
+  klen = ECDH_compute_key( (uint8_t *)tmpkey, SEC_ECDH_KEYLEN, EC_KEY_get0_public_key( hrkey ), hkey, NULL );
   
   /* 
    * this seems odd, but we have to do it for windows compatibility. instead of computing the common key
@@ -190,7 +190,7 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
    */
   SHA1_Init( &sha1cxt );
   SHA1_Update( &sha1cxt, tmpkey, klen ); 
-  SHA1_Final( common->buf, &sha1cxt );
+  SHA1_Final( (uint8_t *)common->buf, &sha1cxt );
   common->len = SEC_ECDH_MAX_COMMON;
 
   EC_KEY_free( hkey );
@@ -250,7 +250,7 @@ void sha1_hmac( uint8_t *hash, uint8_t *key, struct sec_buf *iov, int n ) {
 	}
 
 	/* Hash ipad||message */
-	piov[0].buf = ipad;
+	piov[0].buf = (char *)ipad;
 	piov[0].len = SEC_AES_MAX_KEY;
 	for( i = 0; i < n; i++ ) {
 	  piov[i + 1].buf = iov[i].buf;
@@ -259,9 +259,9 @@ void sha1_hmac( uint8_t *hash, uint8_t *key, struct sec_buf *iov, int n ) {
 	sha1( rhash, piov, n + 1 );
 
 	/* Hash opad || Hash(ipad||message) */
-	piov[0].buf = opad;
+	piov[0].buf = (char *)opad;
 	piov[0].len = SEC_AES_MAX_KEY;
-	piov[1].buf = rhash;
+	piov[1].buf = (char *)rhash;
 	piov[1].len = SEC_SHA1_MAX_HASH;
 	sha1( hash, piov, 2 );
 

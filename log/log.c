@@ -71,15 +71,16 @@ struct _header {
 
 struct _entry {
   uint32_t magic;      /* msg start identifier */
-  uint32_t count;      /* number of blocks, including header */
+  uint32_t count;      /* number of blocks, including header. XXX: this is redundant, can be computed from msglen */
   uint64_t id;         /* msg identifier */
   uint64_t timestamp;  /* when msg written */
   uint32_t pid;        /* who wrote msg */
   uint32_t flags;      /* msg flags */
   uint32_t msglen;     /* length of msg data */
   uint64_t prev_id;    /* id of previous message */
-
-  uint8_t spare[20];   /* future expansion */
+  uint64_t seq;
+  
+  uint8_t spare[12];   /* future expansion */
 };
 
 #if 1
@@ -454,6 +455,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   e->flags = entry->flags;
   e->msglen = msglen;
   e->prev_id = hdr->last_id;
+  e->seq = hdr->seq;
   hdr->last_id = e->id;
   
   /* write in 64 byte chunks */

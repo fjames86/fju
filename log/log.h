@@ -69,6 +69,7 @@ struct log_iov {
 
 struct log_entry {
   uint64_t id;                          /* msg identifier */
+  uint64_t seq;
   uint64_t timestamp;                   /* unix timestamp when msg written */
   uint32_t pid;                         /* pid of writer */
   uint32_t flags;                       /* msg flags */

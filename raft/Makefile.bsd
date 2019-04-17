@@ -1,0 +1,15 @@
+
+.PHONY: all clean
+
+all: libraft.a raft
+
+clean:
+	rm -f libraft.a raft.o raft
+
+libraft.a: raft.c raft.h
+	cc -c -g raft.c -I../mmf -I../rpc -I../hostreg -I../log 
+	ar rcs libraft.a raft.o
+
+raft: libraft.a raft-main.c
+	cc -o raft raft-main.c -L. -lraft -I../mmf -L../mmf -lmmf -I../sec -L../sec -lsec -lcrypto -L../rpc -lrpc -I../hostreg -L../hostreg -lhostreg -I../log -L../log -llog 
+	

@@ -48,7 +48,13 @@ static int logger_open = 0;
 static struct log_s logger;
 
 static void rpcd_logger( int lvl, char *fmt, va_list args ) {
-  log_writev( &logger, lvl, fmt, args );
+  int loglvl = 0;
+  if( lvl == RPC_LOG_INFO ) loglvl = LOG_LVL_INFO;
+  else if( lvl == RPC_LOG_DEBUG ) loglvl = LOG_LVL_DEBUG;
+  else if( lvl == RPC_LOG_WARN ) loglvl = LOG_LVL_WARN;
+  else if( lvl == RPC_LOG_ERROR ) loglvl = LOG_LVL_ERROR;
+  
+  log_writev( &logger, loglvl, fmt, args );
 }
 
 int main( int argc, char **argv ) {

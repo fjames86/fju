@@ -338,3 +338,4 @@ int hostreg_host_common( uint64_t hostid, char *common, int *size ) {
   
   return 0;
 }
+

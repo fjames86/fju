@@ -2,6 +2,8 @@
 #include "rpcd.h"
 #include "shauth.h"
 #include <hrauth.h>
+#include <raft.h>
+#include <log.h>
 
 #define SHAUTH_SECRET "123abcd123"
 
@@ -39,12 +41,31 @@ static void init_cb( void ) {
 
   hrauth_register();
 
+  raft_register();
+}
+
+static int logger_open = 0;
+static struct log_s logger;
+
+static void rpcd_logger( int lvl, char *fmt, va_list args ) {
+  log_writev( &logger, lvl, fmt, args );
 }
 
 int main( int argc, char **argv ) {
-
+  int sts;
+  
+  /* open log */
+  sts = log_open( "/tmp/rpcd.log", NULL, &logger );
+  if( sts ) printf( "Warning: Failed to open log file" );
+  else {
+    logger_open = 1;
+    rpc_set_logger( rpcd_logger );
+  }
+  
   /* run daemon */
   rpcd_main( argc, argv, init_cb );
+
+  if( logger_open ) log_close( &logger );
   
   return 0;
 }

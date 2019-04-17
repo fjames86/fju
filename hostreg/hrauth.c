@@ -566,7 +566,8 @@ static int hrauth_proc_local( struct rpc_inc *inc ) {
 }
 static int hrauth_proc_list( struct rpc_inc *inc ) {
   int handle;
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  /* XXX: reserved for future use. Should return list of registered hosts */
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, &handle );
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }

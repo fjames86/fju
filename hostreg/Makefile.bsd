@@ -14,9 +14,9 @@ libhostreg.a: hostreg.c hostreg.h
 	ar rcs libhostreg.a hostreg.o
 
 libhrauth.a: hrauth.c hrauth.h libhostreg.a
-	cc -c hrauth.c -I../rpc -I../sec -I../mmf 
+	cc -c -g hrauth.c -I../rpc -I../sec -I../mmf 
 	ar rcs libhrauth.a hrauth.o
 	
 hostreg: hostreg-main.c libhostreg.a
-	cc -o hostreg -g hostreg-main.c -L. -lhostreg -L../mmf -lmmf -I../mmf -I../sec -L../sec -lsec -lcrypto
+	cc -o hostreg -g hostreg-main.c -L. -lhostreg -L../mmf -lmmf -I../mmf -I../sec -L../sec -lsec -lcrypto -I../rpc -L../rpc -lrpc
 	

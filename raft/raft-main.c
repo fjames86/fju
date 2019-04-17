@@ -10,8 +10,9 @@
 #include "raft.h"
 
 static void usage( char *fmt, ... ) {
-    printf( "Usage:    prop\n" 
-            "          add cluster [currentterm=CURRENTTERM] [votedfor=VOTEDFOR] ]\n"
+    printf( "Usage:    prop\n"
+	    "          reset\n" 
+            "          add cluster [clid=ID] [currentterm=CURRENTTERM] [votedfor=VOTEDFOR] ]\n"
             "          set cluster ID [currentterm=CURRENTTERM] [votedfor=VOTEDFOR] ]\n"
             "          rem cluster ID\n"
             "          add member [clid=CLID] [hostid=HOSTID] [lastseen=LASTSEEN] [nextping=NEXTPING] [nextidx=NEXTIDX] [matchidx=MATCHIDX] [flags=FLAGS] ]\n"
@@ -62,6 +63,8 @@ int main( int argc, char **argv ) {
         cmd_list();
     } else if( strcmp( argv[i], "prop" ) == 0 ) {
         cmd_prop();
+    } else if( strcmp( argv[i], "reset" ) == 0 ) {
+        raft_reset();
     } else if( strcmp( argv[i], "add" ) == 0 ) {
         i++;
         if( i >= argc ) usage( NULL );
@@ -72,10 +75,12 @@ int main( int argc, char **argv ) {
             i++;
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
-                 if( strcmp( argname, "currentterm" ) == 0 ) {
+		 if( strcmp( argname, "clid" ) == 0 ) {
+		      if( argval ) entry.clid = strtoull( argval, NULL, 16 );
+		 } else if( strcmp( argname, "currentterm" ) == 0 ) {
                       if( argval ) entry.currentterm = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "votedfor" ) == 0 ) {
-                      if( argval ) entry.votedfor = strtoull( argval, NULL, 16 );
+		 } else if( strcmp( argname, "votedfor" ) == 0 ) {
+    		      if( argval ) entry.votedfor = strtoull( argval, NULL, 16 );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
@@ -193,31 +198,26 @@ int main( int argc, char **argv ) {
 }
 
 static void cmd_list( void ) {
-    int sts, i, n, m;
-    {
-        struct raft_cluster *lst;
-        n = raft_cluster_list( NULL, 0 );
-        lst = (struct raft_cluster *)malloc( sizeof(*lst) * n );
-        m = raft_cluster_list( lst, n );
-        if( m < n ) n = m;
-        for( i = 0; i < n; i++ ) {
-            printf( "%-16s %-16"PRIx64" currentterm=%"PRIx64" votedfor=%"PRIx64" \n", "cluster", lst[i].clid, lst[i].currentterm, lst[i].votedfor );
-        }
-        free( lst );
-        printf( "\n" );
+  int sts, i, n, m, j;
+  struct raft_cluster *cluster;
+  struct raft_member member[RAFT_MAX_CLUSTER_MEMBER];
+  
+  n = raft_cluster_list( NULL, 0 );
+  cluster = (struct raft_cluster *)malloc( sizeof(*cluster) * n );
+  m = raft_cluster_list( cluster, n );
+  if( m < n ) n = m;
+  for( i = 0; i < n; i++ ) {
+    printf( "cluster clid=%"PRIx64" currentterm=%"PRIx64" votedfor=%"PRIx64" \n", cluster[i].clid, cluster[i].currentterm, cluster[i].votedfor );
+    
+    /* print all members of this cluster */
+    m = raft_member_list_by_clid( cluster[i].clid, member, RAFT_MAX_CLUSTER_MEMBER );
+    for( j = 0; j < m; j++ ) {
+      printf( "    member memberid=%"PRIx64" hostid=%"PRIx64" lastseen=%"PRIx64" nextping=%"PRIx64" nextidx=%"PRIx64" matchidx=%"PRIx64" flags=%d \n", 
+	      member[j].memberid, member[j].hostid, member[j].lastseen, member[j].nextping, member[j].nextidx, member[j].matchidx, member[j].flags );
     }
-    {
-        struct raft_member *lst;
-        n = raft_member_list( NULL, 0 );
-        lst = (struct raft_member *)malloc( sizeof(*lst) * n );
-        m = raft_member_list( lst, n );
-        if( m < n ) n = m;
-        for( i = 0; i < n; i++ ) {
-	  printf( "%-16s %-16"PRIx64" clid=%"PRIx64" hostid=%"PRIx64" lastseen=%"PRIx64" nextping=%"PRIx64" nextidx=%"PRIx64" matchidx=%"PRIx64" flags=%d \n", "member", lst[i].memberid, lst[i].clid, lst[i].hostid, lst[i].lastseen, lst[i].nextping, lst[i].nextidx, lst[i].matchidx, lst[i].flags );
-        }
-        free( lst );
-        printf( "\n" );
-    }
+  }
+  free( cluster );
+  printf( "\n" );
 }
 
 static void cmd_prop( void ) {

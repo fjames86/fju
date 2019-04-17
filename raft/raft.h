@@ -20,6 +20,8 @@
 #define RAFT_RPC_PROGRAM 1231231
 #define RAFT_RPC_VERSION 1
 
+#define RAFT_MAX_CLUSTER_MEMBER 8    /* max members per cluster */
+
 struct raft_cluster {
     uint64_t clid;
     uint64_t currentterm;

@@ -12,7 +12,6 @@
 
 #define RAFT_MAX_CLUSTER        16
 #define RAFT_MAX_MEMBER         64   /* max members total */
-#define RAFT_MAX_CLUSTER_MEMBER 8    /* max members per cluster */
 
 struct raft_header {
     uint32_t magic;
@@ -176,6 +175,16 @@ int raft_cluster_rem( uint64_t clid ) {
     int sts, i;
     if( glob.ocount <= 0 ) return -1;
     raft_lock();
+    sts = 0;
+    /* look for any member of this cluster - if so, forbid removing */
+    for( i = 0; i < glob.file->header.member_count; i++ ) {
+      if( glob.file->member[i].clid == clid ) {
+	sts = -1;
+	break;
+      }
+    }
+    if( sts == -1 ) goto done;
+    
     sts = -1;
     for( i = 0; i < glob.file->header.cluster_count; i++ ) {
         if( glob.file->cluster[i].clid == clid ) {
@@ -186,6 +195,8 @@ int raft_cluster_rem( uint64_t clid ) {
             break;
         }
     }
+    
+ done:
     raft_unlock();
     return sts;
 }
@@ -540,7 +551,6 @@ static int raft_proc_list( struct rpc_inc *inc ) {
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }
-
 
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },

@@ -45,6 +45,8 @@ struct hostreg_header {
     uint8_t pubkey[HOSTREG_MAX_PUBKEY];
     uint32_t privlen;
     uint8_t privkey[HOSTREG_MAX_PRIVKEY];
+
+    uint32_t spare[32];
 };
 
 
@@ -158,6 +160,15 @@ int hostreg_prop( struct hostreg_prop *prop ) {
     memcpy( prop->privkey, glob.file->header.privkey, glob.file->header.privlen );
     hostreg_unlock();
     return 0;
+}
+
+uint64_t hostreg_localid( void ) {
+    uint64_t localid = 0;
+    if( glob.ocount <= 0 ) return 0;
+    hostreg_lock();
+    localid = glob.file->header.localid;
+    hostreg_unlock();
+    return localid;
 }
 
 /* ------------ host commands ----------- */

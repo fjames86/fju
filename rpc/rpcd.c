@@ -741,6 +741,19 @@ static void rpc_poll( int timeout ) {
 
 }
 
+struct rpc_conn *rpc_conn_acquire( void ) {
+  struct rpc_conn *c;
+  c = rpc.flist;
+  if( !c ) return NULL;
+  rpc.flist = rpc.flist->next;
+  return c;
+}
+
+void rpc_conn_release( struct rpc_conn *c ) {
+  c->next = rpc.flist;
+  rpc.flist = c;
+}
+
 static void rpc_accept( struct rpc_listen *lis ) {
 	struct rpc_conn *c;
 	int sts;
@@ -750,8 +763,6 @@ static void rpc_accept( struct rpc_listen *lis ) {
 	case RPC_LISTEN_UDP6:
 	{
 							socklen_t slen;
-
-							rpc_log( RPC_LOG_INFO, "Accept UDP" );
 
 							c = rpc.flist;
 							if( !c ) return;
@@ -779,7 +790,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
 								if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
 							}
 							else {
-								rpc_log( RPC_LOG_INFO, "rpc_process_incoming failed" );
+							  //rpc_log( RPC_LOG_INFO, "rpc_process_incoming failed" );
 							}
 
 	}
@@ -970,4 +981,12 @@ failure:
 	c->next = rpc.flist;
 	rpc.flist = c;
 	return -1;
+}
+
+struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type ) {
+  int i;
+  for( i = 0; i < rpc.nlisten; i++ ) {
+    if( rpc.listen[i].type == type ) return &rpc.listen[i];
+  }
+  return NULL;
 }

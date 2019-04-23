@@ -9,6 +9,8 @@
 #include <inttypes.h>
 #include <log.h>
 #include <sys/stat.h>
+#include <rpcd.h>
+#include <hostreg.h>
 
 #define RAFT_MAX_CLUSTER        16
 #define RAFT_MAX_MEMBER         64   /* max members total */
@@ -26,6 +28,9 @@ struct raft_header {
     uint32_t member_count;
 
     /* header fields */
+    uint32_t port;
+
+    uint32_t spare[32];
 };
 
 
@@ -74,11 +79,14 @@ int raft_open( void ) {
         glob.file->header.cluster_count = 0;
         glob.file->header.member_max = RAFT_MAX_MEMBER;
         glob.file->header.member_count = 0;
+	glob.file->header.port = RAFT_PORT;
     } else if( glob.file->header.version != RAFT_VERSION ) {
         raft_unlock();
         goto bad;
     }
     raft_unlock();
+
+    hostreg_open();
     
     glob.ocount = 1;
     return 0;
@@ -92,6 +100,7 @@ int raft_close( void ) {
     glob.ocount--;
     if( glob.ocount > 0 ) return 0;
     mmf_close( &glob.mmf );
+    hostreg_close();
     return 0;
 }
 
@@ -105,6 +114,7 @@ int raft_reset( void ) {
     glob.file->header.cluster_count = 0;
     glob.file->header.member_max = RAFT_MAX_MEMBER;
     glob.file->header.member_count = 0;
+    glob.file->header.port = RAFT_PORT;
     raft_unlock();
     return 0;
 }
@@ -118,9 +128,19 @@ int raft_prop( struct raft_prop *prop ) {
     prop->cluster_count = glob.file->header.cluster_count;
     prop->member_max = glob.file->header.member_max;
     prop->member_count = glob.file->header.member_count;
+    prop->port = glob.file->header.port;
     raft_unlock();
     return 0;
 }
+
+int raft_set_port( int port ) {
+    if( glob.ocount <= 0 ) return -1;
+    raft_lock();
+    glob.file->header.port = port;
+    raft_unlock();
+    return 0;
+}
+
 
 /* ------------ cluster commands ----------- */
 
@@ -306,6 +326,18 @@ int raft_member_add( struct raft_member *member ) {
  done:
     raft_unlock();
     return sts;
+}
+
+int raft_member_add_local( uint64_t clid ) {
+  int sts;
+  struct raft_member member;
+  struct hostreg_prop prop;
+
+  hostreg_prop( &prop );
+  memset( &member, 0, sizeof(member) );
+  member.clid = clid;
+  member.hostid = prop.localid;
+  return raft_member_add( &member );
 }
 
 int raft_member_rem( uint64_t memberid ) {
@@ -552,11 +584,38 @@ static int raft_proc_list( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int raft_proc_setcluster( struct rpc_inc *inc ) {
+  int handle;
+  int sts, nmember, i;
+  struct raft_cluster cl;
+  struct raft_member member;
+  uint64_t hostid;
+
+  memset( &cl, 0, sizeof(cl) );
+  xdr_decode_uint64( &inc->xdr, &cl.clid );
+  raft_cluster_add( &cl );
+  xdr_decode_uint32( &inc->xdr, (uint32_t *)&nmember );
+  for( i = 0; i < nmember; i++ ) {
+    xdr_decode_uint64( &inc->xdr, &hostid );
+
+    memset( &member, 0, sizeof(member) );
+    member.clid = cl.clid;
+    member.hostid = hostid;
+    raft_member_add( &member );
+  }
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_append },
   { 2, raft_proc_vote },
   { 3, raft_proc_list },
+  { 4, raft_proc_setcluster },
   { 0, NULL }
 };
 
@@ -569,6 +628,101 @@ static struct rpc_program raft_prog = {
 };
 
 
+static void raft_call_append_cb( struct rpc_waiter *waiter, struct rpc_inc *inc ) {
+  rpc_log( RPC_LOG_DEBUG, "append waiter %s", inc ? "received" : "timeout" );
+  free( waiter );
+}
+
+
+static void raft_call_append( uint64_t hostid ) {
+  int sts, i;
+  char *buf;
+  struct rpc_inc inc;
+  struct sockaddr_in sinp;
+  struct raft_prop prop;
+  struct hostreg_host host;
+  struct rpc_waiter *waiter;
+  struct rpc_listen *listen;
+  int handle;
+  struct rpc_conn *conn;
+  
+  sts = hostreg_host_by_id( hostid, &host );
+  if( sts ) return;
+ 
+  sts = raft_prop( &prop );
+  if( sts ) return; 
+
+  /* get udp file descriptor */
+  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+  if( !listen ) goto done;  
+
+  conn = rpc_conn_acquire();
+  
+  for( i = 0; i < host.naddr; i++ ) {
+    rpc_log( RPC_LOG_DEBUG, "send message host=%"PRIx64" addr=%d.%d.%d.%d",
+	     host.id,
+	     (host.addr[i]) & 0xff,
+	     (host.addr[i] >> 8) & 0xff,
+	     (host.addr[i] >> 16) & 0xff,
+	     (host.addr[i] >> 24) & 0xff );
+
+    memset( &inc, 0, sizeof(inc) );
+    xdr_init( &inc.xdr, (uint8_t *)conn->buf, conn->count );
+    rpc_init_call( &inc, RAFT_RPC_PROGRAM, RAFT_RPC_VERSION, 1, &handle );
+    
+    /* encode args */
+    rpc_complete_call( &inc, handle );
+    
+    memset( &sinp, 0, sizeof(sinp) );
+    sinp.sin_family = AF_INET;
+    sinp.sin_port = htons( prop.port );
+    sinp.sin_addr.s_addr = host.addr[i];
+    sendto( listen->fd, conn->buf, inc.xdr.offset, 0, (struct sockaddr *)&sinp, sizeof(sinp) );
+
+    waiter = malloc( sizeof(*waiter) );
+    memset( waiter, 0, sizeof(*waiter) );
+    waiter->xid = inc.msg.xid;
+    waiter->timeout = rpc_now() + 1000;
+    waiter->cb = raft_call_append_cb;
+    waiter->cxt = (void *)hostid;    
+    rpc_await_reply( waiter );
+  }
+
+ done:
+  rpc_conn_release( conn );
+}
+
+
+static void raft_ping_cluster_hosts( uint64_t clid ) {
+  struct raft_member member[RAFT_MAX_CLUSTER_MEMBER];
+  int n, i;
+  uint64_t localid;
+  uint64_t now;
+    
+  localid = hostreg_localid();
+  now = rpc_now();
+  n = raft_member_list_by_clid( clid, member, RAFT_MAX_CLUSTER_MEMBER );
+  for( i = 0; i < n; i++ ) {
+    if( member[i].hostid != localid && member[i].nextping > now ) {
+      raft_member_set_nextping( member[i].memberid, now + 2000 );
+      raft_call_append( member[i].hostid );
+    }
+  }
+  
+}
+
+static void raft_ping_clusters( void ) {
+  struct raft_cluster cluster[RAFT_MAX_CLUSTER];
+  int n, i;
+
+  n = raft_cluster_list( cluster, RAFT_MAX_CLUSTER );
+  for( i = 0; i < n; i++ ) {
+    raft_ping_cluster_hosts( cluster[i].clid );
+  }
+  
+}
+
+
 /* we also need an iterator to periodically contact other hosts */
 static void raft_iter_cb( struct rpc_iterator *iter ) {
   int i, j, k, ncl, nm, sts;
@@ -578,14 +732,14 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
   int found;
   uint64_t now, memberid;
   
-  //  rpc_log( RPC_LOG_DEBUG, "raft iter" );
+  rpc_log( RPC_LOG_DEBUG, "raft iter" );
 
   /* we need to send some calls out and await the replies */
   hostreg_host_local( &local );
   
   /* list all clusters */
   ncl = raft_cluster_list( cluster, RAFT_MAX_CLUSTER );
-  //  rpc_log( LOG_LVL_TRACE, "ncl = %d", ncl );
+  rpc_log( LOG_LVL_TRACE, "ncl = %d", ncl );
   
   /* start by loading all defined clusters, or unloading removed clusters */
   for( i = 0; i < ncl; i++ ) {
@@ -644,6 +798,8 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
   }
 
 
+  raft_ping_clusters();
+  
   now = rpc_now();
   for( i = 0; i < ncl; i++ ) {
     /* for each cluster, list all members */
@@ -654,22 +810,13 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
 
       /* do nothing until next ping time expires */
       if( member[j].nextping > now ) continue;
-      raft_member_set_nextping( member[j].memberid, now + 2000 );
+
       
       /* each host has many interfaces... */
       sts = hostreg_host_by_id( member[j].hostid, &host );
       if( sts ) continue;
       
-      for( k = 0; k < host.naddr; k++ ) {
-	/* TODO: send message on this address */
-	rpc_log( RPC_LOG_DEBUG, "TODO: send message host=%"PRIx64" addr=%d.%d.%d.%d",
-		 host.id,
-		 (host.addr[k]) & 0xff,
-		 (host.addr[k] >> 8) & 0xff,
-		 (host.addr[k] >> 16) & 0xff,
-		 (host.addr[k] >> 24) & 0xff );
-		 
-      }
+      raft_call_append( member[j].hostid );
       
     }
   }

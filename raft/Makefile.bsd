@@ -1,5 +1,5 @@
 
-.PHONY: all clean
+.PHONY: all clean 
 
 all: libraft.a raft
 

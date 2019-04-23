@@ -103,7 +103,9 @@ struct rpc_conn {
 
 int rpcd_main( int argc, char **argv, void (*init_cb)(void) );
 int rpc_connect( struct sockaddr *addr, socklen_t alen, void( *cb )(struct rpc_conn *c), void *cxt );
-
+struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type );
+struct rpc_conn *rpc_conn_acquire( void );
+void rpc_conn_release( struct rpc_conn *c );
 
 #endif
 

@@ -12,11 +12,11 @@
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
 	    "          reset\n" 
-            "          add cluster [clid=ID] [currentterm=CURRENTTERM] [votedfor=VOTEDFOR] ]\n"
-            "          set cluster ID [currentterm=CURRENTTERM] [votedfor=VOTEDFOR] ]\n"
+            "          add cluster [clid=ID] [currentterm=CURRENTTERM] [votedfor=VOTEDFOR]\n"
+            "          set cluster ID [currentterm=CURRENTTERM] [votedfor=VOTEDFOR]\n"
             "          rem cluster ID\n"
-            "          add member [clid=CLID] [hostid=HOSTID] [lastseen=LASTSEEN] [nextping=NEXTPING] [nextidx=NEXTIDX] [matchidx=MATCHIDX] [flags=FLAGS] ]\n"
-            "          set member ID [clid=CLID] [hostid=HOSTID] [lastseen=LASTSEEN] [nextping=NEXTPING] [nextidx=NEXTIDX] [matchidx=MATCHIDX] [flags=FLAGS] ]\n"
+            "          add member [clid=CLID] [hostid=HOSTID] [lastseen=LASTSEEN] [nextping=NEXTPING] [nextidx=NEXTIDX] [matchidx=MATCHIDX] [flags=FLAGS]\n"
+            "          set member ID [clid=CLID] [hostid=HOSTID] [lastseen=LASTSEEN] [nextping=NEXTPING] [nextidx=NEXTIDX] [matchidx=MATCHIDX] [flags=FLAGS]\n"
             "          rem member ID\n"
     );
 
@@ -88,6 +88,9 @@ int main( int argc, char **argv ) {
             sts = raft_cluster_add( &entry );
             if( sts ) usage( "Failed to add cluster" );
             printf( "Added cluster ID=%"PRIx64"\n", entry.clid );
+
+	    /* add local host as member */	    
+	    raft_member_add_local( entry.clid );
         } else if( strcmp( argv[i], "member" ) == 0 ) {
             struct raft_member entry;
             char argname[64], *argval;
@@ -190,6 +193,12 @@ int main( int argc, char **argv ) {
             }
             sts = raft_member_set( &entry );
             if( sts ) usage( "Failed to set member" );
+	} else if( strcmp( argv[i], "port") == 0 ) {
+     	    int port;
+	    i++;
+	    if( i >= argc ) usage( NULL );
+	    port = strtoul( argv[i], NULL, 10 );
+	    raft_set_port( port );
         } else usage( NULL );
     } else usage( NULL );
 
@@ -226,5 +235,6 @@ static void cmd_prop( void ) {
      printf( "seq=%"PRIu64"\n", prop.seq );
      printf( "cluster=%d/%d\n", prop.cluster_count, prop.cluster_max );
      printf( "member=%d/%d\n", prop.member_count, prop.member_max );
+     printf( "port=%d\n", prop.port );
 }
 

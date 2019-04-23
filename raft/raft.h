@@ -19,6 +19,7 @@
 
 #define RAFT_RPC_PROGRAM 1231231
 #define RAFT_RPC_VERSION 1
+#define RAFT_PORT 8000
 
 #define RAFT_MAX_CLUSTER_MEMBER 8    /* max members per cluster */
 
@@ -56,12 +57,14 @@ struct raft_prop {
     uint32_t cluster_count;
     uint32_t member_max;
     uint32_t member_count;
+    uint32_t port;
 };
 
 int raft_open( void );
 int raft_close( void );
 int raft_prop( struct raft_prop *prop );
 int raft_reset( void );
+int raft_set_port( int port );
 
 int raft_cluster_list( struct raft_cluster *list, int n );
 int raft_cluster_by_id( uint64_t clid, struct raft_cluster *entry );
@@ -79,6 +82,7 @@ int raft_member_set( struct raft_member *entry );
 int raft_member_set_state( uint64_t memberid, uint32_t state );
 uint64_t raft_member_by_hostid( uint64_t clid, uint64_t hostid );
 int raft_member_set_nextping( uint64_t memberid, uint64_t nextping );
+int raft_member_add_local( uint64_t clid );
 
 int raft_register( void );
 

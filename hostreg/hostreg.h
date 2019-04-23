@@ -47,6 +47,7 @@ int hostreg_open( void );
 int hostreg_close( void );
 int hostreg_prop( struct hostreg_prop *prop );
 int hostreg_reset( int full );
+uint64_t hostreg_localid( void );
 
 int hostreg_host_local( struct hostreg_host *host );
 int hostreg_host_list( struct hostreg_host *list, int n );

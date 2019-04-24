@@ -536,7 +536,9 @@ static int raft_proc_append( struct rpc_inc *inc ) {
 
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_uint32( &inc->xdr, inc->msg.xid );
   rpc_complete_accept_reply( inc, handle );
+  
   return 0;
 }
 
@@ -629,7 +631,27 @@ static struct rpc_program raft_prog = {
 
 
 static void raft_call_append_cb( struct rpc_waiter *waiter, struct rpc_inc *inc ) {
+  int sts;
+  uint32_t u32;
+  
   rpc_log( RPC_LOG_DEBUG, "append waiter %s", inc ? "received" : "timeout" );
+  if( !inc ) goto done;
+  
+  if( inc->msg.u.reply.tag != RPC_MSG_ACCEPT ) goto done;
+  if( inc->msg.u.reply.u.accept.tag != RPC_ACCEPT_SUCCESS ) goto done;
+
+  /* all good - decode results */
+  sts = xdr_decode_uint32( &inc->xdr, &u32 );
+  if( sts ) {
+    rpc_log( RPC_LOG_ERROR, "raft_call_append_cb: failed to decode" );
+    goto done;
+  }
+  
+  rpc_log( RPC_LOG_DEBUG, "raft_call_append_cb: u32=%u", u32 );  
+  
+    
+ done:
+  
   free( waiter );
 }
 
@@ -732,18 +754,18 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
   int found;
   uint64_t now, memberid;
   
-  rpc_log( RPC_LOG_DEBUG, "raft iter" );
+  //  rpc_log( RPC_LOG_DEBUG, "raft iter" );
 
   /* we need to send some calls out and await the replies */
   hostreg_host_local( &local );
   
   /* list all clusters */
   ncl = raft_cluster_list( cluster, RAFT_MAX_CLUSTER );
-  rpc_log( LOG_LVL_TRACE, "ncl = %d", ncl );
+  //  rpc_log( LOG_LVL_TRACE, "ncl = %d", ncl );
   
   /* start by loading all defined clusters, or unloading removed clusters */
   for( i = 0; i < ncl; i++ ) {
-    rpc_log( LOG_LVL_DEBUG, "cluster[%d] = %"PRIx64"", i, cluster[i].clid );
+    //    rpc_log( LOG_LVL_DEBUG, "load cluster[%d] = %"PRIx64"", i, cluster[i].clid );
     
     found = 0;
     for( j = 0; j < raftg.ncluster; j++ ) {

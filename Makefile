@@ -20,7 +20,7 @@ all:
 	cd rpc && $(MAKE) -f Makefile.bsd all && cp rpcd rpcinfo ../bin
 	cd raft && $(MAKE) -f Makefile.bsd all && cp raft ../bin
 	cd hostreg && $(MAKE) -f Makefile.bsd all && cp hostreg ../bin 
-	scp bin/* root@169.254.54.129:~
+	scp bin/* root@169.254.54.129:~/bin 
 
 
 

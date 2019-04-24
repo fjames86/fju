@@ -46,6 +46,7 @@ static struct {
 	struct rpc_conn *flist;    /* free list */
 
 	void (*init_cb)( void );
+        struct rpc_logger loggers[1];
 
         
 #ifdef WIN32
@@ -217,6 +218,9 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 		close( STDOUT_FILENO ); open( "/dev/null", O_WRONLY );
 		close( STDERR_FILENO ); open( "/dev/null", O_WRONLY );
 #endif
+	} else {
+	  /* add default stdout logger */
+	  rpc_add_logger( &rpc.loggers[0] );
 	}
 
 #ifndef WIN32

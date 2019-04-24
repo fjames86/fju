@@ -282,7 +282,12 @@ void rpc_iterator_service( void );
 
 uint64_t rpc_now( void );
 void rpc_log( int lvl, char *fmt, ... );
-void rpc_set_logger( void (*cb)( int lvl, char *fmt, va_list args ) );
+
+struct rpc_logger {
+  struct rpc_logger *next;
+  void (*cb)( int lvl, char *fmt, va_list args );
+};
+void rpc_add_logger( struct rpc_logger *logger );
 
 struct rpc_waiter;
 typedef void (*rpc_waiter_t)( struct rpc_waiter *w, struct rpc_inc *inc );

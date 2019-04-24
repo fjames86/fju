@@ -1122,11 +1122,6 @@ int rpc_iterator_timeout( void ) {
   return timeout;
 }
 
-static void (*rpc_log_cb)( int lvl, char *fmt, va_list args );
-void rpc_set_logger( void (*cb)( int lvl, char *fmt, va_list args ) ) {
-  rpc_log_cb = cb;
-}
-
 static void rpc_default_log( int lvl, char *fmt, va_list args ) {
   char timestr[64];
   struct tm *tm;
@@ -1140,13 +1135,24 @@ static void rpc_default_log( int lvl, char *fmt, va_list args ) {
   printf( "\n" );  
 }
 
+static struct rpc_logger *loggers;
+void rpc_add_logger( struct rpc_logger *logger ) {
+  logger->next = loggers;
+  if( !logger->cb ) logger->cb = rpc_default_log;
+  loggers = logger;
+}
+
 void rpc_log( int lvl, char *fmt, ... ) {
   va_list args;
-  if( !rpc_log_cb ) rpc_log_cb = rpc_default_log;
+  struct rpc_logger *lg;
   
-  va_start( args, fmt );
-  rpc_log_cb( lvl, fmt, args );
-  va_end( args );
+  lg = loggers;
+  while( lg ) {
+    va_start( args, fmt );
+    lg->cb( lvl, fmt, args );
+    va_end( args );
+    lg = lg->next;
+  }
 }
 
 /* ------------------------------ */

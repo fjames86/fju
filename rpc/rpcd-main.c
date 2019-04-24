@@ -47,7 +47,9 @@ static void init_cb( void ) {
 static int logger_open = 0;
 static struct log_s logger;
 
-static void rpcd_logger( int lvl, char *fmt, va_list args ) {
+static struct rpc_logger rpcd_loggers[1];
+
+static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
   int loglvl = 0;
   if( lvl == RPC_LOG_INFO ) loglvl = LOG_LVL_INFO;
   else if( lvl == RPC_LOG_DEBUG ) loglvl = LOG_LVL_DEBUG;
@@ -59,13 +61,15 @@ static void rpcd_logger( int lvl, char *fmt, va_list args ) {
 
 int main( int argc, char **argv ) {
   int sts;
-  
+
   /* open log */
   sts = log_open( "/tmp/rpcd.log", NULL, &logger );
   if( sts ) printf( "Warning: Failed to open log file" );
   else {
     logger_open = 1;
-    rpc_set_logger( rpcd_logger );
+
+    rpcd_loggers[0].cb = rpcd_logger_cb;
+    rpc_add_logger( &rpcd_loggers[0] );
   }
   
   /* run daemon */

@@ -337,6 +337,7 @@ int raft_member_add_local( uint64_t clid ) {
   memset( &member, 0, sizeof(member) );
   member.clid = clid;
   member.hostid = prop.localid;
+  member.flags = RAFT_MEMBER_LOCAL;
   return raft_member_add( &member );
 }
 
@@ -630,9 +631,18 @@ static struct rpc_program raft_prog = {
 };
 
 
+struct raft_waiter {
+  struct rpc_waiter waiter;
+  uint64_t clid;
+  uint64_t memberid;
+  uint64_t hostid;
+};
+
 static void raft_call_append_cb( struct rpc_waiter *waiter, struct rpc_inc *inc ) {
   int sts;
   uint32_t u32;
+  struct raft_member member;
+  struct raft_waiter *w = (struct raft_waiter *)waiter;
   
   rpc_log( RPC_LOG_DEBUG, "append waiter %s", inc ? "received" : "timeout" );
   if( !inc ) goto done;
@@ -647,8 +657,11 @@ static void raft_call_append_cb( struct rpc_waiter *waiter, struct rpc_inc *inc 
     goto done;
   }
   
-  rpc_log( RPC_LOG_DEBUG, "raft_call_append_cb: u32=%u", u32 );  
+  rpc_log( RPC_LOG_DEBUG, "raft_call_append_cb: u32=%u", u32 );
   
+  raft_member_by_id( w->memberid, &member );
+  member.lastseen = time( NULL );
+  raft_member_set( &member );
     
  done:
   
@@ -656,14 +669,14 @@ static void raft_call_append_cb( struct rpc_waiter *waiter, struct rpc_inc *inc 
 }
 
 
-static void raft_call_append( uint64_t hostid ) {
+static void raft_call_append( uint64_t hostid, uint64_t memberid, uint64_t clid ) {
   int sts, i;
   char *buf;
   struct rpc_inc inc;
   struct sockaddr_in sinp;
   struct raft_prop prop;
   struct hostreg_host host;
-  struct rpc_waiter *waiter;
+  struct raft_waiter *waiter;
   struct rpc_listen *listen;
   int handle;
   struct rpc_conn *conn;
@@ -703,11 +716,14 @@ static void raft_call_append( uint64_t hostid ) {
 
     waiter = malloc( sizeof(*waiter) );
     memset( waiter, 0, sizeof(*waiter) );
-    waiter->xid = inc.msg.xid;
-    waiter->timeout = rpc_now() + 1000;
-    waiter->cb = raft_call_append_cb;
-    waiter->cxt = (void *)hostid;    
-    rpc_await_reply( waiter );
+    waiter->waiter.xid = inc.msg.xid;
+    waiter->waiter.timeout = rpc_now() + 1000;
+    waiter->waiter.cb = raft_call_append_cb;
+    waiter->waiter.cxt = (void *)hostid;
+    waiter->hostid = hostid;
+    waiter->memberid = memberid;
+    waiter->clid = clid;
+    rpc_await_reply( (struct rpc_waiter *)waiter );
   }
 
  done:
@@ -727,7 +743,7 @@ static void raft_ping_cluster_hosts( uint64_t clid ) {
   for( i = 0; i < n; i++ ) {
     if( member[i].hostid != localid && member[i].nextping > now ) {
       raft_member_set_nextping( member[i].memberid, now + 2000 );
-      raft_call_append( member[i].hostid );
+      raft_call_append( member[i].hostid, member[i].memberid, member[i].clid );
     }
   }
   
@@ -832,13 +848,12 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
 
       /* do nothing until next ping time expires */
       if( member[j].nextping > now ) continue;
-
       
       /* each host has many interfaces... */
       sts = hostreg_host_by_id( member[j].hostid, &host );
       if( sts ) continue;
       
-      raft_call_append( member[j].hostid );
+      raft_call_append( member[j].hostid, member[j].memberid, member[j].clid );
       
     }
   }

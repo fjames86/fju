@@ -1,10 +1,10 @@
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
 #include <inttypes.h>
+#include <time.h>
 #include <mmf.h>
 #include <sec.h>
 #include "raft.h"
@@ -111,7 +111,7 @@ int main( int argc, char **argv ) {
                 } else if( strcmp( argname, "matchidx" ) == 0 ) {
                       if( argval ) entry.matchidx = strtoull( argval, NULL, 16 );
                 } else if( strcmp( argname, "flags" ) == 0 ) {
-                      if( argval ) entry.flags = strtoul( argval, NULL, 10 );
+                      if( argval ) entry.flags = strtoul( argval, NULL, 16 );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
@@ -187,7 +187,7 @@ int main( int argc, char **argv ) {
                 } else if( strcmp( argname, "matchidx" ) == 0 ) {
                       if( argval ) entry.matchidx = strtoull( argval, NULL, 16 );
                 } else if( strcmp( argname, "flags" ) == 0 ) {
-                      if( argval ) entry.flags = strtoul( argval, NULL, 10 );
+                      if( argval ) entry.flags = strtoul( argval, NULL, 16 );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
@@ -210,6 +210,10 @@ static void cmd_list( void ) {
   int sts, i, n, m, j;
   struct raft_cluster *cluster;
   struct raft_member member[RAFT_MAX_CLUSTER_MEMBER];
+  char timestr[64];
+  struct tm *tm;
+  time_t now;
+  char strflags[128];
   
   n = raft_cluster_list( NULL, 0 );
   cluster = (struct raft_cluster *)malloc( sizeof(*cluster) * n );
@@ -221,8 +225,37 @@ static void cmd_list( void ) {
     /* print all members of this cluster */
     m = raft_member_list_by_clid( cluster[i].clid, member, RAFT_MAX_CLUSTER_MEMBER );
     for( j = 0; j < m; j++ ) {
-      printf( "    member memberid=%"PRIx64" hostid=%"PRIx64" lastseen=%"PRIx64" nextping=%"PRIx64" nextidx=%"PRIx64" matchidx=%"PRIx64" flags=%d \n", 
-	      member[j].memberid, member[j].hostid, member[j].lastseen, member[j].nextping, member[j].nextidx, member[j].matchidx, member[j].flags );
+        now = member[j].lastseen;
+	if( !now ) strcpy( timestr, "Never" );
+	else {		     
+	  tm = localtime( &now );
+	  strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+	}
+
+	strcpy( strflags, "" );
+	if( member[j].flags & RAFT_MEMBER_ONLINE ) {
+	  if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
+	  strcat( strflags, "ONLINE" );
+	}
+	if( member[j].flags & RAFT_MEMBER_LOCAL ) {
+	  if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
+	  strcat( strflags, "LOCAL" );
+	}	
+	if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
+	switch( member[j].flags & RAFT_MEMBER_STATEMASK ) {
+	case RAFT_MEMBER_LEADER:
+	  strcat( strflags, "LEADER" );
+	  break;
+	case RAFT_MEMBER_FOLLOWER:
+	  strcat( strflags, "FOLLOWER" );
+	  break;
+	case RAFT_MEMBER_CANDIDATE:
+	  strcat( strflags, "CANDIDATE" );
+	  break;
+	}
+	
+	printf( "    member memberid=%"PRIx64" hostid=%"PRIx64" lastseen=%s nextping=%"PRIx64" nextidx=%"PRIx64" matchidx=%"PRIx64" flags=%s \n", 
+		member[j].memberid, member[j].hostid, timestr, member[j].nextping, member[j].nextidx, member[j].matchidx, strflags );
     }
   }
   free( cluster );

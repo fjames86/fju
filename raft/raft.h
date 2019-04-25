@@ -41,11 +41,12 @@ struct raft_member {
     uint64_t nextidx;
     uint64_t matchidx;
     uint32_t flags;
-#define RAFT_MEMBER_ONLINE    0x0001
-#define RAFT_MEMBER_LEADER    0x0002
-#define RAFT_MEMBER_FOLLOWER  0x0004
-#define RAFT_MEMBER_CANDIDATE 0x0006
-#define RAFT_MEMBER_STATEMASK 0x0006
+#define RAFT_MEMBER_FOLLOWER  0x0000
+#define RAFT_MEMBER_LEADER    0x0001
+#define RAFT_MEMBER_CANDIDATE 0x0002
+#define RAFT_MEMBER_STATEMASK 0x0007
+#define RAFT_MEMBER_ONLINE    0x0008
+#define RAFT_MEMBER_LOCAL     0x0010
 };
 
 

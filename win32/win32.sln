@@ -64,6 +64,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "hostreg", "hostreg\hostreg.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libhrauth", "libhrauth\libhrauth.vcxproj", "{C6F084CB-E2B2-47F7-A90B-252633273D4F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libraft", "libraft\libraft.vcxproj", "{4FFADBA4-D038-4D2D-9847-D0ECDF291115}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -254,6 +256,18 @@ Global
 		{C6F084CB-E2B2-47F7-A90B-252633273D4F}.Release|Win32.Build.0 = Release|Win32
 		{C6F084CB-E2B2-47F7-A90B-252633273D4F}.Release|x64.ActiveCfg = Release|x64
 		{C6F084CB-E2B2-47F7-A90B-252633273D4F}.Release|x64.Build.0 = Release|x64
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Debug|Win32.ActiveCfg = Debug|Win32
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Debug|Win32.Build.0 = Debug|Win32
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Debug|x64.ActiveCfg = Debug|x64
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Debug|x64.Build.0 = Debug|x64
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|Win32.ActiveCfg = Release|Win32
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|Win32.Build.0 = Release|Win32
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|x64.ActiveCfg = Release|x64
+		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

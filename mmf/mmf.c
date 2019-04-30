@@ -106,7 +106,7 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 	return 0;
 }
 
-char *mmf_default_path( char *filename ) {
+char *mmf_default_path( char *filename, ... ) {
 	static char path[256];
 
 	wchar_t *wp;

@@ -1,4 +1,8 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "raft.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -679,7 +683,7 @@ static void raft_call_append( uint64_t hostid, uint64_t memberid, uint64_t clid 
   struct raft_waiter *waiter;
   struct rpc_listen *listen;
   int handle;
-  struct rpc_conn *conn;
+  struct rpc_conn *conn = NULL;
   
   sts = hostreg_host_by_id( hostid, &host );
   if( sts ) return;
@@ -727,7 +731,7 @@ static void raft_call_append( uint64_t hostid, uint64_t memberid, uint64_t clid 
   }
 
  done:
-  rpc_conn_release( conn );
+  if( conn ) rpc_conn_release( conn );
 }
 
 

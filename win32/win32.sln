@@ -66,6 +66,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libhrauth", "libhrauth\libh
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libraft", "libraft\libraft.vcxproj", "{4FFADBA4-D038-4D2D-9847-D0ECDF291115}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "raft", "raft\raft.vcxproj", "{9BBAD014-60C1-409E-A240-9A776B8CC620}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -268,6 +270,18 @@ Global
 		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|Win32.Build.0 = Release|Win32
 		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|x64.ActiveCfg = Release|x64
 		{4FFADBA4-D038-4D2D-9847-D0ECDF291115}.Release|x64.Build.0 = Release|x64
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Debug|Win32.ActiveCfg = Debug|Win32
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Debug|Win32.Build.0 = Debug|Win32
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Debug|x64.ActiveCfg = Debug|x64
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Debug|x64.Build.0 = Debug|x64
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Release|Win32.ActiveCfg = Release|Win32
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Release|Win32.Build.0 = Release|Win32
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Release|x64.ActiveCfg = Release|x64
+		{9BBAD014-60C1-409E-A240-9A776B8CC620}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

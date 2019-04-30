@@ -64,8 +64,8 @@ int main( int argc, char **argv ) {
 
   /* open log */
   sts = log_open( "/tmp/rpcd.log", NULL, &logger );
-  if( sts ) printf( "Warning: Failed to open log file" );
-  else {
+  if( sts ) printf( "Warning: Failed to open rpcd debug log file\n" );
+  else { 
     logger_open = 1;
 
     rpcd_loggers[0].cb = rpcd_logger_cb;

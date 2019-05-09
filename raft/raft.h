@@ -29,6 +29,9 @@ struct raft_cluster {
     uint64_t votedfor;
     uint64_t leaderid;   /* member id of current leader */
     uint64_t logid;      /* id of last log item written */
+    uint64_t phasetimeout;
+
+    uint32_t spare[20];
 };
 
 struct raft_member {
@@ -47,6 +50,8 @@ struct raft_member {
 #define RAFT_MEMBER_STATEMASK 0x0007
 #define RAFT_MEMBER_ONLINE    0x0008
 #define RAFT_MEMBER_LOCAL     0x0010
+
+    uint32_t spare[15];
 };
 
 
@@ -84,6 +89,7 @@ int raft_member_set_state( uint64_t memberid, uint32_t state );
 uint64_t raft_member_by_hostid( uint64_t clid, uint64_t hostid );
 int raft_member_set_nextping( uint64_t memberid, uint64_t nextping );
 int raft_member_add_local( uint64_t clid );
+int raft_member_local( uint64_t clid, struct raft_member *member );
 
 int raft_register( void );
 

@@ -259,8 +259,8 @@ static void cmd_list( void ) {
 	  break;
 	}
 	
-	printf( "    member memberid=%"PRIx64" hostid=%"PRIx64" lastseen=%s nextping=%"PRIx64" nextidx=%"PRIx64" matchidx=%"PRIx64" flags=%s \n", 
-		member[j].memberid, member[j].hostid, timestr, member[j].nextping, member[j].nextidx, member[j].matchidx, strflags );
+	printf( "    member memberid=%"PRIx64" hostid=%"PRIx64" lastseen=%s nextping=%"PRIx64" nextidx=%"PRIx64" matchidx=%"PRIx64" flags=%s (%x) \n", 
+		member[j].memberid, member[j].hostid, timestr, member[j].nextping, member[j].nextidx, member[j].matchidx, strflags, member[j].flags );
     }
   }
   free( cluster );

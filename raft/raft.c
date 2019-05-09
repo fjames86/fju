@@ -345,6 +345,23 @@ int raft_member_add_local( uint64_t clid ) {
   return raft_member_add( &member );
 }
 
+int raft_member_local( uint64_t clid, struct raft_member *member ) {
+    int sts, i;
+    if( glob.ocount <= 0 ) return -1;
+    raft_lock();
+    sts = -1;
+    for( i = 0; i < glob.file->header.member_count; i++ ) {
+        if( glob.file->member[i].clid == clid &&
+	    (glob.file->member[i].flags & RAFT_MEMBER_LOCAL) ) {
+  	    if( member ) *member = glob.file->member[i];
+            sts = 0;
+            break;
+        }
+    }
+    raft_unlock();
+    return sts;  
+}
+
 int raft_member_rem( uint64_t memberid ) {
     int sts, i;
     if( glob.ocount <= 0 ) return -1;
@@ -421,7 +438,7 @@ int raft_member_set_state( uint64_t memberid, uint32_t state ) {
     sts = -1;
     for( i = 0; i < glob.file->header.member_count; i++ ) {
         if( glob.file->member[i].memberid == memberid ) {
-	    glob.file->member[i].flags = (glob.file->member[i].flags & RAFT_MEMBER_STATEMASK) | (state & RAFT_MEMBER_STATEMASK);
+	    glob.file->member[i].flags = (glob.file->member[i].flags & ~RAFT_MEMBER_STATEMASK) | (state & RAFT_MEMBER_STATEMASK);
             glob.file->header.seq++;
             sts = 0;
             break;
@@ -528,9 +545,9 @@ static int raft_decode_member( struct xdr_s *xdr, struct raft_member *x ) {
  * Sent by leader to replicate log entries.
  */
 static int raft_proc_append( struct rpc_inc *inc ) {
-  int handle;
+  int handle, sts;
   /* arguments */
-  uint64_t clid;
+  uint64_t clid, term;
   uint64_t leaderterm;
   uint64_t leaderid;
   uint64_t prevlogidx;
@@ -539,6 +556,17 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   int nentries;
   uint64_t commitidx; 
 
+  /* decode args */
+  sts = xdr_decode_uint64( &inc->xdr, &term );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &leaderid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &prevlogidx );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &prevlogterm );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &commitidx );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&nentries );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  rpc_log( RPC_LOG_DEBUG, "raft_proc_append term=%"PRIu64" leaderid=%"PRIx64" prevlogidx=%"PRIu64" prevlogterm=%"PRIu64" commitidx=%"PRIu64" nentries=%u",
+	   term, leaderid, prevlogidx, prevlogterm, commitidx, nentries );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_uint32( &inc->xdr, inc->msg.xid );
@@ -673,7 +701,7 @@ static void raft_call_append_cb( struct rpc_waiter *waiter, struct rpc_inc *inc 
 }
 
 
-static void raft_call_append( uint64_t hostid, uint64_t memberid, uint64_t clid ) {
+static void raft_call_append( struct raft_cluster *cl, uint64_t hostid, uint64_t memberid ) {
   int sts, i;
   char *buf;
   struct rpc_inc inc;
@@ -710,6 +738,13 @@ static void raft_call_append( uint64_t hostid, uint64_t memberid, uint64_t clid 
     rpc_init_call( &inc, RAFT_RPC_PROGRAM, RAFT_RPC_VERSION, 1, &handle );
     
     /* encode args */
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->term );
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->leaderid );
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->prevlogidx );
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->prevlogterm );
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->commitidx );
+    xdr_encode_uint32( &inc.xdr, 0 ); //cl->nentries );
+    
     rpc_complete_call( &inc, handle );
     
     memset( &sinp, 0, sizeof(sinp) );
@@ -726,7 +761,105 @@ static void raft_call_append( uint64_t hostid, uint64_t memberid, uint64_t clid 
     waiter->waiter.cxt = (void *)hostid;
     waiter->hostid = hostid;
     waiter->memberid = memberid;
-    waiter->clid = clid;
+    waiter->clid = cl->clid;
+    rpc_await_reply( (struct rpc_waiter *)waiter );
+  }
+
+ done:
+  if( conn ) rpc_conn_release( conn );
+}
+
+static void raft_call_vote_cb( struct rpc_waiter *waiter, struct rpc_inc *inc ) {
+  int sts;
+  uint32_t u32;
+  struct raft_member member;
+  struct raft_waiter *w = (struct raft_waiter *)waiter;
+  
+  rpc_log( RPC_LOG_DEBUG, "vote waiter %s", inc ? "received" : "timeout" );
+  if( !inc ) goto done;
+  
+  if( inc->msg.u.reply.tag != RPC_MSG_ACCEPT ) goto done;
+  if( inc->msg.u.reply.u.accept.tag != RPC_ACCEPT_SUCCESS ) goto done;
+
+  /* all good - decode results */
+  sts = xdr_decode_uint32( &inc->xdr, &u32 );
+  if( sts ) {
+    rpc_log( RPC_LOG_ERROR, "raft_call_vote_cb: failed to decode" );
+    goto done;
+  }
+  
+  rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb: u32=%u", u32 );
+  
+  raft_member_by_id( w->memberid, &member );
+  member.lastseen = time( NULL );
+  raft_member_set( &member );
+    
+ done:
+  
+  free( waiter );
+}
+
+static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid, uint64_t memberid ) {
+  int sts, i;
+  char *buf;
+  struct rpc_inc inc;
+  struct sockaddr_in sinp;
+  struct raft_prop prop;
+  struct hostreg_host host;
+  struct raft_waiter *waiter;
+  struct rpc_listen *listen;
+  int handle;
+  struct rpc_conn *conn = NULL;
+  
+  sts = hostreg_host_by_id( hostid, &host );
+  if( sts ) return;
+ 
+  sts = raft_prop( &prop );
+  if( sts ) return; 
+
+  /* get udp file descriptor */
+  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+  if( !listen ) goto done;  
+
+  conn = rpc_conn_acquire();
+  
+  for( i = 0; i < host.naddr; i++ ) {
+    rpc_log( RPC_LOG_DEBUG, "send message host=%"PRIx64" addr=%d.%d.%d.%d",
+	     host.id,
+	     (host.addr[i]) & 0xff,
+	     (host.addr[i] >> 8) & 0xff,
+	     (host.addr[i] >> 16) & 0xff,
+	     (host.addr[i] >> 24) & 0xff );
+
+    memset( &inc, 0, sizeof(inc) );
+    xdr_init( &inc.xdr, (uint8_t *)conn->buf, conn->count );
+    rpc_init_call( &inc, RAFT_RPC_PROGRAM, RAFT_RPC_VERSION, 2, &handle );
+    
+    /* encode args */
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->term );
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->leaderid );
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->prevlogidx );
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->prevlogterm );
+    xdr_encode_uint64( &inc.xdr, 0 ); //cl->commitidx );
+    xdr_encode_uint32( &inc.xdr, 0 ); //cl->nentries );
+    
+    rpc_complete_call( &inc, handle );
+    
+    memset( &sinp, 0, sizeof(sinp) );
+    sinp.sin_family = AF_INET;
+    sinp.sin_port = htons( prop.port );
+    sinp.sin_addr.s_addr = host.addr[i];
+    sendto( listen->fd, conn->buf, inc.xdr.offset, 0, (struct sockaddr *)&sinp, sizeof(sinp) );
+
+    waiter = malloc( sizeof(*waiter) );
+    memset( waiter, 0, sizeof(*waiter) );
+    waiter->waiter.xid = inc.msg.xid;
+    waiter->waiter.timeout = rpc_now() + 1000;
+    waiter->waiter.cb = raft_call_vote_cb;
+    waiter->waiter.cxt = (void *)hostid;
+    waiter->hostid = hostid;
+    waiter->memberid = memberid;
+    waiter->clid = cl->clid;
     rpc_await_reply( (struct rpc_waiter *)waiter );
   }
 
@@ -735,19 +868,19 @@ static void raft_call_append( uint64_t hostid, uint64_t memberid, uint64_t clid 
 }
 
 
-static void raft_ping_cluster_hosts( uint64_t clid ) {
+static void raft_ping_cluster_hosts( struct raft_cluster *cl ) {
   struct raft_member member[RAFT_MAX_CLUSTER_MEMBER];
   int n, i;
   uint64_t localid;
   uint64_t now;
-    
+
   localid = hostreg_localid();
   now = rpc_now();
-  n = raft_member_list_by_clid( clid, member, RAFT_MAX_CLUSTER_MEMBER );
+  n = raft_member_list_by_clid( cl->clid, member, RAFT_MAX_CLUSTER_MEMBER );
   for( i = 0; i < n; i++ ) {
-    if( member[i].hostid != localid && member[i].nextping > now ) {
+    if( member[i].hostid != localid && member[i].nextping <= now ) {
       raft_member_set_nextping( member[i].memberid, now + 2000 );
-      raft_call_append( member[i].hostid, member[i].memberid, member[i].clid );
+      raft_call_append( cl, member[i].hostid, member[i].memberid );
     }
   }
   
@@ -759,10 +892,30 @@ static void raft_ping_clusters( void ) {
 
   n = raft_cluster_list( cluster, RAFT_MAX_CLUSTER );
   for( i = 0; i < n; i++ ) {
-    raft_ping_cluster_hosts( cluster[i].clid );
+    raft_ping_cluster_hosts( &cluster[i] );
   }
   
 }
+
+static void raft_cluster_call_vote( struct raft_cluster *cl ) {
+  struct raft_member member[RAFT_MAX_CLUSTER_MEMBER];
+  int n, i;
+  uint64_t localid;
+  uint64_t now;
+
+  localid = hostreg_localid();
+  now = rpc_now();
+  n = raft_member_list_by_clid( cl->clid, member, RAFT_MAX_CLUSTER_MEMBER );
+  for( i = 0; i < n; i++ ) {
+    if( member[i].hostid != localid ) {
+      raft_call_vote( cl, member[i].hostid, member[i].memberid );
+    }
+  }
+  
+}
+
+
+
 
 
 /* we also need an iterator to periodically contact other hosts */
@@ -773,6 +926,7 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
   struct hostreg_host local, host;
   int found;
   uint64_t now, memberid;
+  struct raft_member mbr;
   
   //  rpc_log( RPC_LOG_DEBUG, "raft iter" );
 
@@ -840,29 +994,62 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
   }
 
 
-  raft_ping_clusters();
-  
-  now = rpc_now();
+  /* walk each cluster. do different things based on current cluster state */
+  ncl = raft_cluster_list( cluster, RAFT_MAX_CLUSTER );
   for( i = 0; i < ncl; i++ ) {
-    /* for each cluster, list all members */
-    nm = raft_member_list_by_clid( cluster[i].clid, member, RAFT_MAX_CLUSTER_MEMBER );
-    for( j = 0; j < nm; j++ ) {
-      /* for each member, if it is not local, send a ping and await reply */
-      if( member[j].hostid == local.id ) continue;
+    rpc_log( RPC_LOG_DEBUG, "iter clid=%"PRIx64"", cluster[i].clid );
+    
+    sts = raft_member_local( cluster[i].clid, &mbr );
+    if( sts ) continue;
 
-      /* do nothing until next ping time expires */
-      if( member[j].nextping > now ) continue;
+    switch( mbr.flags & RAFT_MEMBER_STATEMASK ) {
+    case RAFT_MEMBER_LEADER:
+      /* ping everyone else in the cluster, telling them we are still alive. */
+      rpc_log( RPC_LOG_DEBUG, "Leader" );
+      raft_ping_cluster_hosts( &cluster[i] );
+      break;
+    case RAFT_MEMBER_FOLLOWER:
+      /* 
+       * check for election timeout. if election timeout hit then this phase has ended
+       * and the current leader has not initiated a new phase. Therefore we need 
+       * to transition to candidate and start a new election.
+       */
+      rpc_log( RPC_LOG_DEBUG, "Follower" );
+      now = rpc_now();
+      if( now >= cluster[i].phasetimeout ) {
+	/* transition to candidate */
+	rpc_log( RPC_LOG_DEBUG, "Cluster %"PRIx64" timeout, transition to candidate",
+		 cluster[i].clid );
+
+	/* send vote rpcs */
+	raft_cluster_call_vote( &cluster[i] );
+
+	/* set state to candidate */
+	raft_member_set_state( mbr.memberid, RAFT_MEMBER_CANDIDATE );
+	cluster[i].phasetimeout = now + 1000;
+	raft_cluster_set( &cluster[i] );
+      }
       
-      /* each host has many interfaces... */
-      sts = hostreg_host_by_id( member[j].hostid, &host );
-      if( sts ) continue;
-      
-      raft_call_append( member[j].hostid, member[j].memberid, member[j].clid );
-      
+      break;
+    case RAFT_MEMBER_CANDIDATE:
+      /* we have sent election requests, check for election timeout */
+      rpc_log( RPC_LOG_DEBUG, "Candidate" );
+      now = rpc_now();
+      if( now >= cluster[i].phasetimeout ) {
+	rpc_log( RPC_LOG_DEBUG, "candidate election timeout" );
+	/* send votes */
+	raft_cluster_call_vote( &cluster[i] );
+	
+	cluster[i].phasetimeout = now + 1000;
+	raft_cluster_set( &cluster[i] );
+      }
+      break;
+    default:
+      break;
     }
+	    
   }
 
-  
 }
 
 static struct rpc_iterator raft_iter = {
@@ -881,6 +1068,37 @@ int raft_register( void ) {
   
   sts = raft_open();
   if( sts ) rpc_log( LOG_LVL_ERROR, "raft_open failed" );
+
+
+  /* init clusters */
+  {
+    struct raft_cluster *cl;
+    int i, n;
+    n = raft_cluster_list( NULL, 0 );
+    cl = malloc( sizeof(*cl) * n );
+    i = raft_cluster_list( cl, n );
+    if( i < n ) n = i;
+    for( i = 0; i < n; i++ ) {
+      cl[i].phasetimeout = 0;
+      raft_cluster_set( &cl[i] );
+    }
+    free( cl );
+  }
+  
+  /* init all members */
+  {
+    struct raft_member *member;
+    int i, n;
+    n = raft_member_list( NULL, 0 );
+    member = malloc( sizeof(*member) * n );
+    i = raft_member_list( member, n );
+    if( i < n ) n = i;
+    for( i = 0; i < n; i++ ) {
+      member[i].nextping = 0;      
+      raft_member_set( &member[i] );
+    }
+    free( member );
+  }
   
   rpc_program_register( &raft_prog );
   rpc_iterator_register( &raft_iter );

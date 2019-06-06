@@ -227,8 +227,7 @@ static void print_host( struct hostreg_host *host ) {
 	mynet_ntop( host->addr[j], hex );
 	printf( "addr=%s ", hex );
     }
-    printf( "\n" );
-    
+    printf( "\n" );    
 }
 
 static void cmd_list( void ) {

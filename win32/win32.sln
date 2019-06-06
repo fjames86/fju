@@ -67,6 +67,10 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libraft", "libraft\libraft.vcxproj", "{4FFADBA4-D038-4D2D-9847-D0ECDF291115}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "raft", "raft\raft.vcxproj", "{9BBAD014-60C1-409E-A240-9A776B8CC620}"
+	ProjectSection(ProjectDependencies) = postProject
+		{2FC14865-015B-4849-9FB6-B2C960AA9ADF} = {2FC14865-015B-4849-9FB6-B2C960AA9ADF}
+		{82BE9BD1-BFF7-4C5D-95FC-369F5589C4C4} = {82BE9BD1-BFF7-4C5D-95FC-369F5589C4C4}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

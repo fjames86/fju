@@ -17,13 +17,14 @@
 
 #include <stdint.h>
 
+#define HOSTREG_MAX_NAME       64 
 #define HOSTREG_MAX_ADDR       8
 #define HOSTREG_MAX_PUBKEY     64
 #define HOSTREG_MAX_PRIVKEY    32
 
 struct hostreg_host {
     uint64_t id;
-    char name[64];
+    char name[HOSTREG_MAX_NAME];
     uint32_t publen;
     uint8_t pubkey[HOSTREG_MAX_PUBKEY];
     uint32_t naddr;

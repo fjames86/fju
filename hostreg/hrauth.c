@@ -572,6 +572,47 @@ static int hrauth_proc_list( struct rpc_inc *inc ) {
   return 0;
 }
 
+#if 0
+static int hrauth_proc_invoke( struct rpc_inc *inc ) {
+  int handle;
+  /* 
+   * XXX: reserved for future use. 
+   * Should invoke a specified procedure on local machine. THis allows us 
+   * to send the whole rpc header+payload in encrypted+verified form, hiding 
+   * our true rpc endpoint.
+   */
+
+  /* check authenticated */
+  if( !inc->pvr || (inc->pvr->flavour != RPC_AUTH_HRAUTH) ) {
+    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  }
+
+  /* extract endpoint address */
+  xdr_decode_uint32( &inc->xdr, &prog );
+  xdr_decode_uint32( &inc->xdr, &vers );
+  xdr_decode_uint32( &inc->xdr, &proc );
+
+  /* copy over inc, replacing the parts we need*/
+  inc2 = *inc;  
+  inc2.msg.u.call.prog = proc;
+  inc2.msg.u.call.vers = vers;
+  inc2.msg.u.call.proc = proc;
+  inc2.msg.u.call.auth.flavour = 0;
+  inc2.msg.u.call.verf.flavour = 0;
+  inc2.pvr = NULL;
+  inc2.pcxt = NULL;
+
+  /* lookup function */
+  sts = rpc_program_find( prog, vers, proc, &pg, &vs, &pc );
+  if( !sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, NULL );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  /* invoke */
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+#endif
+
 static struct rpc_proc hrauth_procs[] = {
   { 0, hrauth_proc_null },
   { 1, hrauth_proc_local },

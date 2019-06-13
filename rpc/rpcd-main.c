@@ -41,7 +41,7 @@ static void init_cb( void ) {
 
   hrauth_register();
 
-  raft_register();
+  //raft_register();
 }
 
 static int logger_open = 0;
@@ -63,7 +63,7 @@ int main( int argc, char **argv ) {
   int sts;
 
   /* open log */
-  sts = log_open( "/tmp/rpcd.log", NULL, &logger );
+  sts = log_open( mmf_default_path( "rpcd.log", NULL ), NULL, &logger );
   if( sts ) printf( "Warning: Failed to open rpcd debug log file\n" );
   else { 
     logger_open = 1;

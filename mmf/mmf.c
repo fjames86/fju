@@ -114,7 +114,7 @@ char *mmf_default_path( char *filename, ... ) {
 
 	strcpy( path, "" );
 	sts = SHGetKnownFolderPath( &FOLDERID_ProgramData, 0, NULL, &wp );
-	if( sts ) return -1;
+	if( sts ) return path;
 
 	wcstombs( path, wp, sizeof(path) );
 	if( filename ) {

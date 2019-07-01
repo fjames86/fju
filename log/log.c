@@ -295,7 +295,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
       if( nbytes > e->msglen - msgcnt ) nbytes = e->msglen - msgcnt;
 
       p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx) + blk_offset;
-      memcpy( elist[i].iov[j].buf + offset, p, nbytes );
+      if( elist[i].iov[j].buf ) memcpy( elist[i].iov[j].buf + offset, p, nbytes );
       msgcnt += nbytes;
       
       offset += nbytes;
@@ -315,7 +315,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
     /* if non-binary append a null terminator */
     if( !(elist[i].flags & LOG_BINARY) ) {
       if( (j < elist[i].niov) && (offset < elist[i].iov[j].len) ) {
-	elist[i].iov[j].buf[offset] = '\0';
+	if( elist[i].iov[j].buf ) elist[i].iov[j].buf[offset] = '\0';
       }
     }
 
@@ -457,6 +457,10 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   e->prev_id = hdr->last_id;
   e->seq = hdr->seq;
   hdr->last_id = e->id;
+
+  entry->id = e->id;
+  entry->msglen = msglen;
+  entry->seq = e->seq;
   
   /* write in 64 byte chunks */
   idx = (idx + 1) % hdr->lbacount;
@@ -474,7 +478,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
 
     /* copy in */
     p = ((char *)log->mmf.file) + sizeof(struct _header) + (LOG_LBASIZE * idx) + blk_offset;
-    memcpy( p, entry->iov[i].buf + offset, nbytes );
+    if( entry->iov[i].buf ) memcpy( p, entry->iov[i].buf + offset, nbytes );
     offset += nbytes;
     blk_offset += nbytes;
 

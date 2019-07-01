@@ -31,7 +31,7 @@
 #include <stdint.h>
 #include <mmf.h>
 
-#define LOG_LBASIZE 64 
+#define LOG_LBASIZE 64               /* lba size fixed to 64 bytes */
 
 /* caller data */
 struct log_s {

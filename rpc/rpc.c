@@ -872,7 +872,13 @@ int rpc_call_udp( struct rpc_inc *inc ) {
     
     evt = WSACreateEvent();
     WSAEventSelect( fd, evt, FD_READ );
-    WSAWaitForMultipleEvents( 1, &evt, TRUE, 5000, FALSE );
+    sts = WSAWaitForMultipleEvents( 1, &evt, TRUE, 5000, FALSE );
+	if( sts != WSA_WAIT_EVENT_0 ) {
+		SetLastError( WAIT_TIMEOUT );
+		sts = -1;
+		goto done;
+	}
+
     WSAEnumNetworkEvents( fd, evt, &events );
     WSACloseEvent( evt );
   }

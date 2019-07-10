@@ -37,6 +37,7 @@
 static struct {
 	int foreground;
 	int no_rpcregister;
+	int quiet;
 	volatile int exiting;
 
 	struct rpc_listen listen[RPC_MAX_LISTEN];   /* listening fds */
@@ -93,8 +94,7 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            [-L path]\n"
 #endif
-		"            [-f]\n"
-		"            [-R]\n"
+		"            [-f] [-R] [-q]\n"
 		"\n"
 		"  Where:\n"
 		"            -f               Run in foreground\n"
@@ -103,7 +103,8 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            -L path          Listen on AF_UNIX socket file\n"
 #endif
-		"            -R               Don't register with rpcbind service.\n" 		
+		"            -R               Don't register with rpcbind service.\n"
+		"            -q               Quiet. Don't log to stdout\n" 
 		"\n" );
 
 
@@ -184,6 +185,8 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 			rpc.foreground = 1;
 		} else if( strcmp( argv[i], "-R" ) == 0 ) {
 	        	rpc.no_rpcregister = 1;
+		} else if( strcmp( argv[i], "-q" ) == 0 ) {
+	        	rpc.quiet = 1;			
 		}
 		else usage( NULL );
 
@@ -218,8 +221,8 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 		close( STDOUT_FILENO ); open( "/dev/null", O_WRONLY );
 		close( STDERR_FILENO ); open( "/dev/null", O_WRONLY );
 #endif
-	} else {
-	  /* add default stdout logger */
+	} else if( !rpc.quiet ) {
+	  /* if running in foreground and not quiet, add default stdout logger */
 	  rpc_add_logger( &rpc.loggers[0] );
 	}
 
@@ -759,72 +762,74 @@ void rpc_conn_release( struct rpc_conn *c ) {
 }
 
 static void rpc_accept( struct rpc_listen *lis ) {
-	struct rpc_conn *c;
-	int sts;
+  struct rpc_conn *c;
+  int sts;
 
-	switch( lis->type ) {
-	case RPC_LISTEN_UDP:
-	case RPC_LISTEN_UDP6:
-	{
-							socklen_t slen;
+  switch( lis->type ) {
+  case RPC_LISTEN_UDP:
+  case RPC_LISTEN_UDP6:
+    {
+      socklen_t slen;
 
-							c = rpc.flist;
-							if( !c ) return;
+      c = rpc.flist;
+      if( !c ) return;
 
-							/* setup inc */
-							memset( &c->inc, 0, sizeof(c->inc) );
+      /* setup inc */
+      memset( &c->inc, 0, sizeof(c->inc) );
 
-							c->inc.raddr_len = sizeof(c->inc.raddr);
-							slen = c->inc.raddr_len;
-							c->cdata.count = recvfrom( lis->fd, c->buf, RPC_MAX_BUF, 0, (struct sockaddr *)&c->inc.raddr, &slen );
-							if( c->cdata.count < 0 ) return;
-							c->inc.raddr_len = slen;
+      c->inc.raddr_len = sizeof(c->inc.raddr);
+      slen = c->inc.raddr_len;
+      c->cdata.count = recvfrom( lis->fd, c->buf, RPC_MAX_BUF, 0, (struct sockaddr *)&c->inc.raddr, &slen );
+      if( c->cdata.count < 0 ) return;
+      c->inc.raddr_len = slen;
 
-							memcpy( &c->inc.laddr,
-								&lis->addr,
-								lis->type == RPC_LISTEN_UDP ? sizeof(lis->addr.sin) : sizeof(lis->addr.sin6) );
-							xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
-							c->inc.xdr.count = c->cdata.count;
+      memcpy( &c->inc.laddr,
+	      &lis->addr,
+	      lis->type == RPC_LISTEN_UDP ? sizeof(lis->addr.sin) : sizeof(lis->addr.sin6) );
+      xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
+      c->inc.xdr.count = c->cdata.count;
 
-							/* process message and send reply */
-							rpc_log( RPC_LOG_INFO, "Process UDP call" );
-							sts = rpc_process_incoming( &c->inc );
-							if( sts == 0 ) {
-								sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
-								if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
-							}
-							else {
-							  //rpc_log( RPC_LOG_INFO, "rpc_process_incoming failed" );
-							}
+      /* process message and send reply */
+      rpc_log( RPC_LOG_INFO, "Process UDP call" );
+      rpc.flist = rpc.flist->next;
+      sts = rpc_process_incoming( &c->inc );
+      rpc.flist = c;
+      if( sts == 0 ) {
+	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
+	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
+      }
+      else {
+	//rpc_log( RPC_LOG_INFO, "rpc_process_incoming failed" );
+      }
 
-	}
-		break;
-	case RPC_LISTEN_TCP:
-	case RPC_LISTEN_TCP6:
+    }
+    break;
+  case RPC_LISTEN_TCP:
+  case RPC_LISTEN_TCP6:
 #ifndef WIN32
-	case RPC_LISTEN_UNIX:
-	{
-							rpc_log( RPC_LOG_INFO, "Accept TCP/UNIX" );
+  case RPC_LISTEN_UNIX:
+    {
+      rpc_log( RPC_LOG_INFO, "Accept TCP/UNIX" );
 
-							/* get connection descriptor */
-							c = rpc.flist;
-							if( !c ) return;
-							rpc.flist = c->next;
+      /* get connection descriptor */
+      c = rpc.flist;
+      if( !c ) return;
+      rpc.flist = c->next;
 
-							c->inc.raddr_len = sizeof(c->inc.raddr);
-							c->fd = accept( lis->fd, (struct sockaddr *)&c->inc.raddr, &c->inc.raddr_len );
-							c->cstate = RPC_CSTATE_RECVLEN;
-							c->nstate = RPC_NSTATE_RECV;
+      c->inc.raddr_len = sizeof(c->inc.raddr);
+      c->fd = accept( lis->fd, (struct sockaddr *)&c->inc.raddr, &c->inc.raddr_len );
+      c->cstate = RPC_CSTATE_RECVLEN;
+      c->nstate = RPC_NSTATE_RECV;
 
-							sts = fcntl( c->fd, F_GETFL, 0 );
-							fcntl( c->fd, F_SETFL, sts|O_NONBLOCK );
+      sts = fcntl( c->fd, F_GETFL, 0 );
+      fcntl( c->fd, F_SETFL, sts|O_NONBLOCK );
 
-							c->next = rpc.clist;
-							rpc.clist = c;
-	}
+      c->next = rpc.clist;
+      rpc.clist = c;
+    }
 #endif
-		break;
-	}
+    break;
+  }
 }
 
 static void rpcd_run( void ) {

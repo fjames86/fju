@@ -4,6 +4,7 @@
 #include <hrauth.h>
 #include <raft.h>
 #include <log.h>
+#include <nls.h>
 
 #define SHAUTH_SECRET "123abcd123"
 
@@ -42,6 +43,8 @@ static void init_cb( void ) {
   hrauth_register();
 
   //raft_register();
+
+  nls_register();
 }
 
 static int logger_open = 0;

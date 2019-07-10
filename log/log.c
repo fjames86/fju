@@ -315,10 +315,21 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
     /* if non-binary append a null terminator */
     if( !(elist[i].flags & LOG_BINARY) ) {
       if( (j < elist[i].niov) && (offset < elist[i].iov[j].len) ) {
-	if( elist[i].iov[j].buf ) elist[i].iov[j].buf[offset] = '\0';
+	if( elist[i].iov[j].buf ) {
+	  elist[i].iov[j].buf[offset] = '\0';
+	  offset++;
+	}
       }
     }
 
+    /* record amount actually written to each trailing iov */
+    elist[i].iov[j].len = offset;
+    j++;
+    while( j < elist[i].niov ) {
+      elist[i].iov[j].len = 0;
+      j++;
+    }
+    
     i++;
    
     idx = (idx + 1) % hdr->lbacount;

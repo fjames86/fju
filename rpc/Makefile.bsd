@@ -4,6 +4,7 @@ INCLUDES += -I../mmf -L../mmf -lmmf
 INCLUDES += -I../raft -L../raft -lraft
 INCLUDES += -I../log -L../log -llog 
 INCLUDES += -I../hostreg -L../hostreg -lhostreg -lhrauth 
+INCLUDES += -I../nls -L../nls -lnls
 
 all: rpcd rpcinfo librpc.a 
 

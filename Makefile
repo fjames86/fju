@@ -17,8 +17,10 @@ all:
 	cd lht && $(MAKE) -f Makefile.bsd all && cp lht ../bin 
 	cd hostreg && $(MAKE) -f Makefile.bsd libhostreg.a 
 	cd raft && $(MAKE) -f Makefile.bsd libraft.a
+	cd nls && $(MAKE) -f Makefile libnls.a  
 	cd rpc && $(MAKE) -f Makefile.bsd all && cp rpcd rpcinfo ../bin
 	cd raft && $(MAKE) -f Makefile.bsd all && cp raft ../bin
+	cd nls && $(MAKE) -f Makefile nls && cp nls ../bin 
 	cd hostreg && $(MAKE) -f Makefile.bsd all && cp hostreg ../bin 
 	scp bin/* root@169.254.54.129:~/bin 
 

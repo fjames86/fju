@@ -454,7 +454,6 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
     } while( (int)(hdr->lbacount - hdr->count) < cnt );
   }
   hdr->count += cnt;
-  hdr->seq++;
 
   /* now write data at end */
   e = (struct _entry *)((char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx));

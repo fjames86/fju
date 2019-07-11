@@ -491,11 +491,88 @@ static int nls_proc_notreg( struct rpc_inc *inc ) {
   return 0;
 }
 
+static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t lastid, uint64_t seq, int count );
+struct nls_read_cxt {
+  uint64_t hostid;
+  uint64_t hshare;
+  uint64_t lastid;
+  uint64_t seq;
+};
+
 static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
+  int sts, b;
+  struct log_s log;
+  uint64_t id, lastid, previd, seq;
+  uint32_t flags;
+  char *bufp;
+  int lenp;
+  struct log_entry e;
+  struct log_iov iov[1];
+  struct nls_read_cxt *nlscxtp;
+  int logopen = 0;
+  struct nls_remote remote;
+  uint64_t hshare;
+  
+  nlscxtp = (struct nls_read_cxt *)w->cxt;
+  
+  /* do nothing if call timed out? */
+  if( !inc ) goto done;
+
+  /* decode results */
+  xdr_decode_uint64( &inc->xdr, &hshare );
+
+  sts = nls_remote_by_hshare( hshare, &remote );
+  if( sts ) goto done;
+  
+  /* open local log and write new entries */
+  sts = nls_remote_open( &remote, &log );
+  if( sts ) goto done;
+  logopen = 1;
+  
+  sts = xdr_decode_boolean( &inc->xdr, &b );
+  if( sts ) goto done;
+  while( b ) {
+    sts = xdr_decode_uint64( &inc->xdr, &id );
+    if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &previd );
+    if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
+    if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
+    if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+    if( sts ) goto done;
+    
+    memset( &e, 0, sizeof(e) );
+    iov[0].buf = bufp;
+    iov[0].len = lenp;
+    e.iov = iov;
+    e.niov = 1;
+    e.flags = flags;      
+    log_write( &log, &e );
+
+    lastid = id;
+
+    sts = xdr_decode_boolean( &inc->xdr, &b );
+    if( sts ) goto done;
+  }
+  
+  /* update remote descriptor */
+  sts = nls_remote_by_hshare( hshare, &remote );
+  if( sts ) goto done;
+  
+  remote.seq = seq;
+  remote.lastid = lastid;
+  nls_remote_set( &remote );
+
+  /* Did we read all available messages? If not then continue */
+  if( seq == nlscxtp->seq ) goto done;
+
+  nlscxtp->lastid = lastid;
+  nls_call_read( nlscxtp->hostid, nlscxtp->hshare, nlscxtp->lastid, nlscxtp->seq, 16 );
+  
+ done:
+  if( logopen ) log_close( &log );
   free( w );
 }
 
-static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t lastid, int count ) {
+static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t lastid, uint64_t seq, int count ) {
   int sts;
   struct rpc_waiter *w;
   struct hostreg_host host;
@@ -503,6 +580,9 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t lastid, in
   struct rpc_listen *listen;
   struct rpc_inc inc;
   int handle;
+  struct nls_read_cxt *nlscxtp;
+  
+  if( count > 16 ) count = 16;
   
   /* lookup host */
   sts = hostreg_host_by_id( hostid, &host );
@@ -523,7 +603,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t lastid, in
   rpc_init_call( &inc, NLS_RPC_PROG, NLS_RPC_VERS, 3, &handle );
   xdr_encode_uint64( &inc.xdr, hshare );
   xdr_encode_uint64( &inc.xdr, lastid );
-  xdr_encode_uint32( &inc.xdr, 16 );
+  xdr_encode_uint32( &inc.xdr, count );
   rpc_complete_call( &inc, handle );
   
   /* send */
@@ -533,12 +613,18 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t lastid, in
   rpc_conn_release( conn );
 
   /* await reply */
-  w = malloc( sizeof(*w) );
+  w = malloc( sizeof(*w) + sizeof(struct nls_read_cxt) );
+  nlscxtp = (struct nls_read_cxt *)(((char *)w) + sizeof(*w));
+  nlscxtp->hostid = hostid;
+  nlscxtp->hshare = hshare;
+  nlscxtp->lastid = lastid;
+  nlscxtp->seq = seq;
+  
   memset( w, 0, sizeof(*w) );
   w->xid = inc.msg.xid;
   w->timeout = rpc_now() + NLS_READ_TIMEOUT;
   w->cb = nls_read_cb;
-  w->cxt = NULL;
+  w->cxt = nlscxtp;
   rpc_await_reply( w );
 }
 
@@ -554,10 +640,10 @@ static int nls_proc_notify( struct rpc_inc *inc ) {
   struct nls_remote remote;
   
   sts = xdr_decode_uint64( &inc->xdr, &hostid );
-  sts = xdr_decode_uint64( &inc->xdr, &hshare );
-  sts = xdr_decode_uint64( &inc->xdr, &seq );
-  sts = xdr_decode_uint64( &inc->xdr, &lastid );
-
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &hshare );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &lastid );
+  if( sts ) goto done;
 
   /* lookup remote entry */
   sts = nls_remote_by_hshare( hshare, &remote );
@@ -567,7 +653,7 @@ static int nls_proc_notify( struct rpc_inc *inc ) {
   if( remote.seq == seq ) goto done;
 
   /* issue async call to read missing log entries */
-  nls_call_read( hostid, hshare, remote.lastid, seq - remote.seq );
+  nls_call_read( hostid, hshare, remote.lastid, seq, seq - remote.seq );
   
  done:
   /* don't send a reply */

@@ -53,6 +53,7 @@ int mmf_unlock( struct mmf_s *mmf );
 int mmf_remap( struct mmf_s *mmf, int size );
 int mmf_sync( struct mmf_s *mmf );
 char *mmf_default_path( char *filename, ... );
+int mmf_ensure_dir( char *path );
 
 #endif
 

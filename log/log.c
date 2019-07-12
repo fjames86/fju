@@ -206,6 +206,7 @@ int log_reset( struct log_s *log ) {
   hdr->count = 0;
   hdr->seq = 1;
   hdr->tag = time( NULL );
+  hdr->last_id = 0;
   
   log_unlock( log );
   return 0;
@@ -283,6 +284,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
     elist[i].flags = e->flags;
     elist[i].msglen = e->msglen;
     elist[i].prev_id = e->prev_id;
+    elist[i].seq = e->seq;
     
     j = 0; /* iov index */
     offset = 0; /* current iov offset */
@@ -323,7 +325,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
     }
 
     /* record amount actually written to each trailing iov */
-    elist[i].iov[j].len = offset;
+    if( j < elist[i].niov ) elist[i].iov[j].len = offset;
     j++;
     while( j < elist[i].niov ) {
       elist[i].iov[j].len = 0;

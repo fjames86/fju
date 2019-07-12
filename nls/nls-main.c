@@ -6,6 +6,7 @@
 #include <stdarg.h>
 #include <inttypes.h>
 #include <mmf.h>
+#include <time.h>
 #include "nls.h"
 
 static void usage( char *fmt, ... ) {
@@ -193,12 +194,24 @@ static void cmd_list( void ) {
     }
     {
         struct nls_remote *lst;
+	char timestr[64];
+	struct tm *tm;
+  	time_t now;
+	
         n = nls_remote_list( NULL, 0 );
         lst = (struct nls_remote *)malloc( sizeof(*lst) * n );
         m = nls_remote_list( lst, n );
         if( m < n ) n = m;
         for( i = 0; i < n; i++ ) {
-	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64"\n", "remote", lst[i].share.hshare, lst[i].share.name, lst[i].hostid, lst[i].seq, lst[i].lastid );
+	  if( lst[i].timestamp == 0 ) strcpy( timestr, "Never" );
+	  else {
+	    now = (time_t)lst[i].timestamp;
+	    tm = localtime( &now );
+	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+	  }
+	    
+	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s\n", "remote",
+		  lst[i].share.hshare, lst[i].share.name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr );
         }
         free( lst );
         printf( "\n" );

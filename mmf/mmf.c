@@ -40,6 +40,7 @@
 
 #include <sys/file.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #endif
 
 #ifdef WIN32
@@ -140,6 +141,11 @@ char *mmf_default_path( char *filename, ... ) {
 	return path;
 }
 
+int mmf_ensure_dir( char *path ) {
+  CreateDirectoryA( path, NULL );
+  return 0;
+}
+
 #else
 int mmf_open( char *path, struct mmf_s *mmf ) {
 	mmf->fd = open( path, O_RDWR|O_CREAT, 0600 );
@@ -213,5 +219,11 @@ char *mmf_default_path( char *filename, ... ) {
 
 	return path;
 }
+
+int mmf_ensure_dir( char *path ) {
+  mkdir( path, 0755 );
+  return 0;
+}
+
 
 #endif

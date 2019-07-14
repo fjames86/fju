@@ -272,6 +272,9 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
   }
 
   do {
+    /* check we are still in active block range */
+    if( (idx + hdr->lbacount - hdr->start) % hdr->lbacount >= hdr->count ) goto done;
+      
     /* lookup item at index */
     p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
     e = (struct _entry *)p;

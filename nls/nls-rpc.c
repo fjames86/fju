@@ -1,4 +1,7 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 
 #include "nls.h"
 #include <stdint.h>
@@ -12,6 +15,11 @@
 #include <hostreg.h>
 
 #include "nls-private.h"
+
+#ifdef WIN32
+#define PRIu64 "llu"
+#define PRIx64 "llx"
+#endif
 
 struct nls_notcxt {
   uint64_t hostid;
@@ -205,7 +213,7 @@ static int nls_proc_write( struct rpc_inc *inc ) {
   int handle, sts, successp, buflen;
   uint32_t flags;
   uint64_t hshare, id;
-  char *bufp;
+  char *bufp = NULL;
   struct nls_share share;
   struct log_s log;
   struct log_prop prop;
@@ -291,7 +299,7 @@ static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   struct log_s log;
   uint64_t id, lastid, previd, seq;
   uint32_t flags;
-  char *bufp;
+  char *bufp = NULL;
   int lenp;
   struct log_entry e;
   struct log_iov iov[1];

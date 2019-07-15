@@ -1,4 +1,8 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "nls.h"
 #include <stdint.h>
 #include <stdlib.h>
@@ -11,6 +15,10 @@
 #include <hostreg.h>
 
 #include "nls-private.h"
+
+#ifdef WIN32
+#define PRIu64 "llu"
+#endif
 
 struct nls_header {
     uint32_t magic;

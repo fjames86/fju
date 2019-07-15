@@ -14,7 +14,9 @@
 #include "nls.h"
 
 static void usage( char *fmt, ... ) {
-    printf( "Usage:    prop\n" 
+    printf( "Usage:    prop\n"
+	    "          set prop [rpc=RPC] [poll=POLL]\n"
+	    "\n" 
             "          add share [name=NAME] [hshare=HSHARE] \n"
             "          set share HSHARE [name=NAME]\n"
             "          rem share HSHARE\n"
@@ -98,9 +100,9 @@ int main( int argc, char **argv ) {
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
                  if( strcmp( argname, "name" ) == 0 ) {
-		     if( argval ) strncpy( entry.share.name, argval, sizeof(entry.share.name) );
+		     if( argval ) strncpy( entry.name, argval, sizeof(entry.name) );
 		 } else if( strcmp( argname, "hshare" ) == 0 ) {
-  		     if( argval ) entry.share.hshare = strtoull( argval, NULL, 16 );
+  		     if( argval ) entry.hshare = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
 		     if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "lastid" ) == 0 ) {
@@ -112,7 +114,7 @@ int main( int argc, char **argv ) {
 	    }
             sts = nls_remote_add( &entry );
             if( sts ) usage( "Failed to add remote" );
-            printf( "Added remote HSHARE=%"PRIx64"\n", entry.share.hshare );
+            printf( "Added remote HSHARE=%"PRIx64"\n", entry.hshare );
         } else usage( NULL );
     } else if( strcmp( argv[i], "rem" ) == 0 ) {
         i++;
@@ -175,7 +177,7 @@ int main( int argc, char **argv ) {
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
                  if( strcmp( argname, "name" ) == 0 ) {
-                      if( argval ) strncpy( entry.share.name, argval, sizeof(entry.share.name) );
+                      if( argval ) strncpy( entry.name, argval, sizeof(entry.name) );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
                       if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "lastid" ) == 0 ) {
@@ -187,7 +189,19 @@ int main( int argc, char **argv ) {
             }
             sts = nls_remote_set( &entry );
             if( sts ) usage( "Failed to set remote" );
-        } else usage( NULL );
+        } else if( strcmp( argv[i], "prop" ) == 0 ) {
+            char argname[64], *argval;
+            i++;
+            while( i < argc ) {
+                 argval_split( argv[i], argname, &argval );
+                 if( strcmp( argname, "rpc" ) == 0 ) {
+		     if( argval ) nls_set_rpc_timeout( strtoull( argval, NULL, 10 ) );
+		 } else if( strcmp( argname, "poll" ) == 0 ) {
+		     if( argval ) nls_set_poll_timeout( strtoull( argval, NULL, 10 ) );
+                 } else { printf( "Unknown property name %s\n", argname ); usage( NULL ); }
+                 i++;
+            }
+	} else usage( NULL );
     } else if( strcmp( argv[i], "reset" ) == 0 ) {
       nls_reset();
     } else usage( NULL );
@@ -230,7 +244,7 @@ static void cmd_list( void ) {
 	    
 	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s\n",
 		  "remote",
-		  lst[i].share.hshare, lst[i].share.name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr );
+		  lst[i].hshare, lst[i].name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );
@@ -266,7 +280,7 @@ static void cmd_list( void ) {
 static void cmd_prop( void ) {
      struct nls_prop prop;
      nls_prop( &prop );
-     printf( "seq=%"PRIu64"\n", prop.seq );
+     printf( "seq=%"PRIu64" rpc=%ums poll=%us\n", prop.seq, prop.rpc_timeout, prop.poll_timeout );
      printf( "share=%d/%d\n", prop.share_count, prop.share_max );
      printf( "remote=%d/%d\n", prop.remote_count, prop.remote_max );
      printf( "notify=%d/%d\n", prop.notify_count, prop.notify_max );

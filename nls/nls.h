@@ -17,14 +17,15 @@
 
 /* local log shared over RPC */
 struct nls_share {
-    char name[64];
-    uint64_t hshare;
+  uint64_t hshare;
+  char name[64];
 };
 
 /* remote shared log */
 struct nls_remote {
   uint64_t hostid;   /* remote host id */
-  struct nls_share share; /* shared log descriptor */
+  uint64_t hshare; /* shared log descriptor */
+  char name[64];
   uint64_t seq;      /* last known log seqno and message id */
   uint64_t lastid;
   uint64_t timestamp;
@@ -49,13 +50,17 @@ struct nls_prop {
     uint32_t remote_max;
     uint32_t remote_count;
     uint32_t notify_max;
-    uint32_t notify_count;  
+    uint32_t notify_count;
+    uint32_t rpc_timeout;
+    uint32_t poll_timeout;
 };
 
 int nls_open( void );
 int nls_close( void );
 int nls_prop( struct nls_prop *prop );
 int nls_reset( void );
+int nls_set_rpc_timeout( uint32_t timeout );
+int nls_set_poll_timeout( uint32_t timeout );
 
 int nls_share_list( struct nls_share *list, int n );
 int nls_share_by_hshare( uint64_t hshare, struct nls_share *share );

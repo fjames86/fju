@@ -35,6 +35,8 @@ struct nls_header {
     uint32_t notify_count;
   
     /* header fields */
+    uint32_t poll_timeout;
+    uint32_t rpc_timeout;
 };
 
 
@@ -85,7 +87,9 @@ int nls_open( void ) {
 	glob.file->header.remote_max = NLS_MAX_REMOTE;
 	glob.file->header.remote_count = 0;
 	glob.file->header.notify_max = NLS_MAX_NOTIFY;
-	glob.file->header.notify_count = 0;	
+	glob.file->header.notify_count = 0;
+	glob.file->header.rpc_timeout = NLS_RPC_TIMEOUT;
+	glob.file->header.poll_timeout = NLS_POLL_TIMEOUT;
     } else if( glob.file->header.version != NLS_VERSION ) {
         nls_unlock();
         goto bad;
@@ -133,9 +137,26 @@ int nls_prop( struct nls_prop *prop ) {
     prop->remote_max = glob.file->header.remote_max;
     prop->remote_count = glob.file->header.remote_count;
     prop->notify_max = glob.file->header.notify_max;
-    prop->notify_count = glob.file->header.notify_count;    
+    prop->notify_count = glob.file->header.notify_count;
+    prop->rpc_timeout = glob.file->header.rpc_timeout;
+    prop->poll_timeout = glob.file->header.poll_timeout;
     nls_unlock();
     return 0;
+}
+
+int nls_set_rpc_timeout( uint32_t timeout ) {
+    if( glob.ocount <= 0 ) return -1;
+    nls_lock();
+    glob.file->header.rpc_timeout = timeout;
+    nls_unlock();
+    return 0;  
+}
+int nls_set_poll_timeout( uint32_t timeout ) {
+    if( glob.ocount <= 0 ) return -1;
+    nls_lock();
+    glob.file->header.poll_timeout = timeout;
+    nls_unlock();
+    return 0;    
 }
 
 /* ------------ share commands ----------- */
@@ -251,7 +272,7 @@ int nls_remote_by_hshare( uint64_t hshare, struct nls_remote *remote ) {
     nls_lock();
     sts = -1;
     for( i = 0; i < glob.file->header.remote_count; i++ ) {
-        if( glob.file->remote[i].share.hshare == hshare ) {
+        if( glob.file->remote[i].hshare == hshare ) {
             if( remote ) *remote = glob.file->remote[i];
             sts = 0;
             break;
@@ -264,7 +285,7 @@ int nls_remote_by_hshare( uint64_t hshare, struct nls_remote *remote ) {
 int nls_remote_add( struct nls_remote *remote ) {
     int sts, i;
     if( glob.ocount <= 0 ) return -1;
-    if( !remote->share.hshare ) return -1;
+    if( !remote->hshare ) return -1;
     
     nls_lock();
     sts = -1;
@@ -285,7 +306,7 @@ int nls_remote_rem( uint64_t hshare ) {
     nls_lock();
     sts = -1;
     for( i = 0; i < glob.file->header.remote_count; i++ ) {
-        if( glob.file->remote[i].share.hshare == hshare ) {
+        if( glob.file->remote[i].hshare == hshare ) {
             if( i != (glob.file->header.remote_count - 1) ) glob.file->remote[i] = glob.file->remote[glob.file->header.remote_count - 1];
             glob.file->header.remote_count--;
             glob.file->header.seq++;
@@ -303,7 +324,7 @@ int nls_remote_set( struct nls_remote *remote ) {
     nls_lock();
     sts = -1;
     for( i = 0; i < glob.file->header.remote_count; i++ ) {
-        if( glob.file->remote[i].share.hshare == remote->share.hshare ) {
+        if( glob.file->remote[i].hshare == remote->hshare ) {
             glob.file->remote[i] = *remote;
             glob.file->header.seq++;
             sts = 0;
@@ -317,7 +338,7 @@ int nls_remote_set( struct nls_remote *remote ) {
 int nls_remote_open( struct nls_remote *remote, struct log_s *log ) {
   char name[256], hostid[64];
   sprintf( hostid, "%"PRIu64"", remote->hostid );
-  sprintf( name, "%s.log", remote->share.name );
+  sprintf( name, "%s.log", remote->name );
   mmf_ensure_dir( mmf_default_path( "nls", hostid, NULL ) );
   return log_open( mmf_default_path( "nls", hostid, name, NULL ), NULL, log );
 }

@@ -21,6 +21,10 @@
 #define PRIx64 "llx"
 #endif
 
+static struct {
+  struct nls_prop prop;
+} glob;
+
 static uint64_t nls_share_seqno( uint64_t hshare, uint64_t *lastid );
 static uint64_t nls_remote_seqno( uint64_t hshare, uint64_t *lastid );
 
@@ -391,9 +395,10 @@ static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   sts = nls_remote_by_hshare( rshare.hshare, &remote );
   if( sts ) goto done;
 
+  strncpy( remote.name, rshare.name, sizeof(remote.name) - 1 );
   remote.seq = prop.seq;
   remote.lastid = prop.last_id;
-  remote.timestamp = time( NULL ) + NLS_POLL_TIMEOUT;
+  remote.timestamp = time( NULL ) + glob.prop.poll_timeout;
   nls_remote_set( &remote );
 
   /* Did we read all available messages? If not then continue */
@@ -469,7 +474,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   
   memset( w, 0, sizeof(*w) );
   w->xid = inc.msg.xid;
-  w->timeout = rpc_now() + NLS_READ_TIMEOUT;
+  w->timeout = rpc_now() + glob.prop.rpc_timeout;
   w->cb = nls_read_cb;
   w->cxt = nlscxtp;
   rpc_await_reply( w );
@@ -540,7 +545,7 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare ) {
   w = malloc( sizeof(*w) );
   memset( w, 0, sizeof(*w) );
   w->xid = inc.msg.xid;
-  w->timeout = rpc_now() + NLS_READ_TIMEOUT;   
+  w->timeout = rpc_now() + glob.prop.rpc_timeout;
   w->cb = nls_call_notreg_cb;
   rpc_await_reply( w );
 
@@ -614,29 +619,32 @@ static void nls_clt_iter_cb( struct rpc_iterator *iter ) {
   int n, i;
   uint64_t now;
 
+  nls_prop( &glob.prop );
+  
   now = time( NULL );
   n = nls_remote_list( remote, NLS_MAX_REMOTE );
   for( i = 0; i < n; i++ ) {
     if( (remote[i].timestamp == 0) || (remote[i].timestamp > now) ) {
       /* ask for some entries */
-      nls_call_read( remote[i].hostid, remote[i].share.hshare, remote[i].seq, remote[i].lastid, 16 );
+      nls_call_read( remote[i].hostid, remote[i].hshare, remote[i].seq, remote[i].lastid, 16 );
       
       /* ask for a callback */
-      rpc_log( RPC_LOG_DEBUG, "nls_clt_iter_cb nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", remote[i].hostid, remote[i].share.hshare );
-      nls_call_notreg( remote[i].hostid, remote[i].share.hshare );
+      rpc_log( RPC_LOG_DEBUG, "nls_clt_iter_cb nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", remote[i].hostid, remote[i].hshare );
+      nls_call_notreg( remote[i].hostid, remote[i].hshare );
       
       /* schedule to ask again later */
-      remote[i].timestamp = now + NLS_POLL_TIMEOUT;
+      remote[i].timestamp = now + glob.prop.poll_timeout;
       nls_remote_set( &remote[i] );      
     }
   }
 
+  iter->timeout = rpc_now() + glob.prop.poll_timeout*1000;  
 }
 
 static struct rpc_iterator nls_clt_iter = {
     NULL,
     0,
-    (NLS_POLL_TIMEOUT * 1000),
+    1000,
     nls_clt_iter_cb,
     NULL
 };
@@ -788,11 +796,13 @@ void nls_register( void ) {
   nls_open();
   hostreg_open();
 
+  nls_prop( &glob.prop );
+  
   /* reset all remote timestamps */
   n = nls_remote_list( remote, NLS_MAX_REMOTE );
   for( i = 0; i < n; i++ ) {
     remote[i].timestamp = 0;
-    remote[i].seq = nls_remote_seqno( remote[i].share.hshare, &remote[i].lastid );
+    remote[i].seq = nls_remote_seqno( remote[i].hshare, &remote[i].lastid );
     nls_remote_set( &remote[i] );
   }  
   

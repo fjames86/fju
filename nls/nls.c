@@ -337,7 +337,7 @@ int nls_remote_set( struct nls_remote *remote ) {
 
 int nls_remote_open( struct nls_remote *remote, struct log_s *log ) {
   char name[256], hostid[64];
-  sprintf( hostid, "%"PRIu64"", remote->hostid );
+  sprintf( hostid, "%"PRIx64"", remote->hostid );
   sprintf( name, "%s.log", remote->name );
   mmf_ensure_dir( mmf_default_path( "nls", hostid, NULL ) );
   return log_open( mmf_default_path( "nls", hostid, name, NULL ), NULL, log );

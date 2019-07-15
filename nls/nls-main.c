@@ -18,6 +18,13 @@ static void usage( char *fmt, ... ) {
             "          add share [name=NAME] [hshare=HSHARE] \n"
             "          set share HSHARE [name=NAME]\n"
             "          rem share HSHARE\n"
+	    "\n" 
+            "          add remote [name=NAME] [hshare=HSHARE] [hostid=HOSTID]\n"
+            "          set remote HSHARE [name=NAME] [hostid=HOSTID]\n"
+            "          rem remote HSHARE\n"
+	    "\n"
+            "          rem notify TAG\n"
+	    
     );
 
     if( fmt ) {
@@ -102,7 +109,7 @@ int main( int argc, char **argv ) {
 		     if( argval ) entry.seq = strtoull( argval, NULL, 10 );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
-            }
+	    }
             sts = nls_remote_add( &entry );
             if( sts ) usage( "Failed to add remote" );
             printf( "Added remote HSHARE=%"PRIx64"\n", entry.share.hshare );
@@ -123,6 +130,13 @@ int main( int argc, char **argv ) {
             if( i >= argc ) usage( NULL );
             tag = strtoull( argv[i], NULL, 16 );
             sts = nls_remote_rem( tag );
+            if( sts ) usage( "Failed to rem remote" );
+        } else if( strcmp( argv[i], "notify" ) == 0 ) {
+            uint64_t tag;
+            i++;
+            if( i >= argc ) usage( NULL );
+            tag = strtoull( argv[i], NULL, 16 );
+            sts = nls_notify_rem( tag );
             if( sts ) usage( "Failed to rem remote" );
         } else usage( NULL );
     } else if( strcmp( argv[i], "set" ) == 0 ) {
@@ -194,7 +208,7 @@ static void cmd_list( void ) {
             printf( "%-16s %-8"PRIx64" name=%s\n", "share", lst[i].hshare, lst[i].name );
         }
         free( lst );
-        printf( "\n" );
+        if( n > 0 ) printf( "\n" );
     }
     {
         struct nls_remote *lst;
@@ -214,11 +228,37 @@ static void cmd_list( void ) {
 	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
 	    
-	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s\n", "remote",
+	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s\n",
+		  "remote",
 		  lst[i].share.hshare, lst[i].share.name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr );
         }
         free( lst );
-        printf( "\n" );
+        if( n > 0 ) printf( "\n" );
+    }
+    {
+        struct nls_notify *lst;
+	char timestr[64];
+	struct tm *tm;
+  	time_t now;
+
+        n = nls_notify_list( NULL, 0 );
+        lst = (struct nls_notify *)malloc( sizeof(*lst) * n );
+        m = nls_notify_list( lst, n );
+        if( m < n ) n = m;
+        for( i = 0; i < n; i++ ) {
+	  if( lst[i].timestamp == 0 ) strcpy( timestr, "Never" );
+	  else {
+	    now = (time_t)lst[i].timestamp;
+	    tm = localtime( &now );
+	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+	  }
+
+	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s\n",
+		  "notify",
+		  lst[i].tag, lst[i].hostid, lst[i].hshare, lst[i].seq, lst[i].lastid, timestr );
+        }
+        free( lst );
+        if( n > 0 ) printf( "\n" );
     }
 
 }
@@ -229,5 +269,6 @@ static void cmd_prop( void ) {
      printf( "seq=%"PRIu64"\n", prop.seq );
      printf( "share=%d/%d\n", prop.share_count, prop.share_max );
      printf( "remote=%d/%d\n", prop.remote_count, prop.remote_max );
+     printf( "notify=%d/%d\n", prop.notify_count, prop.notify_max );
 }
 

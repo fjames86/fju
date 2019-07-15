@@ -790,7 +790,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->inc.xdr.count = c->cdata.count;
 
       /* process message and send reply */
-      rpc_log( RPC_LOG_INFO, "Process UDP call" );
+      //rpc_log( RPC_LOG_INFO, "Process UDP call" );
       rpc.flist = rpc.flist->next;
       sts = rpc_process_incoming( &c->inc );
       rpc.flist = c;

@@ -13,6 +13,8 @@
 #include <stdint.h>
 #include <log.h>
 
+#define NLS_MAX_COOKIE 16
+
 /* local log shared over RPC */
 struct nls_share {
     char name[64];
@@ -28,6 +30,15 @@ struct nls_remote {
   uint64_t timestamp;
 };
 
+struct nls_notify {
+  uint64_t tag;
+  uint64_t hostid;
+  uint64_t hshare;
+  uint64_t seq;
+  uint64_t lastid;
+  uint64_t timestamp;
+  uint8_t cookie[NLS_MAX_COOKIE];
+};
 
 struct nls_prop {
     uint32_t version;
@@ -37,6 +48,8 @@ struct nls_prop {
     uint32_t share_count;
     uint32_t remote_max;
     uint32_t remote_count;
+    uint32_t notify_max;
+    uint32_t notify_count;  
 };
 
 int nls_open( void );
@@ -57,6 +70,13 @@ int nls_remote_add( struct nls_remote *entry );
 int nls_remote_rem( uint64_t hshare );
 int nls_remote_set( struct nls_remote *entry );
 int nls_remote_open( struct nls_remote *remote, struct log_s *log );
+
+int nls_notify_list( struct nls_notify *list, int n );
+int nls_notify_by_tag( uint64_t tag, struct nls_notify *notify );
+int nls_notify_by_hshare( uint64_t hostid, uint64_t hshare, struct nls_notify *notify );
+int nls_notify_add( struct nls_notify *entry );
+int nls_notify_rem( uint64_t tag );
+int nls_notify_set( struct nls_notify *entry );
 
 
 #define NLS_RPC_PROG 0x27E1FAEE

@@ -31,6 +31,8 @@ struct nls_header {
     uint32_t share_count;
     uint32_t remote_max;
     uint32_t remote_count;
+    uint32_t notify_max;
+    uint32_t notify_count;
   
     /* header fields */
 };
@@ -40,6 +42,7 @@ struct nls_file {
     struct nls_header header;
     struct nls_share share[NLS_MAX_SHARE];
     struct nls_remote remote[NLS_MAX_REMOTE];
+    struct nls_notify notify[NLS_MAX_NOTIFY];
 };
 
 static struct {
@@ -81,6 +84,8 @@ int nls_open( void ) {
         glob.file->header.share_count = 0;
 	glob.file->header.remote_max = NLS_MAX_REMOTE;
 	glob.file->header.remote_count = 0;
+	glob.file->header.notify_max = NLS_MAX_NOTIFY;
+	glob.file->header.notify_count = 0;	
     } else if( glob.file->header.version != NLS_VERSION ) {
         nls_unlock();
         goto bad;
@@ -112,6 +117,8 @@ int nls_reset( void ) {
     glob.file->header.share_count = 0;
     glob.file->header.remote_max = NLS_MAX_REMOTE;
     glob.file->header.remote_count = 0;
+    glob.file->header.notify_max = NLS_MAX_NOTIFY;
+    glob.file->header.notify_count = 0;    
     nls_unlock();
     return 0;
 }
@@ -125,6 +132,8 @@ int nls_prop( struct nls_prop *prop ) {
     prop->share_count = glob.file->header.share_count;
     prop->remote_max = glob.file->header.remote_max;
     prop->remote_count = glob.file->header.remote_count;
+    prop->notify_max = glob.file->header.notify_max;
+    prop->notify_count = glob.file->header.notify_count;    
     nls_unlock();
     return 0;
 }
@@ -313,5 +322,127 @@ int nls_remote_open( struct nls_remote *remote, struct log_s *log ) {
   return log_open( mmf_default_path( "nls", hostid, name, NULL ), NULL, log );
 }
 
+
+
+/* ------------ notify commands ----------- */
+
+int nls_notify_list( struct nls_notify *rlist, int n ) {
+    int sts, i;
+    if( glob.ocount <= 0 ) return -1;
+    nls_lock();
+    for( i = 0; i < glob.file->header.notify_count; i++ ) {
+         if( i < n ) {
+             rlist[i] = glob.file->notify[i];
+         }
+    }
+    sts = glob.file->header.notify_count;
+    nls_unlock();
+    return sts;
+}
+
+int nls_notify_by_hshare( uint64_t hostid, uint64_t hshare, struct nls_notify *notify ) {
+    int sts, i;
+    if( glob.ocount <= 0 ) return -1;
+    nls_lock();
+    sts = -1;
+    for( i = 0; i < glob.file->header.notify_count; i++ ) {
+        if( glob.file->notify[i].hshare == hshare && glob.file->notify[i].hostid == hostid ) {
+            if( notify ) *notify = glob.file->notify[i];
+            sts = 0;
+            break;
+        }
+    }
+    nls_unlock();
+    return sts;
+}
+
+
+int nls_notify_by_tag( uint64_t tag, struct nls_notify *notify ) {
+    int sts, i;
+    if( glob.ocount <= 0 ) return -1;
+    nls_lock();
+    sts = -1;
+    for( i = 0; i < glob.file->header.notify_count; i++ ) {
+        if( glob.file->notify[i].tag == tag ) {
+            if( notify ) *notify = glob.file->notify[i];
+            sts = 0;
+            break;
+        }
+    }
+    nls_unlock();
+    return sts;
+}
+
+int nls_notify_add( struct nls_notify *entry ) {
+  return nls_notify_set( entry );
+}
+
+int nls_notify_rem( uint64_t tag ) {
+    int sts, i;
+    if( glob.ocount <= 0 ) return -1;
+    nls_lock();
+    sts = -1;
+    for( i = 0; i < glob.file->header.notify_count; i++ ) {
+      if( glob.file->notify[i].tag == tag ) {
+            if( i != (glob.file->header.notify_count - 1) ) glob.file->notify[i] = glob.file->notify[glob.file->header.notify_count - 1];
+            glob.file->header.notify_count--;
+            glob.file->header.seq++;
+            sts = 0;
+            break;
+        }
+    }
+    nls_unlock();
+    return sts;
+}
+
+int nls_notify_set( struct nls_notify *notify ) {
+    int sts, i, oldest;
+    uint64_t age;
+    
+    if( glob.ocount <= 0 ) return -1;
+    nls_lock();
+
+    sts = -1;
+    
+    /* update existing */
+    for( i = 0; i < glob.file->header.notify_count; i++ ) {
+      if( glob.file->notify[i].hostid == notify->hostid &&
+	  glob.file->notify[i].hshare == notify->hshare ) {
+	glob.file->notify[i] = *notify;
+	glob.file->header.seq++;
+	sts = 0;
+	goto done;
+      }
+    }
+
+    /* add new */
+    if( glob.file->header.notify_count == glob.file->header.notify_max ) {
+      /* if out of space evict oldest */
+      oldest = 0;
+      age = 0;
+      for( i = 0; i < glob.file->header.notify_count; i++ ) {
+	if( oldest == 0 || glob.file->notify[i].timestamp < age ) {
+	  age = glob.file->notify[i].timestamp;
+	  oldest = i;
+	}
+      }
+      if( oldest != glob.file->header.notify_count - 1 ) glob.file->notify[oldest] = glob.file->notify[glob.file->header.notify_count - 1];
+      glob.file->header.notify_count--;
+      glob.file->header.seq++;
+    }
+
+    if( glob.file->header.notify_count < glob.file->header.notify_max ) {
+        i = glob.file->header.notify_count;
+	notify->tag = glob.file->header.seq;
+	glob.file->notify[i] = *notify;
+	glob.file->header.notify_count++;
+	glob.file->header.seq++;
+	sts = 0;
+    }
+    
+ done:
+    nls_unlock();
+    return sts;
+}
 
 

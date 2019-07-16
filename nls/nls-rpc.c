@@ -232,7 +232,12 @@ static int nls_proc_write( struct rpc_inc *inc ) {
   struct log_prop prop;
   struct log_entry e;
   struct log_iov iov[1];
-   
+
+  /* only allow authenticated clients */
+  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
+      return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  }
+  
   sts = xdr_decode_uint64( &inc->xdr, &hshare );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
@@ -528,8 +533,10 @@ static int nls_proc_notify( struct rpc_inc *inc ) {
   /* issue async call to read missing log entries */
   nls_call_read( hostid, hshare, seq, remote.lastid, 32*1024 );
 
+  sts = 0;
  done:
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
   rpc_complete_accept_reply( inc, handle );
 
   return 0;
@@ -652,56 +659,71 @@ static uint64_t nls_remote_seqno( uint64_t hshare, uint64_t *lastid ) {
   return seq;  
 }
 
+struct nls_notify_cxt {
+    uint64_t hostid;
+    uint64_t hshare;
+    uint64_t tag;
+};
+
+static void nls_notify_cb( struct xdr_s *xdr, void *cxt ) {
+    int sts, b;
+    struct nls_notify_cxt *ncxt = (struct nls_notify_cxt *)cxt;
+    
+    if( !xdr ) goto done;
+
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) goto done;
+    if( !b ) {
+	/* doesn't want notifications for this hshare */
+	rpc_log( RPC_LOG_DEBUG, "Deleting notification context hostid=%"PRIx64" hshare=%"PRIx64"", ncxt->hostid, ncxt->hshare );
+	
+	nls_notify_rem( ncxt->tag );
+    }
+    
+done:
+    free( ncxt );
+    return;
+}
+
 /* send a notification callback to client */
 static void nls_call_notify( struct nls_notify *notify ) {
-  int handle, sts;
-  struct hostreg_host host;
-  struct rpc_conn *conn;
-  struct rpc_listen *listen;
-  struct rpc_inc inc;
+  int sts;
+  struct hrauth_call hcall;
+  struct xdr_s xdr;
+  uint8_t xdr_buf[64];
   struct hostreg_prop prop;
-  struct sockaddr_in sin;
+  struct nls_notify_cxt *ncxt;
   
+  rpc_log( RPC_LOG_DEBUG, "nls_call_notify hostid=%"PRIx64" hshare=%"PRIx64"", notify->hostid, notify->hshare );
+
   sts = hostreg_prop( &prop );
   if( sts ) return;
-  
-  /* lookup host */
-  sts = hostreg_host_by_id( notify->hostid, &host );
-  if( sts ) return;
 
-  /* get listen descriptor */
-  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
-  if( !listen ) return;
+  ncxt = malloc( sizeof(*ncxt) );
+  ncxt->hostid = notify->hostid;
+  ncxt->hshare = notify->hshare;
+  ncxt->tag = notify->tag;
   
-  /* prepare message */
-  conn = rpc_conn_acquire();
-  if( !conn ) return;
-
-  /* encode message */
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, conn->buf, conn->count );
-  
-  rpc_init_call( &inc, NLS_RPC_PROG, NLS_RPC_VERS, 6, &handle );
+  hcall.hostid = notify->hostid;
+  hcall.prog = NLS_RPC_PROG;
+  hcall.vers = NLS_RPC_VERS;
+  hcall.proc = 6;
+  hcall.donecb = nls_notify_cb;
+  hcall.cxt = ncxt;
+  hcall.timeout = glob.prop.rpc_timeout;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &inc.xdr, prop.localid );
   xdr_encode_uint64( &inc.xdr, notify->hshare );
   xdr_encode_uint64( &inc.xdr, notify->seq );
   xdr_encode_uint64( &inc.xdr, notify->lastid );
   xdr_encode_fixed( &inc.xdr, notify->cookie, NLS_MAX_COOKIE );
-  rpc_complete_call( &inc, handle );
-  
-  /* send */
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = listen->addr.sin.sin_port;
-  sin.sin_addr.s_addr = host.addr[0];
-  sts = sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0,
-	  (struct sockaddr *)&sin, sizeof(sin) );
-  if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
-  
-  rpc_conn_release( conn );
-
-  /* we don't expect a reply */
-  return;
+  sts = hrauth_call_udp( &hcall, &xdr );
+  if( sts ) {
+    rpc_log( RPC_LOG_ERROR, "nls_call_notify: hrauth_call failed" );
+    free( ncxt );
+  }
+    
 }
 
 /*

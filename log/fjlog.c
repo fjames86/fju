@@ -328,7 +328,7 @@ static void cmd_write( void ) {
 #ifdef WIN32
 	{
 		int b;
-		b = ReadFile( GetStdHandle( STD_INPUT_HANDLE ), buf + offset, msglen - offset, &sts, NULL );
+		b = ReadFile( GetStdHandle( STD_INPUT_HANDLE ), buf + offset, msglen - offset, (DWORD *)&sts, NULL );
 		if( !b ) sts = -1;
 	}
 #else

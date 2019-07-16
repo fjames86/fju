@@ -25,8 +25,7 @@
 #include "hrauth.h"
 #include <mmf.h>
 #include <sec.h>
-#include <sec.h>
-
+#include <rpcd.h>
 
 static int hrauth_common( uint64_t remoteid, uint8_t *common ) {
   int sts;
@@ -637,3 +636,104 @@ void hrauth_register( void ) {
   rpc_provider_register( hrauth_provider() );
   rpc_program_register( &hrauth_prog );
 }
+
+/* ---------- simple hrauth client ---------------- */
+
+static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
+  int sts;
+  struct hrauth_call *hcallp = (struct hrauth_call *)w->cxt;
+
+  if( !hcallp->donecb ) goto done;
+
+  /* check for timeout */
+  if( !inc ) {
+    rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: XID=%u timeout", w->xid );
+    hcallp->donecb( NULL, hcallp->cxt );
+    goto done;
+  }
+
+  /* process msg */
+  sts = rpc_process_reply( inc );
+  if( sts ) {
+    rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: failed processing reply" );
+    hcallp->donecb( NULL, hcallp->cxt );
+    goto done;
+  }
+
+  /* invoke callback */
+  rpc_log( RPC_LOG_DEBUG, "hrauth_call_cb %"PRIx64" %u:%u:%u XID=%u XDR=%u/%u",
+	   hcallp->hostid, hcallp->prog, hcallp->vers, hcallp->proc,
+	   w->xid, inc->xdr.offset, inc->xdr.count );
+  
+  hcallp->donecb( &inc->xdr, hcallp->cxt );
+  
+ done:
+  free( w->pcxt );   /* free auth context */
+  free( w );         /* free waiter */
+}
+
+int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
+  int sts, handle;
+  struct rpc_waiter *w;
+  struct hostreg_host host;
+  struct rpc_conn *conn;
+  struct rpc_listen *listen;
+  struct rpc_inc inc;
+  struct sockaddr_in sin;
+  struct hrauth_context *hcxt;
+  struct hrauth_call *hcallp;
+
+  /* lookup host */
+  sts = hostreg_host_by_id( hcall->hostid, &host );
+  if( sts ) return -1;
+
+  /* get listen descriptor */
+  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+  if( !listen ) return -1;
+  
+  /* prepare message */
+  conn = rpc_conn_acquire();
+  if( !conn ) return -1;
+
+  memset( &inc, 0, sizeof(inc) );
+  xdr_init( &inc.xdr, conn->buf, conn->count );
+  inc.pvr = hrauth_provider();
+
+  /* prepare auth context */
+  hcxt = malloc( sizeof(*hcxt) );
+  sts = hrauth_init( hcxt, hcall->hostid );
+  inc.pcxt = hcxt;
+  
+  rpc_init_call( &inc, hcall->prog, hcall->vers, hcall->proc, &handle );
+  xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+  rpc_complete_call( &inc, handle );
+
+  /* send */
+  memset( &sin, 0, sizeof(sin) );
+  sin.sin_family = AF_INET;
+  sin.sin_port = listen->addr.sin.sin_port;
+  sin.sin_addr.s_addr = host.addr[0];
+  sts = sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0,
+	  (struct sockaddr *)&sin, sizeof(sin) );
+  if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
+  
+  rpc_conn_release( conn );
+
+  rpc_log( RPC_LOG_DEBUG, "hrauth_call_udp %"PRIx64" %u:%u:%u XID=%u",
+	   hcall->hostid, hcall->prog, hcall->vers, hcall->proc, inc.msg.xid );
+  
+
+  /* await reply */
+  w = malloc( sizeof(*w) + sizeof(*hcallp) );
+  hcallp = (struct hrauth_call *)(((char *)w) + sizeof(*w));
+  *hcallp = *hcall;
+  memset( w, 0, sizeof(*w) );
+  w->xid = inc.msg.xid;
+  w->timeout = rpc_now() + hcall->timeout;
+  w->cb = hrauth_call_cb;
+  w->cxt = hcallp;
+  rpc_await_reply( w );
+
+  return 0;  
+}
+

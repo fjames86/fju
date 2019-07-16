@@ -86,5 +86,16 @@ struct rpc_provider *hrauth_provider( void );
 int hrauth_priv_header( struct hrauth_context *sa, struct xdr_s *xdr, int start, int end );
 void hrauth_register( void );
 
+struct hrauth_call {
+  uint64_t hostid;
+  uint32_t prog;
+  uint32_t vers;
+  uint32_t proc;
+  void (*donecb)( struct xdr_s *res, void *cxt );
+  void *cxt;
+  int timeout;
+};
+int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args );
+
 #endif
 

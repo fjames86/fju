@@ -1189,6 +1189,8 @@ int rpc_waiter_invoke( uint32_t xid, struct rpc_inc *inc ) {
       else waiter_list = w->next;
 
       /* invoke callback and return */
+      inc->pvr = w->pvr;
+      inc->pcxt = w->pcxt;
       w->cb( w, inc );
       return 0;
     }

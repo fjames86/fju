@@ -653,8 +653,6 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   }
 
   /* process msg */
-  inc->pvr = w->pvr;
-  inc->pcxt = w->pcxt;
   sts = rpc_process_reply( inc );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );

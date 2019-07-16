@@ -21,6 +21,11 @@ processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 HICON fjlogui_icon(void);
 
+#define CMD_QUIT 1
+#define CMD_OPEN 2 
+#define CMD_ABOUT 3
+#define CMD_CLOSE 4
+
 #endif
 
 

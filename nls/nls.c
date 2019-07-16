@@ -18,6 +18,7 @@
 
 #ifdef WIN32
 #define PRIu64 "llu"
+#define PRIx64 "llx"
 #endif
 
 struct nls_header {

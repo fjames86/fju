@@ -143,14 +143,16 @@ static int nls_proc_read( struct rpc_inc *inc ) {
   struct rpc_conn *tmpconn = NULL;
   uint64_t id;
   int ne, eof = 0;
-  uint32_t count;
+  uint32_t xdrcount, xdrlen;
   
   sts = xdr_decode_uint64( &inc->xdr, &hshare );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &id );
-  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &count );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &xdrcount );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  rpc_log( RPC_LOG_DEBUG, "proc_read: hshare=%"PRIx64" id=%"PRIx64" count=%u", hshare, id, count );
+  rpc_log( RPC_LOG_DEBUG, "proc_read: hshare=%"PRIx64" id=%"PRIx64" xdrcount=%u", hshare, id, xdrcount );
+  if( xdrcount > 32*1024 ) xdrcount = 32*1024;
+  if( xdrcount < 1024 ) xdrcount = 1024;
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
@@ -180,7 +182,8 @@ static int nls_proc_read( struct rpc_inc *inc ) {
   }
 
   /* read and encode entries */
-  while( count > 0 ) {
+  xdrcount -= 4; /* reserve space for terminating bool */
+  while( inc->xdr.offset < xdrcount ) {
     memset( &entry, 0, sizeof(entry) );
     iov[0].buf = (char *)tmpconn->buf;
     iov[0].len = tmpconn->count;
@@ -192,6 +195,10 @@ static int nls_proc_read( struct rpc_inc *inc ) {
       break;
     }
 
+    /* check this entry will fit in requested xdr buffer */
+    xdrlen = 4 + 8 + 8 + 8 + 4 + 4 + entry.iov[0].len;
+    if( inc->xdr.offset + xdrlen > xdrcount ) break;
+    
     /* encode entry */
     sts = xdr_encode_boolean( &inc->xdr, 1 );
     sts = xdr_encode_uint64( &inc->xdr, entry.id );
@@ -201,7 +208,6 @@ static int nls_proc_read( struct rpc_inc *inc ) {
     sts = xdr_encode_opaque( &inc->xdr, (uint8_t *)entry.iov[0].buf, entry.iov[0].len );
     
     id = entry.id;
-    count--;
   }
   xdr_encode_boolean( &inc->xdr, 0 );
   
@@ -301,7 +307,7 @@ static int nls_proc_notreg( struct rpc_inc *inc ) {
 
 
 
-static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint64_t lastid, int count );
+static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint64_t lastid, int xdrcount );
 struct nls_read_cxt {
   uint64_t hostid;
   uint64_t hshare;
@@ -407,7 +413,7 @@ static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   }
 
   nlscxtp->lastid = lastid;
-  nls_call_read( nlscxtp->hostid, nlscxtp->hshare, nlscxtp->seq, nlscxtp->lastid, 16 );
+  nls_call_read( nlscxtp->hostid, nlscxtp->hshare, nlscxtp->seq, nlscxtp->lastid, 32*1024 );
   
  done:
   if( logopen ) log_close( &log );
@@ -415,7 +421,7 @@ static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
 }
 
 /* send a read command to server */
-static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint64_t lastid, int count ) {
+static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint64_t lastid, int xdrcount ) {
   int sts;
   struct rpc_waiter *w;
   struct hostreg_host host;
@@ -425,11 +431,12 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   int handle;
   struct nls_read_cxt *nlscxtp;
   struct sockaddr_in sin;
-  
-  if( count > 16 ) count = 16;
 
-  rpc_log( RPC_LOG_DEBUG, "nls_call_read hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" count=%u",
-	   hostid, hshare, seq, lastid, count );
+  if( xdrcount > 32*1024 ) xdrcount = 32*1024;
+  if( xdrcount < 1024 ) xdrcount = 1024;
+
+  rpc_log( RPC_LOG_DEBUG, "nls_call_read hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" xdrcount=%u",
+	   hostid, hshare, seq, lastid, xdrcount );
   
   /* lookup host */
   sts = hostreg_host_by_id( hostid, &host );
@@ -450,7 +457,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   rpc_init_call( &inc, NLS_RPC_PROG, NLS_RPC_VERS, 3, &handle );
   xdr_encode_uint64( &inc.xdr, hshare );
   xdr_encode_uint64( &inc.xdr, lastid );
-  xdr_encode_uint32( &inc.xdr, count );
+  xdr_encode_uint32( &inc.xdr, xdrcount );
   rpc_complete_call( &inc, handle );
   
   /* send */
@@ -577,7 +584,7 @@ static int nls_proc_notify( struct rpc_inc *inc ) {
   if( remote.seq == seq ) goto done;
 
   /* issue async call to read missing log entries */
-  nls_call_read( hostid, hshare, seq, remote.lastid, seq - remote.seq );
+  nls_call_read( hostid, hshare, seq, remote.lastid, 32*1024 );
 
  done:
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -626,7 +633,7 @@ static void nls_clt_iter_cb( struct rpc_iterator *iter ) {
   for( i = 0; i < n; i++ ) {
     if( (remote[i].timestamp == 0) || (remote[i].timestamp > now) ) {
       /* ask for some entries */
-      nls_call_read( remote[i].hostid, remote[i].hshare, remote[i].seq, remote[i].lastid, 16 );
+      nls_call_read( remote[i].hostid, remote[i].hshare, remote[i].seq, remote[i].lastid, 32*1024 );
       
       /* ask for a callback */
       rpc_log( RPC_LOG_DEBUG, "nls_clt_iter_cb nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", remote[i].hostid, remote[i].hshare );

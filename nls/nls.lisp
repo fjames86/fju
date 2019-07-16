@@ -65,8 +65,8 @@
   read-arg
   read-res)
 
-(defun call-read (client hshare id &optional (count 1))
-  (%call-read client (list hshare id count)))
+(defun call-read (client hshare id &optional xdrcount)
+  (%call-read client (list hshare id (or xdrcount (* 32 1024)))))
 
 
 (drx:defxstruct write-arg ((:mode :list))

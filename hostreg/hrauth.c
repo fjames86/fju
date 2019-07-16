@@ -657,16 +657,12 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   inc->pcxt = w->pcxt;
   sts = rpc_process_reply( inc );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: failed processing reply" );
+    rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }
 
   /* invoke callback */
-  rpc_log( RPC_LOG_DEBUG, "hrauth_call_cb %"PRIx64" %u:%u:%u XID=%u XDR=%u/%u",
-	   hcallp->hostid, hcallp->prog, hcallp->vers, hcallp->proc,
-	   w->xid, inc->xdr.offset, inc->xdr.count );
-  
   hcallp->donecb( &inc->xdr, hcallp->cxt );
   
  done:
@@ -704,6 +700,7 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
   /* prepare auth context */
   hcxt = malloc( sizeof(*hcxt) );
   sts = hrauth_init( hcxt, hcall->hostid );
+  hcxt->service = hcall->service;
   inc.pcxt = hcxt;
   
   rpc_init_call( &inc, hcall->prog, hcall->vers, hcall->proc, &handle );
@@ -720,10 +717,6 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
   if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
   
   rpc_conn_release( conn );
-
-  rpc_log( RPC_LOG_DEBUG, "hrauth_call_udp %"PRIx64" %u:%u:%u XID=%u",
-	   hcall->hostid, hcall->prog, hcall->vers, hcall->proc, inc.msg.xid );
-  
 
   /* await reply */
   w = malloc( sizeof(*w) + sizeof(*hcallp) );

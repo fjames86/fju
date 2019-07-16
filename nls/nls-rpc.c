@@ -425,7 +425,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   struct nls_read_cxt *nlscxtp;
   struct hrauth_call hcall;
   struct xdr_s xdr;
-  uint8_t xdr_buf[16];
+  uint8_t xdr_buf[32];
   
   rpc_log( RPC_LOG_DEBUG, "nls_call_read hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" xdrcount=%u",
 	   hostid, hshare, seq, lastid, xdrcount );
@@ -443,7 +443,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   hcall.donecb = nls_read_cb;
   hcall.cxt = nlscxtp;
   hcall.timeout = glob.prop.rpc_timeout;
-
+  hcall.service = HRAUTH_SERVICE_PRIV;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &xdr, hshare );
   xdr_encode_uint64( &xdr, lastid );
@@ -456,75 +456,48 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
 
 }
 
-static void nls_call_notreg_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
-  if( !inc ) {
+static void nls_call_notreg_cb( struct xdr_s *xdr, void *cxt ) {
+  if( !xdr ) {
     rpc_log( RPC_LOG_ERROR, "nls_call_notreg_cb: timeout" );
     goto done;
   }
 
  done:
-  free( w );
+  return;
 }
 
 /* send a read command to server */
-static void nls_call_notreg( uint64_t hostid, uint64_t hshare ) {
+static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep ) {
   int sts;
-  struct hostreg_host host;
-  struct rpc_conn *conn;
-  struct rpc_listen *listen;
-  struct rpc_inc inc;
-  int handle;
-  struct hostreg_prop prop;
-  struct rpc_waiter *w;
-  struct sockaddr_in sin;
+  struct hrauth_call hcall;
+  struct xdr_s xdr;
   uint8_t cookie[NLS_MAX_COOKIE];
+  uint8_t xdr_buf[64];
+  struct hostreg_prop prop;
   
+  rpc_log( RPC_LOG_DEBUG, "nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", hostid, hshare );
+
   sts = hostreg_prop( &prop );
   if( sts ) return;
-  
-  /* lookup host */
-  sts = hostreg_host_by_id( hostid, &host );
-  if( sts ) return;
-
-  /* get listen descriptor */
-  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
-  if( !listen ) return;
-  
-  /* prepare message */
-  conn = rpc_conn_acquire();
-  if( !conn ) return;
-
-  /* encode message */
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, conn->buf, conn->count );
 
   memset( cookie, 0, sizeof(cookie) );
   
-  rpc_init_call( &inc, NLS_RPC_PROG, NLS_RPC_VERS, 5, &handle );
-  xdr_encode_uint64( &inc.xdr, prop.localid );
-  xdr_encode_uint64( &inc.xdr, hshare );
-  xdr_encode_fixed( &inc.xdr, cookie, NLS_MAX_COOKIE );
-  rpc_complete_call( &inc, handle );
-  
-  /* send */
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = listen->addr.sin.sin_port;
-  sin.sin_addr.s_addr = host.addr[0];
-  sts = sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0,
-		(struct sockaddr *)&sin, sizeof(sin) );
-  if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
-  
-  rpc_conn_release( conn );
-
-  /* await reply */
-  w = malloc( sizeof(*w) );
-  memset( w, 0, sizeof(*w) );
-  w->xid = inc.msg.xid;
-  w->timeout = rpc_now() + glob.prop.rpc_timeout;
-  w->cb = nls_call_notreg_cb;
-  rpc_await_reply( w );
-
+  hcall.hostid = hostid;
+  hcall.prog = NLS_RPC_PROG;
+  hcall.vers = NLS_RPC_VERS;
+  hcall.proc = 5;
+  hcall.donecb = nls_call_notreg_cb;
+  hcall.cxt = NULL;
+  hcall.timeout = glob.prop.rpc_timeout;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
+  xdr_encode_uint64( &xdr, prop.localid );
+  xdr_encode_uint64( &xdr, hshare );
+  xdr_encode_fixed( &xdr, cookiep ? cookiep : cookie, NLS_MAX_COOKIE );
+  sts = hrauth_call_udp( &hcall, &xdr );
+  if( sts ) {
+    rpc_log( RPC_LOG_ERROR, "nls_call_notreg: hrauth_call failed" );
+  }
 }
 
 /* 
@@ -606,7 +579,7 @@ static void nls_clt_iter_cb( struct rpc_iterator *iter ) {
       
       /* ask for a callback */
       rpc_log( RPC_LOG_DEBUG, "nls_clt_iter_cb nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", remote[i].hostid, remote[i].hshare );
-      nls_call_notreg( remote[i].hostid, remote[i].hshare );
+      nls_call_notreg( remote[i].hostid, remote[i].hshare, NULL );
       
       /* schedule to ask again later */
       remote[i].timestamp = now + glob.prop.poll_timeout;

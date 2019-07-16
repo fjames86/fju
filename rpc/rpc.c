@@ -568,7 +568,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     
   switch( inc->msg.tag ) {
   case RPC_CALL:
-    rpc_log( RPC_LOG_INFO, "CALL %d:%d:%d", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc );
+    rpc_log( RPC_LOG_INFO, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
 
     /* lookup function */
     sts = rpc_program_find( inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,
@@ -603,8 +603,6 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     /* authenticate */
     inc->pvr = rpc_provider_by_flavour( inc->msg.u.call.auth.flavour );
     if( inc->pvr ) {
-      rpc_log( RPC_LOG_INFO, "AUTH %d", inc->msg.u.call.auth.flavour );
-    
       sts = inc->pvr->sauth( inc->pvr, &inc->msg, &inc->pcxt );
       if( sts ) {
 	rpc_init_reject_reply( inc, inc->msg.xid, sts < 0 ? RPC_AUTH_ERROR_TOOWEAK : sts );

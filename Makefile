@@ -15,7 +15,7 @@ all:
 	cd dh && $(MAKE) -f Makefile.bsd all && cp ecdh ../bin 
 	cd log && $(MAKE) -f Makefile.bsd all && cp fjlog ../bin 
 	cd lht && $(MAKE) -f Makefile.bsd all && cp lht ../bin 
-	cd hostreg && $(MAKE) -f Makefile.bsd libhostreg.a 
+	cd hostreg && $(MAKE) -f Makefile.bsd libhostreg.a libhrauth.a 
 	cd raft && $(MAKE) -f Makefile.bsd libraft.a
 	cd nls && $(MAKE) -f Makefile libnls.a  
 	cd rpc && $(MAKE) -f Makefile.bsd all && cp rpcd rpcinfo ../bin

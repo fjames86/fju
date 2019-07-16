@@ -94,6 +94,7 @@ struct hrauth_call {
   void (*donecb)( struct xdr_s *res, void *cxt );
   void *cxt;
   int timeout;
+  int service;
 };
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args );
 

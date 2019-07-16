@@ -643,9 +643,6 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 
 int rpc_process_reply( struct rpc_inc *inc ) {
   int sts;
-  
-  sts = rpc_decode_msg( &inc->xdr, &inc->msg );
-  if( sts ) return sts;
 
   if( inc->msg.tag != RPC_REPLY ) return -1;
   if( inc->msg.u.reply.tag != RPC_MSG_ACCEPT ) return -1;
@@ -1015,6 +1012,8 @@ int rpcbind_call_dump( struct sockaddr_in *addr, struct rpcbind_mapping *mlist, 
     
   sts = rpc_call_tcp( &inc );
   if( sts ) goto done;
+
+  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
   
   sts = rpc_process_reply( &inc );
   if( sts ) goto done;

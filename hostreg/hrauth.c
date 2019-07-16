@@ -653,6 +653,8 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   }
 
   /* process msg */
+  inc->pvr = w->pvr;
+  inc->pcxt = w->pcxt;
   sts = rpc_process_reply( inc );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: failed processing reply" );
@@ -732,6 +734,8 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
   w->timeout = rpc_now() + hcall->timeout;
   w->cb = hrauth_call_cb;
   w->cxt = hcallp;
+  w->pvr = hrauth_provider();
+  w->pcxt = hcxt;
   rpc_await_reply( w );
 
   return 0;  

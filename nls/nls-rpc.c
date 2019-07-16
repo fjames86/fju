@@ -13,6 +13,7 @@
 #include <rpcd.h>
 #include <sys/stat.h>
 #include <hostreg.h>
+#include <hrauth.h>
 
 #include "nls-private.h"
 
@@ -315,7 +316,7 @@ struct nls_read_cxt {
   uint64_t lastid;
 };
 
-static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
+static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   int sts, b;
   struct log_s log;
   uint64_t id, lastid, previd, seq;
@@ -324,29 +325,27 @@ static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   int lenp;
   struct log_entry e;
   struct log_iov iov[1];
-  struct nls_read_cxt *nlscxtp;
+  struct nls_read_cxt *nlscxtp = (struct nls_read_cxt *)cxt;
   int logopen = 0;
   struct nls_remote remote;
   struct nls_share rshare;
   struct log_prop prop;
   int nmsgs = 0, eof;
   
-  nlscxtp = (struct nls_read_cxt *)w->cxt;
-  
   /* do nothing if call timed out? */
-  if( !inc ) {
+  if( !xdr ) {
     rpc_log( RPC_LOG_ERROR, "nls_read_cb timeout" );
     goto done;
   }
 
   /* decode results */
-  sts = xdr_decode_boolean( &inc->xdr, &b );
+  sts = xdr_decode_boolean( xdr, &b );
   if( sts || !b ) {
     rpc_log( RPC_LOG_ERROR, "error stauts" );
     goto done;
   }
 
-  sts = nls_decode_prop( &inc->xdr, &rshare, &prop );
+  sts = nls_decode_prop( xdr, &rshare, &prop );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "nls_decode_prop failed" );
     goto done;
@@ -368,14 +367,14 @@ static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   }
   logopen = 1;
   
-  sts = xdr_decode_boolean( &inc->xdr, &b );
+  sts = xdr_decode_boolean( xdr, &b );
   if( sts ) goto done;
   while( b ) {
-    sts = xdr_decode_uint64( &inc->xdr, &id );
-    if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &previd );
-    if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
-    if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
-    if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+    sts = xdr_decode_uint64( xdr, &id );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &previd );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &seq );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
+    if( !sts ) sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
     if( sts ) {
       rpc_log( RPC_LOG_ERROR, "Failed to decode" );
       goto done;
@@ -392,10 +391,10 @@ static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
     lastid = id;
     nmsgs++;
     
-    sts = xdr_decode_boolean( &inc->xdr, &b );
+    sts = xdr_decode_boolean( xdr, &b );
     if( sts ) goto done;
   }
-  sts = xdr_decode_boolean( &inc->xdr, &eof );
+  sts = xdr_decode_boolean( xdr, &eof );
   
   /* update remote descriptor */
   sts = nls_remote_by_hshare( rshare.hshare, &remote );
@@ -417,74 +416,44 @@ static void nls_read_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   
  done:
   if( logopen ) log_close( &log );
-  free( w );
+  free( cxt );
 }
 
 /* send a read command to server */
 static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint64_t lastid, int xdrcount ) {
   int sts;
-  struct rpc_waiter *w;
-  struct hostreg_host host;
-  struct rpc_conn *conn;
-  struct rpc_listen *listen;
-  struct rpc_inc inc;
-  int handle;
   struct nls_read_cxt *nlscxtp;
-  struct sockaddr_in sin;
-
-  if( xdrcount > 32*1024 ) xdrcount = 32*1024;
-  if( xdrcount < 1024 ) xdrcount = 1024;
-
+  struct hrauth_call hcall;
+  struct xdr_s xdr;
+  uint8_t xdr_buf[16];
+  
   rpc_log( RPC_LOG_DEBUG, "nls_call_read hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" xdrcount=%u",
 	   hostid, hshare, seq, lastid, xdrcount );
-  
-  /* lookup host */
-  sts = hostreg_host_by_id( hostid, &host );
-  if( sts ) return;
 
-  /* get listen descriptor */
-  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
-  if( !listen ) return;
-  
-  /* prepare message */
-  conn = rpc_conn_acquire();
-  if( !conn ) return;
-
-  /* encode message */
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, conn->buf, conn->count );
-  
-  rpc_init_call( &inc, NLS_RPC_PROG, NLS_RPC_VERS, 3, &handle );
-  xdr_encode_uint64( &inc.xdr, hshare );
-  xdr_encode_uint64( &inc.xdr, lastid );
-  xdr_encode_uint32( &inc.xdr, xdrcount );
-  rpc_complete_call( &inc, handle );
-  
-  /* send */
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = listen->addr.sin.sin_port;
-  sin.sin_addr.s_addr = host.addr[0];
-  sts = sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0,
-	  (struct sockaddr *)&sin, sizeof(sin) );
-  if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
-  
-  rpc_conn_release( conn );
-
-  /* await reply */
-  w = malloc( sizeof(*w) + sizeof(struct nls_read_cxt) );
-  nlscxtp = (struct nls_read_cxt *)(((char *)w) + sizeof(*w));
+  nlscxtp = malloc( sizeof(*nlscxtp) );
   nlscxtp->hostid = hostid;
   nlscxtp->hshare = hshare;
   nlscxtp->lastid = lastid;
   nlscxtp->seq = seq;
-  
-  memset( w, 0, sizeof(*w) );
-  w->xid = inc.msg.xid;
-  w->timeout = rpc_now() + glob.prop.rpc_timeout;
-  w->cb = nls_read_cb;
-  w->cxt = nlscxtp;
-  rpc_await_reply( w );
+
+  hcall.hostid = hostid;
+  hcall.prog = NLS_RPC_PROG;
+  hcall.vers = NLS_RPC_VERS;
+  hcall.proc = 3;
+  hcall.donecb = nls_read_cb;
+  hcall.cxt = nlscxtp;
+  hcall.timeout = glob.prop.rpc_timeout;
+
+  xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
+  xdr_encode_uint64( &xdr, hshare );
+  xdr_encode_uint64( &xdr, lastid );
+  xdr_encode_uint32( &xdr, xdrcount );  
+  sts = hrauth_call_udp( &hcall, &xdr );
+  if( sts ) {
+    free( nlscxtp );
+    rpc_log( RPC_LOG_ERROR, "nls_call_read: hrauth_call failed" );
+  }
+
 }
 
 static void nls_call_notreg_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {

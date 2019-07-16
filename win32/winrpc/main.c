@@ -306,6 +306,7 @@ static void winrpc_service( void ) {
 
 		memset( &inc, 0, sizeof(inc) );
 		xdr_init( &inc.xdr, winrpc.buf, sts );
+		sts = rpc_decode_msg( &inc.xdr, &inc.msg );		
 		sts = rpc_process_reply( &inc );
 		if( sts ) return;
 

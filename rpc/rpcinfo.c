@@ -238,6 +238,8 @@ int main( int argc, char **argv ) {
     printf( "Failed to call\n" );
     exit( 1 );
   }
+    
+  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
 
   sts = rpc_process_reply( &inc );
   if( sts ) {

@@ -397,6 +397,8 @@ static void cmd_call( uint32_t addr, int port ) {
     mynet_ntop( addr, addrstr );
     usage( "Failed to call addr=%s port=%d", addrstr, port );
   }
+  
+  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
 
   sts = rpc_process_reply( &inc );
   if( sts ) usage( "Failed to receive reply" );

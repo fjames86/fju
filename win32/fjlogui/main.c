@@ -162,6 +162,8 @@ static void main_create( HWND hwnd ) {
 	ListView_InsertColumn(h, 3, &lvc );
 
 	SetTimer( hwnd, &glob.htimer, 1000, 0 );
+
+	DragAcceptFiles( hwnd, TRUE );
 }
 
 static void add_log_entry( struct log_entry *entry ) {

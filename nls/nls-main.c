@@ -219,7 +219,7 @@ static void cmd_list( void ) {
         m = nls_share_list( lst, n );
         if( m < n ) n = m;
         for( i = 0; i < n; i++ ) {
-            printf( "%-16s %-8"PRIx64" name=%s\n", "share", lst[i].hshare, lst[i].name );
+	  printf( "%-16s %-8"PRIx64" name=%s path=/etc/nls/%"PRIx64".log\n", "share", lst[i].hshare, lst[i].name, lst[i].hshare );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );
@@ -242,9 +242,9 @@ static void cmd_list( void ) {
 	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
 	    
-	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s\n",
+	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/etc/nls/%"PRIx64"/%"PRIx64".log\n",
 		  "remote",
-		  lst[i].hshare, lst[i].name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr );
+		  lst[i].hshare, lst[i].name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr, lst[i].hostid, lst[i].hshare );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );

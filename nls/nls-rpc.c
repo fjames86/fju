@@ -441,6 +441,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   nlscxtp->lastid = lastid;
   nlscxtp->seq = seq;
 
+  memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
   hcall.prog = NLS_RPC_PROG;
   hcall.vers = NLS_RPC_VERS;
@@ -449,6 +450,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   hcall.cxt = nlscxtp;
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
+  hcall.retry = 2;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &xdr, hshare );
   xdr_encode_uint64( &xdr, lastid );
@@ -486,7 +488,8 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   if( sts ) return;
 
   memset( cookie, 0, sizeof(cookie) );
-  
+
+  memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
   hcall.prog = NLS_RPC_PROG;
   hcall.vers = NLS_RPC_VERS;
@@ -495,6 +498,7 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   hcall.cxt = NULL;
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
+  hcall.retry = 2;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &xdr, prop.localid );
   xdr_encode_uint64( &xdr, hshare );
@@ -580,7 +584,7 @@ static void nls_clt_iter_cb( struct rpc_iterator *iter ) {
   now = time( NULL );
   n = nls_remote_list( remote, NLS_MAX_REMOTE );
   for( i = 0; i < n; i++ ) {
-    if( (remote[i].timestamp == 0) || (remote[i].timestamp > now) ) {
+    if( (remote[i].timestamp == 0) || (remote[i].timestamp < now) ) {
       /* ask for some entries */
       nls_call_read( remote[i].hostid, remote[i].hshare, remote[i].seq, remote[i].lastid, 32*1024 );
       
@@ -703,7 +707,8 @@ static void nls_call_notify( struct nls_notify *notify ) {
   ncxt->hostid = notify->hostid;
   ncxt->hshare = notify->hshare;
   ncxt->tag = notify->tag;
-  
+
+  memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = notify->hostid;
   hcall.prog = NLS_RPC_PROG;
   hcall.vers = NLS_RPC_VERS;
@@ -712,6 +717,7 @@ static void nls_call_notify( struct nls_notify *notify ) {
   hcall.cxt = ncxt;
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
+  hcall.retry = 2;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &xdr, prop.localid );
   xdr_encode_uint64( &xdr, notify->hshare );

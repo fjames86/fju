@@ -32,7 +32,7 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
   }
 
-  printf( "lht [-p path] [get KEY [-b] | rem KEY | put KEY | reset ]\n"
+  printf( "lht [-p path] [get KEY [-b] | rem KEY | put KEY | reset | prop ]\n"
 	  "\n" );
   exit( 0 );
 }
@@ -124,7 +124,8 @@ int main( int argc, char **argv ) {
       if( mem > 1024 ) {
 	mem /= 1024;
 	unit = "M";
-      }      
+      }
+      printf( "Path: %s\n", glob.filepath );
       printf( "LHT EntryCount %d/%d (%d%%) MemCount %d%s (%d bytes)\n",
 	      glob.lht.count, glob.lht.nbuckets, (100 * glob.lht.count) / glob.lht.nbuckets,
 	      mem, unit, glob.lht.memcount );

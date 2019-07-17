@@ -639,15 +639,31 @@ void hrauth_register( void ) {
 
 /* ---------- simple hrauth client ---------------- */
 
+struct hrauth_call_cxt {
+  struct hrauth_call hcall;
+  struct xdr_s args;
+};
+
 static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   int sts;
-  struct hrauth_call *hcallp = (struct hrauth_call *)w->cxt;
+  struct hrauth_call_cxt *cxt;
+  struct hrauth_call *hcallp;
 
+  cxt = (struct hrauth_call_cxt *)w->cxt;
+  hcallp = &cxt->hcall;
+  
   if( !hcallp->donecb ) goto done;
 
   /* check for timeout */
   if( !inc ) {
     rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: XID=%u timeout", w->xid );
+    hcallp->retry--;
+    hcallp->timeout = (3 * hcallp->timeout) / 2;
+    if( hcallp->retry > 0 ) {
+      hrauth_call_udp( hcallp, &cxt->args );
+      goto done;
+    }
+    
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }
@@ -677,8 +693,13 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
   struct rpc_inc inc;
   struct sockaddr_in sin;
   struct hrauth_context *hcxt;
-  struct hrauth_call *hcallp;
+  struct hrauth_call_cxt *hcallp;
 
+  if( hcall->retry < 1 ) {
+    rpc_log( RPC_LOG_DEBUG, "rerey=%d", hcall->retry );
+    hcall->retry = 1;
+  }
+  
   /* lookup host */
   sts = hostreg_host_by_id( hcall->hostid, &host );
   if( sts ) return -1;
@@ -716,10 +737,14 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
   
   rpc_conn_release( conn );
 
-  /* await reply */
-  w = malloc( sizeof(*w) + sizeof(*hcallp) );
-  hcallp = (struct hrauth_call *)(((char *)w) + sizeof(*w));
-  *hcallp = *hcall;
+  /* await reply - copy args so we can resend on failure */
+  w = malloc( sizeof(*w) + sizeof(*hcallp) + args->offset );
+  hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w));
+  hcallp->hcall = *hcall;
+  xdr_init( &hcallp->args, (uint8_t *)(((char *)hcallp) + sizeof(*hcallp)), args->offset );
+  memcpy( hcallp->args.buf, args->buf, args->offset );
+  hcallp->args.offset = args->offset;
+  
   memset( w, 0, sizeof(*w) );
   w->xid = inc.msg.xid;
   w->timeout = rpc_now() + hcall->timeout;

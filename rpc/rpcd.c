@@ -992,6 +992,14 @@ failure:
 	return -1;
 }
 
+int rpc_send( struct rpc_conn *c, int count ) {
+  c->cstate = RPC_CSTATE_SENDLEN;
+  c->nstate = RPC_NSTATE_SEND;
+  c->cdata.count = count;
+  c->cdata.offset = 0;
+  return 0;
+}
+
 struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type ) {
   int i;
   for( i = 0; i < rpc.nlisten; i++ ) {

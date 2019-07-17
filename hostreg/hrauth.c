@@ -732,3 +732,144 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
   return 0;  
 }
 
+/* ------ an equivalent for TCP is MUCH harder. ------ */
+
+struct hrauth_tcp_cxt {
+  struct hrauth_call hcall;
+  struct rpc_conn *conn;
+  int early_close;
+  struct hrauth_context hcxt;
+  struct rpc_waiter waiter;
+  struct xdr_s args;
+};
+
+static void call_tcp_waiter_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
+  int sts;
+  struct hrauth_tcp_cxt *cxt = (struct hrauth_tcp_cxt *)w->cxt;
+  
+  if( !cxt->hcall.donecb ) goto done;
+
+  /* check for timeout */
+  if( !inc ) {
+    rpc_log( RPC_LOG_ERROR, "hrauth_call_tcp: XID=%u timeout", w->xid );
+    cxt->hcall.donecb( NULL, cxt->hcall.cxt );
+    goto done;
+  }
+
+  /* process msg */
+  sts = rpc_process_reply( inc );
+  if( sts ) {
+    rpc_log( RPC_LOG_ERROR, "hrauth_call_tcp: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
+    cxt->hcall.donecb( NULL, cxt->hcall.cxt );
+    goto done;
+  }
+
+  /* invoke completion callback */
+  cxt->hcall.donecb( &inc->xdr, cxt->hcall.cxt );
+  
+ done:
+  cxt->conn->cstate = RPC_CSTATE_CLOSE;
+  free( cxt );       /* free call context */
+}
+
+static void call_tcp_cb( struct rpc_conn *c ) {
+  int sts, handle;
+  struct rpc_inc inc;
+  struct hrauth_tcp_cxt *cxt = (struct hrauth_tcp_cxt *)c->cdata.cxt;
+  struct rpc_waiter *w;
+  struct hrauth_context *hcxt;
+  
+  switch( c->cstate ) {
+  case RPC_CSTATE_CLOSE:
+    /* connection closing - free context if required */
+    if( cxt->early_close ) {
+      if( cxt->hcall.donecb ) cxt->hcall.donecb( NULL, cxt->hcall.cxt );
+      free( cxt );
+    }
+    break;
+  case RPC_CSTATE_RECVLEN:
+    /* connection completed - ready to send */
+    cxt->conn = c;
+    
+    /* fill buffer with call xdr */
+    memset( &inc, 0, sizeof(inc) );
+    xdr_init( &inc.xdr, c->buf, c->count );
+
+    /* prepare auth context */
+    hcxt = &cxt->hcxt;
+    sts = hrauth_init( hcxt, cxt->hcall.hostid );
+    hcxt->service = cxt->hcall.service;
+    inc.pvr = hrauth_provider();
+    inc.pcxt = hcxt;
+
+    /* prepare call xdr */
+    rpc_init_call( &inc, cxt->hcall.prog, cxt->hcall.vers, cxt->hcall.proc, &handle );
+    xdr_encode_fixed( &inc.xdr, cxt->args.buf, cxt->args.offset );
+    rpc_complete_call( &inc, handle );
+    
+    /* set state to send */
+    rpc_send( c, inc.xdr.offset );
+
+    /* await reply. once we issue this the waiter is responsible for cleanup */
+    cxt->early_close = 0;
+    
+    w = &cxt->waiter;
+    memset( w, 0, sizeof(*w) );
+    w->xid = inc.msg.xid;
+    w->timeout = rpc_now() + cxt->hcall.timeout;
+    w->cb = call_tcp_waiter_cb;
+    w->cxt = cxt;
+    w->pvr = hrauth_provider();
+    w->pcxt = hcxt;
+    rpc_await_reply( w );
+  
+    break;
+  default:
+    break;
+  }
+
+  return;
+}
+
+int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args ) {
+  int sts;
+  struct hrauth_tcp_cxt *cxt;
+  struct hostreg_host host;
+  struct sockaddr_in sin;
+  struct rpc_listen *listen;
+  
+  /* lookup host */
+  sts = hostreg_host_by_id( hcall->hostid, &host );
+  if( sts ) return -1;
+
+  /* get listen descriptor (for dest port) */
+  listen = rpcd_listen_by_type( RPC_LISTEN_TCP );
+  if( !listen ) return -1;
+
+  /* allocate context state, allowing space for arg xdr */
+  cxt = malloc( sizeof(*cxt) + args->offset );
+  memset( cxt, 0, sizeof(*cxt) );
+  cxt->hcall = *hcall;
+
+  /* set flag to ensure cleanup if connection closes before we can make the rpc call */
+  cxt->early_close = 1;
+
+  /* copy arg xdr */
+  xdr_init( &cxt->args, (uint8_t *)(((char *)cxt) + sizeof(*cxt)), args->offset );
+  memcpy( cxt->args.buf, args->buf, args->offset );
+  cxt->args.offset = args->offset;
+  
+  /* issue connection command and await connection completion */
+  memset( &sin, 0, sizeof(sin) );
+  sin.sin_family = AF_INET;
+  sin.sin_port = listen->addr.sin.sin_port;
+  sin.sin_addr.s_addr = host.addr[0];
+  
+  sts = rpc_connect( (struct sockaddr *)&sin, sizeof(sin), call_tcp_cb, cxt );
+  if( sts ) goto done;
+
+  sts = 0;
+ done:
+  if( sts ) free( cxt );
+  return sts;
+}

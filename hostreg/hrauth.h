@@ -97,6 +97,7 @@ struct hrauth_call {
   int service;
 };
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args );
+int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args );
 
 #endif
 

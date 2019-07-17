@@ -33,6 +33,17 @@ static void usage( char *fmt, ... ) {
   }
 
   printf( "lht [-p path] [get KEY [-b] | rem KEY | put KEY | reset | prop ]\n"
+	  "\n"
+	  "Commands:\n"
+	  "    get KEY          Lookup and print value for a given key.\n"
+	  "    rem KEY          Remove entry for a given key.\n"
+	  "    put KEY          Set an entry for a given key. Read data from stdin.\n"
+	  "    reset            Reset the backing data by rewriting commands. Used to free up storage.\n"
+	  "    prop             Print backing data properties."
+	  "\n" 
+	  "Options:\n"
+	  "    -p path          Set path to lht data file\n"
+	  "    -b               Print raw contents. Default prints a hexdump.\n"
 	  "\n" );
   exit( 0 );
 }
@@ -87,7 +98,7 @@ int main( int argc, char **argv ) {
     } else usage( NULL );
   }
   
-  if( !glob.filepath ) glob.filepath = "lht.dat";
+  if( !glob.filepath ) glob.filepath = mmf_default_path( "lht.dat", NULL );
 
   sts = lht_open( glob.filepath, &glob.lht );
   if( sts ) usage( "Failed to open" );

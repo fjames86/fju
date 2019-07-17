@@ -713,11 +713,11 @@ static void nls_call_notify( struct nls_notify *notify ) {
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
-  xdr_encode_uint64( &inc.xdr, prop.localid );
-  xdr_encode_uint64( &inc.xdr, notify->hshare );
-  xdr_encode_uint64( &inc.xdr, notify->seq );
-  xdr_encode_uint64( &inc.xdr, notify->lastid );
-  xdr_encode_fixed( &inc.xdr, notify->cookie, NLS_MAX_COOKIE );
+  xdr_encode_uint64( &xdr, prop.localid );
+  xdr_encode_uint64( &xdr, notify->hshare );
+  xdr_encode_uint64( &xdr, notify->seq );
+  xdr_encode_uint64( &xdr, notify->lastid );
+  xdr_encode_fixed( &xdr, notify->cookie, NLS_MAX_COOKIE );
   sts = hrauth_call_udp( &hcall, &xdr );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "nls_call_notify: hrauth_call failed" );

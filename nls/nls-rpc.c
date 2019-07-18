@@ -463,17 +463,39 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
 
 }
 
+struct nls_notreg_cxt {
+  uint64_t hostid;
+  uint64_t hshare;
+};
+
 static void nls_call_notreg_cb( struct xdr_s *xdr, void *cxt ) {
+  int sts;
+  uint64_t seq;
+  struct nls_remote remote;
+  struct nls_notreg_cxt *ncxt = (struct nls_notreg_cxt *)cxt;
+  
   if( !xdr ) {
     rpc_log( RPC_LOG_ERROR, "nls_call_notreg_cb: timeout" );
     goto done;
   }
 
+  sts = xdr_decode_uint64( xdr, &seq );
+  if( sts ) goto done;
+
+  /* compare seq against expected seq */
+  sts = nls_remote_by_hshare( ncxt->hshare, &remote );
+  if( sts ) goto done;
+
+  if( remote.seq != seq ) {
+    nls_call_read( remote.hostid, remote.hshare, remote.seq, remote.lastid, 32*1024 );
+  }
+  
  done:
+  free( ncxt );
   return;
 }
 
-/* send a read command to server */
+/* send a notification register command to server */
 static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep ) {
   int sts;
   struct hrauth_call hcall;
@@ -481,6 +503,7 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   uint8_t cookie[NLS_MAX_COOKIE];
   uint8_t xdr_buf[64];
   struct hostreg_prop prop;
+  struct nls_notreg_cxt *ncxt;
   
   rpc_log( RPC_LOG_DEBUG, "nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", hostid, hshare );
 
@@ -489,6 +512,10 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
 
   memset( cookie, 0, sizeof(cookie) );
 
+  ncxt = malloc( sizeof(*ncxt) );
+  ncxt->hostid = hostid;
+  ncxt->hshare = hshare;
+  
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
   hcall.prog = NLS_RPC_PROG;
@@ -585,9 +612,6 @@ static void nls_clt_iter_cb( struct rpc_iterator *iter ) {
   n = nls_remote_list( remote, NLS_MAX_REMOTE );
   for( i = 0; i < n; i++ ) {
     if( (remote[i].timestamp == 0) || (remote[i].timestamp < now) ) {
-      /* ask for some entries */
-      nls_call_read( remote[i].hostid, remote[i].hshare, remote[i].seq, remote[i].lastid, 32*1024 );
-      
       /* ask for a callback */
       rpc_log( RPC_LOG_DEBUG, "nls_clt_iter_cb nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", remote[i].hostid, remote[i].hshare );
       nls_call_notreg( remote[i].hostid, remote[i].hshare, NULL );

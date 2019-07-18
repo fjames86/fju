@@ -39,7 +39,8 @@ static struct {
 	int no_rpcregister;
 	int quiet;
 	volatile int exiting;
-
+	char *pidfile;
+  
 	struct rpc_listen listen[RPC_MAX_LISTEN];   /* listening fds */
 	int nlisten;
 
@@ -104,7 +105,10 @@ static void usage( char *fmt, ... ) {
 		"            -L path          Listen on AF_UNIX socket file\n"
 #endif
 		"            -R               Don't register with rpcbind service.\n"
-		"            -q               Quiet. Don't log to stdout\n" 
+		"            -q               Quiet. Don't log to stdout\n"
+#ifndef WIN32
+		"            -p pidfile       Write a pidfile here\n"
+#endif
 		"\n" );
 
 
@@ -187,6 +191,10 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 	        	rpc.no_rpcregister = 1;
 		} else if( strcmp( argv[i], "-q" ) == 0 ) {
 	        	rpc.quiet = 1;			
+		} else if( strcmp( argv[i], "-p" ) == 0 ) {
+			i++;
+			if( i >= argc ) usage( NULL );
+			rpc.pidfile = argv[i];
 		}
 		else usage( NULL );
 
@@ -204,7 +212,7 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 		svctab[0].lpServiceProc = rpcd_svc;
 		StartServiceCtrlDispatcherA( svctab );
 		return 0;
-#else
+#else		
 		pid_t pid = fork();
 		if( pid < 0 ) exit( 1 );
 		if( pid != 0 ) exit( 0 );
@@ -220,6 +228,18 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 		close( STDIN_FILENO ); open( "/dev/null", O_RDONLY );
 		close( STDOUT_FILENO ); open( "/dev/null", O_WRONLY );
 		close( STDERR_FILENO ); open( "/dev/null", O_WRONLY );
+
+		/* write pid file */
+		if( rpc.pidfile ) {
+		  int pidfd;
+		  char pidstr[64];
+		  pidfd = open( rpc.pidfile, O_RDWR|O_CREAT, 0600 );
+		  if( pidfd != -1 ) {
+		    sprintf( pidstr, "%d", getpid() );
+		    write( pidfd, pidstr, strlen( pidstr ) + 1 );
+		    close( pidfd );
+		  }
+		}
 #endif
 	} else if( !rpc.quiet ) {
 	  /* if running in foreground and not quiet, add default stdout logger */
@@ -241,6 +261,13 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 #endif
 
 	rpcd_run();
+
+
+#ifndef WIN32
+	if( rpc.pidfile ) {
+	  unlink( rpc.pidfile );
+	}
+#endif
 	
 	return 0;
 }

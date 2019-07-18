@@ -15,14 +15,14 @@
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
-	    "          set prop [rpc=RPC] [poll=POLL]\n"
+	    "          set prop [rpc=RPC] [notreg=NOTREG] [notify=NOTIFY]\n"
 	    "\n" 
             "          add share [name=NAME] [hshare=HSHARE] \n"
             "          set share HSHARE [name=NAME]\n"
             "          rem share HSHARE\n"
 	    "\n" 
-            "          add remote [name=NAME] [hshare=HSHARE] [hostid=HOSTID]\n"
-            "          set remote HSHARE [name=NAME] [hostid=HOSTID]\n"
+            "          add remote [name=NAME] [hshare=HSHARE] [hostid=HOSTID] [remote_period=PERIOD]\n"
+            "          set remote HSHARE [name=NAME] [hostid=HOSTID] [remote_period=PERIOD]\n"
             "          rem remote HSHARE\n"
 	    "\n"
             "          rem notify TAG\n"
@@ -109,6 +109,8 @@ int main( int argc, char **argv ) {
 		     if( argval ) entry.lastid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "seq" ) == 0 ) {
 		     if( argval ) entry.seq = strtoull( argval, NULL, 10 );
+		 } else if( strcmp( argname, "notify_period" ) == 0 ) {
+		     if( argval ) entry.notify_period = strtoul( argval, NULL, 10 );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
 	    }
@@ -184,6 +186,8 @@ int main( int argc, char **argv ) {
                       if( argval ) entry.lastid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "seq" ) == 0 ) {
                       if( argval ) entry.seq = strtoull( argval, NULL, 10 );
+		 } else if( strcmp( argname, "notify_period" ) == 0 ) {
+                      if( argval ) entry.notify_period = strtoul( argval, NULL, 10 );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
@@ -196,8 +200,10 @@ int main( int argc, char **argv ) {
                  argval_split( argv[i], argname, &argval );
                  if( strcmp( argname, "rpc" ) == 0 ) {
 		     if( argval ) nls_set_rpc_timeout( strtoull( argval, NULL, 10 ) );
-		 } else if( strcmp( argname, "poll" ) == 0 ) {
-		     if( argval ) nls_set_poll_timeout( strtoull( argval, NULL, 10 ) );
+		 } else if( strcmp( argname, "notreg" ) == 0 ) {
+		     if( argval ) nls_set_notreg_period( strtoul( argval, NULL, 10 ) );
+		 } else if( strcmp( argname, "notify" ) == 0 ) {
+		     if( argval ) nls_set_notify_period( strtoul( argval, NULL, 10 ) );		     
                  } else { printf( "Unknown property name %s\n", argname ); usage( NULL ); }
                  i++;
             }
@@ -226,7 +232,7 @@ static void cmd_list( void ) {
     }
     {
         struct nls_remote *lst;
-	char timestr[64];
+	char timestr[64], lastcstr[64];
 	struct tm *tm;
   	time_t now;
 	
@@ -241,10 +247,16 @@ static void cmd_list( void ) {
 	    tm = localtime( &now );
 	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
+	  if( lst[i].last_contact == 0 ) strcpy( lastcstr, "Never" );
+	  else {
+	    now = (time_t)lst[i].last_contact;
+	    tm = localtime( &now );
+	    strftime( lastcstr, sizeof(lastcstr), "%Y-%m-%d %H:%M:%S", tm );
+	  }
 	    
-	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/etc/nls/%"PRIx64"/%"PRIx64".log\n",
+	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/etc/nls/%"PRIx64"/%"PRIx64".log notify_period=%us last_contact=%s\n",
 		  "remote",
-		  lst[i].hshare, lst[i].name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr, lst[i].hostid, lst[i].hshare );
+		  lst[i].hshare, lst[i].name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr, lst[i].hostid, lst[i].hshare, lst[i].notify_period, lastcstr );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );
@@ -267,9 +279,9 @@ static void cmd_list( void ) {
 	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
 
-	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s\n",
+	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s period=%u\n",
 		  "notify",
-		  lst[i].tag, lst[i].hostid, lst[i].hshare, lst[i].seq, lst[i].lastid, timestr );
+		  lst[i].tag, lst[i].hostid, lst[i].hshare, lst[i].seq, lst[i].lastid, timestr, lst[i].period );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );
@@ -280,7 +292,7 @@ static void cmd_list( void ) {
 static void cmd_prop( void ) {
      struct nls_prop prop;
      nls_prop( &prop );
-     printf( "seq=%"PRIu64" rpc=%ums poll=%us\n", prop.seq, prop.rpc_timeout, prop.poll_timeout );
+     printf( "seq=%"PRIu64" rpc=%ums notreg_period=%us notify_period=%us\n", prop.seq, prop.rpc_timeout, prop.notreg_period, prop.notify_period );
      printf( "share=%d/%d\n", prop.share_count, prop.share_max );
      printf( "remote=%d/%d\n", prop.remote_count, prop.remote_max );
      printf( "notify=%d/%d\n", prop.notify_count, prop.notify_max );

@@ -7,7 +7,8 @@ all:
 	cd dh && $(MAKE) -f Makefile.bsd clean 
 	cd log && $(MAKE) -f Makefile.bsd clean
 	cd lht && $(MAKE) -f Makefile.bsd clean
-	cd hostreg && $(MAKE) -f Makefile.bsd clean 
+	cd hostreg && $(MAKE) -f Makefile.bsd clean
+	cd nls && $(MAKE) -f Makefile clean
 	cd raft && $(MAKE) -f Makefile.bsd clean 
 	cd rpc && $(MAKE) -f Makefile.bsd clean 
 	cd mmf && $(MAKE) -f Makefile.bsd all 
@@ -22,7 +23,7 @@ all:
 	cd raft && $(MAKE) -f Makefile.bsd all && cp raft ../bin
 	cd nls && $(MAKE) -f Makefile nls && cp nls ../bin 
 	cd hostreg && $(MAKE) -f Makefile.bsd all && cp hostreg ../bin 
-	scp bin/* root@169.254.54.129:~/bin 
+	scp rpcd.sh bin/* root@169.254.54.129:~/bin 
 
 
 

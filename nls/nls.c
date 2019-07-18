@@ -36,8 +36,9 @@ struct nls_header {
     uint32_t notify_count;
   
     /* header fields */
-    uint32_t poll_timeout;
     uint32_t rpc_timeout;
+    uint32_t notreg_period;
+    uint32_t notify_period;
 };
 
 
@@ -90,7 +91,8 @@ int nls_open( void ) {
 	glob.file->header.notify_max = NLS_MAX_NOTIFY;
 	glob.file->header.notify_count = 0;
 	glob.file->header.rpc_timeout = NLS_RPC_TIMEOUT;
-	glob.file->header.poll_timeout = NLS_POLL_TIMEOUT;
+	glob.file->header.notreg_period = NLS_NOTREG_PERIOD;
+	glob.file->header.notify_period = NLS_NOTIFY_PERIOD;
     } else if( glob.file->header.version != NLS_VERSION ) {
         nls_unlock();
         goto bad;
@@ -140,7 +142,8 @@ int nls_prop( struct nls_prop *prop ) {
     prop->notify_max = glob.file->header.notify_max;
     prop->notify_count = glob.file->header.notify_count;
     prop->rpc_timeout = glob.file->header.rpc_timeout;
-    prop->poll_timeout = glob.file->header.poll_timeout;
+    prop->notreg_period = glob.file->header.notreg_period;
+    prop->notify_period = glob.file->header.notify_period;
     nls_unlock();
     return 0;
 }
@@ -152,10 +155,19 @@ int nls_set_rpc_timeout( uint32_t timeout ) {
     nls_unlock();
     return 0;  
 }
-int nls_set_poll_timeout( uint32_t timeout ) {
+int nls_set_notreg_period( uint32_t timeout ) {
     if( glob.ocount <= 0 ) return -1;
+    if( timeout <= 0 ) return -1;
     nls_lock();
-    glob.file->header.poll_timeout = timeout;
+    glob.file->header.notreg_period = timeout;
+    nls_unlock();
+    return 0;    
+}
+int nls_set_notify_period( uint32_t timeout ) {
+    if( glob.ocount <= 0 ) return -1;
+    if( timeout <= 0 ) return -1;
+    nls_lock();
+    glob.file->header.notify_period = timeout;
     nls_unlock();
     return 0;    
 }
@@ -287,11 +299,12 @@ int nls_remote_add( struct nls_remote *remote ) {
     int sts, i;
     if( glob.ocount <= 0 ) return -1;
     if( !remote->hshare ) return -1;
-    
+
     nls_lock();
     sts = -1;
     if( glob.file->header.remote_count < glob.file->header.remote_max ) {
         i = glob.file->header.remote_count;
+	if( !remote->notify_period ) remote->notify_period = glob.file->header.notify_period;
         glob.file->remote[i] = *remote;
         glob.file->header.remote_count++;
         glob.file->header.seq++;

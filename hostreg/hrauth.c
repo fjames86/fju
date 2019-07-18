@@ -685,11 +685,26 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
 }
 
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
+	struct rpc_conn *conn;
+	int sts;
+	struct xdr_s tmpbuf;
+
+	conn = rpc_conn_acquire();
+	if( !conn ) return -1;
+
+	xdr_init( &tmpbuf, conn->buf, conn->count );
+	sts = hrauth_call_udp2( hcall, args, NULL, &tmpbuf );
+
+	rpc_conn_release( conn );
+
+	return sts;
+}
+
+int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct rpc_listen *listen, struct xdr_s *tmpbuf ) {
   int sts, handle;
   struct rpc_waiter *w;
   struct hostreg_host host;
-  struct rpc_conn *conn;
-  struct rpc_listen *listen;
+  struct rpc_listen *listenp;
   struct rpc_inc inc;
   struct sockaddr_in sin;
   struct hrauth_context *hcxt;
@@ -705,15 +720,15 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
   if( sts ) return -1;
 
   /* get listen descriptor */
-  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
-  if( !listen ) return -1;
+  if( listen ) listenp = listen;
+  else {
+	listenp = rpcd_listen_by_type( RPC_LISTEN_UDP );
+	if( !listenp ) return -1;
+  }
   
   /* prepare message */
-  conn = rpc_conn_acquire();
-  if( !conn ) return -1;
-
   memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, conn->buf, conn->count );
+  xdr_init( &inc.xdr, tmpbuf->buf, tmpbuf->count );
   inc.pvr = hrauth_provider();
 
   /* prepare auth context */
@@ -729,13 +744,11 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
   /* send */
   memset( &sin, 0, sizeof(sin) );
   sin.sin_family = AF_INET;
-  sin.sin_port = listen->addr.sin.sin_port;
+  sin.sin_port = listenp->addr.sin.sin_port;
   sin.sin_addr.s_addr = host.addr[0];
-  sts = sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0,
+  sts = sendto( listenp->fd, inc.xdr.buf, inc.xdr.offset, 0,
 	  (struct sockaddr *)&sin, sizeof(sin) );
   if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
-  
-  rpc_conn_release( conn );
 
   /* await reply - copy args so we can resend on failure */
   w = malloc( sizeof(*w) + sizeof(*hcallp) + args->offset );

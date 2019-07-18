@@ -27,6 +27,7 @@
 #define HRAUTH_H
 
 #include <rpc.h>
+#include <rpcd.h>
 
 #define RPC_AUTH_HRAUTH 0x27E1DAF0
 #define HRAUTH_PROGRAM  0x27E1FAF0

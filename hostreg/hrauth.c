@@ -660,7 +660,11 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
     hcallp->retry--;
     hcallp->timeout = (3 * hcallp->timeout) / 2;
     if( hcallp->retry > 0 ) {
-      hrauth_call_udp( hcallp, &cxt->args );
+      sts = hrauth_call_udp2( hcallp, &cxt->args, NULL );
+	  if( sts ) {
+		  hcallp->donecb( NULL, hcallp->cxt );
+		  hcallp->retry = 0;
+	  }
       goto done;
     }
     
@@ -703,7 +707,7 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   int fd;
 #endif
   struct xdr_s tmpbuf;
-  struct rpc_conn *conn;
+  struct rpc_conn *conn = NULL;
   int port;
   
   if( hcall->retry < 1 ) {
@@ -763,7 +767,7 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   sin.sin_family = AF_INET;
   sin.sin_port = htons( port );
   sin.sin_addr.s_addr = host.addr[0]; /* always use first address? */
-  sts = sendto( listenp->fd, inc.xdr.buf, inc.xdr.offset, 0,
+  sts = sendto( fd, inc.xdr.buf, inc.xdr.offset, 0,
 	  (struct sockaddr *)&sin, sizeof(sin) );
   if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
 
@@ -785,10 +789,8 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   rpc_await_reply( w );
 
   /* cleanup */
-  if( opts && opts->mask & HRAUTH_CALL_OPT_TMPBUF ) {
-  } else {
-    rpc_conn_release( conn );
-  }
+  if( conn ) rpc_conn_release( conn );
+  
   
   
   return 0;  

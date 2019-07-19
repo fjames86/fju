@@ -31,6 +31,7 @@ static struct {
 	uint64_t hostid;
 	uint64_t hshare;
 	int port;
+	HANDLE evts[1];
 } glob;
 
 static LRESULT CALLBACK main_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
@@ -44,7 +45,6 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	WNDCLASSEXW cls;
 	HWND h;
 	WSADATA wsadata;
-	HANDLE evts[1];
 	INITCOMMONCONTROLSEX icex;
 	struct sockaddr_in sin;
 
@@ -80,13 +80,15 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	memset( &sin,0,sizeof( sin ) );
 	sin.sin_family = AF_INET;
 	bind( glob.fd, (struct sockaddr *)&sin, sizeof(sin) );
-	evts[0] = WSACreateEvent();
-	WSAEventSelect( glob.fd, evts[0], FD_READ );
+	glob.evts[0] = WSACreateEvent();
+	WSAEventSelect( glob.fd, glob.evts[0], FD_READ );
 
 	/* Message loop */
 	do {
+		WSAEventSelect( glob.fd, glob.evts[0], FD_READ );
+
 		//sts = WaitMessage();
-		sts = MsgWaitForMultipleObjects( 1, evts, FALSE, 500, QS_ALLINPUT );
+		sts = MsgWaitForMultipleObjects( 1, glob.evts, FALSE, 500, QS_ALLINPUT );
 		if( sts == (WAIT_OBJECT_0 + 1) ) {
 			/* Normal window message */
 			do {
@@ -113,7 +115,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	} while( !glob.exiting );
 
-	WSACloseEvent( evts[0] );
+	WSACloseEvent( glob.evts[0] );
 
 	return 0;
 }
@@ -122,14 +124,21 @@ static void main_service_networking( void ) {
 	int sts,len;
 	struct sockaddr_in sin;
 	struct rpc_inc inc;
+	WSANETWORKEVENTS events;
 
-	len = sizeof( sin );
-	sts = recvfrom( glob.fd, glob.buf, sizeof(glob.buf), 0, (struct sockaddr *)&sin, &len );
-	if( sts < 0 ) return;
+	WSAEnumNetworkEvents( glob.fd, glob.evts[0], &events );
 
-	memset( &inc, 0, sizeof(inc) );
-	xdr_init( &inc.xdr,glob.buf,sts );
-	sts = rpc_process_incoming( &inc );
+	if( events.lNetworkEvents & FD_READ ) {
+		len = sizeof( sin );
+		sts = recvfrom( glob.fd, glob.buf, sizeof(glob.buf), 0, (struct sockaddr *)&sin, &len );
+		if( sts < 0 ) {
+			return;
+		}
+
+		memset( &inc, 0, sizeof(inc) );
+		xdr_init( &inc.xdr,glob.buf,sts );
+		sts = rpc_process_incoming( &inc );
+	}
 
 }
 
@@ -241,8 +250,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   struct hrauth_call hcall;
   struct xdr_s xdr;
   uint8_t xdr_buf[32];
-  struct rpc_listen listen;
-  struct xdr_s tmpbuf;
+  struct hrauth_call_opts opts;
 
   nlscxtp = malloc( sizeof(*nlscxtp) );
   nlscxtp->hostid = hostid;
@@ -270,7 +278,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   opts.fd = glob.fd;  
   xdr_init( &opts.tmpbuf, glob.buf, sizeof(glob.buf) );
   opts.port = glob.port;
-  sts = hrauth_call_udp2( &hcall, &xdr, &listen, &tmpbuf );
+  sts = hrauth_call_udp2( &hcall, &xdr, &opts );
   if( sts ) {
     free( nlscxtp );
   }
@@ -495,26 +503,38 @@ static int call_list_shares( uint64_t hostid, int port, struct nls_share *share,
   copts.timeout = 1000;
   copts.fd = glob.fd;
   sts = rpc_call_udp2( &inc, &copts );
-  if( sts ) goto done;
+  if( sts ) {
+	  goto done;
+  }
 
   sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-  if(sts) goto done;
+  if(sts) {
+	  goto done;
+  }
 
   sts = rpc_process_reply( &inc );
-  if( sts ) goto done;
+  if( sts ) {
+	  goto done;
+  }
   
   /* decode result from xdr */
   sts = xdr_decode_boolean( &inc.xdr, &b );
-  if( sts ) goto done;
+  if( sts ) {
+	  goto done;
+  }
   i = 0;
   while( b ) {
     sts = nls_decode_prop( &inc.xdr, &tmpshare, &prop );
-	if( sts ) goto done;
+	if( sts ) {
+		goto done;
+	}
 	if( i < n ) {
 		share[i] = tmpshare;
 	}
 	sts = xdr_decode_boolean( &inc.xdr, &b );
-	if( sts ) goto done;
+	if( sts ) {
+		goto done;
+	}
 	i++;
   }
   sts = i;

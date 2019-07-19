@@ -838,7 +838,6 @@ int rpcbind_register( void ) {
 
 /* ----------------------------------------------------------------- */
 
-
 int rpc_call_udp( struct rpc_inc *inc ) {
 	return rpc_call_udp2( inc, NULL );
 }

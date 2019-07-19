@@ -26,10 +26,9 @@ int hlc_prop( struct hlc_s *hlc, struct hlc_prop *prop ) {
 }
 
 struct hlc_hdr {
-  uint64_t hash;
-  uint64_t prevhash;
+  hlc_hash_t prevhash;
 
-  uint32_t spare[12];
+  uint32_t spare[11];
 };
 
 int hlc_read( struct hlc_s *hlc, uint64_t id, struct hlc_entry *elist, int n, int *nelist ) {
@@ -55,8 +54,8 @@ int hlc_read( struct hlc_s *hlc, uint64_t id, struct hlc_entry *elist, int n, in
     if( sts || ne == 0 ) break;
 
     elist[i].id = entry.id;
-    elist[i].hash = hdr.hash;
-    elist[i].prevhash = hdr.prevhash;
+    elist[i].seq = entry.seq;
+    memcpy( elist[i].prevhash, hdr.prevhash, sizeof(hlc_hash_t) );
     if( elist[i].buf == NULL ) elist[i].len = entry.msglen - sizeof(hdr);
     else elist[i].len = iov[1].len;
     
@@ -69,17 +68,16 @@ int hlc_read( struct hlc_s *hlc, uint64_t id, struct hlc_entry *elist, int n, in
   return 0;
 }
 
-static uint64_t hlc_hash( struct hlc_entry *entry ) {
-  uint8_t hash[SEC_SHA1_MAX_HASH];
-  struct sec_buf iov[2];
+static void hlc_hash( hlc_hash_t prevhash, struct hlc_entry *entry ) {
+  struct sec_buf iov[3];
   
   iov[0].buf = (char *)&entry->prevhash;
   iov[0].len = sizeof(entry->prevhash);
-  iov[1].buf = entry->buf;
-  iov[1].len = entry->len;
-  sha1( hash, iov, 2 );
-  entry->hash = *((uint64_t *)hash);  
-  return entry->hash;
+  iov[1].buf = (char *)&entry->seq;
+  iov[1].len = sizeof(entry->seq);
+  iov[2].buf = entry->buf;
+  iov[2].len = entry->len;
+  sha1( prevhash, iov, 3 );
 }
 
 int hlc_write( struct hlc_s *hlc, struct hlc_entry *entry ) {
@@ -97,11 +95,12 @@ int hlc_write( struct hlc_s *hlc, struct hlc_entry *entry ) {
   iov[1].buf = NULL;
   iov[1].len = 0;
   sts = log_read_end( &hlc->log, 0, &e, 1, &ne );
-    
-  hdr.prevhash = hdr.hash;
-  entry->prevhash = hdr.hash;
-  hdr.hash = hlc_hash( entry );
-  
+
+  /* get previous hash and compute this entry's hash */
+  memcpy( entry->prevhash, hdr.prevhash, sizeof(hlc_hash_t) );
+  hlc_hash( hdr.prevhash, entry );
+
+  /* write entry */
   memset( &e, 0, sizeof(e) );
   e.iov = iov;
   e.niov = 2;

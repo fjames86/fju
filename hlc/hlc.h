@@ -13,10 +13,12 @@ struct hlc_s {
   struct log_s log;
 };
 
+typedef uint8_t hlc_hash_t[20];
+
 struct hlc_entry {
   uint64_t id;
-  uint64_t prevhash; 
-  uint64_t hash;
+  uint64_t seq;
+  hlc_hash_t prevhash;
   char *buf;
   int len;
 };

@@ -68,17 +68,27 @@ int main( int argc, char **argv ) {
   return 0;
 }
 
+static char *hash_str( hlc_hash_t hash, char *str ) {
+    int i;
+    strcpy( str, "" );
+    for( i = 0; i < sizeof(hlc_hash_t); i++ ) {
+	sprintf( str + strlen( str ), "%02x", hash[i] );
+    }
+    return str;
+}
+
 static void cmd_list( void ) {
   int sts, ne;
   struct hlc_entry entry;
   char *buf;
   int buflen;
   uint64_t id;
+  char hashstr[64];
   
   buflen = 32*1024;
   buf = malloc( buflen );
   
-  printf( "%-16s %-16s %-16s %-8s\n", "ID", "Hash", "PrevHash", "Len" );
+  printf( "%-16s %-16s %-16s %-8s\n", "ID", "Seq", "PrevHash", "Len" );
   
   id = 0;
   do {
@@ -89,7 +99,11 @@ static void cmd_list( void ) {
     sts = hlc_read( &glob.hlc, id, &entry, 1, &ne );
     if( sts || ne == 0 ) break;
 
-    printf( "%-16"PRIx64" %-16"PRIx64" %-16"PRIx64" %-8u\n", entry.id, entry.hash, entry.prevhash, entry.len );
+    printf( "%-16"PRIx64" %-16"PRIx64" %-16s %-8u\n",
+	    entry.id,
+	    entry.seq,
+	    hash_str( entry.prevhash, hashstr ),
+	    entry.len );
     
     id = entry.id;
   } while( 1 );

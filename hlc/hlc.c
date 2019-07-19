@@ -68,7 +68,7 @@ int hlc_read( struct hlc_s *hlc, uint64_t id, struct hlc_entry *elist, int n, in
   return 0;
 }
 
-static void hlc_hash( hlc_hash_t prevhash, struct hlc_entry *entry ) {
+static void hlc_hash( hlc_hash_t hash, struct hlc_entry *entry ) {
   struct sec_buf iov[3];
   
   iov[0].buf = (char *)&entry->prevhash;
@@ -77,7 +77,38 @@ static void hlc_hash( hlc_hash_t prevhash, struct hlc_entry *entry ) {
   iov[1].len = sizeof(entry->seq);
   iov[2].buf = entry->buf;
   iov[2].len = entry->len;
-  sha1( prevhash, iov, 3 );
+  sha1( hash, iov, 3 );
+}
+
+int hash_entry_hash( struct hlc_s *hlc, uint64_t id, hlc_hash_t hash ) {
+    struct log_entry e;
+    struct log_iov iov[2];
+    char *buf;
+    struct hlc_hdr hdr;
+    int sts, ne;
+    struct hlc_entry entry;
+    
+    memset( &e, 0, sizeof(e) );
+    e.iov = iov;
+    e.niov = 2;
+    iov[0].buf = (char *)&hdr;
+    iov[0].len = sizeof(hdr);
+    iov[1].buf = NULL;
+    iov[1].len = 0;
+    sts = log_read_end( &hlc->log, id | LOG_FLAG_READ, &e, 1, &ne );
+    if( sts ) return sts;
+
+    buf = malloc( e.msglen - sizeof(hdr) );
+
+    iov[1].buf = buf;
+    iov[1].len = e.msglen - sizeof(hdr);
+    log_read_end( &hlc->log, id | LOG_FLAG_READ, &e, 1, &ne );
+
+    entry.id = e.id;
+    entry.seq = e.seq;
+    memcpy( entry.prevhash, hdr.prevhash, sizeof(hlc_hash_t) );
+    hlc_hash( hash, &entry );
+    free( buf );
 }
 
 int hlc_write( struct hlc_s *hlc, struct hlc_entry *entry ) {
@@ -95,9 +126,33 @@ int hlc_write( struct hlc_s *hlc, struct hlc_entry *entry ) {
   iov[1].buf = NULL;
   iov[1].len = 0;
   sts = log_read_end( &hlc->log, 0, &e, 1, &ne );
-
-  /* get previous hash and compute this entry's hash */
-  memcpy( entry->prevhash, hdr.prevhash, sizeof(hlc_hash_t) );
+  if( sts == -1 ) {
+      /* first entry - compute genesis hash from log tag */
+      struct sec_buf iov[2];
+      struct log_prop prop;
+      log_prop( &hlc->log, &prop );
+      iov[0].buf = &prop.tag;
+      iov[0].len = sizeof(prop.tag);
+      iov[1].buf = &prop.tag;
+      iov[1].len = sizeof(prop.tag);      
+      sha1( entry->prevhash, iov, 2 );
+  } else {  
+      /* compute previous hash, compare with claimed hash */
+      hlc_hash_t prevhash;
+      struct hlc_entry preventry;
+      char *buf = malloc( e.msglen - sizeof(hdr) );
+      iov[1].buf = buf;
+      iov[1].len = e.msglen - sizeof(hdr);
+      log_read_entry( &hlc->log, 0, &e, 1, &ne );
+      preventry.id = e.id;
+      preventry.seq = e.seq;
+      preventry.buf = iov[1].buf;
+      preventry.len = iov[1].len;
+      hlc_hash( prevhash, &preventry );
+      free( buf );
+//      if( memcmp( prevhash, entry->prevhash, sizeof(hlc_hash_t) ) != 0 ) return -1;
+      memcpy( entry->prevhash, prevhash, sizeof(hlc_hash_t) );
+  }
   hlc_hash( hdr.prevhash, entry );
 
   /* write entry */

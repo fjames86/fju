@@ -32,6 +32,7 @@ int hlc_open( char *path, struct hlc_s *hlc );
 int hlc_close( struct hlc_s *hlc );
 int hlc_prop( struct hlc_s *hlc, struct hlc_prop *prop );
 
+int hash_entry_hash( struct hlc_s *hlc, uint64_t id, hlc_hash_t hash );
 int hlc_read( struct hlc_s *hlc, uint64_t id, struct hlc_entry *elist, int n, int *nelist );
 int hlc_write( struct hlc_s *hlc, struct hlc_entry *entry );
 

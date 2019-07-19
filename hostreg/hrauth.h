@@ -99,7 +99,21 @@ struct hrauth_call {
   int service;
 };
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args );
-int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct rpc_listen *listen, struct xdr_s *tmpbuf );
+
+struct hrauth_call_opts {
+  uint32_t mask;
+#define HRAUTH_CALL_OPT_FD     0x0001
+#define HRAUTH_CALL_OPT_TMPBUF 0x0002
+#define HRAUTH_CALL_OPT_PORT   0x0004 
+#ifdef WIN32
+  SOCKET fd;
+#else
+  int fd;
+#endif
+  struct xdr_s tmpbuf;
+  int port;
+};
+int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
 int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args );
 
 #endif

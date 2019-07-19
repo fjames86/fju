@@ -30,6 +30,7 @@ static struct {
 	char buf[32*1024];
 	uint64_t hostid;
 	uint64_t hshare;
+	int port;
 } glob;
 
 static LRESULT CALLBACK main_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
@@ -264,14 +265,11 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   xdr_encode_uint64( &xdr, lastid );
   xdr_encode_uint32( &xdr, sizeof(glob.buf) );  
 
-  memset( &listen,0,sizeof( listen ) );
-  listen.fd = glob.fd;
-  listen.type = RPC_LISTEN_UDP;
-  listen.addr.sin.sin_family = AF_INET;
-  listen.addr.sin.sin_port = htons( 8000 );  // TODO
-  listen.addr.sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK ); 
-
-  xdr_init( &tmpbuf, glob.buf, sizeof(glob.buf) );
+  memset( &opts, 0, sizeof(opts) );
+  opts.mask = HRAUTH_CALL_OPT_FD|HRAUTH_CALL_OPT_TMPBUF|HRAUTH_CALL_OPT_PORT;
+  opts.fd = glob.fd;  
+  xdr_init( &opts.tmpbuf, glob.buf, sizeof(glob.buf) );
+  opts.port = glob.port;
   sts = hrauth_call_udp2( &hcall, &xdr, &listen, &tmpbuf );
   if( sts ) {
     free( nlscxtp );
@@ -587,8 +585,8 @@ static BOOL WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam, L
 				GetDlgItemTextA( hwnd,IDC_COMBO_HOST,str,sizeof( str ) );
 				sts = hostreg_host_by_name( str,&host );
 				GetDlgItemTextA( hwnd,IDC_EDIT1,str,sizeof( str ) );
-				port = strtoul( str,NULL,10 );
-				sts = call_list_shares( host.id,port,shares,32 );
+				glob.port = strtoul( str,NULL,10 );
+				sts = call_list_shares( host.id,glob.port,shares,32 );
 				if(sts < 0) {
 					MessageBoxA( hwnd,"Failed to contact remote host","Error",MB_OK|MB_ICONERROR );
 				} else {

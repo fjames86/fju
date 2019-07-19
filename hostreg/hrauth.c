@@ -685,31 +685,27 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
 }
 
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
-	struct rpc_conn *conn;
-	int sts;
-	struct xdr_s tmpbuf;
-
-	conn = rpc_conn_acquire();
-	if( !conn ) return -1;
-
-	xdr_init( &tmpbuf, conn->buf, conn->count );
-	sts = hrauth_call_udp2( hcall, args, NULL, &tmpbuf );
-
-	rpc_conn_release( conn );
-
-	return sts;
+  return hrauth_call_udp2( hcall, args, NULL );
 }
 
-int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct rpc_listen *listen, struct xdr_s *tmpbuf ) {
+int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
   int sts, handle;
   struct rpc_waiter *w;
   struct hostreg_host host;
-  struct rpc_listen *listenp;
+  struct rpc_listen *listenp = NULL;
   struct rpc_inc inc;
   struct sockaddr_in sin;
   struct hrauth_context *hcxt;
   struct hrauth_call_cxt *hcallp;
-
+#ifdef WIN32
+  SOCKET fd;
+#else
+  int fd;
+#endif
+  struct xdr_s tmpbuf;
+  struct rpc_conn *conn;
+  int port;
+  
   if( hcall->retry < 1 ) {
     rpc_log( RPC_LOG_DEBUG, "rerey=%d", hcall->retry );
     hcall->retry = 1;
@@ -719,16 +715,37 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct rpc_
   sts = hostreg_host_by_id( hcall->hostid, &host );
   if( sts ) return -1;
 
-  /* get listen descriptor */
-  if( listen ) listenp = listen;
+  /* get fd */
+  if( opts && opts->mask & HRAUTH_CALL_OPT_FD ) fd = opts->fd;
   else {
-	listenp = rpcd_listen_by_type( RPC_LISTEN_UDP );
-	if( !listenp ) return -1;
+    listenp = rpcd_listen_by_type( RPC_LISTEN_UDP );
+    if( !listenp ) return -1;
+    fd = listenp->fd;
+  }
+
+  /* get port */
+  if( opts && opts->mask & HRAUTH_CALL_OPT_PORT ) {
+    port = opts->port;
+  } else {
+    if( !listenp ) {
+      listenp = rpcd_listen_by_type( RPC_LISTEN_UDP );
+      if( !listenp ) return -1;
+    }
+    port = ntohs( listenp->addr.sin.sin_port );
+  }
+
+  /* get tmpbuf, either passed in or from tmp connection descriptor */
+  if( opts && opts->mask & HRAUTH_CALL_OPT_TMPBUF ) {
+    tmpbuf = opts->tmpbuf;
+  } else {
+    conn = rpc_conn_acquire();
+    if( !conn ) return -1;
+    xdr_init( &tmpbuf, conn->buf, conn->count );
   }
   
   /* prepare message */
   memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, tmpbuf->buf, tmpbuf->count );
+  xdr_init( &inc.xdr, tmpbuf.buf, tmpbuf.count );
   inc.pvr = hrauth_provider();
 
   /* prepare auth context */
@@ -744,8 +761,8 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct rpc_
   /* send */
   memset( &sin, 0, sizeof(sin) );
   sin.sin_family = AF_INET;
-  sin.sin_port = listenp->addr.sin.sin_port;
-  sin.sin_addr.s_addr = host.addr[0];
+  sin.sin_port = htons( port );
+  sin.sin_addr.s_addr = host.addr[0]; /* always use first address? */
   sts = sendto( listenp->fd, inc.xdr.buf, inc.xdr.offset, 0,
 	  (struct sockaddr *)&sin, sizeof(sin) );
   if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
@@ -767,6 +784,13 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct rpc_
   w->pcxt = hcxt;
   rpc_await_reply( w );
 
+  /* cleanup */
+  if( opts && opts->mask & HRAUTH_CALL_OPT_TMPBUF ) {
+  } else {
+    rpc_conn_release( conn );
+  }
+  
+  
   return 0;  
 }
 

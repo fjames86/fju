@@ -22,6 +22,8 @@
 #define PRIx64 "llx"
 #endif
 
+#define NLS_MAX_XDRCOUNT (8*1024)
+
 static struct {
   struct nls_prop prop;
 } glob;
@@ -152,7 +154,7 @@ static int nls_proc_read( struct rpc_inc *inc ) {
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
   rpc_log( RPC_LOG_DEBUG, "proc_read: hshare=%"PRIx64" id=%"PRIx64" xdrcount=%u", hshare, id, xdrcount );
-  if( xdrcount > 32*1024 ) xdrcount = 32*1024;
+  if( xdrcount > NLS_MAX_XDRCOUNT ) xdrcount = NLS_MAX_XDRCOUNT;
   if( xdrcount < 1024 ) xdrcount = 1024;
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -219,6 +221,8 @@ static int nls_proc_read( struct rpc_inc *inc ) {
   if( tmpconn ) rpc_conn_release( tmpconn );
   rpc_complete_accept_reply( inc, handle );
 
+  printf( "xxx xdrlen=%d\n", inc->xdr.offset );
+  
   return 0;
 }
 
@@ -420,7 +424,7 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   }
 
   nlscxtp->lastid = lastid;
-  nls_call_read( nlscxtp->hostid, nlscxtp->hshare, nlscxtp->seq, nlscxtp->lastid, 32*1024 );
+  nls_call_read( nlscxtp->hostid, nlscxtp->hshare, nlscxtp->seq, nlscxtp->lastid, NLS_MAX_XDRCOUNT );
   
  done:
   if( logopen ) log_close( &log );
@@ -453,7 +457,6 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   hcall.cxt = nlscxtp;
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
-  hcall.retry = 2;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &xdr, hshare );
   xdr_encode_uint64( &xdr, lastid );
@@ -493,7 +496,7 @@ static void nls_call_notreg_cb( struct xdr_s *xdr, void *cxt ) {
   nls_remote_set( &remote );
   
   if( remote.seq != seq ) {
-    nls_call_read( remote.hostid, remote.hshare, remote.seq, remote.lastid, 32*1024 );
+    nls_call_read( remote.hostid, remote.hshare, remote.seq, remote.lastid, NLS_MAX_XDRCOUNT );
   }
   
  done:
@@ -535,7 +538,6 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   hcall.cxt = ncxt;
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
-  hcall.retry = 2;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &xdr, prop.localid );
   xdr_encode_uint64( &xdr, hshare );
@@ -573,7 +575,7 @@ static int nls_proc_notify( struct rpc_inc *inc ) {
   if( remote.seq == seq ) goto done;
 
   /* issue async call to read missing log entries */
-  nls_call_read( hostid, hshare, seq, remote.lastid, 32*1024 );
+  nls_call_read( hostid, hshare, seq, remote.lastid, NLS_MAX_XDRCOUNT );
 
   sts = 0;
  done:
@@ -750,7 +752,6 @@ static void nls_call_notify( struct nls_notify *notify ) {
   hcall.cxt = ncxt;
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
-  hcall.retry = 2;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &xdr, prop.localid );
   xdr_encode_uint64( &xdr, notify->hshare );

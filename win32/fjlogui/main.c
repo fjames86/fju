@@ -267,7 +267,6 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   hcall.cxt = nlscxtp;
   hcall.timeout = 1000;
   hcall.service = HRAUTH_SERVICE_PRIV;
-  hcall.retry = 2;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
   xdr_encode_uint64( &xdr, hshare );
   xdr_encode_uint64( &xdr, lastid );

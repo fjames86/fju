@@ -657,17 +657,6 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   /* check for timeout */
   if( !inc ) {
     rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: XID=%u timeout", w->xid );
-    hcallp->retry--;
-    hcallp->timeout = (3 * hcallp->timeout) / 2;
-    if( hcallp->retry > 0 ) {
-      sts = hrauth_call_udp2( hcallp, &cxt->args, NULL );
-	  if( sts ) {
-		  hcallp->donecb( NULL, hcallp->cxt );
-		  hcallp->retry = 0;
-	  }
-      goto done;
-    }
-    
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }
@@ -709,11 +698,6 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   struct xdr_s tmpbuf;
   struct rpc_conn *conn = NULL;
   int port;
-  
-  if( hcall->retry < 1 ) {
-    rpc_log( RPC_LOG_DEBUG, "rerey=%d", hcall->retry );
-    hcall->retry = 1;
-  }
   
   /* lookup host */
   sts = hostreg_host_by_id( hcall->hostid, &host );

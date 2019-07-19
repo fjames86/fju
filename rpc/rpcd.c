@@ -726,7 +726,7 @@ static void rpc_poll( int timeout ) {
 										   c->cstate = RPC_CSTATE_RECVLEN;
 									   }
 
-									   if( c->cdata.cb ) c->cdata.cb( c );
+									   if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CONNECT, c );
 			}
 				break;
 			default:
@@ -767,7 +767,7 @@ static void rpc_close_connections( void ) {
 			close( c->fd );
 #endif
 			/* invoke callback if required */
-			if( c->cdata.cb ) c->cdata.cb( c );
+			if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CLOSE, c );
 
 			if( prev ) prev->next = c->next;
 			else rpc.clist = c->next;
@@ -859,7 +859,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->fd = accept( lis->fd, (struct sockaddr *)&c->inc.raddr, &c->inc.raddr_len );
       c->cstate = RPC_CSTATE_RECVLEN;
       c->nstate = RPC_NSTATE_RECV;
-	  c->connid = rpc.connid++;
+      c->connid = ++rpc.connid;
 
 #ifdef WIN32
 	  {
@@ -993,7 +993,7 @@ static void rpcd_run( void ) {
 
 }
 
-int rpc_connect( struct sockaddr *addr, socklen_t alen, void( *cb )(struct rpc_conn *c), void *cxt ) {
+int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *cxt, uint64_t *connid ) {
 	struct rpc_conn *c;
 	int sts;
 
@@ -1034,17 +1034,21 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, void( *cb )(struct rpc_c
 #endif
 		c->cstate = RPC_CSTATE_CONNECT;
 		c->nstate = RPC_NSTATE_CONNECT;
+		c->connid = ++rpc.connid;
 	}
 	else {
 		c->cstate = RPC_CSTATE_RECVLEN;
 		c->nstate = RPC_NSTATE_RECV;
-
-		if( c->cdata.cb ) c->cdata.cb( c );
+		c->connid = ++rpc.connid;
+		
+		if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CONNECT, c );
 	}
 
+	if( connid ) *connid = c->connid;
+	
 	c->next = rpc.clist;
 	rpc.clist = c;
-
+	
 	return 0;
 
 failure:
@@ -1069,7 +1073,7 @@ struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type ) {
   return NULL;
 }
 
-struct rpc_conn *rpc_connection_by_connid( uint64_t connid ) {
+struct rpc_conn *rpc_conn_by_connid( uint64_t connid ) {
 	struct rpc_conn *c;
 	c = rpc.clist;
 	while( c ) {
@@ -1078,3 +1082,9 @@ struct rpc_conn *rpc_connection_by_connid( uint64_t connid ) {
 	}
 	return NULL;
 }
+
+void rpc_conn_close( struct rpc_conn *c ) {
+    c->cstate = RPC_CSTATE_CLOSE;
+}
+
+    

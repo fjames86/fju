@@ -784,7 +784,7 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
 
 struct hrauth_tcp_cxt {
   struct hrauth_call hcall;
-  struct rpc_conn *conn;
+  uint64_t connid;
   int early_close;
   struct hrauth_context hcxt;
   struct rpc_waiter waiter;
@@ -794,6 +794,7 @@ struct hrauth_tcp_cxt {
 static void call_tcp_waiter_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   int sts;
   struct hrauth_tcp_cxt *cxt = (struct hrauth_tcp_cxt *)w->cxt;
+  struct rpc_conn *conn;
   
   if( !cxt->hcall.donecb ) goto done;
 
@@ -816,64 +817,65 @@ static void call_tcp_waiter_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   cxt->hcall.donecb( &inc->xdr, cxt->hcall.cxt );
   
  done:
-  cxt->conn->cstate = RPC_CSTATE_CLOSE;
+  conn = rpc_conn_by_connid( cxt->connid );
+  if( conn ) rpc_conn_close( connid );
   free( cxt );       /* free call context */
 }
 
-static void call_tcp_cb( struct rpc_conn *c ) {
+static void call_tcp_cb( rpc_conn_event_t event, struct rpc_conn *c ) {
   int sts, handle;
   struct rpc_inc inc;
   struct hrauth_tcp_cxt *cxt = (struct hrauth_tcp_cxt *)c->cdata.cxt;
   struct rpc_waiter *w;
   struct hrauth_context *hcxt;
   
-  switch( c->cstate ) {
-  case RPC_CSTATE_CLOSE:
-    /* connection closing - free context if required */
-    if( cxt->early_close ) {
-      if( cxt->hcall.donecb ) cxt->hcall.donecb( NULL, cxt->hcall.cxt );
-      free( cxt );
-    }
-    break;
-  case RPC_CSTATE_RECVLEN:
-    /* connection completed - ready to send */
-    cxt->conn = c;
-    
-    /* fill buffer with call xdr */
-    memset( &inc, 0, sizeof(inc) );
-    xdr_init( &inc.xdr, c->buf, c->count );
-
-    /* prepare auth context */
-    hcxt = &cxt->hcxt;
-    sts = hrauth_init( hcxt, cxt->hcall.hostid );
-    hcxt->service = cxt->hcall.service;
-    inc.pvr = hrauth_provider();
-    inc.pcxt = hcxt;
-
-    /* prepare call xdr */
-    rpc_init_call( &inc, cxt->hcall.prog, cxt->hcall.vers, cxt->hcall.proc, &handle );
-    xdr_encode_fixed( &inc.xdr, cxt->args.buf, cxt->args.offset );
-    rpc_complete_call( &inc, handle );
-    
-    /* set state to send */
-    rpc_send( c, inc.xdr.offset );
-
-    /* await reply. once we issue this the waiter is responsible for cleanup */
-    cxt->early_close = 0;
-    
-    w = &cxt->waiter;
-    memset( w, 0, sizeof(*w) );
-    w->xid = inc.msg.xid;
-    w->timeout = rpc_now() + cxt->hcall.timeout;
-    w->cb = call_tcp_waiter_cb;
-    w->cxt = cxt;
-    w->pvr = hrauth_provider();
-    w->pcxt = hcxt;
-    rpc_await_reply( w );
-  
-    break;
+  switch( event ) {
+  case RPC_CONN_CLOSE:
+      /* connection closing - free context if required */
+      if( cxt->early_close ) {
+	  if( cxt->hcall.donecb ) cxt->hcall.donecb( NULL, cxt->hcall.cxt );
+	  free( cxt );
+      }
+      break;
+  case RPC_CONN_CONNECT:
+      /* connection completed - ready to send */
+      cxt->connid = c->connid;
+      
+      /* fill buffer with call xdr */
+      memset( &inc, 0, sizeof(inc) );
+      xdr_init( &inc.xdr, c->buf, c->count );
+      
+      /* prepare auth context */
+      hcxt = &cxt->hcxt;
+      sts = hrauth_init( hcxt, cxt->hcall.hostid );
+      hcxt->service = cxt->hcall.service;
+      inc.pvr = hrauth_provider();
+      inc.pcxt = hcxt;
+      
+      /* prepare call xdr */
+      rpc_init_call( &inc, cxt->hcall.prog, cxt->hcall.vers, cxt->hcall.proc, &handle );
+      xdr_encode_fixed( &inc.xdr, cxt->args.buf, cxt->args.offset );
+      rpc_complete_call( &inc, handle );
+      
+      /* set state to send */
+      rpc_send( c, inc.xdr.offset );
+      
+      /* await reply. once we issue this the waiter is responsible for cleanup */
+      cxt->early_close = 0;
+      
+      w = &cxt->waiter;
+      memset( w, 0, sizeof(*w) );
+      w->xid = inc.msg.xid;
+      w->timeout = rpc_now() + cxt->hcall.timeout;
+      w->cb = call_tcp_waiter_cb;
+      w->cxt = cxt;
+      w->pvr = hrauth_provider();
+      w->pcxt = hcxt;
+      rpc_await_reply( w );
+      
+      break;
   default:
-    break;
+      break;
   }
 
   return;
@@ -913,7 +915,7 @@ int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args ) {
   sin.sin_port = listen->addr.sin.sin_port;
   sin.sin_addr.s_addr = host.addr[0];
   
-  sts = rpc_connect( (struct sockaddr *)&sin, sizeof(sin), call_tcp_cb, cxt );
+  sts = rpc_connect( (struct sockaddr *)&sin, sizeof(sin), call_tcp_cb, cxt, NULL );
   if( sts ) goto done;
 
   sts = 0;

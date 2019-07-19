@@ -74,6 +74,12 @@ typedef enum {
 } rpc_cstate_t;
 
 struct rpc_conn;
+typedef enum {
+    RPC_CONN_CLOSE = 0,
+    RPC_CONN_CONNECT = 1,
+} rpc_conn_event_t;
+typedef void (*rpc_conn_cb_t)( rpc_conn_event_t event, struct rpc_conn *conn );
+
 struct rpc_conn {
 	struct rpc_conn *next;
 
@@ -93,7 +99,7 @@ struct rpc_conn {
 		uint64_t timeout;     /* when to give up */
 
 		/* callback on completion */
-		void( *cb )(struct rpc_conn *c);
+	        rpc_conn_cb_t cb;
 		void *cxt;
 	} cdata;
 
@@ -107,13 +113,14 @@ struct rpc_conn {
 
 
 int rpcd_main( int argc, char **argv, void (*init_cb)(void) );
-int rpc_connect( struct sockaddr *addr, socklen_t alen, void( *cb )(struct rpc_conn *c), void *cxt );
-int rpc_send( struct rpc_conn *c, int count );
 struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type );
 
+int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *cxt, uint64_t *connid );
+int rpc_send( struct rpc_conn *c, int count );
 struct rpc_conn *rpc_conn_acquire( void );
 void rpc_conn_release( struct rpc_conn *c );
-struct rpc_conn *rpc_connection_by_connid( uint64_t connid );
+struct rpc_conn *rpc_conn_by_connid( uint64_t connid );
+void rpc_conn_close( struct rpc_conn *c );
 
 #endif
 

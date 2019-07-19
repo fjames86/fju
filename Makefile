@@ -10,7 +10,8 @@ all:
 	cd hostreg && $(MAKE) -f Makefile.bsd clean
 	cd nls && $(MAKE) -f Makefile clean
 	cd raft && $(MAKE) -f Makefile.bsd clean 
-	cd rpc && $(MAKE) -f Makefile.bsd clean 
+	cd rpc && $(MAKE) -f Makefile.bsd clean
+	cd hlc && $(MAKE) -f Makefile clean
 	cd mmf && $(MAKE) -f Makefile.bsd all 
 	cd sec && $(MAKE) -f Makefile.bsd all
 	cd dh && $(MAKE) -f Makefile.bsd all && cp ecdh ../bin 
@@ -22,7 +23,8 @@ all:
 	cd rpc && $(MAKE) -f Makefile.bsd all && cp rpcd rpcinfo ../bin
 	cd raft && $(MAKE) -f Makefile.bsd all && cp raft ../bin
 	cd nls && $(MAKE) -f Makefile nls && cp nls ../bin 
-	cd hostreg && $(MAKE) -f Makefile.bsd all && cp hostreg ../bin 
+	cd hostreg && $(MAKE) -f Makefile.bsd all && cp hostreg ../bin
+	cd hlc && $(MAKE) -f Makefile && cp hlc ../bin 
 	scp rpcd.sh bin/* root@169.254.54.129:~/bin 
 
 

@@ -4,15 +4,17 @@
 #include <WinSock2.h>
 #include <Windows.h>
 #include <ws2tcpip.h>
-
-#include "fjlogui.h"
-#include <log.h>
 #include <time.h>
+
 #include <rpc.h>
+#include <log.h>
+#include <hostreg.h>
 #include <hrauth.h>
 #include <nls.h>
 #include <rpcd.h>
-#include <hostreg.h>
+
+
+#include "fjlogui.h"
 
 static struct {
 	int exiting;
@@ -472,6 +474,7 @@ static int call_list_shares( uint64_t hostid, int port, struct nls_share *share,
   struct hostreg_host host;
   struct sockaddr_in sin;
   struct log_prop prop;
+  struct rpc_call_opts copts;
 
   sts = hostreg_host_by_id( hostid,&host );
   if(sts) return sts;
@@ -483,29 +486,37 @@ static int call_list_shares( uint64_t hostid, int port, struct nls_share *share,
   memset( &sin,0,sizeof( sin ) );
   sin.sin_family = AF_INET;
   sin.sin_port = htons( port );
-  sin.sin_addr.s_addr =host.addr[0];
+  sin.sin_addr.s_addr = host.addr[0];
   rpc_complete_call( &inc, handle );
 
   memcpy( &inc.raddr, &sin, sizeof(struct sockaddr_in) );
   inc.raddr_len = sizeof(struct sockaddr_in);
     
-  sts = rpc_call_udp( &inc );
+  memset( &copts, 0, sizeof(copts) );
+  copts.mask = RPC_CALL_OPT_TIMEOUT|RPC_CALL_OPT_FD;
+  copts.timeout = 1000;
+  copts.fd = glob.fd;
+  sts = rpc_call_udp2( &inc, &copts );
   if( sts ) goto done;
 
   sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-  
+  if(sts) goto done;
+
   sts = rpc_process_reply( &inc );
   if( sts ) goto done;
   
   /* decode result from xdr */
-  xdr_decode_boolean( &inc.xdr, &b );
+  sts = xdr_decode_boolean( &inc.xdr, &b );
+  if( sts ) goto done;
   i = 0;
   while( b ) {
-    nls_decode_prop( &inc.xdr, &tmpshare, &prop );
+    sts = nls_decode_prop( &inc.xdr, &tmpshare, &prop );
+	if( sts ) goto done;
 	if( i < n ) {
 		share[i] = tmpshare;
 	}
-	xdr_decode_boolean( &inc.xdr, &b );
+	sts = xdr_decode_boolean( &inc.xdr, &b );
+	if( sts ) goto done;
 	i++;
   }
   sts = i;
@@ -572,18 +583,25 @@ static BOOL WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam, L
 			int port;
 			int i;
 
-			GetDlgItemTextA( hwnd,IDC_COMBO_HOST,str,sizeof( str ) );
-			sts = hostreg_host_by_name( str,&host );
-			GetDlgItemTextA( hwnd,IDC_EDIT1,str,sizeof( str ) );
-			port = strtoul( str,NULL,10 );
-			SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_RESETCONTENT,0,0 );
-			sts = call_list_shares( host.id,port,shares,32 );
-			if(sts > 32) sts= 32;
-			for( i = 0; i < sts; i++ ) {
-				sprintf( str,"%s - %llx",shares[i].name, shares[i].hshare );
-				SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_ADDSTRING,0, str );
+			if( HIWORD(wparam) == CBN_SELCHANGE ) {
+				GetDlgItemTextA( hwnd,IDC_COMBO_HOST,str,sizeof( str ) );
+				sts = hostreg_host_by_name( str,&host );
+				GetDlgItemTextA( hwnd,IDC_EDIT1,str,sizeof( str ) );
+				port = strtoul( str,NULL,10 );
+				sts = call_list_shares( host.id,port,shares,32 );
+				if(sts < 0) {
+					MessageBoxA( hwnd,"Failed to contact remote host","Error",MB_OK|MB_ICONERROR );
+				} else {
+					SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_RESETCONTENT,0,0 );
+					if(sts > 32) sts= 32;
+					for(i = 0; i < sts; i++) {
+						sprintf( str,"%s - %llx",shares[i].name,shares[i].hshare );
+						SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_ADDSTRING,0,str );
+					}
+					if(sts > 0) SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_SETCURSEL,0,0 );
+				}
 			}
-			if( sts > 0 ) SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_SETCURSEL,0,0 );
+
 		}
 			break;
 		}

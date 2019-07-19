@@ -838,7 +838,12 @@ int rpcbind_register( void ) {
 
 /* ----------------------------------------------------------------- */
 
+
 int rpc_call_udp( struct rpc_inc *inc ) {
+	return rpc_call_udp2( inc, NULL );
+}
+
+int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
 #ifdef WIN32
   SOCKET fd;
 #else
@@ -848,13 +853,17 @@ int rpc_call_udp( struct rpc_inc *inc ) {
   int sts;
   struct sockaddr_in sin;
   
-  fd = socket( AF_INET, SOCK_DGRAM, 0 );
-  if( fd < 0 ) return -1;
+  if( opts && opts->mask & RPC_CALL_OPT_FD ) {
+	  fd = opts->fd;
+  } else {
+	fd = socket( AF_INET, SOCK_DGRAM, 0 );
+	if( fd < 0 ) return -1;
     
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sts = bind( fd, (struct sockaddr *)&sin, sizeof(sin) );
-  if( sts < 0 ) goto done;
+	memset( &sin, 0, sizeof(sin) );
+	sin.sin_family = AF_INET;
+	sts = bind( fd, (struct sockaddr *)&sin, sizeof(sin) );
+	if( sts < 0 ) goto done;
+  }
 
   sts = sendto( fd, inc->xdr.buf, inc->xdr.offset, 0,
 		(struct sockaddr *)&inc->raddr, inc->raddr_len );
@@ -867,7 +876,7 @@ int rpc_call_udp( struct rpc_inc *inc ) {
     
     evt = WSACreateEvent();
     WSAEventSelect( fd, evt, FD_READ );
-    sts = WSAWaitForMultipleEvents( 1, &evt, TRUE, 5000, FALSE );
+    sts = WSAWaitForMultipleEvents( 1, &evt, TRUE, opts && opts->mask & RPC_CALL_OPT_TIMEOUT ? opts->timeout : 1000, FALSE );
 	if( sts != WSA_WAIT_EVENT_0 ) {
 		SetLastError( WAIT_TIMEOUT );
 		sts = -1;
@@ -881,7 +890,7 @@ int rpc_call_udp( struct rpc_inc *inc ) {
   pfd[0].fd = fd;
   pfd[0].events = POLLIN;
   pfd[0].revents = 0;
-  sts = poll( pfd, 1, 5000 );
+  sts = poll( pfd, 1, opts && opts->mask & RPC_CALL_OPT_TIMEOUT ? opts->timeout : 1000 );
   if( sts != 1 ) {
     sts = -1;
     goto done;
@@ -900,13 +909,17 @@ int rpc_call_udp( struct rpc_inc *inc ) {
   inc->xdr.count = sts;
     
   sts = 0;
- done:
+done:
+
+  if( opts && opts->mask & RPC_CALL_OPT_FD ) {
+  } else {
 #ifdef WIN32
-  closesocket( fd );
+	closesocket( fd );
 #else
-  close( fd );
+	close( fd );
 #endif
-    
+  }
+
   return sts;
 }
 

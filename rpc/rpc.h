@@ -27,7 +27,8 @@
 #define RPC_H
 
 #ifdef WIN32
-#include <Winsock2.h>
+#define _CRT_SECURE_NO_WARNINGS
+#include <WinSock2.h>
 #include <Windows.h>
 #include <ws2def.h>
 #else
@@ -264,7 +265,21 @@ int rpcbind_call_set( struct sockaddr_in *addr, struct rpcbind_mapping *m );
 void rpcbind_set_laddrs( int *prot_port, int n );
 
 int rpc_call_tcp( struct rpc_inc *inc );
+
 int rpc_call_udp( struct rpc_inc *inc );
+
+struct rpc_call_opts {
+	uint32_t mask;
+#define RPC_CALL_OPT_TIMEOUT 0x0001 
+#define RPC_CALL_OPT_FD      0x0002 
+	int timeout;
+#ifdef WIN32
+	UINT_PTR fd;
+#else
+	int fd;
+#endif
+};
+int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts );
 
 struct rpc_iterator;
 typedef void (*rpc_iterator_t)( struct rpc_iterator *it );

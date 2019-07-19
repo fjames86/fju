@@ -31,6 +31,7 @@
 #define RPC_MAX_BUF (1024*1024)
 #define RPC_MAX_CONN 32 
 #define RPC_MAX_LISTEN 8
+#define RPC_CONNECTION_TIMEOUT (60*1000)  /* how long to wait before a connection is deemed stale and gets closed */
 
 typedef enum {
 	RPC_LISTEN_UDP = 1,
@@ -76,6 +77,8 @@ struct rpc_conn;
 struct rpc_conn {
 	struct rpc_conn *next;
 
+	uint64_t connid;
+
 #ifdef WIN32
 	SOCKET fd;
 #else
@@ -98,6 +101,8 @@ struct rpc_conn {
 
 	uint32_t count;    /* size of buf */
 	uint8_t *buf;
+
+	uint64_t timestamp;
 };
 
 
@@ -108,6 +113,7 @@ struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type );
 
 struct rpc_conn *rpc_conn_acquire( void );
 void rpc_conn_release( struct rpc_conn *c );
+struct rpc_conn *rpc_connection_by_connid( uint64_t connid );
 
 #endif
 

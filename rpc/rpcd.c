@@ -60,6 +60,7 @@ static struct {
 	struct rpc_conn conntab[RPC_MAX_CONN];
 	uint8_t buftab[RPC_MAX_CONN][RPC_MAX_BUF];
 
+	uint64_t connid;
 } rpc;
 
 #ifdef WIN32
@@ -69,7 +70,7 @@ static void WINAPI rpcd_svc( DWORD argc, char **argv );
 
 static void rpcd_run( void );
 static void rpc_accept( struct rpc_listen *lis );
-
+static void rpc_close_connections( void );
 
 #ifndef WIN32
 static void rpc_sig( int sig, siginfo_t *info, void *context ) {
@@ -565,6 +566,7 @@ static void rpc_poll( int timeout ) {
 			c->cstate = RPC_CSTATE_CLOSE;
 		}
 		else if( revents[i] & RPC_POLLIN ) {
+			c->timestamp = rpc_now();
 
 			switch( c->cstate ) {
 			case RPC_CSTATE_RECVLEN:
@@ -671,6 +673,7 @@ static void rpc_poll( int timeout ) {
 
 		}
 		else if( revents[i] & RPC_POLLOUT ) {
+			c->timestamp = rpc_now();
 
 			switch( c->cstate ) {
 			case RPC_CSTATE_SENDLEN:
@@ -744,6 +747,14 @@ static void rpc_poll( int timeout ) {
 	}
 
 	/* Close pending connections */
+	rpc_close_connections();
+
+}
+
+static void rpc_close_connections( void ) {
+	struct rpc_conn *c, *prev, *next;
+
+	/* Close pending connections */
 	c = rpc.clist;
 	prev = NULL;
 	while( c ) {
@@ -771,7 +782,6 @@ static void rpc_poll( int timeout ) {
 			c = c->next;
 		}
 	}
-
 
 }
 
@@ -835,6 +845,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
   case RPC_LISTEN_TCP6:
 #ifndef WIN32
   case RPC_LISTEN_UNIX:
+#endif
     {
       rpc_log( RPC_LOG_INFO, "Accept TCP/UNIX" );
 
@@ -847,14 +858,21 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->fd = accept( lis->fd, (struct sockaddr *)&c->inc.raddr, &c->inc.raddr_len );
       c->cstate = RPC_CSTATE_RECVLEN;
       c->nstate = RPC_NSTATE_RECV;
+	  c->connid = rpc.connid++;
 
+#ifdef WIN32
+	  {
+		u_long nb = 1;
+		ioctlsocket( c->fd, FIONBIO, &sts );
+	  }
+#else
       sts = fcntl( c->fd, F_GETFL, 0 );
       fcntl( c->fd, F_SETFL, sts|O_NONBLOCK );
+#endif
 
       c->next = rpc.clist;
       rpc.clist = c;
     }
-#endif
     break;
   }
 }
@@ -867,6 +885,7 @@ static void rpcd_run( void ) {
 	struct rpc_version *vlist;
 	struct sockaddr_in sin;
 	struct rpcbind_mapping map;
+	uint64_t now;
 
 #ifdef WIN32
 	{
@@ -923,6 +942,18 @@ static void rpcd_run( void ) {
 
 	/* poll loop */
 	while( !rpc.exiting ) {
+		/* detect stale connections */
+		c = rpc.clist;
+		now = rpc_now();
+		while( c ) {
+			if( now > (c->timestamp + RPC_CONNECTION_TIMEOUT) ) {
+				c->cstate = RPC_CSTATE_CLOSE;
+			}
+
+			c = c->next;
+		}
+		rpc_close_connections();
+
 		/* compute timeout */
 		timeout = rpc_iterator_timeout();
 		if( timeout > 1000 ) timeout = 1000;
@@ -936,6 +967,8 @@ static void rpcd_run( void ) {
 
 		/* service waiters */
 		rpc_waiter_service();
+
+		
 	}
 
 	/* done */
@@ -1033,4 +1066,14 @@ struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type ) {
     if( rpc.listen[i].type == type ) return &rpc.listen[i];
   }
   return NULL;
+}
+
+struct rpc_conn *rpc_connection_by_connid( uint64_t connid ) {
+	struct rpc_conn *c;
+	c = rpc.clist;
+	while( c ) {
+		if(c->connid == connid) return c;
+		c = c->next;
+	}
+	return NULL;
 }

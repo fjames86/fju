@@ -139,6 +139,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\rpc\rpc.h" />
+    <ClInclude Include="..\..\rpc\rpcd.h" />
     <ClInclude Include="..\..\rpc\shauth.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -95,14 +95,14 @@ int hash_entry_hash( struct hlc_s *hlc, uint64_t id, hlc_hash_t hash ) {
     iov[0].len = sizeof(hdr);
     iov[1].buf = NULL;
     iov[1].len = 0;
-    sts = log_read_end( &hlc->log, id | LOG_FLAG_READ, &e, 1, &ne );
+    sts = log_read_entry( &hlc->log, id, &e );
     if( sts ) return sts;
 
     buf = malloc( e.msglen - sizeof(hdr) );
 
     iov[1].buf = buf;
     iov[1].len = e.msglen - sizeof(hdr);
-    log_read_end( &hlc->log, id | LOG_FLAG_READ, &e, 1, &ne );
+    log_read_entry( &hlc->log, id, &e );
 
     entry.id = e.id;
     entry.seq = e.seq;
@@ -131,9 +131,9 @@ int hlc_write( struct hlc_s *hlc, struct hlc_entry *entry ) {
       struct sec_buf iov[2];
       struct log_prop prop;
       log_prop( &hlc->log, &prop );
-      iov[0].buf = &prop.tag;
+      iov[0].buf = (char *)&prop.tag;
       iov[0].len = sizeof(prop.tag);
-      iov[1].buf = &prop.tag;
+      iov[1].buf = (char *)&prop.tag;
       iov[1].len = sizeof(prop.tag);      
       sha1( entry->prevhash, iov, 2 );
   } else {  
@@ -143,7 +143,7 @@ int hlc_write( struct hlc_s *hlc, struct hlc_entry *entry ) {
       char *buf = malloc( e.msglen - sizeof(hdr) );
       iov[1].buf = buf;
       iov[1].len = e.msglen - sizeof(hdr);
-      log_read_entry( &hlc->log, 0, &e, 1, &ne );
+      log_read( &hlc->log, 0, &e, 1, &ne );
       preventry.id = e.id;
       preventry.seq = e.seq;
       preventry.buf = iov[1].buf;

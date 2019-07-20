@@ -818,7 +818,7 @@ static void call_tcp_waiter_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   
  done:
   conn = rpc_conn_by_connid( cxt->connid );
-  if( conn ) rpc_conn_close( connid );
+  if( conn ) rpc_conn_close( conn );
   free( cxt );       /* free call context */
 }
 

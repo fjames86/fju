@@ -543,7 +543,7 @@ static int call_list_shares( uint64_t hostid, int port, struct nls_share *share,
   return sts;
 }
 
-static BOOL WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
+static INT_PTR WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
 	int sts;
 
 	switch( msg ) {

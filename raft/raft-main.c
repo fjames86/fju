@@ -81,21 +81,16 @@ int main( int argc, char **argv ) {
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
 		 if( strcmp( argname, "clid" ) == 0 ) {
-		      if( argval ) entry.clid = strtoull( argval, NULL, 16 );
-		 } else if( strcmp( argname, "currentterm" ) == 0 ) {
-                      if( argval ) entry.currentterm = strtoull( argval, NULL, 16 );
-		 } else if( strcmp( argname, "votedfor" ) == 0 ) {
-    		      if( argval ) entry.votedfor = strtoull( argval, NULL, 16 );
-                 } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
+		      if( argval ) entry.id = strtoull( argval, NULL, 16 );
+                 } else {
+		     printf( "Unknown field name %s\n", argname ); usage( NULL );
+		 }
                  i++;
             }
-	    if( !entry.clid ) sec_rand( &entry.clid, sizeof(entry.clid) );
+	    if( !entry.id ) sec_rand( &entry.id, sizeof(entry.id) );
             sts = raft_cluster_add( &entry );
             if( sts ) usage( "Failed to add cluster" );
-            printf( "Added cluster ID=%"PRIx64"\n", entry.clid );
-
-	    /* add local host as member */	    
-	    raft_member_add_local( entry.clid );
+            printf( "Added cluster ID=%"PRIx64"\n", entry.id );
         } else if( strcmp( argv[i], "member" ) == 0 ) {
             struct raft_member entry;
             char argname[64], *argval;
@@ -106,23 +101,13 @@ int main( int argc, char **argv ) {
                  if( strcmp( argname, "clid" ) == 0 ) {
                       if( argval ) entry.clid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-                      if( argval ) entry.hostid = strtoull( argval, NULL, 16 );		      
-                } else if( strcmp( argname, "lastseen" ) == 0 ) {
-                      if( argval ) entry.lastseen = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "nextping" ) == 0 ) {
-                      if( argval ) entry.nextping = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "nextidx" ) == 0 ) {
-                      if( argval ) entry.nextidx = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "matchidx" ) == 0 ) {
-                      if( argval ) entry.matchidx = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "flags" ) == 0 ) {
-                      if( argval ) entry.flags = strtoul( argval, NULL, 16 );
+                      if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
             sts = raft_member_add( &entry );
             if( sts ) usage( "Failed to add member" );
-            printf( "Added member ID=%"PRIx64"\n", entry.memberid );
+            printf( "Added member ID=%"PRIx64"\n", entry.id );
         } else usage( NULL );
     } else if( strcmp( argv[i], "rem" ) == 0 ) {
         i++;
@@ -156,15 +141,6 @@ int main( int argc, char **argv ) {
             sts = raft_cluster_by_id( tag, &entry );
             if( sts ) usage( "Failed to lookup" );
             i++;
-            while( i < argc ) {
-                 argval_split( argv[i], argname, &argval );
-                 if( strcmp( argname, "currentterm" ) == 0 ) {
-                      if( argval ) entry.currentterm = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "votedfor" ) == 0 ) {
-                      if( argval ) entry.votedfor = strtoull( argval, NULL, 16 );
-                 } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
-                 i++;
-            }
             sts = raft_cluster_set( &entry );
             if( sts ) usage( "Failed to set cluster" );
         } else if( strcmp( argv[i], "member" ) == 0 ) {
@@ -182,28 +158,14 @@ int main( int argc, char **argv ) {
                  if( strcmp( argname, "clid" ) == 0 ) {
                       if( argval ) entry.clid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-		   if( argval ) entry.hostid = strtoull( argval, NULL, 16 );		      
-                } else if( strcmp( argname, "lastseen" ) == 0 ) {
-                      if( argval ) entry.lastseen = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "nextping" ) == 0 ) {
-                      if( argval ) entry.nextping = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "nextidx" ) == 0 ) {
-                      if( argval ) entry.nextidx = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "matchidx" ) == 0 ) {
-                      if( argval ) entry.matchidx = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "flags" ) == 0 ) {
-                      if( argval ) entry.flags = strtoul( argval, NULL, 16 );
-                 } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
+		   if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
+                 } else {
+		     printf( "Unknown field name %s\n", argname ); usage( NULL );
+		 }
                  i++;
             }
             sts = raft_member_set( &entry );
             if( sts ) usage( "Failed to set member" );
-	} else if( strcmp( argv[i], "port") == 0 ) {
-     	    int port;
-	    i++;
-	    if( i >= argc ) usage( NULL );
-	    port = strtoul( argv[i], NULL, 10 );
-	    raft_set_port( port );
         } else usage( NULL );
     } else usage( NULL );
 
@@ -214,7 +176,7 @@ int main( int argc, char **argv ) {
 static void cmd_list( void ) {
   int sts, i, n, m, j;
   struct raft_cluster *cluster;
-  struct raft_member member[RAFT_MAX_CLUSTER_MEMBER];
+  struct raft_member *member;
   char timestr[64];
   struct tm *tm;
   time_t now;
@@ -222,45 +184,19 @@ static void cmd_list( void ) {
   
   n = raft_cluster_list( NULL, 0 );
   cluster = (struct raft_cluster *)malloc( sizeof(*cluster) * n );
+
+  member = (struct raft_member *)malloc( sizeof(*member) * 256 );
+  
   m = raft_cluster_list( cluster, n );
   if( m < n ) n = m;
   for( i = 0; i < n; i++ ) {
-    printf( "cluster clid=%"PRIx64" currentterm=%"PRIx64" votedfor=%"PRIx64" \n", cluster[i].clid, cluster[i].currentterm, cluster[i].votedfor );
+      printf( "cluster id=%"PRIx64"\n", cluster[i].id );
     
-    /* print all members of this cluster */
-    m = raft_member_list_by_clid( cluster[i].clid, member, RAFT_MAX_CLUSTER_MEMBER );
-    for( j = 0; j < m; j++ ) {
-        now = member[j].lastseen;
-	if( !now ) strcpy( timestr, "Never" );
-	else {		     
-	  tm = localtime( &now );
-	  strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
-	}
-
-	strcpy( strflags, "" );
-	if( member[j].flags & RAFT_MEMBER_ONLINE ) {
-	  if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
-	  strcat( strflags, "ONLINE" );
-	}
-	if( member[j].flags & RAFT_MEMBER_LOCAL ) {
-	  if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
-	  strcat( strflags, "LOCAL" );
-	}	
-	if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
-	switch( member[j].flags & RAFT_MEMBER_STATEMASK ) {
-	case RAFT_MEMBER_LEADER:
-	  strcat( strflags, "LEADER" );
-	  break;
-	case RAFT_MEMBER_FOLLOWER:
-	  strcat( strflags, "FOLLOWER" );
-	  break;
-	case RAFT_MEMBER_CANDIDATE:
-	  strcat( strflags, "CANDIDATE" );
-	  break;
-	}
-	
-	printf( "    member memberid=%"PRIx64" hostid=%"PRIx64" lastseen=%s nextping=%"PRIx64" nextidx=%"PRIx64" matchidx=%"PRIx64" flags=%s (%x) \n", 
-		member[j].memberid, member[j].hostid, timestr, member[j].nextping, member[j].nextidx, member[j].matchidx, strflags, member[j].flags );
+      /* print all members of this cluster */
+      m = raft_member_list( cluster[i].id, member, 256 );
+      for( j = 0; j < m; j++ ) {
+	  printf( "    member id=%"PRIx64" hostid=%"PRIx64"\n", 
+		  member[j].id, member[j].hostid );
     }
   }
   free( cluster );
@@ -273,6 +209,5 @@ static void cmd_prop( void ) {
      printf( "seq=%"PRIu64"\n", prop.seq );
      printf( "cluster=%d/%d\n", prop.cluster_count, prop.cluster_max );
      printf( "member=%d/%d\n", prop.member_count, prop.member_max );
-     printf( "port=%d\n", prop.port );
 }
 

@@ -236,7 +236,7 @@ int raft_cluster_rem( uint64_t clid ) {
     
     raft_lock();
     sts = 0;
-    /* look for any non-looal member of this cluster - if so, forbid removing */
+    /* look for any non-local member of this cluster - if so, forbid removing */
     for( i = 0; i < glob.file->header.member_count; i++ ) {
 	if( (glob.file->member[i].clid == clid) &&
 	    !(glob.file->member[i].flags & RAFT_MEMBER_LOCAL) ) {
@@ -251,6 +251,7 @@ int raft_cluster_rem( uint64_t clid ) {
 	if( glob.file->member[i].clid == clid ) {
 	    if( i != (glob.file->header.member_count - 1) ) glob.file->member[i] = glob.file->member[glob.file->header.member_count - 1];
 	    glob.file->header.member_count--;
+	    glob.file->header.seq++;
 	} else {
 	    i++;
 	}
@@ -282,6 +283,27 @@ int raft_cluster_set( struct raft_cluster *cluster ) {
             glob.file->cluster[i] = *cluster;
             glob.file->header.seq++;
             sts = 0;
+            break;
+        }
+    }
+    raft_unlock();
+    return sts;
+}
+
+
+int raft_cluster_online( uint64_t clid, int online ) {
+    int sts, i;
+    if( glob.ocount <= 0 ) return -1;
+    raft_lock();
+    sts = -1;
+    for( i = 0; i < glob.file->header.cluster_count; i++ ) {
+        if( glob.file->cluster[i].id == clid ) {
+	    sts = glob.file->cluster[i].flags & RAFT_CLUSTER_OFFLINE ? 0 : 1;
+
+	    if( online ) glob.file->cluster[i].flags &= ~RAFT_CLUSTER_OFFLINE;
+	    else glob.file->cluster[i].flags |= RAFT_CLUSTER_OFFLINE;
+
+	    glob.file->header.seq++;
             break;
         }
     }
@@ -345,7 +367,9 @@ int raft_member_add( struct raft_member *member ) {
     raft_lock();
 
     if( !member->id ) sec_rand( &member->id, sizeof(uint64_t) );
-
+    member->lastseen = 0;
+    member->flags &= ~RAFT_STATE_MASK;
+    
     /* check cluster exists */
     sts = -1;
     for( i = 0; i < glob.file->header.cluster_count; i++ ) {

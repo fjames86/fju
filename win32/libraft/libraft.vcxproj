@@ -136,6 +136,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\raft\raft-rpc.c" />
     <ClCompile Include="..\..\raft\raft.c" />
   </ItemGroup>
   <ItemGroup>

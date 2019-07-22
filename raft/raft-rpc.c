@@ -389,6 +389,9 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   if( !sts ) xdr_decode_uint64( &inc->xdr, &seq );
   if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
+  rpc_log( RPC_LOG_DEBUG, "raft_proc_ping clid=%"PRIx64" hostid=%"PRIx64" Seq=%"PRIu64"",
+	   clid, leaderid, seq );
+  
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
   memset( &cl, 0, sizeof(cl) );
@@ -402,18 +405,26 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   if( seq < cl.seq ) {
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
+  } else if( seq > cl.seq ) {
+    rpc_log( RPC_LOG_DEBUG, "defer to new leader" );
+    
+    /* accept this as leader */
+    transition = 0;
+    if( cl.leaderid != leaderid ) {
+      transition = 1;
+      cl.leaderid = leaderid;
+      cl.state = RAFT_STATE_FOLLOWER;
+      cl.votes = 0;
+      cl.voteid = 0;
+      cl.seq = seq;
+      raft_cluster_set( &cl );
+    }
+  } else if( cl.leaderid != leaderid ) {
+    rpc_log( RPC_LOG_DEBUG, "conflicting leadership claim with matching seqno?" );
+    xdr_encode_boolean( &inc->xdr, 0 );
+    goto done;
   }
 
-  /* accept this as leader */
-  transition = 0;
-  if( cl.leaderid != leaderid ) {
-    transition = 1;
-    cl.state = RAFT_STATE_FOLLOWER;
-    cl.votes = 0;
-    cl.voteid = 0;
-  }
-  cl.leaderid = leaderid;
-  cl.seq = seq;
   cl.timeout = rpc_now() + term_timeout();
   raft_cluster_set( &cl );
 

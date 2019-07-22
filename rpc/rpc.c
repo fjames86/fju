@@ -864,7 +864,6 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
 	if( sts < 0 ) goto done;
   }
 
-  printf( "xxxx xdrlen2=%d\n", inc->xdr.offset );
   sts = sendto( fd, inc->xdr.buf, inc->xdr.offset, 0,
 		(struct sockaddr *)&inc->raddr, inc->raddr_len );
   if( sts < 0 ) goto done;

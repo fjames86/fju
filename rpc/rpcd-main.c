@@ -42,7 +42,7 @@ static void init_cb( void ) {
 
   hrauth_register();
 
-  //raft_register();
+  raft_register();
 
   nls_register();
 }

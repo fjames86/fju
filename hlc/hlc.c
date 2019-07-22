@@ -109,6 +109,8 @@ int hash_entry_hash( struct hlc_s *hlc, uint64_t id, hlc_hash_t hash ) {
     memcpy( entry.prevhash, hdr.prevhash, sizeof(hlc_hash_t) );
     hlc_hash( hash, &entry );
     free( buf );
+
+    return 0;
 }
 
 int hlc_write( struct hlc_s *hlc, struct hlc_entry *entry ) {

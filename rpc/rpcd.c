@@ -832,7 +832,6 @@ static void rpc_accept( struct rpc_listen *lis ) {
       sts = rpc_process_incoming( &c->inc );
       rpc.flist = c;
       if( sts == 0 ) {
-	printf( "xxx xdrlen3=%d\n", c->inc.xdr.offset );
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       }

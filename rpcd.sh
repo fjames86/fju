@@ -10,6 +10,6 @@ if [ $cmd = "start" ]; then
     bin/rpcd -R -u 8000 -p /etc/rpcd.pid 
 elif [ $cmd = "stop" ]; then
     kill $(cat /etc/rpcd.pid)
-    rm /etc/rpcd.pid 
+    rm -f /etc/rpcd.pid 
 fi
 

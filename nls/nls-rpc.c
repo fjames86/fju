@@ -221,8 +221,6 @@ static int nls_proc_read( struct rpc_inc *inc ) {
   if( tmpconn ) rpc_conn_release( tmpconn );
   rpc_complete_accept_reply( inc, handle );
 
-  printf( "xxx xdrlen=%d\n", inc->xdr.offset );
-  
   return 0;
 }
 

@@ -4,7 +4,7 @@
 all: libhlc.a hlc
 
 clean:
-	rm libhlc.a hlc hlc.o
+	rm -f libhlc.a hlc hlc.o
 
 libhlc.a: hlc.c hlc.h
 	cc -c hlc.c -I../log -I../mmf -I../sec 

@@ -4,7 +4,7 @@
 all: libmmf.a test 
 
 clean: 
-	rm libmmf.a test 
+	rm -f libmmf.a test 
 
 libmmf.a: mmf.c mmf.h
 	cc -c mmf.c -o mmf.o 

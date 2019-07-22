@@ -4,7 +4,7 @@
 all: fjlog liblog.a
 
 clean: 
-	rm fjlog liblog.a 
+	rm -f fjlog liblog.a 
 
 liblog.a: log.c log.h
 	cc -c -o log.o -g -I ../mmf log.c

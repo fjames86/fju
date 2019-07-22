@@ -3,7 +3,7 @@
 all: dh ecdh 
 
 clean:
-	rm dh ecdh 
+	rm -f dh ecdh 
 
 dh: dh.c
 	cc -o dh dh.c -lcrypto

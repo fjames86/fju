@@ -11,5 +11,5 @@ sectest: sectest.c libsec.a
 	cc -o sectest sectest.c -L. -lsec -lcrypto
 
 clean: 
-	rm libsec.a sec.o 
+	rm -f libsec.a sec.o 
 

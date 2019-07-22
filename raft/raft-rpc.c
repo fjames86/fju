@@ -57,6 +57,7 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)cxt;
   struct raft_member member;
   uint64_t seq;
+  struct raft_cluster cl;
   
   if( !xdr ) goto done;
 
@@ -73,7 +74,10 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   if( sts ) goto done;
 
   if( !b ) {
-    rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb return false" );
+    rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb returned false" );
+    raft_cluster_by_id( pcxt->clid, &cl );
+    cl.leaderid = pcxt->hostid;
+    raft_transition_follower( &cl );
   }
   
  done:
@@ -229,11 +233,13 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
   
   rpc_log( RPC_LOG_DEBUG, "raft transition candidate" );
 
-  if( cl->state != RAFT_STATE_CANDIDATE ) cl->seq++;  
+  //if( cl->state != RAFT_STATE_CANDIDATE ) cl->seq++;
+  cl->seq++;
   cl->state = RAFT_STATE_CANDIDATE;
 
   now = rpc_now();
   timeo = elec_timeout();
+  printf( "eletion timneout %d\n", timeo );
   cl->timeout = now + timeo;
   cl->voteid = hostreg_localid(); /* vote for self */
   cl->votes = 1;
@@ -367,7 +373,6 @@ static uint32_t elec_timeout( void ) {
   uint32_t n;
   sec_rand( &n, sizeof(n) );
   n = glob.prop.elec_low + (n % (glob.prop.elec_high - glob.prop.elec_low));
-  printf( "Xxxxx n = %u\n", n );
   return n;
 }
     
@@ -377,7 +382,6 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   struct raft_member member;
   struct raft_cluster cl;
   uint64_t clid, leaderid, seq;
-  int transition;
   struct hrauth_context *hcxt;
   
   if( !inc->pvr || (inc->pvr->flavour != RPC_AUTH_HRAUTH) ) {
@@ -409,26 +413,28 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
     rpc_log( RPC_LOG_DEBUG, "defer to new leader" );
     
     /* accept this as leader */
-    transition = 0;
     if( cl.leaderid != leaderid ) {
-      transition = 1;
       cl.leaderid = leaderid;
       cl.state = RAFT_STATE_FOLLOWER;
       cl.votes = 0;
       cl.voteid = 0;
       cl.seq = seq;
       raft_cluster_set( &cl );
+
+      raft_transition_follower( &cl );
     }
-  } else if( cl.leaderid != leaderid ) {
+  } else if( cl.leaderid && (cl.leaderid != leaderid) ) {
     rpc_log( RPC_LOG_DEBUG, "conflicting leadership claim with matching seqno?" );
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }
 
+  if( !cl.leaderid ) rpc_log( RPC_LOG_DEBUG, "accept new leader %"PRIx64"", leaderid );
+  cl.leaderid = leaderid;
   cl.timeout = rpc_now() + term_timeout();
   raft_cluster_set( &cl );
 
-  if( transition ) raft_transition_follower( &cl );
+
   
   xdr_encode_boolean( &inc->xdr, 1 );
 
@@ -491,7 +497,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
     cl.votes = 0;
     cl.leaderid = 0;
     raft_transition_follower( &cl );
-  } else if( cl.leaderid != leaderid ) {
+  } else if( cl.leaderid && (cl.leaderid != leaderid) ) {
     rpc_log( RPC_LOG_DEBUG, "vote declined conficting leader %"PRIx64" != vote request %"PRIx64"", cl.leaderid, leaderid );
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
@@ -499,7 +505,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   
   /* check we didn't already vote */
   if( cl.voteid ) {
-    rpc_log( RPC_LOG_DEBUG, "raft_proc_vote declined already voted" );
+    rpc_log( RPC_LOG_DEBUG, "raft_proc_vote declined already voted for %"PRIx64"", cl.voteid );
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }    

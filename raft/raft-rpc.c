@@ -229,7 +229,7 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
   
   rpc_log( RPC_LOG_DEBUG, "raft transition candidate" );
 
-  cl->seq++;  
+  if( cl->state != RAFT_STATE_CANDIDATE ) cl->seq++;  
   cl->state = RAFT_STATE_CANDIDATE;
 
   now = rpc_now();

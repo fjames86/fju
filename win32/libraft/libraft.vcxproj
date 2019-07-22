@@ -90,7 +90,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessorDefinitions>WIN32;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\mmf;..\..\hostreg;..\..\log;..\..\rpc;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\mmf;..\..\hostreg;..\..\log;..\..\rpc;..\..\sec;</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -100,7 +100,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessorDefinitions>WIN32;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\mmf;..\..\hostreg;..\..\log;..\..\rpc;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\mmf;..\..\hostreg;..\..\log;..\..\rpc;..\..\sec;</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -112,7 +112,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessorDefinitions>WIN32;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\mmf;..\..\hostreg;..\..\log;..\..\rpc;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\mmf;..\..\hostreg;..\..\log;..\..\rpc;..\..\sec;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -128,7 +128,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <PreprocessorDefinitions>WIN32;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\..\mmf;..\..\hostreg;..\..\log;..\..\rpc;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\mmf;..\..\hostreg;..\..\log;..\..\rpc;..\..\sec;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

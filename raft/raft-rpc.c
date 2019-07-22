@@ -162,7 +162,7 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
       if( member.flags & RAFT_MEMBER_VOTED ) {
 	rpc_log( RPC_LOG_DEBUG, "vote already received from %"PRIx64"", pcxt->hostid );
       } else {
-	rpc_log( RPC_LOG_DEBUG, "vote granted" );
+	rpc_log( RPC_LOG_DEBUG, "vote granted from %"PRIx64"", member.hostid );
 	cl.votes++;
 	raft_cluster_set( &cl );
 
@@ -171,7 +171,7 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
       }
       
     } else {
-      rpc_log( RPC_LOG_DEBUG, "vote declined" );
+      rpc_log( RPC_LOG_DEBUG, "vote declined from %"PRIx64"", member.hostid );
     }    
   } else {
     rpc_log( RPC_LOG_ERROR, "bad seq %"PRIu64" < %"PRIu64"", pcxt->seq, cl.seq );
@@ -455,7 +455,10 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   if( !sts ) xdr_decode_uint64( &inc->xdr, &leaderid );
   if( !sts ) xdr_decode_uint64( &inc->xdr, &seq );
   if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-    
+
+  rpc_log( RPC_LOG_DEBUG, "raft_proc_vote clid=%"PRIx64" hostid=%"PRIx64" seq=%"PRIu64"",
+	   clid, leaderid, seq );
+  
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
   sts = raft_cluster_by_id( clid, &cl );
@@ -466,6 +469,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
   /* check seqno */
   if( seq < cl.seq ) {
+    rpc_log( RPC_LOG_DEBUG, "raft_proc_vote declined old seqno" );
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }
@@ -474,16 +478,23 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
     cl.seq = seq;
     cl.voteid = 0;
     cl.votes = 0;
+    cl.leaderid = 0;
     raft_transition_follower( &cl );
+  } else if( cl.leaderid != leaderid ) {
+    rpc_log( RPC_LOG_DEBUG, "vote declined conficting leader %"PRIx64" != vote request %"PRIx64"", cl.leaderid, leaderid );
+    xdr_encode_boolean( &inc->xdr, 0 );
+    goto done;
   }
   
   /* check we didn't already vote */
   if( cl.voteid ) {
+    rpc_log( RPC_LOG_DEBUG, "raft_proc_vote declined already voted" );
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }    
 
   /* grant vote */
+  rpc_log( RPC_LOG_DEBUG, "raft_proc_vote granted" );
   cl.voteid = leaderid;
   raft_cluster_set( &cl );
   xdr_encode_boolean( &inc->xdr, 1 );

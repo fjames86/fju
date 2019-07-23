@@ -1114,21 +1114,18 @@ void rpc_iterator_service( void ) {
 
 }
 
-int rpc_iterator_timeout( void ) {
+int rpc_iterator_timeout( int timeout ) {
   struct rpc_iterator *it;
   uint64_t now;
-  int timeout;
 
-
-  timeout = -1;
   it = itlist;
   now = rpc_now();
   while( it ) {
     if( (it->timeout == 0) || (now >= it->timeout) ) {
       timeout = 0;
       break;
-    } else if( (int)(now - it->timeout) > timeout ) {
-      timeout = (int)(now - it->timeout);
+    } else if( (int)(it->timeout - now) < timeout ) {
+      timeout = (int)(it->timeout - now);
     }
 
     it = it->next;

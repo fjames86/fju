@@ -955,9 +955,9 @@ static void rpcd_run( void ) {
 		rpc_close_connections();
 
 		/* compute timeout */
-		timeout = rpc_iterator_timeout();
+		timeout = rpc_iterator_timeout( 1000 );
 		if( timeout > 1000 ) timeout = 1000;
-		if( timeout < 0 ) timeout = 1000;
+		if( timeout < 0 ) timeout = 0;
 
 		/* poll networking */
 		rpc_poll( timeout );

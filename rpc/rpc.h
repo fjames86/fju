@@ -292,7 +292,7 @@ struct rpc_iterator {
 };
 void rpc_iterator_register( struct rpc_iterator *it );
 void rpc_iterator_unregister( struct rpc_iterator *it );
-int rpc_iterator_timeout( void );
+int rpc_iterator_timeout( int timeout );
 void rpc_iterator_service( void );
 
 uint64_t rpc_now( void );

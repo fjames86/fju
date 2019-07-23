@@ -138,6 +138,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\raft\raft-rpc.c" />
     <ClCompile Include="..\..\raft\raft.c" />
+    <ClCompile Include="..\..\raft\rex.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\raft\raft.h" />

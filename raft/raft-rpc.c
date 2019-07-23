@@ -10,6 +10,7 @@
 static struct {  
   struct raft_prop prop;
   uint64_t nextprop;
+  struct raft_notify_context *notlist;
 } glob;
 
 static void raft_iter_cb( struct rpc_iterator *iter );
@@ -20,6 +21,7 @@ static void raft_transition_candidate( struct raft_cluster *cl );
 static void raft_transition_leader( struct raft_cluster *cl );
 static void raft_call_ping( uint64_t clid, uint64_t hostid, uint64_t seq );
 static void raft_call_vote( uint64_t clid, uint64_t hostid, uint64_t seq );
+static void raft_notify( struct raft_cluster *cl );
 
 static struct rpc_iterator raft_iter = {
     NULL,
@@ -35,6 +37,8 @@ static void raft_iter_set_timeout( uint64_t when ) {
 static void raft_transition_follower( struct raft_cluster *cl ) {
   uint64_t now;
   uint32_t timeo;
+
+  if( cl->state != RAFT_STATE_FOLLOWER ) raft_notify( cl );
   
   cl->state = RAFT_STATE_FOLLOWER;
 
@@ -48,6 +52,7 @@ static void raft_transition_follower( struct raft_cluster *cl ) {
   raft_member_clear_voted( cl->id );
 
   raft_iter_set_timeout( cl->timeout );
+
 }
 
 
@@ -246,6 +251,8 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
   uint32_t timeo;
   uint64_t now;
 
+  if( cl->state != RAFT_STATE_CANDIDATE ) raft_notify( cl );
+  
 #if 0
   if( cl->state != RAFT_STATE_CANDIDATE ) {
     cl->seq++;
@@ -290,11 +297,15 @@ static void raft_send_pings( struct raft_cluster *cl ) {
     }
   }
 
+  raft_notify( cl );
+  
 }
 
 static void raft_transition_leader( struct raft_cluster *cl ) {
   uint32_t timeo;
   uint64_t now;
+
+  if( cl->state != RAFT_STATE_LEADER ) raft_notify( cl );
   
   cl->state = RAFT_STATE_LEADER;
 
@@ -616,4 +627,19 @@ void raft_register( void ) {
   
   rpc_program_register( &raft_prog );
   rpc_iterator_register( &raft_iter );
+}
+
+void raft_notify_register( struct raft_notify_context *cxt ) {
+  cxt->next = glob.notlist;
+  glob.notlist = cxt;
+}
+
+static void raft_notify( struct raft_cluster *cl ) {
+  struct raft_notify_context *ncxt;
+  ncxt = glob.notlist;
+  while( ncxt ) {
+    ncxt->cb( cl, ncxt->cxt );
+    ncxt = ncxt->next;
+  }
+  
 }

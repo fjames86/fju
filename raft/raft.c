@@ -494,3 +494,4 @@ int raft_member_clear_voted( uint64_t clid ) {
     raft_unlock();
     return sts;
 }  
+

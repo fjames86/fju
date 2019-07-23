@@ -5,6 +5,7 @@
 #include <raft.h>
 #include <log.h>
 #include <nls.h>
+#include <rex.h>
 
 #define SHAUTH_SECRET "123abcd123"
 
@@ -45,6 +46,8 @@ static void init_cb( void ) {
   raft_register();
 
   nls_register();
+
+  rex_register();
 }
 
 static int logger_open = 0;

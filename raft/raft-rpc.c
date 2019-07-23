@@ -601,6 +601,8 @@ void raft_register( void ) {
   
   raft_open();
 
+  raft_prop( &glob.prop );
+  
   /* set all clusters to follower state */
   n = raft_cluster_list( cl, 32 );
   for( i = 0; i < n; i++ ) {
@@ -608,7 +610,7 @@ void raft_register( void ) {
     cl[i].votes = 0;
     cl[i].voteid = 0;
     cl[i].leaderid = 0;
-    cl[i].timeout = rpc_now() + term_timeout();
+    cl[i].timeout = rpc_now() + glob.prop.term_high;
     raft_cluster_set( &cl[i] );
   }
   

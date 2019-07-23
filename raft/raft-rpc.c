@@ -608,7 +608,7 @@ void raft_register( void ) {
     cl[i].votes = 0;
     cl[i].voteid = 0;
     cl[i].leaderid = 0;
-    cl[i].timeout = 0;
+    cl[i].timeout = rpc_now() + term_timeout();
     raft_cluster_set( &cl[i] );
   }
   

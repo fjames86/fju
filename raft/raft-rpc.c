@@ -175,6 +175,7 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
   if( sts ) goto done;
 
   if( seq > cl.seq ) {
+    cl.leaderid = 0;
     raft_transition_follower( &cl );
     goto done;
   } else if( seq < cl.seq ) {
@@ -507,6 +508,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
   if( seq > cl.seq ) {
     cl.seq = seq;
+    cl.leaderid = 0;
     raft_transition_follower( &cl );
   }
 

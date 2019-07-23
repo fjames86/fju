@@ -547,10 +547,42 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   return 0;
 }
 
+/* sent from candidates for elections */
+static int raft_proc_list( struct rpc_inc *inc ) {
+  int handle, sts;
+  struct raft_cluster cl[32];
+  struct raft_member member[32];
+  int i, j, n, m;
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  n = raft_cluster_list( cl, 32 );
+  xdr_encode_uint32( &inc->xdr, n );
+  for( i = 0; i < n; i++ ) {
+    xdr_encode_uint64( &inc->xdr, cl[i].id );
+    xdr_encode_uint64( &inc->xdr, cl[i].leaderid );
+    xdr_encode_uint64( &inc->xdr, cl[i].seq );
+    xdr_encode_uint64( &inc->xdr, cl[i].voteid );
+    xdr_encode_uint32( &inc->xdr, cl[i].state );
+    
+    m = raft_member_list( cl[i].id, member, 32 );
+    xdr_encode_uint32( &inc->xdr, m );
+    for( j = 0; j < m; j++ ) {
+      xdr_encode_uint64( &inc->xdr, member[j].hostid );
+      xdr_encode_uint64( &inc->xdr, member[j].lastseen );
+      xdr_encode_uint32( &inc->xdr, member[j].flags );
+    }
+  }
+  
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_ping },
   { 2, raft_proc_vote },
+  { 3, raft_proc_list },
   { 0, NULL }
 };
 

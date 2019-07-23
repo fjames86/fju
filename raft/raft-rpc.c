@@ -278,16 +278,27 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
   
 }
 
+static void raft_send_pings( struct raft_cluster *cl ) {
+  int i, n;
+  struct raft_member member[32];
+  
+  n = raft_member_list( cl->id, member, 32 );
+  for( i = 0; i < n; i++ ) {
+    if( !(member[i].flags & RAFT_MEMBER_LOCAL) ) {      
+      raft_call_ping( cl->id, member[i].hostid, cl->seq );
+    }
+  }
+
+}
+
 static void raft_transition_leader( struct raft_cluster *cl ) {
   uint32_t timeo;
   uint64_t now;
-  int i, n;
-  struct raft_member member[32];
   
   cl->state = RAFT_STATE_LEADER;
 
   now = rpc_now();
-  timeo = term_timeout();
+  timeo = glob.prop.term_low;
   cl->timeout = now + timeo;
   cl->voteid = 0;
   cl->votes = 0;
@@ -296,14 +307,7 @@ static void raft_transition_leader( struct raft_cluster *cl ) {
 
   raft_iter_set_timeout( cl->timeout );
 
-  /* send pings */
-  n = raft_member_list( cl->id, member, 32 );
-  for( i = 0; i < n; i++ ) {
-    if( !(member[i].flags & RAFT_MEMBER_LOCAL) ) {      
-      raft_call_ping( cl->id, member[i].hostid, cl->seq );
-    }
-  }
-  
+  raft_send_pings( cl );
 }
 
 
@@ -353,14 +357,8 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
 	cl[i].timeout = rpc_now() + glob.prop.term_low;
 	raft_cluster_set( &cl[i] );	
 	raft_iter_set_timeout( cl[i].timeout );
-	
-	m = raft_member_list( cl[i].id, member, 32 );
-	for( j = 0; j < m; j++ ) {
-	  if( !(member[j].flags & RAFT_MEMBER_LOCAL) ) {
-	    now = rpc_now();
-	    raft_call_ping( cl[i].id, member[j].hostid, cl[i].seq );
-	  }
-	}
+
+	raft_send_pings( &cl[i] );
 	
       }
       

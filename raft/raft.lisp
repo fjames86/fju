@@ -48,7 +48,8 @@
 	      (multiple-value-bind (s m h d mth y) (decode-universal-time (get-universal-time))
 		(format t "~A-~A-~A ~A:~A:~A~%" y mth d h m s)))
 	    (setf nl t)
-	    (format t "CLUSTER ~X LEADER=~X SEQ=~A STATE=~A~%"
+	    (format t "~A CLUSTER ~X LEADER=~X SEQ=~A STATE=~A~%"
+		    (fsocket:sockaddr-string (fsocket:sockaddr-in addr port))
 		    (cluster-clid cl) (cluster-leader cl) (cluster-seq cl)
 		    (case (cluster-state cl)
 		      (0 "FOLLOWER")

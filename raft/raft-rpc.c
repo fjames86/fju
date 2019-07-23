@@ -291,6 +291,7 @@ static void raft_transition_leader( struct raft_cluster *cl ) {
   cl->timeout = now + timeo;
   cl->voteid = 0;
   cl->votes = 0;
+  cl->leaderid = hostreg_localid();
   raft_cluster_set( cl );
 
   raft_iter_set_timeout( cl->timeout );

@@ -698,6 +698,7 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   struct xdr_s tmpbuf;
   struct rpc_conn *conn = NULL;
   int port;
+  uint32_t addridx, addrmask;
   
   /* lookup host */
   sts = hostreg_host_by_id( hcall->hostid, &host );
@@ -747,14 +748,22 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   rpc_complete_call( &inc, handle );
 
   /* send */
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = htons( port );
-  sin.sin_addr.s_addr = host.addr[0]; /* always use first address? */
-  sts = sendto( fd, inc.xdr.buf, inc.xdr.offset, 0,
-	  (struct sockaddr *)&sin, sizeof(sin) );
-  if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
-
+  addridx = 0;
+  addrmask = (opts && (opts->mask & HRAUTH_CALL_OPT_ADDRMASK)) ? opts->addrmask : 1;
+  while( addrmask && (addridx < host.naddr) ) {
+    if( addrmask & 0x1 ) {
+      memset( &sin, 0, sizeof(sin) );
+      sin.sin_family = AF_INET;
+      sin.sin_port = htons( port );
+      sin.sin_addr.s_addr = host.addr[addridx]; 
+      sts = sendto( fd, inc.xdr.buf, inc.xdr.offset, 0,
+		    (struct sockaddr *)&sin, sizeof(sin) );
+      if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
+    }
+    addridx++;
+    addrmask = addrmask >> 1;
+  }
+  
   /* await reply - copy args so we can resend on failure */
   w = malloc( sizeof(*w) + sizeof(*hcallp) + args->offset );
   hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w));

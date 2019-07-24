@@ -101,9 +101,10 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args );
 
 struct hrauth_call_opts {
   uint32_t mask;
-#define HRAUTH_CALL_OPT_FD     0x0001
-#define HRAUTH_CALL_OPT_TMPBUF 0x0002
-#define HRAUTH_CALL_OPT_PORT   0x0004 
+#define HRAUTH_CALL_OPT_FD           0x0001
+#define HRAUTH_CALL_OPT_TMPBUF       0x0002
+#define HRAUTH_CALL_OPT_PORT         0x0004
+#define HRAUTH_CALL_OPT_ADDRMASK     0x0008
 #ifdef WIN32
   SOCKET fd;
 #else
@@ -111,6 +112,7 @@ struct hrauth_call_opts {
 #endif
   struct xdr_s tmpbuf;
   int port;
+  uint32_t addrmask;
 };
 int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
 int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args );

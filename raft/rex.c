@@ -32,19 +32,49 @@ static int rex_proc_read( struct rpc_inc *inc ) {
 }
 
 
+struct rex_ping_cxt {
+  uint64_t clid;
+  uint64_t hostid;
+  uint64_t stateseq;
+};
+
 static void rex_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
+  struct rex_ping_cxt *pcxt = (struct rex_ping_cxt *)cxt;
+  int sts;
+  struct raft_member member;
+  struct raft_cluster cl;
+  
   if( !xdr ) {
     rpc_log( RPC_LOG_DEBUG, "rex_call_ping_cb timeout" );
   }
+
+  sts = raft_cluster_by_id( pcxt->clid, &cl );
+  if( sts ) goto done;
+  if( cl.state != RAFT_STATE_LEADER ) goto done;
   
+  sts = raft_member_by_hostid( pcxt->clid, pcxt->hostid, &member );
+  if( sts ) goto done;
+
+  member.nextseq = cl.stateseq;
+  member.stateseq = pcxt->stateseq;
+  raft_member_set( &member );
+  
+ done:
+  free( pcxt );
   return;
 }
 
-static void rex_call_ping( uint64_t clid, uint64_t hostid, uint64_t seq ) {
+static void rex_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   int sts;
   struct hrauth_call hcall;
   struct xdr_s xdr;
   uint8_t xdr_buf[256];
+  struct rex_ping_cxt *pcxt;
+
+  pcxt = malloc( sizeof(*pcxt) );
+  pcxt->clid = cl->id;
+  pcxt->hostid = hostid;
+  pcxt->stateseq = cl->stateseq;
   
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
@@ -52,17 +82,20 @@ static void rex_call_ping( uint64_t clid, uint64_t hostid, uint64_t seq ) {
   hcall.vers = REX_RPC_VERS;
   hcall.proc = 3;
   hcall.donecb = rex_call_ping_cb;
-  hcall.cxt = NULL;
+  hcall.cxt = pcxt;
   hcall.timeout = 500;
   hcall.service = HRAUTH_SERVICE_PRIV;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
-  xdr_encode_uint64( &xdr, clid );
+  xdr_encode_uint64( &xdr, cl->id );
   xdr_encode_uint64( &xdr, hostreg_localid() );
-  xdr_encode_uint64( &xdr, seq );
+  xdr_encode_uint64( &xdr, cl->termseq );
+  xdr_encode_uint64( &xdr, cl->stateseq );
+  xdr_encode_uint64( &xdr, cl->stateterm );  
   xdr_encode_opaque( &xdr, (uint8_t *)rex_buf, REX_MAX_BUF );
   sts = hrauth_call_udp( &hcall, &xdr );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "raft_call_ping: hrauth_call failed" );
+    free( pcxt );
   }
 
 }
@@ -73,9 +106,7 @@ static void rex_send_pings( struct raft_cluster *cl ) {
   
   n = raft_member_list( cl->id, member, 32 );
   for( i = 0; i < n; i++ ) {
-    if( !(member[i].flags & RAFT_MEMBER_LOCAL) ) {      
-      rex_call_ping( cl->id, member[i].hostid, cl->seq );
-    }
+    rex_call_ping( cl, member[i].hostid );
   }
 
 }
@@ -108,6 +139,13 @@ static int rex_proc_write( struct rpc_inc *inc ) {
 
   if( len > REX_MAX_BUF ) len = REX_MAX_BUF;
   memcpy( rex_buf, buf, len );
+  cl.stateterm = cl.termseq;
+  cl.stateseq++;
+  cl.commitseq = cl.stateseq;
+  raft_cluster_set( &cl );
+
+  /* TODO: don't acknowlege until replicated on a quorum number of members */
+  
   xdr_encode_boolean( &inc->xdr, 1 );
   xdr_encode_uint64( &inc->xdr, cl.leaderid );
   
@@ -122,13 +160,15 @@ static int rex_proc_write( struct rpc_inc *inc ) {
 
 static int rex_proc_ping( struct rpc_inc *inc ) {
   int handle, sts, len;
-  uint64_t clid, seq, leaderid;
+  uint64_t clid, termseq, leaderid, stateseq, stateterm;
   struct raft_cluster cl;
   uint8_t buf[REX_MAX_BUF];
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &leaderid );
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &termseq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateseq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateterm );
   len = REX_MAX_BUF;
   if( !sts ) sts = xdr_decode_opaque( &inc->xdr, buf, &len );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
@@ -151,20 +191,34 @@ static int rex_proc_ping( struct rpc_inc *inc ) {
   if( cl.leaderid != leaderid ) {
     /* bad leader */
     xdr_encode_boolean( &inc->xdr, 0 );
-    xdr_encode_uint64( &inc->xdr, cl.leaderid );    
+    xdr_encode_uint64( &inc->xdr, cl.leaderid );
+    goto done;
   }
   
-  if( seq != cl.seq ) {
-    /* bad seq */
+  if( termseq != cl.termseq ) {
+    /* bad term seq */
     xdr_encode_boolean( &inc->xdr, 0 );
     xdr_encode_uint64( &inc->xdr, cl.leaderid );
+    goto done;
   }
 
+  if( stateseq < cl.stateseq ) {
+    /* old state, ignore */
+    xdr_encode_boolean( &inc->xdr, 0 );
+    xdr_encode_uint64( &inc->xdr, cl.leaderid );
+    goto done;
+  }
+  
   /* all good, write state */
   if( len > REX_MAX_BUF ) len = REX_MAX_BUF;
   memcpy( rex_buf, buf, len );
   xdr_encode_boolean( &inc->xdr, 1 );
   xdr_encode_uint64( &inc->xdr, cl.leaderid );
+
+  cl.commitseq = stateseq;
+  cl.stateseq = stateseq;
+  cl.stateterm = stateterm;
+  raft_cluster_set( &cl );
   
  done:
 

@@ -231,7 +231,7 @@ int raft_cluster_set( struct raft_cluster *cluster ) {
 
     if( !cluster->id ) {
       sec_rand( &cluster->id, sizeof(cluster->id) );
-      cluster->seq = 0;
+      cluster->termseq = 0;
       cluster->voteid = 0;
       cluster->flags = 0;
       cluster->state = RAFT_STATE_FOLLOWER;
@@ -254,8 +254,7 @@ int raft_cluster_set( struct raft_cluster *cluster ) {
 
     /* add new */
     sts = -1;
-    if( (glob.file->header.cluster_count >= glob.file->header.cluster_max) ||
-	(glob.file->header.member_count >= glob.file->header.member_max) ) {
+    if( (glob.file->header.cluster_count >= glob.file->header.cluster_max) ) {
 	sts = -1;
 	goto done;
     }
@@ -265,14 +264,6 @@ int raft_cluster_set( struct raft_cluster *cluster ) {
     glob.file->cluster[i] = *cluster;
     glob.file->header.cluster_count++;
 
-    /* add local entry */
-    i = glob.file->header.member_count;
-    glob.file->member[i].clid = cluster->id;
-    glob.file->member[i].hostid = hostreg_localid();
-    glob.file->member[i].lastseen = 0;
-    glob.file->member[i].flags = RAFT_MEMBER_LOCAL;
-    glob.file->header.member_count++;
-    
     glob.file->header.seq++;
     sts = 0;
 
@@ -322,7 +313,7 @@ int raft_cluster_quorum( uint64_t clid ) {
     if( glob.ocount <= 0 ) return -1;    
     raft_lock();
 
-    count = 0;
+    count = 1;
     for( i = 0; i < glob.file->header.member_count; i++ ) {
       if( glob.file->member[i].clid == clid ) count++;
     }
@@ -365,56 +356,6 @@ int raft_member_by_hostid( uint64_t clid, uint64_t hostid, struct raft_member *m
     return sts;
 }
 
-int raft_member_local( uint64_t clid, struct raft_member *member ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    sts = -1;
-    for( i = 0; i < glob.file->header.member_count; i++ ) {
-        if( (glob.file->member[i].clid == clid) &&
-	    (glob.file->member[i].flags & RAFT_MEMBER_LOCAL) ) {
-            if( member ) *member = glob.file->member[i];
-            sts = 0;
-            break;
-        }
-    }
-    raft_unlock();
-    return sts;    
-}
-
-int raft_member_leader( uint64_t clid, struct raft_member *member ) {
-    int sts, i;
-    uint64_t leaderid;
-    
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    sts = -1;
-
-    for( i = 0; i < glob.file->header.cluster_count; i++ ) {
-      if( glob.file->cluster[i].id == clid ) {
-	leaderid = glob.file->cluster[i].leaderid;
-	sts = 0;
-	break;
-      }
-    }
-    if( sts ) goto done;
-
-    sts = -1;
-    for( i = 0; i < glob.file->header.member_count; i++ ) {
-        if( (glob.file->member[i].clid == clid) &&
-	    (glob.file->member[i].hostid == leaderid) ) {
-            if( member ) *member = glob.file->member[i];
-            sts = 0;
-            break;
-        }
-    }
-
- done:
-    raft_unlock();
-    return sts;    
-}
-
-
 int raft_member_set( struct raft_member *member ) {
     int sts, i;
     
@@ -435,7 +376,6 @@ int raft_member_set( struct raft_member *member ) {
     sts = -1;
     for( i = 0; i < glob.file->header.member_count; i++ ) {
       if( (glob.file->member[i].clid == member->clid) && (glob.file->member[i].hostid == member->hostid) ) {
-	if( glob.file->member[i].flags & RAFT_MEMBER_LOCAL ) member->flags |= RAFT_MEMBER_LOCAL;
 	glob.file->member[i] = *member;
 	glob.file->header.seq++;
 	sts = 0;

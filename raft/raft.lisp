@@ -10,16 +10,23 @@
 (drx:defxstruct rmember ()
   (hostid :uint64)
   (lastseen :uint64)
-  (flags :uint32))
+  (flags :uint32)
+  (nextseq :uint64)
+  (stateterm :uint64))
+  
 
 (drx:defxarray member-list ((:mode :list)) rmember)
 
 (drx:defxstruct cluster ()
   (clid :uint64)
   (leader :uint64)
-  (seq :uint64)
+  (termseq :uint64)
   (voteid :uint64)
   (state :uint32)
+  (typeid :uint32)
+  (commitseq :uint64)
+  (stateseq :uint64)
+  (stateterm :uint64)
   (members member-list))
 
 (drx:defxarray cluster-list ((:mode :list)) cluster)
@@ -48,13 +55,14 @@
 	      (multiple-value-bind (s m h d mth y) (decode-universal-time (get-universal-time))
 		(format t "~A-~A-~A ~A:~A:~A~%" y mth d h m s)))
 	    (setf nl t)
-	    (format t "~A CLUSTER ~X LEADER=~X SEQ=~A STATE=~A~%"
+	    (format t "~A CLUSTER ~X LEADER=~X TERMSEQ=~A STATE=~A STATESEQ=~A STATETERM=~A~%"
 		    (fsocket:sockaddr-string (fsocket:sockaddr-in addr port))
-		    (cluster-clid cl) (cluster-leader cl) (cluster-seq cl)
+		    (cluster-clid cl) (cluster-leader cl) (cluster-termseq cl)
 		    (case (cluster-state cl)
 		      (0 "FOLLOWER")
 		      (1 "CANDIDATE")
-		      (2 "LEADER"))))))
+		      (2 "LEADER"))
+		    (cluster-stateseq cl) (cluster-stateterm cl)))))
       (when nl (terpri)))))
 
 

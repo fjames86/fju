@@ -19,8 +19,8 @@ static uint32_t elec_timeout( void );
 static void raft_transition_follower( struct raft_cluster *cl );
 static void raft_transition_candidate( struct raft_cluster *cl );
 static void raft_transition_leader( struct raft_cluster *cl );
-static void raft_call_ping( uint64_t clid, uint64_t hostid, uint64_t seq );
-static void raft_call_vote( uint64_t clid, uint64_t hostid, uint64_t seq );
+static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid );
+static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid );
 static void raft_notify( struct raft_cluster *cl );
 
 static struct rpc_iterator raft_iter = {
@@ -59,18 +59,18 @@ static void raft_transition_follower( struct raft_cluster *cl ) {
 struct raft_ping_cxt {
   uint64_t clid;
   uint64_t hostid;
-  uint64_t seq;
+  uint64_t termseq;
 };
 
 static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   int sts, b;
   struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)cxt;
   struct raft_member member;
-  uint64_t seq;
+  uint64_t termseq;
   struct raft_cluster cl;
 
-  //  rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb clid=%"PRIx64" hostid=%"PRIx64" seq=%"PRIu64"",
-  //	   pcxt->clid, pcxt->hostid, pcxt->seq );
+  //  rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  //	   pcxt->clid, pcxt->hostid, pcxt->termseq );
 
   if( !xdr ) {
     //    rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb timeout" );
@@ -87,10 +87,10 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) goto done;
-  sts = xdr_decode_uint64( xdr, &seq );
+  sts = xdr_decode_uint64( xdr, &termseq );
   if( sts ) goto done;
 
-  if( seq > cl.seq ) {
+  if( termseq > cl.termseq ) {
     cl.leaderid = pcxt->hostid;
     raft_transition_follower( &cl );
   }
@@ -107,20 +107,20 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   return;
 }
 
-static void raft_call_ping( uint64_t clid, uint64_t hostid, uint64_t seq ) {
+static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   int sts;
   struct hrauth_call hcall;
   struct xdr_s xdr;
   uint8_t xdr_buf[64];
   struct raft_ping_cxt *pcxt;
   
-  //  rpc_log( RPC_LOG_DEBUG, "raft_call_ping clid=%"PRIx64" hostid=%"PRIx64" seq=%"PRIu64"",
-  //	   clid, hostid, seq );
+  //  rpc_log( RPC_LOG_DEBUG, "raft_call_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  //	   clid, hostid, termseq );
 
   pcxt = malloc( sizeof(*pcxt) );
-  pcxt->clid = clid;
+  pcxt->clid = cl->id;
   pcxt->hostid = hostid;
-  pcxt->seq = seq;
+  pcxt->termseq = cl->termseq;
   
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
@@ -132,9 +132,9 @@ static void raft_call_ping( uint64_t clid, uint64_t hostid, uint64_t seq ) {
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
-  xdr_encode_uint64( &xdr, clid );
+  xdr_encode_uint64( &xdr, cl->id );
   xdr_encode_uint64( &xdr, hostreg_localid() );
-  xdr_encode_uint64( &xdr, seq );
+  xdr_encode_uint64( &xdr, cl->termseq );
   sts = hrauth_call_udp( &hcall, &xdr );
   if( sts ) {
     free( pcxt );
@@ -148,7 +148,7 @@ static void raft_call_ping( uint64_t clid, uint64_t hostid, uint64_t seq ) {
 struct raft_vote_cxt {
   uint64_t clid;
   uint64_t hostid;
-  uint64_t seq;
+  uint64_t termseq;
 };
 
 static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
@@ -156,10 +156,10 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
   struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)cxt;
   struct raft_member member;
   struct raft_cluster cl;
-  uint64_t seq;
+  uint64_t termseq;
   
-  //  rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb clid=%"PRIx64" hostid=%"PRIx64" seq=%"PRIu64"",
-  //	   pcxt->clid, pcxt->hostid, pcxt->seq );
+  //  rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  //	   pcxt->clid, pcxt->hostid, pcxt->termseq );
 
   if( !xdr ) {
     //rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb timeout" );
@@ -176,14 +176,14 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) goto done;
-  sts = xdr_decode_uint64( xdr, &seq );
+  sts = xdr_decode_uint64( xdr, &termseq );
   if( sts ) goto done;
 
-  if( seq > cl.seq ) {
+  if( termseq > cl.termseq ) {
     cl.leaderid = 0;
     raft_transition_follower( &cl );
     goto done;
-  } else if( seq < cl.seq ) {
+  } else if( termseq < cl.termseq ) {
     goto done;
   }
   
@@ -208,20 +208,20 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
   return;
 }
 
-static void raft_call_vote( uint64_t clid, uint64_t hostid, uint64_t seq ) {
+static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   int sts;
   struct hrauth_call hcall;
   struct xdr_s xdr;
   uint8_t xdr_buf[64];
   struct raft_ping_cxt *pcxt;
   
-  //  rpc_log( RPC_LOG_DEBUG, "raft_call_vote clid=%"PRIx64" hostid=%"PRIx64" seq=%"PRIu64"",
-  //	   clid, hostid, seq );
+  //  rpc_log( RPC_LOG_DEBUG, "raft_call_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  //	   clid, hostid, termseq );
 
   pcxt = malloc( sizeof(*pcxt) );
-  pcxt->clid = clid;
+  pcxt->clid = cl->id;
   pcxt->hostid = hostid;
-  pcxt->seq = seq;
+  pcxt->termseq = cl->termseq;
   
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
@@ -233,9 +233,11 @@ static void raft_call_vote( uint64_t clid, uint64_t hostid, uint64_t seq ) {
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
   xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
-  xdr_encode_uint64( &xdr, clid );
+  xdr_encode_uint64( &xdr, cl->id );
   xdr_encode_uint64( &xdr, hostreg_localid() );
-  xdr_encode_uint64( &xdr, seq );  
+  xdr_encode_uint64( &xdr, cl->termseq );
+  xdr_encode_uint64( &xdr, cl->stateseq );
+  xdr_encode_uint64( &xdr, cl->stateterm );  
   sts = hrauth_call_udp( &hcall, &xdr );
   if( sts ) {
     free( pcxt );
@@ -255,11 +257,11 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
   
 #if 0
   if( cl->state != RAFT_STATE_CANDIDATE ) {
-    cl->seq++;
+    cl->termseq++;
     cl->state = RAFT_STATE_CANDIDATE;
   }  
 #else
-  cl->seq++;
+  cl->termseq++;
   cl->state = RAFT_STATE_CANDIDATE;
 #endif
   
@@ -279,9 +281,7 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
   /* send vote requests */
   n = raft_member_list( cl->id, member, 32 );
   for( i = 0; i < n; i++ ) {
-    if( !(member[i].flags & RAFT_MEMBER_LOCAL) ) {      
-      raft_call_vote( cl->id, member[i].hostid, cl->seq );
-    }
+    raft_call_vote( cl, member[i].hostid );
   }
   
 }
@@ -292,9 +292,7 @@ static void raft_send_pings( struct raft_cluster *cl ) {
   
   n = raft_member_list( cl->id, member, 32 );
   for( i = 0; i < n; i++ ) {
-    if( !(member[i].flags & RAFT_MEMBER_LOCAL) ) {      
-      raft_call_ping( cl->id, member[i].hostid, cl->seq );
-    }
+    raft_call_ping( cl, member[i].hostid );
   }
 
   raft_notify( cl );
@@ -418,7 +416,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   int handle, sts;
   struct raft_member member;
   struct raft_cluster cl;
-  uint64_t clid, leaderid, seq;
+  uint64_t clid, leaderid, termseq;
   struct hrauth_context *hcxt;
   
   if( !inc->pvr || (inc->pvr->flavour != RPC_AUTH_HRAUTH) ) {
@@ -426,12 +424,12 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   }
 
   sts = xdr_decode_uint64( &inc->xdr, &clid );
-  if( !sts ) xdr_decode_uint64( &inc->xdr, &leaderid );
-  if( !sts ) xdr_decode_uint64( &inc->xdr, &seq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &leaderid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &termseq );
   if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  //  rpc_log( RPC_LOG_DEBUG, "raft_proc_ping clid=%"PRIx64" hostid=%"PRIx64" Seq=%"PRIu64"",
-  //	   clid, leaderid, seq );
+  //  rpc_log( RPC_LOG_DEBUG, "raft_proc_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  //	   clid, leaderid, termseq );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
@@ -442,15 +440,15 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
     goto done;
   }
 
-  /* compare seq */
-  if( seq < cl.seq ) {
+  /* compare termseq */
+  if( termseq < cl.termseq ) {
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }
   
-  if( seq > cl.seq ) {
+  if( termseq > cl.termseq ) {
     cl.leaderid = leaderid;
-    cl.seq = seq;    
+    cl.termseq = termseq;    
     raft_transition_follower( &cl );
   }
   
@@ -478,7 +476,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   } else {
   }
     
-  xdr_encode_uint64( &inc->xdr, cl.seq );  
+  xdr_encode_uint64( &inc->xdr, cl.termseq );  
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }
@@ -487,7 +485,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
 static int raft_proc_vote( struct rpc_inc *inc ) {
   int handle, sts;
   struct raft_cluster cl;
-  uint64_t clid, candid, seq;
+  uint64_t clid, candid, termseq, stateseq, stateterm;
   struct hrauth_context *hcxt;
   struct raft_member member;
   
@@ -496,12 +494,14 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   }
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
-  if( !sts ) xdr_decode_uint64( &inc->xdr, &candid );
-  if( !sts ) xdr_decode_uint64( &inc->xdr, &seq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &candid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &termseq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateseq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateterm ); 
   if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  //  rpc_log( RPC_LOG_DEBUG, "raft_proc_vote clid=%"PRIx64" hostid=%"PRIx64" seq=%"PRIu64"",
-  //	   clid, candid, seq );
+  //  rpc_log( RPC_LOG_DEBUG, "raft_proc_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  //	   clid, candid, termseq );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
@@ -511,21 +511,22 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
     goto done;
   }
 
-  /* check seqno */
-  if( seq < cl.seq ) {
+  /* check term seqno */
+  if( termseq < cl.termseq ) {
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }
 
-  if( seq > cl.seq ) {
-    cl.seq = seq;
+  if( termseq > cl.termseq ) {
+    cl.termseq = termseq;
     cl.leaderid = 0;
     raft_transition_follower( &cl );
   }
 
   switch( cl.state ) {
   case RAFT_STATE_FOLLOWER:
-    if( cl.voteid == 0 || cl.voteid == candid ) {
+    if( (cl.voteid == 0 || cl.voteid == candid) &&
+	(stateseq >= cl.stateseq) ) {
       xdr_encode_boolean( &inc->xdr, 1 );
       cl.voteid = candid;
       cl.timeout = rpc_now() + term_timeout();
@@ -554,7 +555,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   } else {
   }
 
-  xdr_encode_uint64( &inc->xdr, cl.seq );  
+  xdr_encode_uint64( &inc->xdr, cl.termseq );  
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }
@@ -573,9 +574,13 @@ static int raft_proc_list( struct rpc_inc *inc ) {
   for( i = 0; i < n; i++ ) {
     xdr_encode_uint64( &inc->xdr, cl[i].id );
     xdr_encode_uint64( &inc->xdr, cl[i].leaderid );
-    xdr_encode_uint64( &inc->xdr, cl[i].seq );
+    xdr_encode_uint64( &inc->xdr, cl[i].termseq );
     xdr_encode_uint64( &inc->xdr, cl[i].voteid );
     xdr_encode_uint32( &inc->xdr, cl[i].state );
+    xdr_encode_uint32( &inc->xdr, cl[i].typeid );
+    xdr_encode_uint64( &inc->xdr, cl[i].commitseq );
+    xdr_encode_uint64( &inc->xdr, cl[i].stateseq );
+    xdr_encode_uint64( &inc->xdr, cl[i].stateterm );
     
     m = raft_member_list( cl[i].id, member, 32 );
     xdr_encode_uint32( &inc->xdr, m );
@@ -583,6 +588,8 @@ static int raft_proc_list( struct rpc_inc *inc ) {
       xdr_encode_uint64( &inc->xdr, member[j].hostid );
       xdr_encode_uint64( &inc->xdr, member[j].lastseen );
       xdr_encode_uint32( &inc->xdr, member[j].flags );
+      xdr_encode_uint64( &inc->xdr, member[j].nextseq );
+      xdr_encode_uint64( &inc->xdr, member[j].stateseq );
     }
   }
   

@@ -220,15 +220,15 @@ static void cmd_list( void ) {
   m = raft_cluster_list( cluster, n );
   if( m < n ) n = m;
   for( i = 0; i < n; i++ ) {
-      printf( "cluster id=%"PRIx64" seq=%"PRIu64" leader=%"PRIx64" state=%s timeout=%"PRIu64" votes=%u voteid=%"PRIx64"\n",
-	      cluster[i].id, cluster[i].seq, cluster[i].leaderid,
+      printf( "cluster id=%"PRIx64" termseq=%"PRIu64" leader=%"PRIx64" typeid=%x\n"
+	      "        state=%s votes=%u votedid=%"PRIx64" commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
+	      cluster[i].id, cluster[i].termseq, cluster[i].leaderid, cluster[i].typeid,
 	      cluster[i].state == RAFT_STATE_FOLLOWER ? "Follower" :
 	      cluster[i].state == RAFT_STATE_CANDIDATE ? "Candidate" :
 	      cluster[i].state == RAFT_STATE_LEADER ? "Leader" :
 	      "Unknown",
-	      cluster[i].timeout,
-	      cluster[i].votes,
-	      cluster[i].voteid );
+	      cluster[i].votes, cluster[i].voteid,
+	      cluster[i].commitseq, cluster[i].stateseq );
 	      
     
       /* print all members of this cluster */
@@ -242,8 +242,12 @@ static void cmd_list( void ) {
 	      strcpy( timestr, "Never" );
 	  }
 
-	  printf( "    member hostid=%"PRIx64" flags=%x lastseen=%s\n", 
+	  printf( "    member hostid=%"PRIx64" flags=%x lastseen=%s", 
 		  member[j].hostid, member[j].flags, timestr );
+	  if( cluster[i].state == RAFT_STATE_LEADER ) {
+	    printf( "nextseq=%"PRIu64" stateseq=%"PRIu64"", member[j].nextseq, member[j].stateseq );
+	  }
+	  printf( "\n" );
     }
   }
   free( cluster );

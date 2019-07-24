@@ -5,28 +5,36 @@
 #include <stdint.h>
 
 struct raft_member {
-    uint64_t clid;                   /* cluster id */
-    uint64_t hostid;                 /* host identifier */
-    uint64_t lastseen;               /* last time received a msg */
-    uint32_t flags;                  /* member state+flags */
-#define RAFT_MEMBER_LOCAL    0x0001
-#define RAFT_MEMBER_VOTED    0x0002    /* true if this member voted for us this election */
-    uint32_t spare[7];                 /* unused */
+    uint64_t clid;                     /* cluster id */
+    uint64_t hostid;                   /* host identifier */
+    uint64_t lastseen;                 /* last time received a msg */
+    uint32_t flags;                    /* member state+flags */
+#define RAFT_MEMBER_VOTED    0x0001    /* true if this member voted for us this election */
+    uint32_t unused;
+    uint64_t nextseq;                  /* (when leader only) seqno of next state to send to member */
+    uint64_t stateseq;                 /* (when leader only) last known state ack'ed by member */
+  
+    uint32_t spare[4];                 /* future expansion */
 };
 
 struct raft_cluster {
     uint64_t id;                       /* cluster identifier */
-    uint64_t leaderid;
-    uint64_t seq;                      /* cluster seqno */
+    uint64_t leaderid;                 /* current leader, if any */
+    uint64_t termseq;                  /* cluster term seqno */
     uint64_t voteid;                   /* member we voted for this election */
-    uint64_t timeout;                   /* election/term timeout */
-    uint32_t state;
-#define RAFT_STATE_FOLLOWER    0x0000   /* we are follower */
-#define RAFT_STATE_CANDIDATE   0x0001   /* we are candidate */
-#define RAFT_STATE_LEADER      0x0002   /* we are leader */
-    uint32_t flags;                    /* cluster flags+state */
-    uint32_t votes;
-    uint32_t spare[5];
+    uint64_t timeout;                  /* election/term timeout */
+    uint32_t state;                    /* local state */
+#define RAFT_STATE_FOLLOWER    0x0000  /* we are follower */
+#define RAFT_STATE_CANDIDATE   0x0001  /* we are candidate */
+#define RAFT_STATE_LEADER      0x0002  /* we are leader */
+    uint32_t flags;                    /* cluster flags */
+    uint32_t votes;                    /* number of votes received this election */
+    uint32_t typeid;                   /* custom field to store a cluster type identifier */  
+    uint64_t commitseq;                /* seqno of last state commited to storage */
+    uint64_t stateseq;                 /* seqno of last state applied to state machine */
+    uint64_t stateterm;                /* term seqno of last state applied to state machine */
+  
+    uint32_t spare[12];                /* future expansion */
 };
 
 int raft_open( void );
@@ -59,8 +67,6 @@ int raft_cluster_quorum( uint64_t clid );
 
 int raft_member_list( uint64_t clid, struct raft_member *member, int n );
 int raft_member_by_hostid( uint64_t clid, uint64_t hostid, struct raft_member *member );
-int raft_member_local( uint64_t clid, struct raft_member *member );
-int raft_member_leader( uint64_t clid, struct raft_member *member );
 int raft_member_set( struct raft_member *member );
 int raft_member_rem( uint64_t clid, uint64_t hostid );
 int raft_member_clear_voted( uint64_t clid );

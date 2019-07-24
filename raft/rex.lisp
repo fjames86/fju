@@ -1,6 +1,9 @@
 
 (defpackage #:rex
-  (:use #:cl))
+  (:use #:cl)
+  (:export #:call-read
+	   #:call-write))
+	   
 
 (in-package #:rex)
 
@@ -11,8 +14,13 @@
   :uint64
   :opaque)
 
-(defun call-read (c clid)
-  (%call-read c clid))
+(defmacro with-client ((var &optional addr) &body body)
+  `(frpc2:with-rpc-client (,var frpc2:udp-client :addr (fsocket:sockaddr-in ,(or addr #(127 0 0 1)) 8000))
+     ,@body))
+
+(defun call-read (addr)
+  (with-client (c addr)
+    (%call-read c 0)))
 
 (drx:defxstruct write-args ((:mode :list))
   (clid :uint64)
@@ -26,12 +34,11 @@
   write-args
   write-res)
 
-(defun call-write (c clid buf)
-  (apply #'values (%call-write c (list clid (coerce buf '(vector (unsigned-byte 8)))))))
+(defun call-write (addr clid buf)
+  (with-client (c addr)
+    (apply #'values (%call-write c (list clid (coerce buf '(vector (unsigned-byte 8))))))))
 
-(defmacro with-client ((var &optional addr) &body body)
-  `(frpc2:with-rpc-client (,var frpc2:udp-client :addr (fsocket:sockaddr-in ,(or addr #(127 0 0 1)) 8000))
-     ,@body))
+
 
 
 

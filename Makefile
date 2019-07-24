@@ -10,6 +10,7 @@ PROJECTS += raft
 PROJECTS += rpc
 PROJECTS += dh
 PROJECTS += lht 
+PROJECTS += ef
 
 BINDIR=bin
 CFLAGS += -Iinclude

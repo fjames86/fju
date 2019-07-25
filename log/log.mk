@@ -5,8 +5,8 @@ log: liblog ${BINDIR}/fjlog
 
 liblog: ${BINDIR}/liblog.a
 
-${BINDIR}/liblog.a: log/log.c 
-	${CC} -c $> ${CFLAGS} 
+${BINDIR}/liblog.a: log/log.c libmmf 
+	${CC} -c log/log.c ${CFLAGS} 
 	${AR} rcs $@ log.o
 
 

@@ -17,8 +17,8 @@
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
 	    "          reset\n" 
-            "          add cluster [clid=ID]\n"
-            "          set cluster ID\n"
+            "          add cluster [clid=ID] [typeid=TYPEID] [witness=true|false]\n"
+            "          set cluster ID [typeid=TYPEID] [witness=true|false]\n"
             "          rem cluster ID\n"
             "          add member [clid=CLID] [hostid=HOSTID]\n"
             "          set member\n"
@@ -82,6 +82,10 @@ int main( int argc, char **argv ) {
                  argval_split( argv[i], argname, &argval );
 		 if( strcmp( argname, "clid" ) == 0 ) {
 		      if( argval ) entry.id = strtoull( argval, NULL, 16 );
+		 } else if( strcmp( argname, "typeid" ) == 0 ) {
+		   if( argval ) entry.typeid = strtoul( argval, NULL, 16 );
+		 } else if( strcmp( argname, "witness" ) == 0 ) {
+		   if( argval ) entry.flags |= (strcmp( argval, "true" ) == 0) ? RAFT_CLUSTER_WITNESS : 0;
                  } else {
 		     printf( "Unknown field name %s\n", argname ); usage( NULL );
 		 }
@@ -157,6 +161,10 @@ int main( int argc, char **argv ) {
 		else if( strcmp( argval, "candidate" ) == 0 ) cl.state = RAFT_STATE_CANDIDATE;
 		else if( strcmp( argval, "leader" ) == 0 ) cl.state = RAFT_STATE_LEADER;
 	      }
+	    } else if( strcmp( argname, "typeid" ) == 0 ) {
+	      if( argval ) cl.typeid = strtoul( argval, NULL, 16 );
+	    } else if( strcmp( argname, "witness" ) == 0 ) {
+	      if( argval ) cl.flags |= (strcmp( argval, "true" ) == 0) ? RAFT_CLUSTER_WITNESS : 0;	      
 	    } else usage( NULL );
 	    i++;
 	  }
@@ -220,9 +228,10 @@ static void cmd_list( void ) {
   m = raft_cluster_list( cluster, n );
   if( m < n ) n = m;
   for( i = 0; i < n; i++ ) {
-      printf( "cluster id=%"PRIx64" termseq=%"PRIu64" leader=%"PRIx64" typeid=%x\n"
+      printf( "cluster id=%"PRIx64" termseq=%"PRIu64" leader=%"PRIx64" typeid=%x witness=%s\n"
 	      "        state=%s votes=%u votedid=%"PRIx64" commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
 	      cluster[i].id, cluster[i].termseq, cluster[i].leaderid, cluster[i].typeid,
+	      cluster[i].flags & RAFT_CLUSTER_WITNESS ? "true" : "false", 
 	      cluster[i].state == RAFT_STATE_FOLLOWER ? "Follower" :
 	      cluster[i].state == RAFT_STATE_CANDIDATE ? "Candidate" :
 	      cluster[i].state == RAFT_STATE_LEADER ? "Leader" :

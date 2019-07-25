@@ -7,12 +7,12 @@ libhostreg: ${BINDIR}/libhostreg.a
 
 libhrauth: ${BINDIR}/libhrauth.a 
 
-${BINDIR}/libhostreg.a: hostreg/hostreg.c
-	${CC} -c $> ${CFLAGS} 
+${BINDIR}/libhostreg.a: hostreg/hostreg.c libmmf 
+	${CC} -c hostreg/hostreg.c ${CFLAGS} 
 	${AR} rcs $@ hostreg.o
 
-${BINDIR}/libhrauth.a: hostreg/hrauth.c
-	${CC} -c $> ${CFLAGS} 
+${BINDIR}/libhrauth.a: hostreg/hrauth.c libmmf librpc libsec libhostreg 
+	${CC} -c hostreg/hrauth.c ${CFLAGS} 
 	${AR} rcs $@ hrauth.o
 
 ${BINDIR}/hostreg: hostreg/hostreg-main.c libmmf librpc libsec libhostreg 

@@ -253,6 +253,8 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
   uint32_t timeo;
   uint64_t now;
 
+  if( cl->flags & RAFT_CLUSTER_WITNESS ) return;
+  
   if( cl->state != RAFT_STATE_CANDIDATE ) raft_notify( cl );
   
 #if 0

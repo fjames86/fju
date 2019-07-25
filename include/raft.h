@@ -28,6 +28,7 @@ struct raft_cluster {
 #define RAFT_STATE_CANDIDATE   0x0001  /* we are candidate */
 #define RAFT_STATE_LEADER      0x0002  /* we are leader */
     uint32_t flags;                    /* cluster flags */
+#define RAFT_CLUSTER_WITNESS   0x0001  /* follower only, never become candidate/leader */
     uint32_t votes;                    /* number of votes received this election */
     uint32_t typeid;                   /* custom field to store a cluster type identifier */  
     uint64_t commitseq;                /* seqno of last state commited to storage */

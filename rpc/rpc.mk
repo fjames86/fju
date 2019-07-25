@@ -5,7 +5,7 @@ rpc: ${BINDIR}/rpcd ${BINDIR}/rpcinfo librpc
 librpc: ${BINDIR}/librpc.a 
 
 ${BINDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c 
-	${CC} -c $> ${CFLAGS} 
+	${CC} -c rpc/rpc.c rpc/rpcd.c rpc/shauth.c ${CFLAGS} 
 	${AR} rcs $@ rpc.o rpcd.o shauth.o 
 
 ${BINDIR}/rpcd: rpc/rpcd-main.c libmmf librpc libsec liblog libraft libhrauth libnls librex

@@ -1,9 +1,9 @@
 
-.PHONY: libhlt
+.PHONY: liblht
 
-lht: ${BINDIR}/lht libhlt
+lht: ${BINDIR}/lht liblht
 
-libhlt: ${BINDIR}/liblht.a 
+liblht: ${BINDIR}/liblht.a 
 
 ${BINDIR}/liblht.a: lht/lht.c 
 	${CC} -c $> ${CFLAGS} 

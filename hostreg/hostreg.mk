@@ -1,9 +1,9 @@
 
 .PHONY: libhostreg libhrauth 
 
-hostreg: ${BINDIR}/libhostreg.a libhostreg libhrauth
+hostreg: libhostreg libhrauth libhostreg
 
-libhostreg: ${BINDIR}/hostreg
+libhostreg: ${BINDIR}/libhostreg.a
 
 libhrauth: ${BINDIR}/libhrauth.a 
 

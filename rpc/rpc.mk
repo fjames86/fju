@@ -2,7 +2,7 @@
 .PHONY: librpc 
 rpc: ${BINDIR}/rpcd ${BINDIR}/rpcinfo librpc
 
-lubrpc: ${BINDIR}/librpc.a 
+librpc: ${BINDIR}/librpc.a 
 
 ${BINDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c 
 	${CC} -c $> ${CFLAGS} 

@@ -109,7 +109,10 @@ int main( int argc, char **argv ) {
 		 } else if( strcmp( argname, "typeid" ) == 0 ) {
 		   if( argval ) entry.typeid = strtoul( argval, NULL, 16 );
 		 } else if( strcmp( argname, "witness" ) == 0 ) {
-		   if( argval ) entry.flags |= (strcmp( argval, "true" ) == 0) ? RAFT_CLUSTER_WITNESS : 0;
+		   if( argval ) {
+		     if( strcmp( argval, "true" ) == 0 ) entry.flags |= RAFT_CLUSTER_WITNESS;
+		     else entry.flags &= ~RAFT_CLUSTER_WITNESS;
+		   }		   
                  } else {
 		     printf( "Unknown field name %s\n", argname ); usage( NULL );
 		 }
@@ -188,7 +191,10 @@ int main( int argc, char **argv ) {
 	    } else if( strcmp( argname, "typeid" ) == 0 ) {
 	      if( argval ) cl.typeid = strtoul( argval, NULL, 16 );
 	    } else if( strcmp( argname, "witness" ) == 0 ) {
-	      if( argval ) cl.flags |= (strcmp( argval, "true" ) == 0) ? RAFT_CLUSTER_WITNESS : 0;	      
+	      if( argval ) {
+		if( strcmp( argval, "true" ) == 0 ) cl.flags |= RAFT_CLUSTER_WITNESS;
+		else cl.flags &= ~RAFT_CLUSTER_WITNESS;
+	      }		   
 	    } else usage( NULL );
 	    i++;
 	  }
@@ -252,15 +258,15 @@ static void cmd_list( void ) {
   m = raft_cluster_list( cluster, n );
   if( m < n ) n = m;
   for( i = 0; i < n; i++ ) {
-      printf( "cluster id=%"PRIx64" termseq=%"PRIu64" leader=%"PRIx64" typeid=%x witness=%s\n"
-	      "        state=%s votes=%u votedid=%"PRIx64" commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
-	      cluster[i].id, cluster[i].termseq, cluster[i].leaderid, cluster[i].typeid,
-	      cluster[i].flags & RAFT_CLUSTER_WITNESS ? "true" : "false", 
+      printf( "cluster id=%"PRIx64" state=%s termseq=%"PRIu64" leader=%"PRIx64" typeid=%x\n"
+	      "        flags=0x%x votes=%u votedid=%"PRIx64" commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
+	      cluster[i].id,
 	      cluster[i].state == RAFT_STATE_FOLLOWER ? "Follower" :
 	      cluster[i].state == RAFT_STATE_CANDIDATE ? "Candidate" :
 	      cluster[i].state == RAFT_STATE_LEADER ? "Leader" :
 	      "Unknown",
-	      cluster[i].votes, cluster[i].voteid,
+	      cluster[i].termseq, cluster[i].leaderid, cluster[i].typeid,
+	      cluster[i].flags, cluster[i].votes, cluster[i].voteid,
 	      cluster[i].commitseq, cluster[i].stateseq );
 	      
     

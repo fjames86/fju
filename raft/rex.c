@@ -9,6 +9,10 @@
 
 #define REX_MAX_BUF 32
 
+#ifdef WIN32
+#define PRIx64 "llx"
+#define PRIu64 "llu"
+#endif
 
 struct rex_state {
   uint64_t termseq;

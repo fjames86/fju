@@ -1,9 +1,11 @@
 
-mmf: ${BINDIR}/libmmf.a
+.PHONY: libmmf
 
-mmf_src += mmf/mmf.c 
+mmf: libmmf 
 
-${BINDIR}/libmmf.a: ${mmf_src}
+libmmf: ${BINDIR}/libmmf.a
+
+${BINDIR}/libmmf.a: mmf/mmf.c
 	${CC} -c $> ${CFLAGS} 
 	${AR} rcs $@ mmf.o
 

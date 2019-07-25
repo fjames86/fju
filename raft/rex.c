@@ -5,10 +5,58 @@
 #include <hrauth.h>
 #include <hostreg.h>
 #include "raft.h"
+#include <mmf.h>
 
 #define REX_MAX_BUF 32
 
-static char rex_buf[REX_MAX_BUF];
+
+struct rex_state {
+  uint64_t termseq;
+  uint64_t stateseq;
+  uint8_t buf[REX_MAX_BUF];
+};
+
+static void rex_state_save( uint64_t clid, struct rex_state *state ) {
+  int sts;
+  struct mmf_s mmf;
+  char name[64];
+
+  sprintf( name, "%"PRIx64".dat", clid );
+  mmf_ensure_dir( mmf_default_path( "rex", NULL ) );
+  sts = mmf_open( mmf_default_path( "rex", name, NULL ), &mmf );
+  if( sts ) return;
+
+  sts = mmf_remap( &mmf, sizeof(*state) );
+  if( sts ) goto done;
+
+  memcpy( mmf.file, state, sizeof(*state) );
+  mmf_sync( &mmf );
+ done:
+  mmf_close( &mmf );
+  return;  
+}
+
+static void rex_state_load( uint64_t clid, struct rex_state *state ) {
+  int sts;
+  struct mmf_s mmf;
+  char name[64];
+
+  memset( state, 0, sizeof(*state) );
+  
+  sprintf( name, "%"PRIx64".dat", clid );
+  mmf_ensure_dir( mmf_default_path( "rex", NULL ) );
+  sts = mmf_open( mmf_default_path( "rex", name, NULL ), &mmf );
+  if( sts ) return;
+
+  sts = mmf_remap( &mmf, sizeof(*state) );
+  if( sts ) goto done;
+
+  memcpy( state, mmf.file, sizeof(*state) );
+  
+ done:
+  mmf_close( &mmf );
+  return;    
+}
 
 static int rex_proc_null( struct rpc_inc *inc ) {
   int handle;
@@ -21,12 +69,14 @@ static int rex_proc_read( struct rpc_inc *inc ) {
   int handle, sts;
   uint64_t clid;
   struct raft_cluster cl;
+  struct rex_state state;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  xdr_encode_opaque( &inc->xdr, (uint8_t *)rex_buf, REX_MAX_BUF );
+  rex_state_load( clid, &state );
+  xdr_encode_opaque( &inc->xdr, (uint8_t *)state.buf, REX_MAX_BUF );
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }
@@ -70,7 +120,8 @@ static void rex_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   struct xdr_s xdr;
   uint8_t xdr_buf[256];
   struct rex_ping_cxt *pcxt;
-
+  struct rex_state state;
+  
   pcxt = malloc( sizeof(*pcxt) );
   pcxt->clid = cl->id;
   pcxt->hostid = hostid;
@@ -90,8 +141,10 @@ static void rex_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint64( &xdr, hostreg_localid() );
   xdr_encode_uint64( &xdr, cl->termseq );
   xdr_encode_uint64( &xdr, cl->stateseq );
-  xdr_encode_uint64( &xdr, cl->stateterm );  
-  xdr_encode_opaque( &xdr, (uint8_t *)rex_buf, REX_MAX_BUF );
+  xdr_encode_uint64( &xdr, cl->stateterm );
+
+  rex_state_load( cl->id, &state );
+  xdr_encode_opaque( &xdr, (uint8_t *)state.buf, REX_MAX_BUF );
   sts = hrauth_call_udp( &hcall, &xdr );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "raft_call_ping: hrauth_call failed" );
@@ -116,6 +169,7 @@ static int rex_proc_write( struct rpc_inc *inc ) {
   uint64_t clid;
   struct raft_cluster cl;
   uint8_t buf[REX_MAX_BUF];
+  struct rex_state state;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   len = REX_MAX_BUF;
@@ -137,13 +191,17 @@ static int rex_proc_write( struct rpc_inc *inc ) {
     goto done;
   }
 
-  if( len > REX_MAX_BUF ) len = REX_MAX_BUF;
-  memcpy( rex_buf, buf, len );
   cl.stateterm = cl.termseq;
   cl.stateseq++;
   cl.commitseq = cl.stateseq;
   raft_cluster_set( &cl );
 
+  if( len > REX_MAX_BUF ) len = REX_MAX_BUF;
+  state.termseq = cl.termseq;
+  state.stateseq = cl.stateseq;
+  memcpy( state.buf, buf, len );
+  rex_state_save( cl.id, &state );
+  
   /* TODO: don't acknowlege until replicated on a quorum number of members */
   
   xdr_encode_boolean( &inc->xdr, 1 );
@@ -163,6 +221,7 @@ static int rex_proc_ping( struct rpc_inc *inc ) {
   uint64_t clid, termseq, leaderid, stateseq, stateterm;
   struct raft_cluster cl;
   uint8_t buf[REX_MAX_BUF];
+  struct rex_state state;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &leaderid );
@@ -210,8 +269,6 @@ static int rex_proc_ping( struct rpc_inc *inc ) {
   }
   
   /* all good, write state */
-  if( len > REX_MAX_BUF ) len = REX_MAX_BUF;
-  memcpy( rex_buf, buf, len );
   xdr_encode_boolean( &inc->xdr, 1 );
   xdr_encode_uint64( &inc->xdr, cl.leaderid );
 
@@ -219,7 +276,14 @@ static int rex_proc_ping( struct rpc_inc *inc ) {
   cl.stateseq = stateseq;
   cl.stateterm = stateterm;
   raft_cluster_set( &cl );
+
+  if( len > REX_MAX_BUF ) len = REX_MAX_BUF;
+  state.termseq = cl.termseq;
+  state.stateseq = cl.stateseq;
+  memcpy( state.buf, buf, len );
+  rex_state_save( cl.id, &state );
   
+
  done:
 
   rpc_complete_accept_reply( inc, handle );

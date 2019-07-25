@@ -144,7 +144,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\include\rpc.h" />
     <ClInclude Include="..\..\include\rpcd.h" />
-    <ClInclude Include="..\..\rpc\shauth.h" />
+    <ClInclude Include="..\..\include\shauth.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

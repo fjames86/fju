@@ -13,7 +13,7 @@ PROJECTS += lht
 PROJECTS += ef
 
 BINDIR=bin
-CFLAGS += -Iinclude
+CFLAGS += -Iinclude -g
 LFLAGS += -L${BINDIR}
 
 

@@ -18,9 +18,9 @@
   `(frpc2:with-rpc-client (,var frpc2:udp-client :addr (fsocket:sockaddr-in ,(or addr #(127 0 0 1)) 8000))
      ,@body))
 
-(defun call-read (addr)
+(defun call-read (addr clid)
   (with-client (c addr)
-    (%call-read c 0)))
+    (%call-read c clid)))
 
 (drx:defxstruct write-args ((:mode :list))
   (clid :uint64)

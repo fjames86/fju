@@ -148,6 +148,7 @@ int mmf_ensure_dir( char *path ) {
 
 #else
 int mmf_open( char *path, struct mmf_s *mmf ) {
+	memset( mmf, 0, sizeof(*mmf) );
 	mmf->fd = open( path, O_RDWR|O_CREAT, 0600 );
 	if( mmf->fd < 0 ) return -1;
 	return 0;

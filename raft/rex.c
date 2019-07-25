@@ -23,8 +23,8 @@ struct rex_state {
 static void rex_state_save( uint64_t clid, struct rex_state *state ) {
   int sts;
   struct mmf_s mmf;
-  char name[64];
-
+  char name[256];
+  
   sprintf( name, "%"PRIx64".dat", clid );
   mmf_ensure_dir( mmf_default_path( "rex", NULL ) );
   sts = mmf_open( mmf_default_path( "rex", name, NULL ), &mmf );
@@ -43,10 +43,10 @@ static void rex_state_save( uint64_t clid, struct rex_state *state ) {
 static void rex_state_load( uint64_t clid, struct rex_state *state ) {
   int sts;
   struct mmf_s mmf;
-  char name[64];
+  char name[256];
 
   memset( state, 0, sizeof(*state) );
-  
+
   sprintf( name, "%"PRIx64".dat", clid );
   mmf_ensure_dir( mmf_default_path( "rex", NULL ) );
   sts = mmf_open( mmf_default_path( "rex", name, NULL ), &mmf );
@@ -201,6 +201,7 @@ static int rex_proc_write( struct rpc_inc *inc ) {
   raft_cluster_set( &cl );
 
   if( len > REX_MAX_BUF ) len = REX_MAX_BUF;
+  memset( &state, 0, sizeof(state) );
   state.termseq = cl.termseq;
   state.stateseq = cl.stateseq;
   memcpy( state.buf, buf, len );
@@ -282,6 +283,7 @@ static int rex_proc_ping( struct rpc_inc *inc ) {
   raft_cluster_set( &cl );
 
   if( len > REX_MAX_BUF ) len = REX_MAX_BUF;
+  memset( &state, 0, sizeof(state) );
   state.termseq = cl.termseq;
   state.stateseq = cl.stateseq;
   memcpy( state.buf, buf, len );

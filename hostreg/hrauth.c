@@ -803,9 +803,7 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
 
   /* cleanup */
   if( conn ) rpc_conn_release( conn );
-  
-  
-  
+    
   return 0;  
 }
 

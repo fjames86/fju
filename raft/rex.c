@@ -30,6 +30,7 @@
 #include <hostreg.h>
 #include "raft.h"
 #include <mmf.h>
+#include <rpcd.h>
 
 #define REX_MAX_BUF 32
 
@@ -193,6 +194,74 @@ static void rex_send_pings( struct raft_cluster *cl ) {
 
 }
 
+struct rex_proxy_cxt {
+  uint32_t xid;
+  struct rpc_provider *pvr;
+  void *pcxt;
+  struct sockaddr_storage raddr;
+  uint32_t raddr_len;
+  uint64_t leaderid;
+};
+
+static void rex_proxy_write_cb( struct xdr_s *xdr, void *cxt ) {
+  struct rex_proxy_cxt *pcxt = (struct rex_proxy_cxt *)cxt;
+  struct rpc_listen *listen;
+  int sts, handle;
+  struct rpc_inc inc;
+  uint8_t buf[1024];
+  
+  /* send reply message */
+  memset( &inc, 0, sizeof(inc) );
+  inc.pvr = pcxt->pvr;
+  inc.pcxt = pcxt->pcxt;
+  xdr_init( &inc.xdr, buf, sizeof(buf) );
+  rpc_init_accept_reply( &inc, pcxt->xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  if( xdr ) {
+    xdr_encode_fixed( &inc.xdr, xdr->buf + xdr->offset, xdr->count - xdr->offset );
+  } else {
+    xdr_encode_boolean( &inc.xdr, 0 );
+    xdr_encode_boolean( &inc.xdr, pcxt->leaderid );
+  }
+  rpc_complete_accept_reply( &inc, handle );
+
+  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+  if( listen ) sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0, (struct sockaddr *)&pcxt->raddr, pcxt->raddr_len );
+  
+ done:
+  free( pcxt );
+  return;
+}
+
+static int rex_proxy_write( uint64_t hostid, struct xdr_s *args, struct rpc_inc *inc ) {
+  int sts;
+  struct hrauth_call hcall;
+  struct rex_proxy_cxt *pcxt;
+
+  pcxt = malloc( sizeof(*pcxt) );
+  pcxt->xid = inc->msg.xid;
+  pcxt->pvr = inc->pvr;
+  pcxt->pcxt = inc->pcxt;
+  memcpy( &pcxt->raddr, &inc->raddr, inc->raddr_len );
+  pcxt->raddr_len = inc->raddr_len;
+  pcxt->leaderid = hostid;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = REX_RPC_PROG;
+  hcall.vers = REX_RPC_VERS;
+  hcall.proc = 2;
+  hcall.donecb = rex_proxy_write_cb;
+  hcall.cxt = pcxt;
+  hcall.timeout = 500;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  sts = hrauth_call_udp( &hcall, args );
+  if( sts ) {
+    free( pcxt );
+  }
+
+  return sts;
+}
+
 static int rex_proc_write( struct rpc_inc *inc ) {
   int handle, sts, len;
   uint64_t clid;
@@ -215,8 +284,18 @@ static int rex_proc_write( struct rpc_inc *inc ) {
   }
 
   if( cl.state != RAFT_STATE_LEADER ) {
+#if 0
     xdr_encode_boolean( &inc->xdr, 0 );
     xdr_encode_uint64( &inc->xdr, cl.leaderid );
+#else
+    struct xdr_s args;
+    uint8_t argbuf[64];
+    xdr_init( &args, argbuf, sizeof(argbuf) );
+    xdr_encode_uint64( &args, clid );
+    xdr_encode_opaque( &args, buf, len );
+    rex_proxy_write( cl.leaderid, &args, inc );
+    return 1;
+#endif
     goto done;
   }
 

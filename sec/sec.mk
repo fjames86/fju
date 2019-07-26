@@ -1,9 +1,5 @@
 
-.PHONY: libsec
-
-sec: libsec
-
-libsec: ${BINDIR}/libsec.a
+sec: ${BINDIR}/libsec.a 
 
 ${BINDIR}/libsec.a: sec/sec.c 
 	${CC} -c $> ${CFLAGS} 

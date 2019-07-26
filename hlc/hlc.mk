@@ -1,13 +1,15 @@
 
-.PHONY: libhlc
+hlc: ${BINDIR}/hlc ${BINDIR}/libhlc.a 
 
-hlc: ${BINDIR}/hlc libhlc
-
-libhlc: ${BINDIR}/libhlc.a 
-
-${BINDIR}/libhlc.a: hlc/hlc.c libmmf libsec liblog libnls 
+${BINDIR}/libhlc.a: hlc/hlc.c
 	${CC} -c hlc/hlc.c ${CFLAGS} 
 	${AR} rcs $@ hlc.o 
 
-${BINDIR}/hlc: hlc/hlc-main.c libmmf libsec liblog libnls libhlc 
+hlc_deps += ${BINDIR}/libmmf.a
+hlc_deps += ${BINDIR}/libsec.a
+hlc_deps += ${BINDIR}/liblog.a
+hlc_deps += ${BINDIR}/libnls.a
+hlc_deps += ${BINDIR}/libhlc.a
+
+${BINDIR}/hlc: hlc/hlc-main.c ${hlc_deps}
 	${CC} -o $@ hlc/hlc-main.c ${CFLAGS} ${LFLAGS} -lmmf -lcrypto -llog -lsec -lnls -lhlc 

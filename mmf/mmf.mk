@@ -1,6 +1,4 @@
 
-.PHONY: libmmf
-
 mmf: libmmf 
 
 libmmf: ${BINDIR}/libmmf.a

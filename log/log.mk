@@ -1,14 +1,10 @@
 
-.PHONY: liblog 
+log: ${BINDIR}/liblog.a ${BINDIR}/fjlog 
 
-log: liblog ${BINDIR}/fjlog 
-
-liblog: ${BINDIR}/liblog.a
-
-${BINDIR}/liblog.a: log/log.c libmmf 
+${BINDIR}/liblog.a: log/log.c ${BINDIR}/libmmf.a 
 	${CC} -c log/log.c ${CFLAGS} 
 	${AR} rcs $@ log.o
 
 
-${BINDIR}/fjlog: log/fjlog.c libmmf liblog 
+${BINDIR}/fjlog: log/fjlog.c ${BINDIR}/libmmf.a ${BINDIR}/liblog.a 
 	${CC} -o $@ log/fjlog.c ${CFLAGS} ${LFLAGS} -llog -lmmf

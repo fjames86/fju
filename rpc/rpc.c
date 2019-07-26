@@ -568,7 +568,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     
   switch( inc->msg.tag ) {
   case RPC_CALL:
-    rpc_log( RPC_LOG_INFO, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
+    //rpc_log( RPC_LOG_INFO, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
 
     /* lookup function */
     sts = rpc_program_find( inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,

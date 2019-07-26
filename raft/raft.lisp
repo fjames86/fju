@@ -1,7 +1,8 @@
 
 (defpackage #:raft
   (:use #:cl)
-  (:export #:poll-cluster))
+  (:export #:call-list
+	   #:poll-cluster))
 
 (in-package #:raft)
 

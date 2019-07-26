@@ -123,7 +123,8 @@ static void rex_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   struct raft_cluster cl;
   
   if( !xdr ) {
-    rpc_log( RPC_LOG_DEBUG, "rex_call_ping_cb timeout" );
+    //rpc_log( RPC_LOG_DEBUG, "rex_call_ping_cb timeout" );
+    goto done;
   }
 
   sts = raft_cluster_by_id( pcxt->clid, &cl );

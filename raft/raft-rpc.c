@@ -627,11 +627,69 @@ static int raft_proc_list( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int raft_proc_set( struct rpc_inc *inc ) {
+  int handle, sts;
+  struct raft_cluster cl;
+  struct raft_member member;
+  int j, m;
+
+  if( !inc->pvr || (inc->pvr->flavour != RPC_AUTH_HRAUTH) ) {
+    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  }
+
+  memset( &cl, 0, sizeof(cl) );
+
+  sts = xdr_decode_uint64( &inc->xdr, &cl.id );
+  if( !sts ) raft_cluster_by_id( cl.id, &cl );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &cl.typeid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &cl.flags );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  raft_cluster_set( &cl );
+  
+  sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&m );
+  if( sts || (m > 32) ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  for( j = 0; j < m; j++ ) {
+    memset( &member, 0, sizeof(member) );
+    sts = xdr_decode_uint64( &inc->xdr, &member.hostid );
+    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    sts = raft_member_by_hostid( cl.id, member.hostid, &member );
+    if( sts ) raft_member_set( &member );
+  }
+    
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, 1 );
+  rpc_complete_accept_reply( inc, handle );
+    
+  return 0;
+}
+
+static int raft_proc_rem( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint64_t clid;
+
+  if( !inc->pvr || (inc->pvr->flavour != RPC_AUTH_HRAUTH) ) {
+    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  }
+
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  sts = raft_cluster_rem( clid );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_ping },
   { 2, raft_proc_vote },
   { 3, raft_proc_list },
+  { 4, raft_proc_set },
+  { 5, raft_proc_rem },
   { 0, NULL }
 };
 

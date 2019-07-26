@@ -1,7 +1,7 @@
 
 lht: ${BINDIR}/lht ${BINDIR}/liblht.a 
 
-${BINDIR}/liblht.a: lht/lht.c 
+${BINDIR}/liblht.a: lht/lht.c include/lht.h 
 	${CC} -c $> ${CFLAGS} 
 	${AR} rcs $@ lht.o
 

@@ -1,11 +1,11 @@
 
 raft: ${BINDIR}/raft ${BINDIR}/libraft.a ${BINDIR}/librex.a 
 
-${BINDIR}/libraft.a: raft/raft.c raft/raft-rpc.c
+${BINDIR}/libraft.a: raft/raft.c raft/raft-rpc.c include/raft.h 
 	${CC} -c raft/raft.c raft/raft-rpc.c ${CFLAGS} 
 	${AR} rcs $@ raft.o raft-rpc.o 
 
-${BINDIR}/librex.a: raft/rex.c 
+${BINDIR}/librex.a: raft/rex.c include/rex.h 
 	${CC} -c raft/rex.c ${CFLAGS} 
 	${AR} rcs $@ rex.o 
 

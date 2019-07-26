@@ -2,7 +2,7 @@
 
 rpc: ${BINDIR}/rpcd ${BINDIR}/rpcinfo ${BINDIR}/librpc.a 
 
-${BINDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c 
+${BINDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c include/rpc.h include/rpcd.h include/shauth.h 
 	${CC} -c rpc/rpc.c rpc/rpcd.c rpc/shauth.c ${CFLAGS} 
 	${AR} rcs $@ rpc.o rpcd.o shauth.o 
 

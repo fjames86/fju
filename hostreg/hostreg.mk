@@ -5,7 +5,7 @@ ${BINDIR}/libhostreg.a: hostreg/hostreg.c include/hostreg.h
 	${CC} -c hostreg/hostreg.c ${CFLAGS} 
 	${AR} rcs $@ hostreg.o
 
-${BINDIR}/libhrauth.a: hostreg/hrauth.c 
+${BINDIR}/libhrauth.a: hostreg/hrauth.c include/hrauth.h 
 	${CC} -c hostreg/hrauth.c ${CFLAGS} 
 	${AR} rcs $@ hrauth.o
 

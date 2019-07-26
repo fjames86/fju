@@ -1,7 +1,7 @@
 
 nls: ${BINDIR}/nls ${BINDIR}/libnls.a 
 
-${BINDIR}/libnls.a: nls/nls.c nls/nls-rpc.c 
+${BINDIR}/libnls.a: nls/nls.c nls/nls-rpc.c include/nls.h 
 	${CC} -c nls/nls.c nls/nls-rpc.c ${CFLAGS} 
 	${AR} rcs $@ nls.o nls-rpc.o 
 

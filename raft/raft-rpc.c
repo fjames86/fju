@@ -90,7 +90,7 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   int sts, b;
   struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)cxt;
   struct raft_member member;
-  uint64_t termseq;
+  uint64_t termseq, commitseq;
   struct raft_cluster cl;
 
   //  rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
@@ -113,7 +113,9 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   if( sts ) goto done;
   sts = xdr_decode_uint64( xdr, &termseq );
   if( sts ) goto done;
-
+  if( sts ) xdr_decode_uint64( xdr, &commitseq );
+  if( sts ) goto done;
+  
   if( termseq > cl.termseq ) {
     cl.leaderid = pcxt->hostid;
     raft_transition_follower( &cl );
@@ -159,6 +161,7 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint64( &xdr, cl->id );
   xdr_encode_uint64( &xdr, hostreg_localid() );
   xdr_encode_uint64( &xdr, cl->termseq );
+  xdr_encode_uint64( &xdr, cl->commitseq );
   sts = hrauth_call_udp( &hcall, &xdr );
   if( sts ) {
     free( pcxt );
@@ -442,7 +445,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   int handle, sts;
   struct raft_member member;
   struct raft_cluster cl;
-  uint64_t clid, leaderid, termseq;
+  uint64_t clid, leaderid, termseq, commitseq;
   struct hrauth_context *hcxt;
   
   if( !inc->pvr || (inc->pvr->flavour != RPC_AUTH_HRAUTH) ) {
@@ -452,6 +455,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &leaderid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &termseq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &commitseq );
   if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
   //  rpc_log( RPC_LOG_DEBUG, "raft_proc_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",

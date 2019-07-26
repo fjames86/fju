@@ -91,6 +91,12 @@ static void cmd_call_rem( uint64_t hostid, uint64_t clid, int port );
 int main( int argc, char **argv ) {
     int sts, i;
 
+#ifdef WIN32
+	{
+		WSADATA wsadata;
+		WSAStartup( MAKEWORD( 2, 2 ), &wsadata );
+	}
+#endif
     sts = raft_open();
     if( sts ) usage( "Failed to open" );
 

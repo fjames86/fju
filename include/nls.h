@@ -42,14 +42,13 @@
 /* local log shared over RPC */
 struct nls_share {
   uint64_t hshare;
-  char name[64];
+  char path[256];
 };
 
 /* remote shared log */
 struct nls_remote {
   uint64_t hostid;   /* remote host id */
   uint64_t hshare; /* shared log descriptor */
-  char name[64];
   uint64_t seq;      /* last known log seqno and message id */
   uint64_t lastid;
   uint64_t timestamp;   /* when to next send a notreg call */

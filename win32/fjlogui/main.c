@@ -179,8 +179,6 @@ static int nls_decode_prop( struct xdr_s *xdr, struct nls_share *share, struct l
   int sts;
   
   sts = xdr_decode_uint64( xdr, &share->hshare );
-  if( !sts ) sts = xdr_decode_string( xdr, share->name, sizeof(share->name) );  
-
   if( !sts ) sts = xdr_decode_uint32( xdr, &prop->version );  
   if( !sts ) sts = xdr_decode_uint64( xdr, &prop->seq );
   if( !sts ) sts = xdr_decode_uint32( xdr, &prop->lbacount );
@@ -598,15 +596,14 @@ static INT_PTR WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam
 				char str[128];
 				int sts;
 				struct hostreg_host host;
-				char name[64];
 				uint64_t hshare;
 
-				GetDlgItemTextA( hwnd,IDC_COMBO_HOST,str,sizeof( str ) );
-				sts = hostreg_host_by_name( str,&host );
+				GetDlgItemTextA( hwnd, IDC_COMBO_HOST, str, sizeof( str ) );
+				sts = hostreg_host_by_name( str, &host );
 				glob.hostid = host.id;
 
-				GetDlgItemTextA( hwnd,IDC_COMBO_LOG,str,sizeof( str ) );
-				sscanf( str,"%s - %llx", name, &hshare );
+				GetDlgItemTextA( hwnd, IDC_COMBO_LOG, str, sizeof( str ) );
+				sscanf( str, "%llx", &hshare );
 				glob.hshare = hshare;
 			}
 			/* fall through */
@@ -636,7 +633,7 @@ static INT_PTR WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam
 					SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_RESETCONTENT,0,0 );
 					if(sts > 32) sts= 32;
 					for(i = 0; i < sts; i++) {
-						sprintf( str,"%s - %llx",shares[i].name,shares[i].hshare );
+						sprintf( str,"%llx", shares[i].hshare );
 						SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_ADDSTRING,0,str );
 					}
 					if(sts > 0) SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_SETCURSEL,0,0 );

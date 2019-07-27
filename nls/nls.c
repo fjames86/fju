@@ -230,6 +230,8 @@ int nls_share_by_hshare( uint64_t hshare, struct nls_share *share ) {
 
 int nls_share_add( struct nls_share *share ) {
     int sts, i;
+    if( strcmp( share-path, "" ) == 0 ) return -1;
+    
     if( glob.ocount <= 0 ) return -1;
     nls_lock();
     sts = -1;
@@ -281,9 +283,7 @@ int nls_share_set( struct nls_share *share ) {
 }
 
 int nls_share_open( struct nls_share *share, struct log_s *log ) {
-  char name[256];
-  sprintf( name, "%"PRIx64".log", share->hshare );
-  return log_open( mmf_default_path( "nls", name, NULL ), NULL, log );
+  return log_open( share->path, NULL, log );
 }
 
 

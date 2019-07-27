@@ -66,8 +66,6 @@ static int nls_proc_null( struct rpc_inc *inc ) {
 
 static int nls_encode_prop( struct xdr_s *xdr, struct nls_share *share, struct log_prop *prop ) {
   xdr_encode_uint64( xdr, share->hshare );
-  xdr_encode_string( xdr, share->name );  
-
   xdr_encode_uint32( xdr, prop->version );
   xdr_encode_uint64( xdr, prop->seq );
   xdr_encode_uint32( xdr, prop->lbacount );
@@ -82,8 +80,6 @@ static int nls_decode_prop( struct xdr_s *xdr, struct nls_share *share, struct l
   int sts;
   
   sts = xdr_decode_uint64( xdr, &share->hshare );
-  if( !sts ) sts = xdr_decode_string( xdr, share->name, sizeof(share->name) );  
-
   if( !sts ) sts = xdr_decode_uint32( xdr, &prop->version );  
   if( !sts ) sts = xdr_decode_uint64( xdr, &prop->seq );
   if( !sts ) sts = xdr_decode_uint32( xdr, &prop->lbacount );
@@ -103,7 +99,7 @@ static int nls_encode_share( struct xdr_s *xdr, struct nls_share *share ) {
   memset( &prop, 0, sizeof(prop) );
   sts = nls_share_open( share, &log );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "failed to open shared log name=%s", share->name );
+    rpc_log( RPC_LOG_ERROR, "failed to open shared log %"PRIx64"", share->hshare );
   } else {
     log_prop( &log, &prop );
     log_close( &log );
@@ -434,7 +430,6 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   sts = nls_remote_by_hshare( rshare.hshare, &remote );
   if( sts ) goto done;
 
-  strncpy( remote.name, rshare.name, sizeof(remote.name) - 1 );
   remote.seq = prop.seq;
   remote.lastid = prop.last_id;
   remote.last_contact = time( NULL );

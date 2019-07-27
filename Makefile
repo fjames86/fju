@@ -13,17 +13,21 @@ PROJECTS += lht
 PROJECTS += ef
 
 BINDIR=bin
+LIBDIR=lib
 CFLAGS += -Iinclude -g
-LFLAGS += -L${BINDIR}
+LFLAGS += -L${LIBDIR}
 
 
-.PHONY: all clean ${PROJECTS}
+.PHONY: all clean tar ${PROJECTS}
 
 all: ${PROJECTS}
 	rm -f *.o
 
 clean:
-	rm -f ${BINDIR}/* *.o 
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
+
+tar:
+	tar -czvf fju.tar.gz ${BINDIR}/*
 
 .for proj in ${PROJECTS}
 .include "${proj}/${proj}.mk"

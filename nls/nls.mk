@@ -1,14 +1,14 @@
 
-nls: ${BINDIR}/nls ${BINDIR}/libnls.a 
+nls: ${BINDIR}/nls ${LIBDIR}/libnls.a 
 
-${BINDIR}/libnls.a: nls/nls.c nls/nls-rpc.c include/nls.h 
+${LIBDIR}/libnls.a: nls/nls.c nls/nls-rpc.c include/nls.h 
 	${CC} -c nls/nls.c nls/nls-rpc.c ${CFLAGS} 
 	${AR} rcs $@ nls.o nls-rpc.o 
 
-nls_deps += ${BINDIR}/libmmf.a
-nls_deps += ${BINDIR}/liblog.a
-nls_deps += ${BINDIR}/libsec.a
-nls_deps += ${BINDIR}/libnls.a
+nls_deps += ${LIBDIR}/libmmf.a
+nls_deps += ${LIBDIR}/liblog.a
+nls_deps += ${LIBDIR}/libsec.a
+nls_deps += ${LIBDIR}/libnls.a
 
 ${BINDIR}/nls: nls/nls-main.c ${nls_deps}
 	${CC} -o $@ nls/nls-main.c ${CFLAGS} ${LFLAGS} -lmmf -lcrypto -llog -lsec -lnls 

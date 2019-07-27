@@ -1,9 +1,7 @@
 
-mmf: libmmf 
+mmf: ${LIBDIR}/libmmf.a
 
-libmmf: ${BINDIR}/libmmf.a
-
-${BINDIR}/libmmf.a: mmf/mmf.c include/mmf.h 
+${LIBDIR}/libmmf.a: mmf/mmf.c include/mmf.h 
 	${CC} -c $> ${CFLAGS} 
 	${AR} rcs $@ mmf.o
 

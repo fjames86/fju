@@ -509,6 +509,9 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
     
   xdr_encode_uint64( &inc->xdr, cl.termseq );  
   rpc_complete_accept_reply( inc, handle );
+
+  raft_notify( RAFT_NOTIFY_RECV_PING, &cl, NULL );
+  
   return 0;
 }
 
@@ -588,6 +591,9 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
   xdr_encode_uint64( &inc->xdr, cl.termseq );  
   rpc_complete_accept_reply( inc, handle );
+
+  raft_notify( RAFT_NOTIFY_RECV_VOTE, &cl, NULL );
+  
   return 0;
 }
 

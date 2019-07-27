@@ -315,7 +315,7 @@ static int rex_proc_write( struct rpc_inc *inc ) {
   memcpy( state.buf, buf, len );
   rex_state_save( cl.id, &state );
   
-  /* TODO: don't acknowlege until replicated on a quorum number of members */
+  /* TODO: don't acknowlege until replicated on a quorum number of members? */
   
   xdr_encode_boolean( &inc->xdr, 1 );
   xdr_encode_uint64( &inc->xdr, cl.leaderid );
@@ -426,6 +426,7 @@ static void rex_notify( raft_notify_t evt, struct raft_cluster *cl, void *cxt, v
     switch( evt ) {
     case RAFT_NOTIFY_LEADER:
     case RAFT_NOTIFY_SEND_PING:
+	/* resend data whenever we become leader or are sending raft ping messages */
 	rex_send_pings( cl );
     default:
 	break;
@@ -441,8 +442,5 @@ static struct raft_notify_context rex_notify_cxt = {
 
 void rex_register( void ) {
   rpc_program_register( &rex_prog );
-
-  raft_notify_register( &rex_notify_cxt );
-  
-  //rpc_iterator_register( &rex_iter );
+  raft_notify_register( &rex_notify_cxt );  
 }

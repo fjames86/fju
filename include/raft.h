@@ -106,6 +106,8 @@ typedef enum {
     RAFT_NOTIFY_LEADER = 3,
     RAFT_NOTIFY_SEND_PING = 4,
     RAFT_NOTIFY_SEND_VOTE = 5,
+    RAFT_NOTIFY_RECV_PING = 6,
+    RAFT_NOTIFY_RECV_VOTE = 7,
 } raft_notify_t;
 
 typedef void (*raft_notify_cb_t)( raft_notify_t evt, struct raft_cluster *cl, void *cxt, void *reserved );

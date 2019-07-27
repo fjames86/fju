@@ -45,7 +45,7 @@ static void raft_transition_candidate( struct raft_cluster *cl );
 static void raft_transition_leader( struct raft_cluster *cl );
 static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid );
 static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid );
-static void raft_notify( struct raft_cluster *cl );
+static void raft_notify( raft_notify_t *evt, struct raft_cluster *cl, void *reserved );
 
 static struct rpc_iterator raft_iter = {
     NULL,
@@ -62,7 +62,7 @@ static void raft_transition_follower( struct raft_cluster *cl ) {
   uint64_t now;
   uint32_t timeo;
 
-  if( cl->state != RAFT_STATE_FOLLOWER ) raft_notify( cl );
+  if( cl->state != RAFT_STATE_FOLLOWER ) raft_notify( RAFT_NOTIFY_FOLLOWER, cl, NULL );
   
   cl->state = RAFT_STATE_FOLLOWER;
 
@@ -282,7 +282,7 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
 
   if( cl->flags & RAFT_CLUSTER_WITNESS ) return;
   
-  if( cl->state != RAFT_STATE_CANDIDATE ) raft_notify( cl );
+  if( cl->state != RAFT_STATE_CANDIDATE ) raft_notify( RAFT_NOTIFY_CANDIDATE, cl, NULL );
   
 #if 0
   if( cl->state != RAFT_STATE_CANDIDATE ) {
@@ -308,6 +308,7 @@ static void raft_transition_candidate( struct raft_cluster *cl ) {
   raft_iter_set_timeout( cl->timeout );
   
   /* send vote requests */
+  raft_notify( RAFT_NOTIFY_SEND_VOTE, cl, NULL );
   n = raft_member_list( cl->id, member, 32 );
   for( i = 0; i < n; i++ ) {
     raft_call_vote( cl, member[i].hostid );
@@ -324,7 +325,7 @@ static void raft_send_pings( struct raft_cluster *cl ) {
     raft_call_ping( cl, member[i].hostid );
   }
 
-  raft_notify( cl );
+  raft_notify( RAFT_NOTIFY_SEND_PING, cl, NULL );
   
 }
 
@@ -332,7 +333,7 @@ static void raft_transition_leader( struct raft_cluster *cl ) {
   uint32_t timeo;
   uint64_t now;
 
-  if( cl->state != RAFT_STATE_LEADER ) raft_notify( cl );
+  if( cl->state != RAFT_STATE_LEADER ) raft_notify( RAFT_NOTIFY_LEADER, cl, NULL );
   
   cl->state = RAFT_STATE_LEADER;
 
@@ -729,12 +730,11 @@ void raft_notify_register( struct raft_notify_context *cxt ) {
   glob.notlist = cxt;
 }
 
-static void raft_notify( struct raft_cluster *cl ) {
-  struct raft_notify_context *ncxt;
-  ncxt = glob.notlist;
-  while( ncxt ) {
-    ncxt->cb( cl, ncxt->cxt );
-    ncxt = ncxt->next;
-  }
-  
+static void raft_notify( raft_notify_t evt, struct raft_cluster *cl, void *reserved ) {
+    struct raft_notify_context *ncxt;
+    ncxt = glob.notlist;
+    while( ncxt ) {
+	ncxt->cb( evt, cl, ncxt->cxt, reserved );
+	ncxt = ncxt->next;
+    }  
 }

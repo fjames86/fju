@@ -100,10 +100,18 @@ int raft_member_clear_voted( uint64_t clid );
 #define RAFT_RPC_VERS 1
 void raft_register( void );
 
-typedef void (*raft_notify_t)( struct raft_cluster *cl, void *cxt );
+typedef enum {
+    RAFT_NOTIFY_FOLLOWER = 1,
+    RAFT_NOTIFY_CANDIDATE = 2,
+    RAFT_NOTIFY_LEADER = 3,
+    RAFT_NOTIFY_SEND_PING = 4,
+    RAFT_NOTIFY_SEND_VOTE = 5,
+} raft_notify_t;
+
+typedef void (*raft_notify_cb_t)( raft_notify_t evt, struct raft_cluster *cl, void *cxt, void *reserved );
 struct raft_notify_context {
   struct raft_notify_context *next;
-  raft_notify_t cb;
+  raft_notify_cb_t cb;
   void *cxt;
 };
 void raft_notify_register( struct raft_notify_context *ncxt );

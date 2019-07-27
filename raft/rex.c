@@ -421,11 +421,15 @@ static struct rpc_program rex_prog = {
 };
 
 
-static void rex_notify( struct raft_cluster *cl, void *cxt ) {
-  
-  if( cl->state == RAFT_STATE_LEADER ) {
-    rex_send_pings( cl );
-  }
+static void rex_notify( raft_notify_t evt, struct raft_cluster *cl, void *cxt, void *reserved ) {
+
+    switch( evt ) {
+    case RAFT_NOTIFY_LEADER:
+    case RAFT_NOTIFY_SEND_PING:
+	rex_send_pings( cl );
+    default:
+	break;
+    }
   
 }
 

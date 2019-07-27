@@ -194,6 +194,8 @@ static void rex_send_pings( struct raft_cluster *cl ) {
 
 }
 
+#if 0
+
 struct rex_proxy_cxt {
   uint32_t xid;
   struct rpc_provider *pvr;
@@ -261,6 +263,7 @@ static int rex_proxy_write( uint64_t hostid, struct xdr_s *args, struct rpc_inc 
 
   return sts;
 }
+#endif
 
 static int rex_proc_write( struct rpc_inc *inc ) {
   int handle, sts, len;
@@ -293,7 +296,8 @@ static int rex_proc_write( struct rpc_inc *inc ) {
     xdr_init( &args, argbuf, sizeof(argbuf) );
     xdr_encode_uint64( &args, clid );
     xdr_encode_opaque( &args, buf, len );
-    rex_proxy_write( cl.leaderid, &args, inc );
+    hrauth_call_proxy( inc, cl.leaderid, &args );
+//    rex_proxy_write( cl.leaderid, &args, inc );
     return 1;
 #endif
     goto done;

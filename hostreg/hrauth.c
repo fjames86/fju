@@ -807,6 +807,69 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   return 0;  
 }
 
+
+struct hrauth_proxy_cxt {
+  uint32_t xid;
+  struct rpc_provider *pvr;
+  void *pcxt;
+  struct sockaddr_storage raddr;
+  uint32_t raddr_len;
+};
+
+static void hrauth_proxy_cb( struct xdr_s *xdr, void *cxt ) {
+  struct hrauth_proxy_cxt *pcxt = (struct hrauth_proxy_cxt *)cxt;
+  struct rpc_listen *listen;
+  int sts, handle;
+  struct rpc_inc inc;
+
+  if( !xdr ) goto done;
+		 
+  /* send reply message */
+  memset( &inc, 0, sizeof(inc) );
+  inc.pvr = pcxt->pvr;
+  inc.pcxt = pcxt->pcxt;
+  xdr_init( &inc.xdr, buf, sizeof(buf) );
+  rpc_init_accept_reply( &inc, pcxt->xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_fixed( &inc.xdr, xdr->buf + xdr->offset, xdr->count - xdr->offset );
+  rpc_complete_accept_reply( &inc, handle );
+
+  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+  if( listen ) sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0, (struct sockaddr *)&pcxt->raddr, pcxt->raddr_len );
+  
+ done:
+  free( pcxt );
+  return;
+}
+
+int hrauth_call_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args ) {
+  int sts;
+  struct hrauth_call hcall;
+  struct hrauth_proxy_cxt *pcxt;
+
+  pcxt = malloc( sizeof(*pcxt) );
+  pcxt->xid = inc->msg.xid;
+  pcxt->pvr = inc->pvr;
+  pcxt->pcxt = inc->pcxt;
+  memcpy( &pcxt->raddr, &inc->raddr, inc->raddr_len );
+  pcxt->raddr_len = inc->raddr_len;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = inc->msg.u.call.prog;
+  hcall.vers = inc->msg.u.call.vers;
+  hcall.proc = inc->msg.u.call.proc;
+  hcall.donecb = hrauth_proxy_cb;
+  hcall.cxt = pcxt;
+  hcall.timeout = 500;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  sts = hrauth_call_udp( &hcall, args );
+  if( sts ) {
+    free( pcxt );
+  }
+
+  return sts;
+}
+
 /* ------ an equivalent for TCP is MUCH harder. ------ */
 
 struct hrauth_tcp_cxt {

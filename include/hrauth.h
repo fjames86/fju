@@ -117,5 +117,7 @@ struct hrauth_call_opts {
 int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
 int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args );
 
+int hrauth_call_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args );
+
 #endif
 

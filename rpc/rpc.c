@@ -922,6 +922,54 @@ done:
   return sts;
 }
 
+/* simple rpc call */
+struct rpc_call_pars {
+    uint32_t prog;
+    uint32_t vers;
+    uint32_t proc;
+    struct rpc_provider *pvr;
+    void *pcxt;
+    struct sockaddr_storage raddr;
+    uint32_t raddr_len;
+    int timeout;
+    struct xdr_s buf;
+};
+
+int rpc_call_udp_sync( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res ) {
+    int sts, handle;
+    struct rpc_inc inc;
+    struct rpc_call_opts opts;
+
+    memset( &inc, 0, sizeof(inc) );
+    memcpy( &inc.raddr, &pars->raddr, pars->raddr_len );
+    inc.raddr_len = pars->raddr_len;
+        
+    inc.pvr = pars->pvr;
+    inc.pcxt = pars->pcxt;
+
+    xdr_init( &inc.xdr, pars->buf.buf, pars->buf.count );
+    sts = rpc_init_call( &inc, pars->prog, pars->vers, pars->proc, &handle );
+    if( sts ) goto done;
+    sts = xdr_encode_fixed( &inc.xdr, argres->buf, argres->offset );
+    if( sts ) goto done;
+    sts = rpc_complete_call( &inc, handle );
+    if( sts ) goto done;
+
+    memset( &opts, 0, sizeof(opts) );
+    opts.mask = RPC_CALL_OPT_TIMEOUT;
+    opts.timeout = pars->timeout ? pars->timeout : 1000;
+    sts = rpc_call_udp2( &inc, &opts );
+    if( sts ) goto done;
+    
+    sts = rpc_process_reply( &inc );
+    if( sts ) goto done;
+
+    *res = inc.xdr;
+    sts = 0;
+done:
+    return sts;
+};
+
 int rpc_call_tcp( struct rpc_inc *inc ) {
 #ifdef WIN32
   SOCKET fd;

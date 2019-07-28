@@ -785,6 +785,7 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   }
   
   /* await reply - copy args so we can resend on failure */
+  /* XXX: we don't do auto resends so we don't need to copy args */
   w = malloc( sizeof(*w) + sizeof(*hcallp) + args->offset );
   hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w));
   hcallp->hcall = *hcall;
@@ -1012,4 +1013,48 @@ int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args ) {
  done:
   if( sts ) free( cxt );
   return sts;
+}
+
+int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
+    int sts;
+    struct rpc_call_pars pars;
+    struct hrauth_context hcxt;
+    struct sockaddr_in sin;
+    char *tmpbuf = NULL;
+    int port;
+    
+    sts = hostreg_host_by_id( args->hostid, &host );
+    if( sts ) return sts;
+
+    port = args->port;
+    if( !port ) {
+	listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+	if( !listen ) return -1;
+	port = ntohs( listen->laddr.sin_port );
+    }
+
+    memset( &sin, 0, sizeof(sin) );
+    sin.sin_family = AF_INET;
+    sin.sin_port = port;
+    sin.sin_addr.s_addr = host.addr[0];
+
+    sts = hrauth_init( hcxt, args->hostid );
+    hcxt->service = args->service;
+
+    memset( &pars, 0, sizeof(pars) );
+    pars.prog = args->prog;
+    pars.vers = args->vers;
+    pars.proc = args->proc;
+    pars.pvr = hrauth_provider();
+    pars.pcxt = &hcxt;
+    memcpy( &pars.raddr, &sin, sizeof(sin) );
+    pars.raddr_len = sizeof(sin);
+    pars.timeout = args->timeout ? args->timeout : 1000;
+
+    tmpbuf = malloc( 32*1024 );
+    xdr_init( &pars.buf, tmpbuf, 32*1024 );
+
+    sts = rpc_call_udp_sync( &pars, &args->args, &args->res );
+    free( tmpbuf );
+    return sts;
 }

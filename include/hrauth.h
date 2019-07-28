@@ -119,5 +119,18 @@ int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args );
 
 int hrauth_call_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args );
 
+struct hrauth_call_udp_args {
+    uint64_t hostid;
+    uint32_t prog;
+    uint32_t vers;
+    uint32_t proc;
+    int port;
+    int timeout;
+    int service;
+    struct xdr_s args;
+    struct xdr_s res;
+};
+int hrauth_call_udp_sync( struct hrauth_call_udp_args *args );
+
 #endif
 

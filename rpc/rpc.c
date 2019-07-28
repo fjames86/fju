@@ -923,18 +923,6 @@ done:
 }
 
 /* simple rpc call */
-struct rpc_call_pars {
-    uint32_t prog;
-    uint32_t vers;
-    uint32_t proc;
-    struct rpc_provider *pvr;
-    void *pcxt;
-    struct sockaddr_storage raddr;
-    uint32_t raddr_len;
-    int timeout;
-    struct xdr_s buf;
-};
-
 int rpc_call_udp_sync( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res ) {
     int sts, handle;
     struct rpc_inc inc;

@@ -1,6 +1,6 @@
 
 
-rpc: ${BINDIR}/rpcd ${BINDIR}/rpcinfo ${LIBDIR}/librpc.a 
+rpc: ${BINDIR}/rpcd ${BINDIR}/rpcinfo ${LIBDIR}/librpc.a ${BINDIR}/rpclt
 
 ${LIBDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c include/rpc.h include/rpcd.h include/shauth.h 
 	${CC} -c rpc/rpc.c rpc/rpcd.c rpc/shauth.c ${CFLAGS} 
@@ -21,3 +21,6 @@ ${BINDIR}/rpcd: rpc/rpcd-main.c ${rpc_deps}
 
 ${BINDIR}/rpcinfo: rpc/rpcinfo.c ${rpc_deps}
 	${CC} -o $@ rpc/rpcinfo.c ${CFLAGS} ${LFLAGS} -lmmf -lrpc -lcrypto -lsec -lhostreg -lhrauth 
+
+${BINDIR}/rpclt: rpc/rpclt.c ${rpc_deps}
+	${CC} -o $@ rpc/rpclt.c ${CFLAGS} ${LFLAGS} -lmmf -lrpc -lcrypto -lsec -lhostreg -lhrauth -lraft 

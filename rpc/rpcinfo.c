@@ -256,3 +256,9 @@ int main( int argc, char **argv ) {
   return 0;
 }
 
+
+struct rpc_call_info {
+    uint32_t prog;
+    uint32_t vers;
+    uint32_t proc;
+};

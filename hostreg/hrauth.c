@@ -279,6 +279,7 @@ static int hrauth_cverf( struct rpc_provider *pvr, struct rpc_msg *msg, void *pc
   if( sa->nickname == 0 ) {
     sa->nickname = verf.nickname;
   } else if( verf.nickname != sa->nickname ) {
+    rpc_log( RPC_LOG_DEBUG, "hrauth_cverf unexpected nickname" );
     return -1;
   }
 
@@ -350,7 +351,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* derive common key */
     sts = hrauth_common( auth.u.full.id, sa->key );
     if( sts ) {
-      //rpc_log( RPC_LOG_DEBUG, "hrauth: unknown host %"PRIx64"", auth.u.full.id );
+      rpc_log( RPC_LOG_DEBUG, "hrauth: unknown host %"PRIx64"", auth.u.full.id );
       return sts;
     }
     hrauth_decrypt( tmpx.buf, tmpx.count, sa->key, sa->cipher );
@@ -360,7 +361,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     sa->window = cred.window;
     sa->cipher = cred.cipher;
     sec_rand( &sa->nickname, 4 );
-    //rpc_log( RPC_LOG_DEBUG, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
+    rpc_log( RPC_LOG_DEBUG, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
     break;
   default:
     return -1;
@@ -1040,7 +1041,7 @@ int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
 
     memset( &sin, 0, sizeof(sin) );
     sin.sin_family = AF_INET;
-    sin.sin_port = port;
+    sin.sin_port = htons( port );
     sin.sin_addr.s_addr = host.addr[0];
 
     sts = hrauth_init( &hcxt, args->hostid );

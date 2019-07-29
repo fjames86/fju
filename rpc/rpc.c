@@ -568,7 +568,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     
   switch( inc->msg.tag ) {
   case RPC_CALL:
-    //rpc_log( RPC_LOG_INFO, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
+    rpc_log( RPC_LOG_INFO, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
 
     /* lookup function */
     sts = rpc_program_find( inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,
@@ -597,6 +597,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, &handle );
 	return 0;
       }
+
       return -1;
     }
 
@@ -947,6 +948,9 @@ int rpc_call_udp_sync( struct rpc_call_pars *pars, struct xdr_s *args, struct xd
     opts.mask = RPC_CALL_OPT_TIMEOUT;
     opts.timeout = pars->timeout ? pars->timeout : 1000;
     sts = rpc_call_udp2( &inc, &opts );
+    if( sts ) goto done;
+
+    sts = rpc_decode_msg( &inc.xdr, &inc.msg );
     if( sts ) goto done;
     
     sts = rpc_process_reply( &inc );

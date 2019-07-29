@@ -47,7 +47,7 @@ static void rpcbind_results( struct xdr_s *xdr );
 static void raft_results( struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
-    { 10000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
+    { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_results },    
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -66,7 +66,7 @@ static void usage( char *fmt, ... ) {
   info = clt_procs;
   printf( "Programs:\n" );
   while( info->prog ) {
-      printf( "    %-8s %u:%u:%u\n",
+      printf( "    %-32s %u:%u:%u\n",
 	      info->procname, info->prog, info->vers, info->proc );
       info++;
   }
@@ -106,8 +106,11 @@ static struct {
 } glob;
 
 int main( int argc, char **argv ) {
-    int i, sts;
+  int i, sts, idx;
     struct clt_info *info;
+    char *term;
+
+    hostreg_open();
     
     glob.port = 8000;
     glob.timeout = 1000;
@@ -136,16 +139,30 @@ int main( int argc, char **argv ) {
 	i++;
     }
 
-    glob.hostid = strtoull( argv[i], NULL, 16 );
+    if( i >= argc ) usage( NULL );
+    glob.hostid = strtoull( argv[i], &term, 16 );
+    if( *term ) {
+      struct hostreg_host host;
+      if( strcmp( argv[i], "local" ) == 0 ) glob.hostid = hostreg_localid();
+      else {
+	sts = hostreg_host_by_name( argv[i], &host );
+	if( sts ) usage( "Invalid hostid" );
+	glob.hostid = host.id;
+      }
+    }
+
     i++;
+    if( i >= argc ) usage( NULL );
     
-    info = clt_procs;
-    while( info->prog ) {
+    idx = 0;
+    while( clt_procs[idx].prog ) {
+      info = &clt_procs[idx];
 	if( strcmp( argv[i], info->procname ) == 0 ) {
 	    struct hrauth_call_udp_args args;
 	    char argbuf[1024];
 	    
 	    memset( &args, 0, sizeof(args) );
+	    args.hostid = glob.hostid;
 	    args.prog = info->prog;
 	    args.vers = info->vers;
 	    args.proc = info->proc;
@@ -161,7 +178,7 @@ int main( int argc, char **argv ) {
 	    if( info->results ) info->results( &args.res );
 	    exit( 0 );
 	}
-	info++;
+	idx++;
     }
     usage( "Unknown proc \"%s\"", argv[i] );
     
@@ -186,12 +203,13 @@ static void rpcbind_results( struct xdr_s *xdr ) {
       sts = xdr_decode_uint32( xdr, &port );
       if( sts ) goto bad;
 
-      printf( "%-8u %-8u %-8u %-8u\n", prog, vers, prot, port );
+      printf( "%-12u %-8u %-8u %-8u\n", prog, vers, prot, port );
       
       sts = xdr_decode_boolean( xdr, &b );
       if( sts ) goto bad;
   }
-
+  return;
+  
  bad:
   usage( "XDR error" );
 }

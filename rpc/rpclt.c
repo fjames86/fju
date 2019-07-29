@@ -55,9 +55,11 @@ static void rex_read_results( struct xdr_s *xdr );
 static void rex_write_results( struct xdr_s *xdr );
 static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void hrauth_local_results( struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
+    { HRAUTH_PROGRAM, HRAUTH_VERSION, 1, "hrauth.local", NULL, hrauth_local_results },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_list_results },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, "raft.add", raft_add_args, raft_add_results },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, "raft.rem", raft_rem_args, raft_rem_results },
@@ -400,4 +402,60 @@ static void raft_add_results( struct xdr_s *xdr ) {
 }
 
 static void raft_rem_results( struct xdr_s *xdr ) {
+}
+
+static void bn2hex( char *bn, char *hex, int len ) {
+  int i;
+  unsigned int x;
+  memset( hex, 0, 2*len );
+  for( i = 0; i < len; i++ ) {
+    x = (unsigned int)((unsigned char)bn[i]);
+    sprintf( hex + 2*i, "%02x", x );
+  }
+  hex[len*2] = '\0';
+}
+static char *mynet_ntop( uint32_t inaddr, char *str ) {
+  uint8_t *inp = (uint8_t *)&inaddr;
+    sprintf( str, "%d.%d.%d.%d", inp[0], inp[1], inp[2], inp[3] );
+    return str;	     
+}
+static void print_host( struct hostreg_host *host ) {
+    char hex[256];
+    int j;
+    
+    memset( hex, 0, sizeof(hex) );
+    bn2hex( (char *)host->pubkey, hex, host->publen );
+    printf( "ID=%"PRIx64" name=%s pubkey=%s ",
+	    host->id, host->name, hex );
+
+    for( j = 0; j < host->naddr; j++ ) {
+	mynet_ntop( host->addr[j], hex );
+	printf( "addr=%s ", hex );
+    }
+    printf( "\n" );    
+}
+
+static void hrauth_local_results( struct xdr_s *xdr ) {
+    struct hostreg_host x;
+    int sts, i;
+    
+    sts = xdr_decode_uint64( xdr, &x->id );
+    if( sts ) goto bad;
+    sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
+    if( sts ) goto bad;
+    x->publen = sizeof(x->pubkey);
+    sts = xdr_decode_opaque( xdr, x->pubkey, (int *)&x->publen );
+    if( sts ) goto bad;
+    sts = xdr_decode_uint32( xdr, &x->naddr );
+    if( sts ) goto bad;
+    if( x->naddr > HOSTREG_MAX_ADDR ) return -1;
+    for( i = 0; i < x->naddr; i++ ) {
+	sts = xdr_decode_uint32( xdr, &x->addr[i] );
+	if( sts ) goto bad;
+    }
+    print_host( &x );
+    
+    return;
+bad:
+    usage( "XDR error" );
 }

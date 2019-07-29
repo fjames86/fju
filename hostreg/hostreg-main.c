@@ -60,7 +60,6 @@ static void usage( char *fmt, ... ) {
             "          set ID [name=NAME] [pubkey=PUBKEY] [addr=ADDR] ]\n"
             "          rem ID\n"
 	    "          common ID\n"
-	    "          call [addr=ADDR] [port=PORT]\n" 
     );
 
     if( fmt ) {
@@ -97,7 +96,6 @@ static void bn2hex( char *bn, char *hex, int len );
 static int mynet_pton( char *str, uint8_t *inaddr );
 static char *mynet_ntop( uint32_t inaddr, char *str );
 static void cmd_common( uint64_t id );
-static void cmd_call( uint32_t addr, int port );
 
 int main( int argc, char **argv ) {
     int sts, i;
@@ -212,26 +210,6 @@ int main( int argc, char **argv ) {
 	if( i >= argc ) usage( NULL );
 	id = strtoull( argv[i], NULL, 16 );
 	cmd_common( id );
-    } else if( strcmp( argv[i], "call" ) == 0 ) {
-        uint32_t addr;
-        int port;
-	char argname[64], *argval;
-
-	addr = htonl( INADDR_LOOPBACK );
-	port = 8000;
-	
-	i++;
-	while( i < argc ) {
-	  argval_split( argv[i], argname, &argval );
-	  if( strcmp( argname, "addr" ) == 0 ) {
-	    mynet_pton( argval, (uint8_t *)&addr );
-	  } else if( strcmp( argname, "port" ) == 0 ) {
-	    port = strtoul( argval, NULL, 10 );
-	  } else usage( NULL );
-	  i++;
-	}
-
-	cmd_call( addr, port );
     } else usage( NULL );
 
     hostreg_close();
@@ -396,42 +374,3 @@ static int hostreg_decode_host( struct xdr_s *xdr, struct hostreg_host *x ) {
   return 0;
 }
 
-static void cmd_call( uint32_t addr, int port ) {
-  struct rpc_inc inc;
-  struct sockaddr_in *sinp;
-  int handle;
-  int sts;
-  struct hostreg_host host;
-  uint8_t *rpc_buf = malloc( 32*1024 );
-
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, rpc_buf, 32*1024 );
-  rpc_init_call( &inc, HRAUTH_PROGRAM, HRAUTH_VERSION, 1, &handle );
-  rpc_complete_call( &inc, handle );
-
-  sinp = (struct sockaddr_in *)&inc.raddr;
-  sinp->sin_family = AF_INET;
-  sinp->sin_port = htons( port );
-  sinp->sin_addr.s_addr = addr;
-  inc.raddr_len = sizeof(*sinp);
-  
-  sts = rpc_call_udp( &inc );  
-  if( sts ) {
-    char addrstr[64];
-    mynet_ntop( addr, addrstr );
-    usage( "Failed to call addr=%s port=%d", addrstr, port );
-  }
-  
-  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-
-  sts = rpc_process_reply( &inc );
-  if( sts ) usage( "Failed to receive reply" );
-  
-  /* decode results */
-  memset( &host, 0, sizeof(host) );
-  sts = hostreg_decode_host( &inc.xdr, &host );
-  if( sts ) usage( "Failed to decode host" );
-  print_host( &host );
-
-  free( rpc_buf );
-}

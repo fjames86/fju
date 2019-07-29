@@ -1044,15 +1044,16 @@ int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
     sin.sin_port = htons( port );
     sin.sin_addr.s_addr = host.addr[0];
 
-    sts = hrauth_init( &hcxt, args->hostid );
-    hcxt.service = args->service;
-
     memset( &pars, 0, sizeof(pars) );
     pars.prog = args->prog;
     pars.vers = args->vers;
     pars.proc = args->proc;
-    pars.pvr = hrauth_provider();
-    pars.pcxt = &hcxt;
+    if( args->service != -1 ) {
+	sts = hrauth_init( &hcxt, args->hostid );
+	hcxt.service = args->service;
+	pars.pvr = hrauth_provider();
+	pars.pcxt = &hcxt;
+    }
     memcpy( &pars.raddr, &sin, sizeof(sin) );
     pars.raddr_len = sizeof(sin);
     pars.timeout = args->timeout ? args->timeout : 1000;

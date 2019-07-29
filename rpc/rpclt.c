@@ -42,15 +42,15 @@ struct clt_info {
     uint32_t proc;
     char *procname;
     void (*getargs)( int argc, char **argv, int idx, struct xdr_s *xdr );
-    void (*results)( struct xdr_s *xdr );	
+    void (*results)( struct xdr_s *xdr );
+    uint32_t flags;
+#define CLT_NOAUTH 0x0001 
 };
 
 static void rpcbind_results( struct xdr_s *xdr );
 static void raft_list_results( struct xdr_s *xdr );
 static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void raft_add_results( struct xdr_s *xdr );
-static void raft_rem_results( struct xdr_s *xdr );
 static void rex_read_results( struct xdr_s *xdr );
 static void rex_write_results( struct xdr_s *xdr );
 static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
@@ -58,14 +58,14 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void hrauth_local_results( struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
-    { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
-    { HRAUTH_PROGRAM, HRAUTH_VERSION, 1, "hrauth.local", NULL, hrauth_local_results },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_list_results },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, "raft.add", raft_add_args, raft_add_results },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, "raft.rem", raft_rem_args, raft_rem_results },
-    { REX_RPC_PROG, REX_RPC_VERS, 1, "rex.read", rex_read_args, rex_read_results },
-    { REX_RPC_PROG, REX_RPC_VERS, 2, "rex.write", rex_write_args, rex_write_results },
-    { 0, 0, 0, NULL, NULL, NULL }
+    { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results, CLT_NOAUTH },
+    { HRAUTH_PROGRAM, HRAUTH_VERSION, 1, "hrauth.local", NULL, hrauth_local_results, CLT_NOAUTH },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_list_results, CLT_NOAUTH },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, "raft.add", raft_add_args, NULL, 0 },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, "raft.rem", raft_rem_args, NULL, 0 },
+    { REX_RPC_PROG, REX_RPC_VERS, 1, "rex.read", rex_read_args, rex_read_results, 0 },
+    { REX_RPC_PROG, REX_RPC_VERS, 2, "rex.write", rex_write_args, rex_write_results, 0 },
+    { 0, 0, 0, NULL, NULL, NULL, 0 }
 };
 
 static void usage( char *fmt, ... ) {
@@ -230,7 +230,7 @@ static void rpcbind_results( struct xdr_s *xdr ) {
   usage( "XDR error" );
 }
 
-static void raft_results( struct xdr_s *xdr ) {
+static void raft_list_results( struct xdr_s *xdr ) {
     int i, n, j, m;
     struct raft_cluster cl;
     struct raft_member member;
@@ -396,12 +396,6 @@ static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     }
     if( !clid ) usage( "clid=CLID" );
     xdr_encode_uint64( xdr, clid );
-}
-
-static void raft_add_results( struct xdr_s *xdr ) {
-}
-
-static void raft_rem_results( struct xdr_s *xdr ) {
 }
 
 static void bn2hex( char *bn, char *hex, int len ) {

@@ -839,11 +839,7 @@ int rpcbind_register( void ) {
 
 /* ----------------------------------------------------------------- */
 
-int rpc_call_udp( struct rpc_inc *inc ) {
-	return rpc_call_udp2( inc, NULL );
-}
-
-int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
+static int rpc_docall_udp( struct rpc_inc *inc, int timeout ) {
 #ifdef WIN32
   SOCKET fd;
 #else
@@ -853,17 +849,13 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
   int sts;
   struct sockaddr_in sin;
   
-  if( opts && opts->mask & RPC_CALL_OPT_FD ) {
-	  fd = opts->fd;
-  } else {
-	fd = socket( AF_INET, SOCK_DGRAM, 0 );
-	if( fd < 0 ) return -1;
-    
-	memset( &sin, 0, sizeof(sin) );
-	sin.sin_family = AF_INET;
-	sts = bind( fd, (struct sockaddr *)&sin, sizeof(sin) );
-	if( sts < 0 ) goto done;
-  }
+  fd = socket( AF_INET, SOCK_DGRAM, 0 );
+  if( fd < 0 ) return -1;
+  
+  memset( &sin, 0, sizeof(sin) );
+  sin.sin_family = AF_INET;
+  sts = bind( fd, (struct sockaddr *)&sin, sizeof(sin) );
+  if( sts < 0 ) goto done;
 
   sts = sendto( fd, inc->xdr.buf, inc->xdr.offset, 0,
 		(struct sockaddr *)&inc->raddr, inc->raddr_len );
@@ -876,7 +868,7 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
     
     evt = WSACreateEvent();
     WSAEventSelect( fd, evt, FD_READ );
-    sts = WSAWaitForMultipleEvents( 1, &evt, TRUE, opts && opts->mask & RPC_CALL_OPT_TIMEOUT ? opts->timeout : 1000, FALSE );
+    sts = WSAWaitForMultipleEvents( 1, &evt, TRUE, timeout ? timeout : 1000, FALSE );
 	if( sts != WSA_WAIT_EVENT_0 ) {
 		SetLastError( WAIT_TIMEOUT );
 		sts = -1;
@@ -890,7 +882,7 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
   pfd[0].fd = fd;
   pfd[0].events = POLLIN;
   pfd[0].revents = 0;
-  sts = poll( pfd, 1, opts && opts->mask & RPC_CALL_OPT_TIMEOUT ? opts->timeout : 1000 );
+  sts = poll( pfd, 1, timeout ? timeout : 1000 );
   if( sts != 1 ) {
     sts = -1;
     goto done;
@@ -911,23 +903,19 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
   sts = 0;
 done:
 
-  if( opts && opts->mask & RPC_CALL_OPT_FD ) {
-  } else {
 #ifdef WIN32
-	closesocket( fd );
+  closesocket( fd );
 #else
-	close( fd );
+  close( fd );
 #endif
-  }
 
   return sts;
 }
 
 /* simple rpc call */
-int rpc_call_udp_sync( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res ) {
+int rpc_call_udp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res ) {
     int sts, handle;
     struct rpc_inc inc;
-    struct rpc_call_opts opts;
 
     memset( &inc, 0, sizeof(inc) );
     memcpy( &inc.raddr, &pars->raddr, pars->raddr_len );
@@ -939,15 +927,14 @@ int rpc_call_udp_sync( struct rpc_call_pars *pars, struct xdr_s *args, struct xd
     xdr_init( &inc.xdr, pars->buf.buf, pars->buf.count );
     sts = rpc_init_call( &inc, pars->prog, pars->vers, pars->proc, &handle );
     if( sts ) goto done;
-    sts = xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
-    if( sts ) goto done;
+    if( args ) {
+	sts = xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+	if( sts ) goto done;
+    }
     sts = rpc_complete_call( &inc, handle );
     if( sts ) goto done;
 
-    memset( &opts, 0, sizeof(opts) );
-    opts.mask = RPC_CALL_OPT_TIMEOUT;
-    opts.timeout = pars->timeout ? pars->timeout : 1000;
-    sts = rpc_call_udp2( &inc, &opts );
+    sts = rpc_docall_udp( &inc, pars->timeout );
     if( sts ) goto done;
 
     sts = rpc_decode_msg( &inc.xdr, &inc.msg );
@@ -956,7 +943,7 @@ int rpc_call_udp_sync( struct rpc_call_pars *pars, struct xdr_s *args, struct xd
     sts = rpc_process_reply( &inc );
     if( sts ) goto done;
 
-    *res = inc.xdr;
+    if( res ) *res = inc.xdr;
     sts = 0;
 done:
     return sts;
@@ -1094,8 +1081,7 @@ int rpcbind_call_set( struct sockaddr_in *addr, struct rpcbind_mapping *m ) {
   memcpy( &inc.raddr, addr, sizeof(struct sockaddr_in) );
   inc.raddr_len = sizeof(struct sockaddr_in);
 
-  sts = rpc_call_udp( &inc );
-  //  sts = rpc_call_tcp( &inc );
+  sts = rpc_docall_udp( &inc, 1000 );
 
   free( buf );
     

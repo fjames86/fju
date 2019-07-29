@@ -495,64 +495,50 @@ static void load_log( char *path, uint64_t id ) {
 }
 
 static int call_list_shares( uint64_t hostid, int port, struct nls_share *share, int n ) {
- struct rpc_inc inc;
   int sts, handle, b, i;
   struct nls_share tmpshare;
   struct hostreg_host host;
   struct sockaddr_in sin;
   struct log_prop prop;
   struct rpc_call_opts copts;
-
+  struct xdr_s res;
+      
   sts = hostreg_host_by_id( hostid,&host );
   if(sts) return sts;
 
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, glob.buf, sizeof(glob.buf) );
-
-  rpc_init_call( &inc, NLS_RPC_PROG, NLS_RPC_VERS, 1, &handle );
   memset( &sin,0,sizeof( sin ) );
   sin.sin_family = AF_INET;
   sin.sin_port = htons( port );
   sin.sin_addr.s_addr = host.addr[0];
-  rpc_complete_call( &inc, handle );
 
-  memcpy( &inc.raddr, &sin, sizeof(struct sockaddr_in) );
-  inc.raddr_len = sizeof(struct sockaddr_in);
-    
-  memset( &copts, 0, sizeof(copts) );
-  copts.mask = RPC_CALL_OPT_TIMEOUT|RPC_CALL_OPT_FD;
-  copts.timeout = 1000;
-  copts.fd = glob.fd;
-  sts = rpc_call_udp2( &inc, &copts );
+  memset( &pars, 0, sizeof(pars) );
+  pars.prog = NLS_RPC_PROG;
+  pars.vers = NLS_RPC_VERS;
+  pars.proc = 1;
+  memcpy( &pars.addr, &sin, sizeof(sin) );
+  pars.raddr_len = sizeof(sin);
+  pars.timeout = 500;
+  xdr_init( &pars.buf, glob.buf, sizeof(glob.buf) );
+  sts = rpc_call_udp( &pars, NULL, &res );
   if( sts ) {
 	  goto done;
   }
 
-  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-  if(sts) {
-	  goto done;
-  }
-
-  sts = rpc_process_reply( &inc );
-  if( sts ) {
-	  goto done;
-  }
-  
   /* decode result from xdr */
-  sts = xdr_decode_boolean( &inc.xdr, &b );
+  sts = xdr_decode_boolean( &res, &b );
   if( sts ) {
 	  goto done;
   }
   i = 0;
   while( b ) {
-    sts = nls_decode_prop( &inc.xdr, &tmpshare, &prop );
+    sts = nls_decode_prop( &res, &tmpshare, &prop );
 	if( sts ) {
 		goto done;
 	}
 	if( i < n ) {
 		share[i] = tmpshare;
 	}
-	sts = xdr_decode_boolean( &inc.xdr, &b );
+	sts = xdr_decode_boolean( &res, &b );
 	if( sts ) {
 		goto done;
 	}

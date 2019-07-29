@@ -1061,7 +1061,7 @@ int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
     tmpbuf = malloc( 32*1024 );
     xdr_init( &pars.buf, (uint8_t *)tmpbuf, 32*1024 );
 
-    sts = rpc_call_udp_sync( &pars, &args->args, &args->res );
+    sts = rpc_call_udp( &pars, &args->args, &args->res );
     free( tmpbuf );
     return sts;
 }

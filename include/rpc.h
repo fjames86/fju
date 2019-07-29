@@ -266,21 +266,6 @@ void rpcbind_set_laddrs( int *prot_port, int n );
 
 int rpc_call_tcp( struct rpc_inc *inc );
 
-int rpc_call_udp( struct rpc_inc *inc );
-
-struct rpc_call_opts {
-	uint32_t mask;
-#define RPC_CALL_OPT_TIMEOUT 0x0001 
-#define RPC_CALL_OPT_FD      0x0002 
-	int timeout;
-#ifdef WIN32
-	UINT_PTR fd;
-#else
-	int fd;
-#endif
-};
-int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts );
-
 struct rpc_call_pars {
     uint32_t prog;
     uint32_t vers;
@@ -292,7 +277,7 @@ struct rpc_call_pars {
     int timeout;
     struct xdr_s buf;
 };
-int rpc_call_udp_sync( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res );
+int rpc_call_udp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res );
 
 struct rpc_iterator;
 typedef void (*rpc_iterator_t)( struct rpc_iterator *it );

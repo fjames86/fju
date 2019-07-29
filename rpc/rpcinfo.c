@@ -161,6 +161,7 @@ int main( int argc, char **argv ) {
   int port = 8000;
   uint32_t addr = htonl( INADDR_LOOPBACK );
   int service_level = 0;
+  struct rpc_call_pars pars;
   
 #ifdef WIN32
   {
@@ -222,31 +223,27 @@ int main( int argc, char **argv ) {
     
     i++;
   }
-  
-  xdr_init( &inc.xdr, rpc_buf, sizeof(rpc_buf) );
-  rpc_init_call( &inc, 100000, 2, 4, &handle );
-  rpc_complete_call( &inc, handle );
 
   sinp = (struct sockaddr_in *)&inc.raddr;
   sinp->sin_family = AF_INET;
   sinp->sin_port = htons( port );
   sinp->sin_addr.s_addr = addr;
   inc.raddr_len = sizeof(*sinp);
-  
-  sts = rpc_call_udp( &inc );
+
+  memset( &pars, 0, sizeof(pars) );
+  pars.prog = 100000;
+  pars.vres = 2;
+  pars.proc = 4;
+  memcpy( &pars.raddr, sinp, sizeof(*sinp) );
+  pars.raddr_len = sizeof(*sinp);
+  pars.timeout = 1000;
+  xdr_init( &pars.buf, rpc_buf, sizeof(rpc_buf) );
+  sts = rpc_call_udp( &pars, NULL, &inc.xdr );
   if( sts ) {
     printf( "Failed to call\n" );
     exit( 1 );
   }
     
-  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-
-  sts = rpc_process_reply( &inc );
-  if( sts ) {
-    printf( "Failed to receive reply\n" );
-    exit( 1 );
-  }
-  
   /* decode results */
   sts = rpcbind_decode_mapping_list( &inc.xdr, mlist, 16 );
   for( i = 0; i < sts; i++ ) {

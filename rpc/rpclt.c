@@ -46,7 +46,11 @@ struct clt_info {
 };
 
 static void rpcbind_results( struct xdr_s *xdr );
-static void raft_results( struct xdr_s *xdr );
+static void raft_list_results( struct xdr_s *xdr );
+static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void raft_add_results( struct xdr_s *xdr );
+static void raft_rem_results( struct xdr_s *xdr );
 static void rex_read_results( struct xdr_s *xdr );
 static void rex_write_results( struct xdr_s *xdr );
 static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
@@ -54,7 +58,9 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_results },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_list_results },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, "raft.add", raft_add_args, raft_add_results },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, "raft.rem", raft_rem_args, raft_rem_results },
     { REX_RPC_PROG, REX_RPC_VERS, 1, "rex.read", rex_read_args, rex_read_results },
     { REX_RPC_PROG, REX_RPC_VERS, 2, "rex.write", rex_write_args, rex_write_results },
     { 0, 0, 0, NULL, NULL, NULL }
@@ -342,4 +348,56 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   
   xdr_encode_uint64( xdr, clid );
   xdr_encode_opaque( xdr, (uint8_t *)data, REX_MAX_BUF );
+}
+
+static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  int sts;
+  struct raft_cluster cl;
+  struct raft_member member[32];
+  int nmember, j;
+  uint64_t localid, clid = 0;
+  char argname[64], *argval;
+  
+  while( i < argc ) {
+      argval_split( argv[i], argname, &argval );
+      if( strcmp( argname, "clid" ) == 0 ) {
+	  clid = strtoull( argval, NULL, 16 );
+      } else usage( NULL );
+      i++;
+  }
+  if( !clid ) usage( "clid=CLID" );
+  
+  sts = raft_cluster_by_id( clid, &cl );
+  if( sts ) usage( "Unknown cluster" );
+  nmember = raft_member_list( clid, member, 32 );
+  
+  xdr_encode_uint64( xdr, clid );
+  xdr_encode_uint32( xdr, cl.typeid ); 
+  xdr_encode_uint32( xdr, 0 ); // flags 
+  
+  xdr_encode_uint32( xdr, nmember );
+  localid = hostreg_localid();
+  for( j = 0; j < nmember; j++ ) {
+    xdr_encode_uint64( xdr, member[j].hostid == hostid ? localid : member[j].hostid );
+  }
+    
+}
+static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    uint64_t clid;
+    char argname[64], *argval;
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "clid" ) == 0 ) {
+	    clid = strtoull( argval, NULL, 16 );
+	} else usage( NULL );
+	i++;
+    }
+    if( !clid ) usage( "clid=CLID" );
+    xdr_encode_uint64( xdr, clid );
+}
+
+static void raft_add_results( struct xdr_s *xdr ) {
+}
+
+static void raft_rem_results( struct xdr_s *xdr ) {
 }

@@ -50,9 +50,6 @@ static void usage( char *fmt, ... ) {
             "          add member [clid=CLID] [hostid=HOSTID]\n"
             "          set member\n"
             "          rem member clid=CLID hostid=HOSTID\n"
-	    "          call HOSTID list\n"
-	    "          call HOSTID add CLID\n"
-	    "          call HOSTID rem CLID\n" 
     );
 
     if( fmt ) {
@@ -84,9 +81,6 @@ static void argval_split( char *instr, char *argname, char **argval ) {
 
 static void cmd_list( void );
 static void cmd_prop( void );
-static void cmd_call_list( uint64_t hostid, int port );
-static void cmd_call_add( uint64_t hostid, uint64_t clid, int port );
-static void cmd_call_rem( uint64_t hostid, uint64_t clid, int port );
 			   
 int main( int argc, char **argv ) {
     int sts, i;
@@ -251,39 +245,6 @@ int main( int argc, char **argv ) {
 	    if( rpc_timeout ) raft_set_rpc_timeout( rpc_timeout );
 	    
         } else usage( NULL );
-    } else if( strcmp( argv[i], "call" ) == 0 ) {
-      uint64_t hostid;
-      int port;
-      char argbuf[64];
-      char *cp;
-      
-      i++;
-      if( i >= argc ) usage( NULL );
-      strncpy( argbuf, argv[i], sizeof(argbuf) - 1 );
-      port = 8000;
-      cp = strchr( argbuf, ':' );
-      if( cp ) {
-	port = strtoul( cp + 1, NULL, 10 );
-	*cp = 0;
-      }
-      hostid = strtoull( argbuf, NULL, 16 );
-      i++;
-      if( i >= argc ) usage( NULL );
-      if( strcmp( argv[i], "list" ) == 0 ) {
-	cmd_call_list( hostid, port );
-      } else if( strcmp( argv[i], "add" ) == 0 ) {
-	uint64_t clid;
-	i++;
-	if( i >= argc ) usage( NULL );	
-	clid = strtoull( argv[i], NULL, 16 );
-	cmd_call_add( hostid, clid, port );
-      } else if( strcmp( argv[i], "rem" ) == 0 ) {
-	uint64_t clid;
-	i++;
-	if( i >= argc ) usage( NULL );	
-	clid = strtoull( argv[i], NULL, 16 );
-	cmd_call_rem( hostid, clid, port );	
-      } else usage( NULL );
     } else usage( NULL );
 
     raft_close();
@@ -356,145 +317,4 @@ static void cmd_prop( void ) {
      printf( "cluster=%d/%d\n", prop.cluster_count, prop.cluster_max );
      printf( "member=%d/%d\n", prop.member_count, prop.member_max );
 }
-
-
-
-static void cmd_call_list( uint64_t hostid, int port ) {
-  int sts, handle;
-  uint8_t buf[512];
-  struct rpc_inc inc;
-  struct sockaddr_in sin;
-  struct hostreg_host host;
-  struct raft_cluster cl;
-  struct raft_member member[32];
-  int i, n, j, m;
-  
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, buf, sizeof(buf) );
-  rpc_init_call( &inc, RAFT_RPC_PROG, RAFT_RPC_VERS, 3, &handle );
-  rpc_complete_call( &inc, handle );
-
-  sts = hostreg_host_by_id( hostid, &host );
-  if( sts ) usage( "Unknown host" );
-  
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = htons( port );
-  sin.sin_addr.s_addr = host.addr[0]; 
-  memcpy( &inc.raddr, &sin, sizeof(sin) );
-  inc.raddr_len = sizeof(sin);
-  
-  sts = rpc_call_udp( &inc );
-  if( sts ) usage( "Failed to call" );
-
-  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-  
-  sts = xdr_decode_uint32( &inc.xdr, (uint32_t *)&n );  
-  for( i = 0; i < n; i++ ) {
-    memset( &cl, 0, sizeof(cl) );
-    sts = xdr_decode_uint64( &inc.xdr, &cl.id );
-    sts = xdr_decode_uint64( &inc.xdr, &cl.leaderid );
-    sts = xdr_decode_uint64( &inc.xdr, &cl.termseq );
-    sts = xdr_decode_uint64( &inc.xdr, &cl.voteid );
-    sts = xdr_decode_uint32( &inc.xdr, &cl.state );
-    sts = xdr_decode_uint32( &inc.xdr, &cl.typeid );
-    sts = xdr_decode_uint64( &inc.xdr, &cl.commitseq );
-    sts = xdr_decode_uint64( &inc.xdr, &cl.stateseq );
-    sts = xdr_decode_uint64( &inc.xdr, &cl.stateterm );
-
-    memset( member, 0, sizeof(member) );
-    sts = xdr_decode_uint32( &inc.xdr, (uint32_t *)&m );
-    if( m > 32 ) usage( "Too many members" );
-    for( j = 0; j < m; j++ ) {
-      sts = xdr_decode_uint64( &inc.xdr, &member[j].hostid );
-      sts = xdr_decode_uint64( &inc.xdr, &member[j].lastseen );
-      sts = xdr_decode_uint32( &inc.xdr, &member[j].flags );
-      sts = xdr_decode_uint64( &inc.xdr, &member[j].nextseq );
-      sts = xdr_decode_uint64( &inc.xdr, &member[j].stateseq );
-    }
-
-    print_cluster( &cl, member, m );
-  }
-
-}
-
-
-static void cmd_call_add( uint64_t hostid, uint64_t clid, int port ) {
-  int sts, handle;
-  uint8_t buf[512];
-  struct rpc_inc inc;
-  struct raft_cluster cl;
-  struct raft_member member[32];
-  int nmember, j;
-  struct sockaddr_in sin;
-  struct hostreg_host host;
-  struct hrauth_context hcxt;
-  uint64_t localid;
-  
-  sts = raft_cluster_by_id( clid, &cl );
-  if( sts ) usage( "Unknown cluster" );
-  nmember = raft_member_list( clid, member, 32 );
-  
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, buf, sizeof(buf) );
-  inc.pvr = hrauth_provider();
-  sts = hrauth_init( &hcxt, hostid );
-  if( sts ) usage( "Faield to initialize security context" );
-  inc.pcxt = &hcxt;
-  rpc_init_call( &inc, RAFT_RPC_PROG, RAFT_RPC_VERS, 4, &handle );
-  xdr_encode_uint64( &inc.xdr, clid );
-  xdr_encode_uint32( &inc.xdr, cl.typeid ); 
-  xdr_encode_uint32( &inc.xdr, 0 ); // flags 
-  
-  xdr_encode_uint32( &inc.xdr, nmember );
-  localid = hostreg_localid();
-  for( j = 0; j < nmember; j++ ) {
-    xdr_encode_uint64( &inc.xdr, member[j].hostid == hostid ? localid : member[j].hostid );
-  }
-
-  sts = hostreg_host_by_id( hostid, &host );
-  if( sts ) usage( "Unknown host" );
-  
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = htons( port );
-  sin.sin_addr.s_addr = host.addr[0]; 
-  memcpy( &inc.raddr, &sin, sizeof(sin) );
-  inc.raddr_len = sizeof(sin);
-  
-  rpc_complete_call( &inc, handle );
-  sts = rpc_call_udp( &inc );
-}
-
-static void cmd_call_rem( uint64_t hostid, uint64_t clid, int port ) {
-  int sts, handle;
-  uint8_t buf[512];
-  struct rpc_inc inc;
-  struct sockaddr_in sin;
-  struct hostreg_host host;
-  struct hrauth_context hcxt;
-  
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, buf, sizeof(buf) );
-  inc.pvr = hrauth_provider();
-  sts = hrauth_init( &hcxt, hostid );
-  if( sts ) usage( "Faield to initialize security context" );
-  inc.pcxt = &hcxt;
-  rpc_init_call( &inc, RAFT_RPC_PROG, RAFT_RPC_VERS, 5, &handle );
-  xdr_encode_uint64( &inc.xdr, clid );
-
-  sts = hostreg_host_by_id( hostid, &host );
-  if( sts ) usage( "Unknown host" );
-  
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = htons( port );
-  sin.sin_addr.s_addr = host.addr[0]; 
-  memcpy( &inc.raddr, &sin, sizeof(sin) );
-  inc.raddr_len = sizeof(sin);
-  
-  rpc_complete_call( &inc, handle );
-  sts = rpc_call_udp( &inc );
-}
-
 

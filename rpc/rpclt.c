@@ -213,6 +213,9 @@ static void raft_results( struct xdr_s *xdr ) {
 	xdr_decode_uint64( xdr, &cl.stateseq );
 	xdr_decode_uint64( xdr, &cl.stateterm );
 	// TODO: print
+	printf( "Cluster ID=%"PRIx64" leader=%"PRIx64" termseq=%"PRIu64"\n"
+		"        state=%u typeid=%u commitseq=%"PRIu64" stateseq=%"PRIu64" stateterm=%"PRIu64"\n",
+		cl.id, cl.leaderid, cl.termseq, cl.state, cl.typeid, cl.commitseq, cl.stateseq, cl.stateterm );
 	
 	xdr_decode_uint32( xdr, (uint32_t *)&m );
 	for( j = 0; j < m; j++ ) {
@@ -221,7 +224,8 @@ static void raft_results( struct xdr_s *xdr ) {
 	    xdr_decode_uint32( xdr, &member.flags );
 	    xdr_decode_uint64( xdr, &member.nextseq );	    
 	    xdr_decode_uint64( xdr, &member.stateseq );
-	    // TODO: print 
+	    printf( "    Member ID=%"PRIx64" lastseen=%"PRIu64" flags=%x nextseq=%"PRIu64" stateseq=%"PRIu64"\n",
+		    member.hostid, member.lastseen, member.flags, member.nextseq, member.stateseq );
 	}
     }
     

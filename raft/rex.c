@@ -31,8 +31,7 @@
 #include "raft.h"
 #include <mmf.h>
 #include <rpcd.h>
-
-#define REX_MAX_BUF 32
+#include <rex.h>
 
 #ifdef WIN32
 #define PRIx64 "llx"
@@ -293,6 +292,13 @@ static int rex_proc_write( struct rpc_inc *inc ) {
 #else
     struct xdr_s args;
     uint8_t argbuf[64];
+
+    if( !cl.leaderid ) {
+      xdr_encode_boolean( &inc->xdr, 0 );
+      xdr_encode_uint64( &inc->xdr, cl.leaderid );      
+      goto done;
+    }
+    
     xdr_init( &args, argbuf, sizeof(argbuf) );
     xdr_encode_uint64( &args, clid );
     xdr_encode_opaque( &args, buf, len );

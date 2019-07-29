@@ -6,5 +6,7 @@
 #define REX_RPC_VERS 1
 void rex_register( void );
 
+#define REX_MAX_BUF 32
+
 #endif
 

@@ -28,11 +28,13 @@
 #include <string.h>
 #include <stdarg.h>
 #include <inttypes.h>
+#include <time.h>
 
 #include <rpc.h>
 #include <hrauth.h>
 #include <hostreg.h>
 #include <raft.h>
+#include <rex.h>
 
 struct clt_info {
     uint32_t prog;
@@ -45,10 +47,16 @@ struct clt_info {
 
 static void rpcbind_results( struct xdr_s *xdr );
 static void raft_results( struct xdr_s *xdr );
+static void rex_read_results( struct xdr_s *xdr );
+static void rex_write_results( struct xdr_s *xdr );
+static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_results },    
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_results },
+    { REX_RPC_PROG, REX_RPC_VERS, 1, "rex.read", rex_read_args, rex_read_results },
+    { REX_RPC_PROG, REX_RPC_VERS, 2, "rex.write", rex_write_args, rex_write_results },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -87,7 +95,7 @@ static void argval_split( char *instr, char *argname, char **argval ) {
 
     p = strchr( instr, '=' );
     if( p ) *argval = p + 1;
-    else *argval = NULL;
+    else *argval = "";
 
     p = instr;
     while( *p != '0' && *p != '=' ) {
@@ -218,6 +226,9 @@ static void raft_results( struct xdr_s *xdr ) {
     int i, n, j, m;
     struct raft_cluster cl;
     struct raft_member member;
+    char timestr[64];
+    struct tm *tm;
+    time_t now;
     
     xdr_decode_uint32( xdr, (uint32_t *)&n );
     for( i = 0; i < n; i++ ) {
@@ -232,8 +243,13 @@ static void raft_results( struct xdr_s *xdr ) {
 	xdr_decode_uint64( xdr, &cl.stateterm );
 	// TODO: print
 	printf( "Cluster ID=%"PRIx64" leader=%"PRIx64" termseq=%"PRIu64"\n"
-		"        state=%u typeid=%u commitseq=%"PRIu64" stateseq=%"PRIu64" stateterm=%"PRIu64"\n",
-		cl.id, cl.leaderid, cl.termseq, cl.state, cl.typeid, cl.commitseq, cl.stateseq, cl.stateterm );
+		"        state=%s typeid=%u commitseq=%"PRIu64" stateseq=%"PRIu64" stateterm=%"PRIu64"\n",
+		cl.id, cl.leaderid, cl.termseq,
+		cl.state == RAFT_STATE_FOLLOWER ? "FOLLOWER" :
+		cl.state == RAFT_STATE_CANDIDATE ? "CANDIDATE" :
+		cl.state == RAFT_STATE_LEADER ? "LEADER" :
+		"Unknown",
+		cl.typeid, cl.commitseq, cl.stateseq, cl.stateterm );
 	
 	xdr_decode_uint32( xdr, (uint32_t *)&m );
 	for( j = 0; j < m; j++ ) {
@@ -242,9 +258,88 @@ static void raft_results( struct xdr_s *xdr ) {
 	    xdr_decode_uint32( xdr, &member.flags );
 	    xdr_decode_uint64( xdr, &member.nextseq );	    
 	    xdr_decode_uint64( xdr, &member.stateseq );
-	    printf( "    Member ID=%"PRIx64" lastseen=%"PRIu64" flags=%x nextseq=%"PRIu64" stateseq=%"PRIu64"\n",
-		    member.hostid, member.lastseen, member.flags, member.nextseq, member.stateseq );
+
+	    if( member.lastseen ) {
+	      now = (time_t)member.lastseen;
+	      tm = localtime( &now );
+	      strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+	    } else {
+	      strcpy( timestr, "Never" );
+	    }
+	  	    
+	    printf( "    Member ID=%"PRIx64" lastseen=%s flags=%x nextseq=%"PRIu64" stateseq=%"PRIu64"\n",
+		    member.hostid, timestr, member.flags, member.nextseq, member.stateseq );
 	}
     }
     
+}
+
+static void rex_read_results( struct xdr_s *xdr ) {
+  int sts, len, i;
+  uint8_t *buf;
+
+  sts = xdr_decode_opaque_ref( xdr, &buf, &len );
+  if( sts ) usage( "XDR error" );
+
+  for( i = 0; i < len; i++ ) {
+    if( i > 0 && (i % 16) == 0 ) printf( "\n" );
+    printf( "%02x ", (uint32_t)buf[i] );
+  }
+  printf( "\n" );
+}
+
+static void rex_write_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t leaderid;
+
+  sts = xdr_decode_boolean( xdr, &b );
+  sts = xdr_decode_uint64( xdr, &leaderid );
+
+  printf( "Success=%s Leader=%"PRIx64"\n", b ? "True" : "False", leaderid );
+}
+
+static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  uint64_t clid = 0;
+  char argname[64], *argval;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoul( argval, NULL, 16 );
+    } else usage( NULL );
+    i++;
+  }
+  if( !clid ) usage( "Args: clid=CLID" );
+  
+  xdr_encode_uint64( xdr, clid );
+}
+
+static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  uint64_t clid = 0;
+  char argname[64], *argval;
+  char data[REX_MAX_BUF];
+  char tmp[4];
+  int len;
+  int j;
+	  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoul( argval, NULL, 16 );
+    } else if( strcmp( argname, "data" ) == 0 ) {
+      memset( data, 0, sizeof(data) );
+      len = strlen( argval ) / 2;
+      for( j = 0; j < (len > REX_MAX_BUF ? REX_MAX_BUF : len); j++ ) {
+	memset( tmp, 0, sizeof(tmp) );
+	tmp[0] = argval[2*j];
+	tmp[1] = argval[2*j + 1];
+	data[j] = strtoul( tmp, NULL, 16 );
+      }
+    } else usage( NULL );
+    i++;
+  }
+  if( !clid ) usage( "Args: clid=CLID data=DATA" );
+  
+  xdr_encode_uint64( xdr, clid );
+  xdr_encode_opaque( xdr, (uint8_t *)data, REX_MAX_BUF );
 }

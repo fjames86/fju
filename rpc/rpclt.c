@@ -43,8 +43,6 @@ struct clt_info {
     char *procname;
     void (*getargs)( int argc, char **argv, int idx, struct xdr_s *xdr );
     void (*results)( struct xdr_s *xdr );
-    uint32_t flags;
-#define CLT_NOAUTH 0x0001 
 };
 
 static void rpcbind_results( struct xdr_s *xdr );
@@ -58,14 +56,14 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void hrauth_local_results( struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
-    { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results, CLT_NOAUTH },
-    { HRAUTH_PROGRAM, HRAUTH_VERSION, 1, "hrauth.local", NULL, hrauth_local_results, CLT_NOAUTH },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_list_results, CLT_NOAUTH },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, "raft.add", raft_add_args, NULL, 0 },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, "raft.rem", raft_rem_args, NULL, 0 },
-    { REX_RPC_PROG, REX_RPC_VERS, 1, "rex.read", rex_read_args, rex_read_results, 0 },
-    { REX_RPC_PROG, REX_RPC_VERS, 2, "rex.write", rex_write_args, rex_write_results, 0 },
-    { 0, 0, 0, NULL, NULL, NULL, 0 }
+    { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
+    { HRAUTH_PROGRAM, HRAUTH_VERSION, 1, "hrauth.local", NULL, hrauth_local_results },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_list_results },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, "raft.add", raft_add_args, NULL },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, "raft.rem", raft_rem_args, NULL },
+    { REX_RPC_PROG, REX_RPC_VERS, 1, "rex.read", rex_read_args, rex_read_results },
+    { REX_RPC_PROG, REX_RPC_VERS, 2, "rex.write", rex_write_args, rex_write_results },
+    { 0, 0, 0, NULL, NULL, NULL }
 };
 
 static void usage( char *fmt, ... ) {
@@ -126,6 +124,13 @@ int main( int argc, char **argv ) {
     struct clt_info *info;
     char *term;
 
+#ifdef WIN32
+    {
+	WSADATA wsadata;
+	WSAStartup( MAKEWORD(2,2), &wsadata );
+    }
+#endif
+
     hostreg_open();
     
     glob.port = 8000;
@@ -146,6 +151,8 @@ int main( int argc, char **argv ) {
 		glob.service = HRAUTH_SERVICE_INTEG;
 	    } else if( strcmp( argv[i], "priv" ) == 0 ) {
 		glob.service = HRAUTH_SERVICE_PRIV;
+	    } else if( strcmp( argv[i], "noauth" ) == 0 ) {
+		glob.service = -1;		
 	    } else usage( NULL );
 	} else if( strcmp( argv[i], "-t" ) == 0 ) {
 	    i++;

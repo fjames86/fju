@@ -45,7 +45,7 @@ static void raft_transition_candidate( struct raft_cluster *cl );
 static void raft_transition_leader( struct raft_cluster *cl );
 static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid );
 static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid );
-static void raft_notify( raft_notify_t *evt, struct raft_cluster *cl, void *reserved );
+static void raft_notify( raft_notify_t evt, struct raft_cluster *cl, void *reserved );
 
 static struct rpc_iterator raft_iter = {
     NULL,

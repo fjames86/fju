@@ -245,7 +245,7 @@ static void cmd_list( void ) {
         m = nls_share_list( lst, n );
         if( m < n ) n = m;
         for( i = 0; i < n; i++ ) {
-	    printf( "%-16s %-8"PRIx64" path=%s\n", "share", lst[i].hshare, lst[i].hshare, lst[i].path );
+	    printf( "%-16s %-8"PRIx64" path=%s\n", "share", lst[i].hshare, lst[i].path );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );

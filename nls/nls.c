@@ -230,7 +230,7 @@ int nls_share_by_hshare( uint64_t hshare, struct nls_share *share ) {
 
 int nls_share_add( struct nls_share *share ) {
     int sts, i;
-    if( strcmp( share-path, "" ) == 0 ) return -1;
+    if( strcmp( share->path, "" ) == 0 ) return -1;
     
     if( glob.ocount <= 0 ) return -1;
     nls_lock();

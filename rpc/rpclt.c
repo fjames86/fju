@@ -48,8 +48,8 @@ static void raft_results( struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 10000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_results },    
-    { 0, 0, 0, NULL, NULL, NULL, NULL }
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_results },    
+    { 0, 0, 0, NULL, NULL, NULL }
 };
 
 static void usage( char *fmt, ... ) {
@@ -63,11 +63,11 @@ static void usage( char *fmt, ... ) {
 	  "      -L none|integ|priv  Service level\n"
 	  "      -t timeout          Timeout (ms)\n" 
 	  "\n" );
-  info = clt_info;
+  info = clt_procs;
   printf( "Programs:\n" );
   while( info->prog ) {
-      printf( "    %-8s %-8s %u:%u:%u\n",
-	      info->progname, info->procname, info->prog, info->vers, info->proc );
+      printf( "    %-8s %u:%u:%u\n",
+	      info->procname, info->prog, info->vers, info->proc );
       info++;
   }
   
@@ -106,8 +106,9 @@ static struct {
 } glob;
 
 int main( int argc, char **argv ) {
-    int i;
-
+    int i, sts;
+    struct clt_info *info;
+    
     glob.port = 8000;
     glob.timeout = 1000;
 
@@ -140,7 +141,7 @@ int main( int argc, char **argv ) {
     
     info = clt_procs;
     while( info->prog ) {
-	if( strcmp( argv[i], info->procame ) == 0 ) {
+	if( strcmp( argv[i], info->procname ) == 0 ) {
 	    struct hrauth_call_udp_args args;
 	    char argbuf[1024];
 	    
@@ -151,7 +152,7 @@ int main( int argc, char **argv ) {
 	    args.port = glob.port;
 	    args.timeout = glob.timeout;
 	    args.service = glob.service;
-	    xdr_init( &args.args, argbuf, sizeof(argbuf) );
+	    xdr_init( &args.args, (uint8_t *)argbuf, sizeof(argbuf) );
 	    
 	    i++;
 	    if( info->getargs ) info->getargs( argc, argv, i, &args.args );
@@ -174,49 +175,52 @@ static void rpcbind_results( struct xdr_s *xdr ) {
   
   i = 0;
   sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) return sts;
+  if( sts ) goto bad;
   while( b ) {
       sts = xdr_decode_uint32( xdr, &prog );
-      if( sts ) return sts;
+      if( sts ) goto bad;
       sts = xdr_decode_uint32( xdr, &vers );
-      if( sts ) return sts;
+      if( sts ) goto bad;
       sts = xdr_decode_uint32( xdr, &prot );
-      if( sts ) return sts;
+      if( sts ) goto bad;
       sts = xdr_decode_uint32( xdr, &port );
-      if( sts ) return sts;
+      if( sts ) goto bad;
 
       printf( "%-8u %-8u %-8u %-8u\n", prog, vers, prot, port );
       
       sts = xdr_decode_boolean( xdr, &b );
-      if( sts ) return sts;
+      if( sts ) goto bad;
   }
+
+ bad:
+  usage( "XDR error" );
 }
 
 static void raft_results( struct xdr_s *xdr ) {
-    int i, n;
+    int i, n, j, m;
     struct raft_cluster cl;
     struct raft_member member;
     
-    xdr_decode_uint32( &inc->xdr, &n );
+    xdr_decode_uint32( xdr, (uint32_t *)&n );
     for( i = 0; i < n; i++ ) {
-	xdr_decode_uint64( &inc->xdr, &cl.id );
-	xdr_decode_uint64( &inc->xdr, &cl.leaderid );
-	xdr_decode_uint64( &inc->xdr, &cl.termseq );
-	xdr_decode_uint64( &inc->xdr, &cl.voteid );
-	xdr_decode_uint32( &inc->xdr, &cl.state );
-	xdr_decode_uint32( &inc->xdr, &cl.typeid );
-	xdr_decode_uint64( &inc->xdr, &cl.commitseq );
-	xdr_decode_uint64( &inc->xdr, &cl.stateseq );
-	xdr_decode_uint64( &inc->xdr, &cl.stateterm );
+	xdr_decode_uint64( xdr, &cl.id );
+	xdr_decode_uint64( xdr, &cl.leaderid );
+	xdr_decode_uint64( xdr, &cl.termseq );
+	xdr_decode_uint64( xdr, &cl.voteid );
+	xdr_decode_uint32( xdr, &cl.state );
+	xdr_decode_uint32( xdr, &cl.typeid );
+	xdr_decode_uint64( xdr, &cl.commitseq );
+	xdr_decode_uint64( xdr, &cl.stateseq );
+	xdr_decode_uint64( xdr, &cl.stateterm );
 	// TODO: print
 	
-	xdr_decode_uint32( &inc->xdr, &m );
+	xdr_decode_uint32( xdr, (uint32_t *)&m );
 	for( j = 0; j < m; j++ ) {
-	    xdr_decode_uint64( &inc->xdr, &member.hostid );
-	    xdr_decode_uint64( &inc->xdr, &member.lastseen );
-	    xdr_decode_uint32( &inc->xdr, &member.flags );
-	    xdr_decode_uint64( &inc->xdr, &member.nextseq );	    
-	    xdr_decode_uint64( &inc->xdr, &member.stateseq );
+	    xdr_decode_uint64( xdr, &member.hostid );
+	    xdr_decode_uint64( xdr, &member.lastseen );
+	    xdr_decode_uint32( xdr, &member.flags );
+	    xdr_decode_uint64( xdr, &member.nextseq );	    
+	    xdr_decode_uint64( xdr, &member.stateseq );
 	    // TODO: print 
 	}
     }

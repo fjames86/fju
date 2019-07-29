@@ -938,7 +938,7 @@ int rpc_call_udp_sync( struct rpc_call_pars *pars, struct xdr_s *args, struct xd
     xdr_init( &inc.xdr, pars->buf.buf, pars->buf.count );
     sts = rpc_init_call( &inc, pars->prog, pars->vers, pars->proc, &handle );
     if( sts ) goto done;
-    sts = xdr_encode_fixed( &inc.xdr, argres->buf, argres->offset );
+    sts = xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
     if( sts ) goto done;
     sts = rpc_complete_call( &inc, handle );
     if( sts ) goto done;

@@ -822,14 +822,16 @@ static void hrauth_proxy_cb( struct xdr_s *xdr, void *cxt ) {
   struct rpc_listen *listen;
   int sts, handle;
   struct rpc_inc inc;
-
+  char *buf = NULL;
+  
   if( !xdr ) goto done;
 		 
   /* send reply message */
   memset( &inc, 0, sizeof(inc) );
   inc.pvr = pcxt->pvr;
   inc.pcxt = pcxt->pcxt;
-  xdr_init( &inc.xdr, buf, sizeof(buf) );
+  buf = malloc( 512 + xdr->count );
+  xdr_init( &inc.xdr, (uint8_t *)buf, 512 + xdr->count );
   rpc_init_accept_reply( &inc, pcxt->xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_fixed( &inc.xdr, xdr->buf + xdr->offset, xdr->count - xdr->offset );
   rpc_complete_accept_reply( &inc, handle );
@@ -838,6 +840,7 @@ static void hrauth_proxy_cb( struct xdr_s *xdr, void *cxt ) {
   if( listen ) sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0, (struct sockaddr *)&pcxt->raddr, pcxt->raddr_len );
   
  done:
+  if( buf ) free( buf );
   free( pcxt );
   return;
 }
@@ -1022,6 +1025,8 @@ int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
     struct sockaddr_in sin;
     char *tmpbuf = NULL;
     int port;
+    struct hostreg_host host;
+    struct rpc_listen *listen;
     
     sts = hostreg_host_by_id( args->hostid, &host );
     if( sts ) return sts;
@@ -1030,7 +1035,7 @@ int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
     if( !port ) {
 	listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
 	if( !listen ) return -1;
-	port = ntohs( listen->laddr.sin_port );
+	port = ntohs( listen->addr.sin.sin_port );
     }
 
     memset( &sin, 0, sizeof(sin) );
@@ -1038,8 +1043,8 @@ int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
     sin.sin_port = port;
     sin.sin_addr.s_addr = host.addr[0];
 
-    sts = hrauth_init( hcxt, args->hostid );
-    hcxt->service = args->service;
+    sts = hrauth_init( &hcxt, args->hostid );
+    hcxt.service = args->service;
 
     memset( &pars, 0, sizeof(pars) );
     pars.prog = args->prog;
@@ -1052,7 +1057,7 @@ int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
     pars.timeout = args->timeout ? args->timeout : 1000;
 
     tmpbuf = malloc( 32*1024 );
-    xdr_init( &pars.buf, tmpbuf, 32*1024 );
+    xdr_init( &pars.buf, (uint8_t *)tmpbuf, 32*1024 );
 
     sts = rpc_call_udp_sync( &pars, &args->args, &args->res );
     free( tmpbuf );

@@ -299,7 +299,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   opts.fd = glob.fd;  
   xdr_init( &opts.tmpbuf, glob.buf, sizeof(glob.buf) );
   opts.port = glob.port;
-  sts = hrauth_call_udp2( &hcall, &xdr, &opts );
+  sts = hrauth_call_udp_async( &hcall, &xdr, &opts );
   if( sts ) {
     free( nlscxtp );
   }
@@ -500,7 +500,7 @@ static int call_list_shares( uint64_t hostid, int port, struct nls_share *share,
   struct hostreg_host host;
   struct sockaddr_in sin;
   struct log_prop prop;
-  struct rpc_call_opts copts;
+  struct rpc_call_pars pars;
   struct xdr_s res;
       
   sts = hostreg_host_by_id( hostid,&host );
@@ -515,7 +515,7 @@ static int call_list_shares( uint64_t hostid, int port, struct nls_share *share,
   pars.prog = NLS_RPC_PROG;
   pars.vers = NLS_RPC_VERS;
   pars.proc = 1;
-  memcpy( &pars.addr, &sin, sizeof(sin) );
+  memcpy( &pars.raddr, &sin, sizeof(sin) );
   pars.raddr_len = sizeof(sin);
   pars.timeout = 500;
   xdr_init( &pars.buf, glob.buf, sizeof(glob.buf) );

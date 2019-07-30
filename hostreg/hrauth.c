@@ -204,7 +204,6 @@ static int hrauth_cauth( struct rpc_provider *pvr, struct rpc_msg *msg, void *pc
   struct hrauth_context *sa = (struct hrauth_context *)pcxt;
   struct hrauth_auth auth;
   struct xdr_s tmpx;
-  int sts;
   struct hrauth_verf verf;
   struct hostreg_prop prop;
   
@@ -553,25 +552,6 @@ static int hostreg_encode_host( struct xdr_s *xdr, struct hostreg_host *x ) {
   }
   return 0;
 }
-static int hostreg_decode_host( struct xdr_s *xdr, struct hostreg_host *x ) {
-  int sts, i;
-  memset( x, 0, sizeof(*x) );
-  sts = xdr_decode_uint64( xdr, &x->id );
-  if( sts ) return sts;
-  sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
-  if( sts ) return sts;
-  x->publen = sizeof(x->pubkey);
-  sts = xdr_decode_opaque( xdr, x->pubkey, (int *)&x->publen );
-  if( sts ) return sts;
-  sts = xdr_decode_uint32( xdr, &x->naddr );
-  if( sts ) return sts;
-  if( x->naddr > HOSTREG_MAX_ADDR ) return -1;
-  for( i = 0; i < x->naddr; i++ ) {
-    sts = xdr_decode_uint32( xdr, &x->addr[i] );
-    if( sts ) return sts;
-  }
-  return 0;
-}
 
 static int hrauth_proc_local( struct rpc_inc *inc ) {
   int handle;
@@ -817,7 +797,7 @@ struct hrauth_proxy_cxt {
 static void hrauth_proxy_udp_cb( struct xdr_s *xdr, void *cxt ) {
   struct hrauth_proxy_cxt *pcxt = (struct hrauth_proxy_cxt *)cxt;
   struct rpc_listen *listen;
-  int sts, handle;
+  int handle;
   struct rpc_inc inc;
   char *buf = NULL;
   
@@ -1017,55 +997,6 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args ) {
   return sts;
 }
 
-#endif
-
-#if 0 
-int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
-    int sts;
-    struct rpc_call_pars pars;
-    struct hrauth_context hcxt;
-    struct sockaddr_in sin;
-    char *tmpbuf = NULL;
-    int port;
-    struct hostreg_host host;
-    struct rpc_listen *listen;
-    
-    sts = hostreg_host_by_id( args->hostid, &host );
-    if( sts ) return sts;
-
-    port = args->port;
-    if( !port ) {
-	listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
-	if( !listen ) return -1;
-	port = ntohs( listen->addr.sin.sin_port );
-    }
-
-    memset( &sin, 0, sizeof(sin) );
-    sin.sin_family = AF_INET;
-    sin.sin_port = htons( port );
-    sin.sin_addr.s_addr = host.addr[0];
-
-    memset( &pars, 0, sizeof(pars) );
-    pars.prog = args->prog;
-    pars.vers = args->vers;
-    pars.proc = args->proc;
-    if( args->service != -1 ) {
-	sts = hrauth_init( &hcxt, args->hostid );
-	hcxt.service = args->service;
-	pars.pvr = hrauth_provider();
-	pars.pcxt = &hcxt;
-    }
-    memcpy( &pars.raddr, &sin, sizeof(sin) );
-    pars.raddr_len = sizeof(sin);
-    pars.timeout = args->timeout ? args->timeout : 1000;
-
-    tmpbuf = malloc( 32*1024 );
-    xdr_init( &pars.buf, (uint8_t *)tmpbuf, 32*1024 );
-
-    sts = rpc_call_udp( &pars, &args->args, &args->res );
-    free( tmpbuf );
-    return sts;
-}
 #endif
 
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {

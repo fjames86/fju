@@ -176,7 +176,6 @@ int main( int argc, char **argv ) {
             if( sts ) usage( "Failed to rem member" );
         } else usage( NULL );
     } else if( strcmp( argv[i], "set" ) == 0 ) {
-        uint64_t tag;
         i++;
         if( i >= argc ) usage( NULL );
         if( strcmp( argv[i], "cluster" ) == 0 ) {
@@ -254,7 +253,7 @@ int main( int argc, char **argv ) {
 static void print_cluster( struct raft_cluster *cluster, struct raft_member *member, int nmember ) {
     struct tm *tm;
   time_t now;
-  char strflags[128], timestr[128];
+  char timestr[128];
   int j;
   
       printf( "cluster id=%"PRIx64" state=%s termseq=%"PRIu64" leader=%"PRIx64" typeid=%x\n"
@@ -287,12 +286,9 @@ static void print_cluster( struct raft_cluster *cluster, struct raft_member *mem
 }
 
 static void cmd_list( void ) {
-  int sts, i, n, m, j;
+  int i, n, m;
   struct raft_cluster *cluster;
   struct raft_member *member;
-  struct tm *tm;
-  time_t now;
-  char strflags[128], timestr[128];
   
   n = raft_cluster_list( NULL, 0 );
   cluster = (struct raft_cluster *)malloc( sizeof(*cluster) * n );

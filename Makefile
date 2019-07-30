@@ -14,7 +14,7 @@ PROJECTS += ef
 
 BINDIR=bin
 LIBDIR=lib
-CFLAGS += -Iinclude -g
+CFLAGS += -Iinclude -g -Wall
 LFLAGS += -L${LIBDIR}
 
 

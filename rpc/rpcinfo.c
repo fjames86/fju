@@ -153,7 +153,7 @@ static int mynet_pton( char *str, uint8_t *inaddr ) {
 int main( int argc, char **argv ) {
   struct rpc_inc inc;
   struct sockaddr_in *sinp;
-  int i, sts, handle;
+  int i, sts;
   struct rpcbind_mapping mlist[16];
   struct shauth_context sa;
   struct hrauth_context hrauth;

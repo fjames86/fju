@@ -369,7 +369,7 @@ static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   struct raft_cluster cl;
   struct raft_member member[32];
   int nmember, j;
-  uint64_t localid, clid = 0;
+  uint64_t clid = 0;
   char argname[64], *argval;
   
   while( i < argc ) {

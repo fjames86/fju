@@ -85,7 +85,7 @@ int hash_entry_hash( struct hlc_s *hlc, uint64_t id, hlc_hash_t hash ) {
     struct log_iov iov[2];
     char *buf;
     struct hlc_hdr hdr;
-    int sts, ne;
+    int sts;
     struct hlc_entry entry;
     
     memset( &e, 0, sizeof(e) );

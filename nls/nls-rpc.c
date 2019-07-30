@@ -112,9 +112,7 @@ static int nls_encode_share( struct xdr_s *xdr, struct nls_share *share ) {
 static int nls_proc_list( struct rpc_inc *inc ) {
   int handle;
   int sts, i;
-  uint64_t seq, lastid;
   struct nls_share shares[32];
-  struct log_prop prop;
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
@@ -133,10 +131,8 @@ static int nls_proc_list( struct rpc_inc *inc ) {
 static int nls_proc_prop( struct rpc_inc *inc ) {
   int handle;
   uint64_t hshare;
-  struct log_prop prop;
   struct nls_share share;
   int sts;
-  struct log_s log;
   
   sts = xdr_decode_uint64( &inc->xdr, &hshare );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
@@ -312,7 +308,7 @@ static int nls_proc_notreg( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &hshare );
   if( !sts ) sts = xdr_decode_fixed( &inc->xdr, cookie, NLS_MAX_COOKIE );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &notify_period );
-  if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
   
   /* lookup context or add new one */
   sts = nls_notify_by_hshare( hostid, hshare, &notify );

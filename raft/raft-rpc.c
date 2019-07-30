@@ -352,12 +352,9 @@ static void raft_transition_leader( struct raft_cluster *cl ) {
 
 
 static void raft_iter_cb( struct rpc_iterator *iter ) {
-  int sts;
   uint64_t now;
   struct raft_cluster cl[32];
-  int i, n, j, m;
-  struct raft_member member[32];
-  uint32_t timeo;
+  int i, n;
   
   now = rpc_now();
   if( now >= glob.nextprop ) {
@@ -599,7 +596,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
 /* sent from candidates for elections */
 static int raft_proc_list( struct rpc_inc *inc ) {
-  int handle, sts;
+  int handle;
   struct raft_cluster cl[32];
   struct raft_member member[32];
   int i, j, n, m;

@@ -233,7 +233,7 @@ static void print_host( struct hostreg_host *host ) {
 }
 
 static void cmd_list( void ) {
-    int sts, i, n, m, j;
+    int i, n, m;
     struct hostreg_host *lst;
 
     n = hostreg_host_list( NULL, 0 );
@@ -250,9 +250,7 @@ static void cmd_list( void ) {
 static void cmd_prop( void ) {
      struct hostreg_prop prop;
      char hex[256];
-     struct ifaddrs *ifl, *ifa;
-     struct sockaddr_in *sinp;
-	 struct hostreg_host host;
+     struct hostreg_host host;
 
      hostreg_prop( &prop );
      printf( "seq=%"PRIu64"\n", prop.seq );
@@ -260,10 +258,10 @@ static void cmd_prop( void ) {
      bn2hex( (char *)prop.privkey, hex, prop.privlen );
      printf( "privkey=%s\n", hex );
 
-	 hostreg_host_local( &host );
-	 print_host( &host );
-
-	 printf( "\n" );
+     hostreg_host_local( &host );
+     print_host( &host );
+     
+     printf( "\n" );
 }
 
 static void hex2bn( char *hex, struct sec_buf *buf ) {
@@ -352,25 +350,5 @@ static void cmd_common( uint64_t id ) {
 
   bn2hex( (char *)common, hex, size );
   printf( "%s\n", hex );  
-}
-
-static int hostreg_decode_host( struct xdr_s *xdr, struct hostreg_host *x ) {
-  int sts, i;
-  memset( x, 0, sizeof(*x) );
-  sts = xdr_decode_uint64( xdr, &x->id );
-  if( sts ) return sts;
-  sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
-  if( sts ) return sts;
-  x->publen = sizeof(x->pubkey);
-  sts = xdr_decode_opaque( xdr, x->pubkey, (int *)&x->publen );
-  if( sts ) return sts;
-  sts = xdr_decode_uint32( xdr, &x->naddr );
-  if( sts ) return sts;
-  if( x->naddr > HOSTREG_MAX_ADDR ) return -1;
-  for( i = 0; i < x->naddr; i++ ) {
-    sts = xdr_decode_uint32( xdr, &x->addr[i] );
-    if( sts ) return sts;
-  }
-  return 0;
 }
 

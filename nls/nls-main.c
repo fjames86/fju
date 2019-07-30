@@ -237,7 +237,7 @@ int main( int argc, char **argv ) {
 }
 
 static void cmd_list( void ) {
-    int sts, i, n, m;
+    int i, n, m;
     {
         struct nls_share *lst;
         n = nls_share_list( NULL, 0 );

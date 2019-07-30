@@ -238,10 +238,10 @@ int log_prop( struct log_s *log, struct log_prop *prop ) {
 
 int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, int *nelist ) {
   int sts;
+  char *p;
   struct _header *hdr;
-  char *p, *q;
   struct _entry *e;
-  int i, j, k, len;
+  int i, j;
   int idx, nbytes, msgcnt, offset, blk_offset;
 
   if( nelist ) *nelist = 0;
@@ -389,7 +389,7 @@ int log_read_entry( struct log_s *log, uint64_t id, struct log_entry *entry ) {
 int log_read_buf( struct log_s *log, uint64_t id, char *buf, int len, int *msglen ) {
   struct log_entry entry;
   struct log_iov iov[1];
-  int sts, ne;
+  int sts;
   
   memset( &entry, 0, sizeof(entry) );
   iov[0].buf = buf;
@@ -405,11 +405,10 @@ int log_read_buf( struct log_s *log, uint64_t id, char *buf, int len, int *msgle
 
 int log_write( struct log_s *log, struct log_entry *entry ) {
   int sts;
-  char *p, *q;
+  char *p;
   struct _entry *e;
   struct _header *hdr;
-  int i, j, k, len, cnt;
-  int idx;
+  int i, cnt, idx;
   int msglen, nbytes, offset, blk_offset;
 
   msglen = 0;

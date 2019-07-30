@@ -352,8 +352,6 @@ static void cmd_write( void ) {
 static void cmd_tail( void ) {
   int sts;
   struct log_prop prop;
-  struct log_entry entry;
-  char msg[256];
   uint64_t seq;
   uint64_t id, newid;
 

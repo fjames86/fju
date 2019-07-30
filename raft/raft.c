@@ -208,8 +208,7 @@ int raft_set_timeouts( uint32_t *elec_low, uint32_t *elec_high, uint32_t *term_l
 }
 
 int raft_set_rpc_timeout( uint32_t rpc_timeout ) {
-    uint32_t to;
-    
+
     if( glob.ocount <= 0 ) return -1;
     raft_lock();
     
@@ -326,7 +325,6 @@ int raft_cluster_rem( uint64_t clid ) {
         }
     }
     
- done:
     raft_unlock();
     return sts;
 }

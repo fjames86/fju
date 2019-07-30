@@ -455,7 +455,7 @@ static void rpc_poll( int timeout ) {
 	int revents[RPC_MAX_LISTEN + RPC_MAX_CONN];
 	struct xdr_s tmpx;
 	uint8_t tmpbuf[4];
-	struct rpc_conn *c, *prev, *next;
+	struct rpc_conn *c;
 
 #ifndef WIN32
 	memset( pfd, 0, sizeof(pfd) );

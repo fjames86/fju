@@ -232,7 +232,7 @@ int main( int argc, char **argv ) {
 
   memset( &pars, 0, sizeof(pars) );
   pars.prog = 100000;
-  pars.vres = 2;
+  pars.vers = 2;
   pars.proc = 4;
   memcpy( &pars.raddr, sinp, sizeof(*sinp) );
   pars.raddr_len = sizeof(*sinp);

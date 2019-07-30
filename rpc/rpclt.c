@@ -385,9 +385,8 @@ static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_uint32( xdr, 0 ); // flags 
   
   xdr_encode_uint32( xdr, nmember );
-  localid = hostreg_localid();
   for( j = 0; j < nmember; j++ ) {
-    xdr_encode_uint64( xdr, member[j].hostid == hostid ? localid : member[j].hostid );
+    xdr_encode_uint64( xdr, member[j].hostid );
   }
     
 }
@@ -440,18 +439,18 @@ static void hrauth_local_results( struct xdr_s *xdr ) {
     struct hostreg_host x;
     int sts, i;
     
-    sts = xdr_decode_uint64( xdr, &x->id );
+    sts = xdr_decode_uint64( xdr, &x.id );
     if( sts ) goto bad;
-    sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
+    sts = xdr_decode_string( xdr, x.name, sizeof(x.name) );
     if( sts ) goto bad;
-    x->publen = sizeof(x->pubkey);
-    sts = xdr_decode_opaque( xdr, x->pubkey, (int *)&x->publen );
+    x.publen = sizeof(x.pubkey);
+    sts = xdr_decode_opaque( xdr, x.pubkey, (int *)&x.publen );
     if( sts ) goto bad;
-    sts = xdr_decode_uint32( xdr, &x->naddr );
+    sts = xdr_decode_uint32( xdr, &x.naddr );
     if( sts ) goto bad;
-    if( x->naddr > HOSTREG_MAX_ADDR ) return -1;
-    for( i = 0; i < x->naddr; i++ ) {
-	sts = xdr_decode_uint32( xdr, &x->addr[i] );
+    if( x.naddr > HOSTREG_MAX_ADDR ) goto bad;
+    for( i = 0; i < x.naddr; i++ ) {
+	sts = xdr_decode_uint32( xdr, &x.addr[i] );
 	if( sts ) goto bad;
     }
     print_host( &x );

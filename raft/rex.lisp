@@ -7,7 +7,7 @@
 
 (in-package #:rex)
 
-(defconstant +rex-prog+ #x27E1FAF0)
+(defconstant +rex-prog+ #x27E1FAF1)
 (defconstant +rex-vers+ 1)
 
 (frpc2:defrpc %call-read (+rex-prog+ +rex-vers+ 1)

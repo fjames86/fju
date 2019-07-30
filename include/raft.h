@@ -34,7 +34,8 @@ struct raft_member {
     uint64_t lastseen;                 /* last time received a msg */
     uint32_t flags;                    /* member state+flags */
 #define RAFT_MEMBER_VOTED    0x0001    /* true if this member voted for us this election */
-    uint32_t unused;
+#define RAFT_MEMBER_OFFLINE  0x0002    /* true if member not heard from in a while */
+    uint32_t retry;
     uint64_t nextseq;                  /* (when leader only) seqno of next state to send to member */
     uint64_t stateseq;                 /* (when leader only) last known state ack'ed by member */
   
@@ -79,10 +80,12 @@ struct raft_prop {
     uint32_t term_low;
     uint32_t term_high;
     uint32_t rpc_timeout;
+    uint32_t rpc_retry;
 };
 int raft_prop( struct raft_prop *prop );
 int raft_set_timeouts( uint32_t *elec_low, uint32_t *elec_high, uint32_t *term_low, uint32_t *term_high );
 int raft_set_rpc_timeout( uint32_t rpc_timeout );
+int raft_set_rpc_retry( uint32_t rpc_retry );
 
 int raft_cluster_list( struct raft_cluster *cl, int n );
 int raft_cluster_by_id( uint64_t clid, struct raft_cluster *cl );

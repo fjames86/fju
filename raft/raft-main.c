@@ -211,13 +211,14 @@ int main( int argc, char **argv ) {
 	} else if( strcmp( argv[i], "prop" ) == 0 ) {
             char argname[64], *argval;
 	    uint32_t elec_low, elec_high, term_low, term_high;
-	    uint32_t rpc_timeout;
+	    uint32_t rpc_timeout, rpc_retry;
 	      
 	    elec_low = 0;
 	    elec_high = 0;
 	    term_low = 0;
 	    term_high = 0;
 	    rpc_timeout = 0;
+	    rpc_retry = 0;
 	    
             i++;
             while( i < argc ) {
@@ -230,8 +231,10 @@ int main( int argc, char **argv ) {
                       if( argval ) term_low = strtoul( argval, NULL, 10 );
 		 } else if( strcmp( argname, "term_high" ) == 0 ) {
                       if( argval ) term_high = strtoul( argval, NULL, 10 );
-		 } else if( strcmp( argname, "rpc" ) == 0 ) {
-                      if( argval ) rpc_timeout = strtoul( argval, NULL, 10 );		      
+		 } else if( strcmp( argname, "rpc_timeout" ) == 0 ) {
+                      if( argval ) rpc_timeout = strtoul( argval, NULL, 10 );
+		 } else if( strcmp( argname, "rpc_retry" ) == 0 ) {
+                      if( argval ) rpc_retry = strtoul( argval, NULL, 10 );
                  } else {
 		     printf( "Unknown field name %s\n", argname ); usage( NULL );
 		 }
@@ -242,6 +245,7 @@ int main( int argc, char **argv ) {
 			       term_low ? &term_low : NULL,
 			       term_high ? &term_high : NULL );
 	    if( rpc_timeout ) raft_set_rpc_timeout( rpc_timeout );
+	    if( rpc_retry ) raft_set_rpc_retry( rpc_retry );
 	    
         } else usage( NULL );
     } else usage( NULL );
@@ -308,7 +312,7 @@ static void cmd_list( void ) {
 static void cmd_prop( void ) {
      struct raft_prop prop;
      raft_prop( &prop );
-     printf( "seq=%"PRIu64" rpc-timeout=%u\n", prop.seq, prop.rpc_timeout );
+     printf( "seq=%"PRIu64" rpc-timeout=%u rpc-retry=%u\n", prop.seq, prop.rpc_timeout, prop.rpc_retry );
      printf( "Timeouts: election=[%d, %d] term=[%d, %d]\n", prop.elec_low, prop.elec_high, prop.term_low, prop.term_high );
      printf( "cluster=%d/%d\n", prop.cluster_count, prop.cluster_max );
      printf( "member=%d/%d\n", prop.member_count, prop.member_max );

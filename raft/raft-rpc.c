@@ -98,12 +98,26 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
 
   if( !xdr ) {
     //    rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb timeout" );
+    /* try again? */
+    sts = raft_cluster_by_id( pcxt->clid, &cl );
+    sts = raft_member_by_hostid( pcxt->clid, pcxt->hostid, &member );
+    if( member.retry > 0 ) {
+      rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb host %"PRIx64" timeout - retrying %u", pcxt->hostid, member.retry );
+      member.retry--;
+      raft_member_set( &member );	
+      raft_call_ping( &cl, pcxt->hostid );
+    } else {
+      member.flags |= RAFT_MEMBER_OFFLINE;
+      raft_member_set( &member );	
+    }
     goto done;
   }
 
   sts = raft_member_by_hostid( pcxt->clid, pcxt->hostid, &member );
   if( sts ) goto done;
   member.lastseen = time( NULL );
+  member.retry = glob.prop.rpc_retry;
+  member.flags &= ~RAFT_MEMBER_OFFLINE;
   raft_member_set( &member );
 
   sts = raft_cluster_by_id( pcxt->clid, &cl );

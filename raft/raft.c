@@ -65,8 +65,9 @@ struct raft_header {
     uint32_t term_low;
     uint32_t term_high;
     uint32_t rpc_timeout;
+    uint32_t rpc_retry;
   
-    uint32_t spare[31];
+    uint32_t spare[30];
 };
 
 
@@ -120,6 +121,7 @@ int raft_open( void ) {
 	glob.file->header.term_low = RAFT_TERM_LOW;
 	glob.file->header.term_high = RAFT_TERM_HIGH;
 	glob.file->header.rpc_timeout = 500;
+	glob.file->header.rpc_retry = 3;
     } else if( glob.file->header.version != RAFT_VERSION ) {
         raft_unlock();
         goto bad;
@@ -172,6 +174,7 @@ int raft_prop( struct raft_prop *prop ) {
     prop->term_low = glob.file->header.term_low;
     prop->term_high = glob.file->header.term_high;
     prop->rpc_timeout = glob.file->header.rpc_timeout;
+    prop->rpc_retry = glob.file->header.rpc_retry;
     raft_unlock();
     return 0;
 }
@@ -213,6 +216,17 @@ int raft_set_rpc_timeout( uint32_t rpc_timeout ) {
     raft_lock();
     
     glob.file->header.rpc_timeout = rpc_timeout;
+    
+    raft_unlock();
+    return 0;
+}
+
+int raft_set_rpc_retry( uint32_t rpc_retry) {
+
+    if( glob.ocount <= 0 ) return -1;
+    raft_lock();
+    
+    glob.file->header.rpc_retry = rpc_retry;
     
     raft_unlock();
     return 0;

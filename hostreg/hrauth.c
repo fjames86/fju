@@ -360,7 +360,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     sa->window = cred.window;
     sa->cipher = cred.cipher;
     sec_rand( &sa->nickname, 4 );
-    rpc_log( RPC_LOG_DEBUG, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
+    //rpc_log( RPC_LOG_DEBUG, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
     break;
   default:
     return -1;

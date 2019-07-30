@@ -368,6 +368,7 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
     case RAFT_STATE_FOLLOWER:
       /* check for term timeout */
       if( now >= cl[i].timeout ) {
+	rpc_log( RPC_LOG_DEBUG, "term timeout - transition to candidate" );
 	raft_transition_candidate( &cl[i] );
       }
       
@@ -391,7 +392,7 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
     case RAFT_STATE_LEADER:      
       /* send pings */
       if( now >= cl[i].timeout ) {
-	cl[i].timeout = rpc_now() + glob.prop.term_low;
+	cl[i].timeout = rpc_now() + glob.prop.term_low - glob.prop.rpc_timeout;
 	raft_cluster_set( &cl[i] );	
 	raft_iter_set_timeout( cl[i].timeout );
 

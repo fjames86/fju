@@ -40,9 +40,10 @@ struct clt_info {
     uint32_t prog;
     uint32_t vers;
     uint32_t proc;
-    char *procname;
     void (*getargs)( int argc, char **argv, int idx, struct xdr_s *xdr );
     void (*results)( struct xdr_s *xdr );
+    char *procname;
+    char *procargs;
 };
 
 static void rpcbind_results( struct xdr_s *xdr );
@@ -56,13 +57,13 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void hrauth_local_results( struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
-    { 100000, 2, 4, "rpcbind.list", NULL, rpcbind_results },
-    { HRAUTH_PROGRAM, HRAUTH_VERSION, 1, "hrauth.local", NULL, hrauth_local_results },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, "raft.list", NULL, raft_list_results },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, "raft.add", raft_add_args, NULL },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, "raft.rem", raft_rem_args, NULL },
-    { REX_RPC_PROG, REX_RPC_VERS, 1, "rex.read", rex_read_args, rex_read_results },
-    { REX_RPC_PROG, REX_RPC_VERS, 2, "rex.write", rex_write_args, rex_write_results },
+    { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
+    { HRAUTH_PROGRAM, HRAUTH_VERSION, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_list_results, "raft.list", NULL },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, raft_add_args, NULL, "raft.add", "clid=CLID" },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, raft_rem_args, NULL, "raft.rem", "clid=CLID" },
+    { REX_RPC_PROG, REX_RPC_VERS, 1, rex_read_args, rex_read_results, "rex.read", "clid=CLID" },
+    { REX_RPC_PROG, REX_RPC_VERS, 2, rex_write_args, rex_write_results, "rex.write", "clid=CLID data=DATA" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -80,8 +81,8 @@ static void usage( char *fmt, ... ) {
   info = clt_procs;
   printf( "Programs:\n" );
   while( info->prog ) {
-      printf( "    %-32s %u:%u:%u\n",
-	      info->procname, info->prog, info->vers, info->proc );
+      printf( "    %u:%u:%u %s %s\n",
+	      info->prog, info->vers, info->proc, info->procname, info->procargs ? info->procargs : "" );
       info++;
   }
   
@@ -166,15 +167,17 @@ int main( int argc, char **argv ) {
     glob.hostid = strtoull( argv[i], &term, 16 );
     if( *term ) {
       struct hostreg_host host;
-      if( strcmp( argv[i], "local" ) == 0 ) glob.hostid = 0;
-      else {
+      if( strcmp( argv[i], "local" ) == 0 ) {
+	glob.hostid = 0;
+	i++;
+      } else {
 	sts = hostreg_host_by_name( argv[i], &host );
-	if( sts ) usage( "Invalid hostid" );
-	glob.hostid = host.id;
+	if( !sts ) {
+	  glob.hostid = host.id;
+	  i++;
+	}
       }
     }
-
-    i++;
     if( i >= argc ) usage( NULL );
     
     idx = 0;
@@ -329,7 +332,7 @@ static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     } else usage( NULL );
     i++;
   }
-  if( !clid ) usage( "Args: clid=CLID" );
+  if( !clid ) usage( NULL );
   
   xdr_encode_uint64( xdr, clid );
 }
@@ -341,13 +344,14 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char tmp[4];
   int len;
   int j;
-	  
+  
+  memset( data, 0, sizeof(data) );
+  
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "clid" ) == 0 ) {
       clid = strtoul( argval, NULL, 16 );
     } else if( strcmp( argname, "data" ) == 0 ) {
-      memset( data, 0, sizeof(data) );
       len = strlen( argval ) / 2;
       for( j = 0; j < (len > REX_MAX_BUF ? REX_MAX_BUF : len); j++ ) {
 	memset( tmp, 0, sizeof(tmp) );
@@ -358,7 +362,7 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     } else usage( NULL );
     i++;
   }
-  if( !clid ) usage( "Args: clid=CLID data=DATA" );
+  if( !clid ) usage( NULL );
   
   xdr_encode_uint64( xdr, clid );
   xdr_encode_opaque( xdr, (uint8_t *)data, REX_MAX_BUF );
@@ -379,7 +383,7 @@ static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
       } else usage( NULL );
       i++;
   }
-  if( !clid ) usage( "clid=CLID" );
+  if( !clid ) usage( NULL );
   
   sts = raft_cluster_by_id( clid, &cl );
   if( sts ) usage( "Unknown cluster" );
@@ -405,7 +409,7 @@ static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 	} else usage( NULL );
 	i++;
     }
-    if( !clid ) usage( "clid=CLID" );
+    if( !clid ) usage( NULL );
     xdr_encode_uint64( xdr, clid );
 }
 

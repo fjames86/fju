@@ -181,24 +181,29 @@ int main( int argc, char **argv ) {
     while( clt_procs[idx].prog ) {
       info = &clt_procs[idx];
 	if( strcmp( argv[i], info->procname ) == 0 ) {
-	    struct hrauth_call_udp_args args;
+	    struct hrauth_call hcall;
+	    struct xdr_s args, res;
+	    struct hrauth_call_opts opts;
 	    char argbuf[1024];
 	    
-	    memset( &args, 0, sizeof(args) );
-	    args.hostid = glob.hostid;
-	    args.prog = info->prog;
-	    args.vers = info->vers;
-	    args.proc = info->proc;
-	    args.port = glob.port;
-	    args.timeout = glob.timeout;
-	    args.service = glob.service;
-	    xdr_init( &args.args, (uint8_t *)argbuf, sizeof(argbuf) );
+	    memset( &hcall, 0, sizeof(hcall) );
+	    hcall.hostid = glob.hostid;
+	    hcall.prog = info->prog;
+	    hcall.vers = info->vers;
+	    hcall.proc = info->proc;
+	    hcall.timeout = glob.timeout;
+	    hcall.service = glob.service;
+	    xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+	    xdr_init( &res, NULL, 0 );
+
+	    opts.mask = HRAUTH_CALL_OPT_PORT;
+	    opts.port = glob.port;
 	    
 	    i++;
-	    if( info->getargs ) info->getargs( argc, argv, i, &args.args );
-	    sts = hrauth_call_udp_sync( &args );
+	    if( info->getargs ) info->getargs( argc, argv, i, &args );
+	    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
 	    if( sts ) usage( "RPC call failed" );
-	    if( info->results ) info->results( &args.res );
+	    if( info->results ) info->results( &res );
 	    exit( 0 );
 	}
 	idx++;

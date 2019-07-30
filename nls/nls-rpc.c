@@ -478,7 +478,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   xdr_encode_uint64( &xdr, hshare );
   xdr_encode_uint64( &xdr, lastid );
   xdr_encode_uint32( &xdr, xdrcount );  
-  sts = hrauth_call_udp( &hcall, &xdr );
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     free( nlscxtp );
     rpc_log( RPC_LOG_ERROR, "nls_call_read: hrauth_call failed" );
@@ -560,7 +560,7 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   xdr_encode_uint64( &xdr, hshare );
   xdr_encode_fixed( &xdr, cookiep ? cookiep : cookie, NLS_MAX_COOKIE );
   xdr_encode_uint32( &xdr, remote.notify_period );
-  sts = hrauth_call_udp( &hcall, &xdr );
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "nls_call_notreg: hrauth_call failed" );
   }
@@ -775,7 +775,7 @@ static void nls_call_notify( struct nls_notify *notify ) {
   xdr_encode_uint64( &xdr, notify->seq );
   xdr_encode_uint64( &xdr, notify->lastid );
   xdr_encode_fixed( &xdr, notify->cookie, NLS_MAX_COOKIE );
-  sts = hrauth_call_udp( &hcall, &xdr );
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "nls_call_notify: hrauth_call failed" );
     free( ncxt );

@@ -698,11 +698,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   free( w );         /* free waiter */
 }
 
-int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
-  return hrauth_call_udp2( hcall, args, NULL );
-}
-
-int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
+int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
   int sts, handle;
   struct rpc_waiter *w;
   struct hostreg_host host;
@@ -818,7 +814,7 @@ struct hrauth_proxy_cxt {
   uint32_t raddr_len;
 };
 
-static void hrauth_proxy_cb( struct xdr_s *xdr, void *cxt ) {
+static void hrauth_proxy_udp_cb( struct xdr_s *xdr, void *cxt ) {
   struct hrauth_proxy_cxt *pcxt = (struct hrauth_proxy_cxt *)cxt;
   struct rpc_listen *listen;
   int sts, handle;
@@ -846,7 +842,7 @@ static void hrauth_proxy_cb( struct xdr_s *xdr, void *cxt ) {
   return;
 }
 
-int hrauth_call_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args ) {
+int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args ) {
   int sts;
   struct hrauth_call hcall;
   struct hrauth_proxy_cxt *pcxt;
@@ -863,11 +859,11 @@ int hrauth_call_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args 
   hcall.prog = inc->msg.u.call.prog;
   hcall.vers = inc->msg.u.call.vers;
   hcall.proc = inc->msg.u.call.proc;
-  hcall.donecb = hrauth_proxy_cb;
+  hcall.donecb = hrauth_proxy_udp_cb;
   hcall.cxt = pcxt;
   hcall.timeout = 500;
   hcall.service = HRAUTH_SERVICE_PRIV;
-  sts = hrauth_call_udp( &hcall, args );
+  sts = hrauth_call_udp_async( &hcall, args, NULL );
   if( sts ) {
     free( pcxt );
   }
@@ -876,6 +872,8 @@ int hrauth_call_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args 
 }
 
 /* ------ an equivalent for TCP is MUCH harder. ------ */
+
+#if 0
 
 struct hrauth_tcp_cxt {
   struct hrauth_call hcall;
@@ -976,7 +974,7 @@ static void call_tcp_cb( rpc_conn_event_t event, struct rpc_conn *c ) {
   return;
 }
 
-int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args ) {
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args ) {
   int sts;
   struct hrauth_tcp_cxt *cxt;
   struct hostreg_host host;
@@ -1019,6 +1017,9 @@ int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args ) {
   return sts;
 }
 
+#endif
+
+#if 0 
 int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
     int sts;
     struct rpc_call_pars pars;
@@ -1065,3 +1066,57 @@ int hrauth_call_udp_sync( struct hrauth_call_udp_args *args ) {
     free( tmpbuf );
     return sts;
 }
+#endif
+
+int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {
+    int sts;
+    struct rpc_call_pars pars;
+    struct hrauth_context hcxt;
+    struct sockaddr_in sin;
+    char *tmpbuf = NULL;
+    int port;
+    struct hostreg_host host;
+    struct rpc_listen *listen;
+    
+    sts = hostreg_host_by_id( hcall->hostid, &host );
+    if( sts ) return sts;
+
+    port = opts && opts->mask & HRAUTH_CALL_OPT_PORT ? opts->port : 0;
+    if( !port ) {
+	listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+	if( !listen ) return -1;
+	port = ntohs( listen->addr.sin.sin_port );
+    }
+
+    memset( &sin, 0, sizeof(sin) );
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons( port );
+    sin.sin_addr.s_addr = host.addr[0];
+
+    memset( &pars, 0, sizeof(pars) );
+    pars.prog = hcall->prog;
+    pars.vers = hcall->vers;
+    pars.proc = hcall->proc;
+    if( hcall->service != -1 ) {
+	sts = hrauth_init( &hcxt, hcall->hostid );
+	hcxt.service = hcall->service;
+	pars.pvr = hrauth_provider();
+	pars.pcxt = &hcxt;
+    }
+    memcpy( &pars.raddr, &sin, sizeof(sin) );
+    pars.raddr_len = sizeof(sin);
+    pars.timeout = hcall->timeout ? hcall->timeout : 1000;
+
+    if( opts && opts->mask & HRAUTH_CALL_OPT_TMPBUF ) {
+      pars.buf = opts->tmpbuf;
+    } else {
+      tmpbuf = malloc( 32*1024 );
+      xdr_init( &pars.buf, (uint8_t *)tmpbuf, 32*1024 );
+    }
+    
+    sts = rpc_call_udp( &pars, args, res );
+    
+    if( tmpbuf ) free( tmpbuf );
+    return sts;
+}
+

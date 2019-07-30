@@ -162,7 +162,7 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint64( &xdr, hostreg_localid() );
   xdr_encode_uint64( &xdr, cl->termseq );
   xdr_encode_uint64( &xdr, cl->commitseq );
-  sts = hrauth_call_udp( &hcall, &xdr );
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     free( pcxt );
     rpc_log( RPC_LOG_ERROR, "raft_call_ping: hrauth_call failed" );
@@ -265,7 +265,7 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint64( &xdr, cl->termseq );
   xdr_encode_uint64( &xdr, cl->stateseq );
   xdr_encode_uint64( &xdr, cl->stateterm );  
-  sts = hrauth_call_udp( &hcall, &xdr );
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     free( pcxt );
     rpc_log( RPC_LOG_ERROR, "raft_call_vote: hrauth_call failed" );

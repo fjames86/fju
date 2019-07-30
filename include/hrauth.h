@@ -97,7 +97,6 @@ struct hrauth_call {
   int timeout;
   int service;
 };
-int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args );
 
 struct hrauth_call_opts {
   uint32_t mask;
@@ -114,11 +113,13 @@ struct hrauth_call_opts {
   int port;
   uint32_t addrmask;
 };
-int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
-int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args );
+int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
 
-int hrauth_call_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args );
+//int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args );
 
+int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args );
+
+#if 0
 struct hrauth_call_udp_args {
     uint64_t hostid;
     uint32_t prog;
@@ -131,6 +132,9 @@ struct hrauth_call_udp_args {
     struct xdr_s res;
 };
 int hrauth_call_udp_sync( struct hrauth_call_udp_args *args );
+#endif
+
+int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 
 #endif
 

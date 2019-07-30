@@ -166,7 +166,7 @@ int main( int argc, char **argv ) {
     glob.hostid = strtoull( argv[i], &term, 16 );
     if( *term ) {
       struct hostreg_host host;
-      if( strcmp( argv[i], "local" ) == 0 ) glob.hostid = hostreg_localid();
+      if( strcmp( argv[i], "local" ) == 0 ) glob.hostid = 0;
       else {
 	sts = hostreg_host_by_name( argv[i], &host );
 	if( sts ) usage( "Invalid hostid" );

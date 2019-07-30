@@ -1009,9 +1009,6 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s
     struct hostreg_host host;
     struct rpc_listen *listen;
     
-    sts = hostreg_host_by_id( hcall->hostid, &host );
-    if( sts ) return sts;
-
     port = opts && opts->mask & HRAUTH_CALL_OPT_PORT ? opts->port : 0;
     if( !port ) {
 	listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
@@ -1022,7 +1019,14 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s
     memset( &sin, 0, sizeof(sin) );
     sin.sin_family = AF_INET;
     sin.sin_port = htons( port );
-    sin.sin_addr.s_addr = host.addr[0];
+
+    if( hcall->hostid ) {
+      sts = hostreg_host_by_id( hcall->hostid, &host );
+      if( sts ) return sts;   
+      sin.sin_addr.s_addr = host.addr[0];
+    } else {
+      sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
+    }      
 
     memset( &pars, 0, sizeof(pars) );
     pars.prog = hcall->prog;

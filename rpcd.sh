@@ -9,7 +9,15 @@ if [ $cmd = "start" ]; then
     
     bin/rpcd -R -u 8000 -p /etc/rpcd.pid 
 elif [ $cmd = "stop" ]; then
-    kill $(cat /etc/rpcd.pid)
-    rm -f /etc/rpcd.pid 
+    if [ -e /etc/rpcd.pid ]; then 
+	kill $(cat /etc/rpcd.pid)
+	rm -f /etc/rpcd.pid
+    fi
+elif [ $cmd = "status" ]; then
+    if [ -e /etc/rpcd.pid ]; then
+	bin/rpcinfo -p 8000
+    else
+	echo "rpcd not running"
+    fi
 fi
 

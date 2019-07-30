@@ -328,5 +328,9 @@ void rpc_waiter_service( void );
 int rpc_errno( void );
 char *rpc_strerror( int sts );
 
+typedef void (*rpc_broadcast_cb_t)( struct rpc_inc *inc, void *cxt );
+int rpc_call_broadcast( struct rpc_call_pars *pars, struct xdr_s *args, rpc_broadcast_cb_t cb, void *cxt );
+
+				   
 #endif
 

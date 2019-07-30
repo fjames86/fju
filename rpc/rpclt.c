@@ -55,6 +55,8 @@ static void rex_write_results( struct xdr_s *xdr );
 static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void hrauth_local_results( struct xdr_s *xdr );
+static void clt_call( struct clt_info *info, int argc, char **argv, int i );
+static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i );
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
@@ -71,7 +73,7 @@ static void usage( char *fmt, ... ) {
   va_list args;
   struct clt_info *info;
   
-  printf( "Usage: rpclt [OPTIONS] HOSTID program.vers.proc [args...]\n"
+  printf( "Usage: rpclt [OPTIONS] <HOSTID|local|broadcast BCADDR> program.vers.proc [args...]\n"
 	  "\n"
 	  "Where OPTIONS:\n"
 	  "      -p port             Port\n"
@@ -97,6 +99,36 @@ static void usage( char *fmt, ... ) {
   exit( 0 );
 }
 
+static int mynet_pton( char *str, uint8_t *inaddr ) {
+    char *p;
+    char tmp[4];
+    int i, j;
+    
+    p = str;
+    memset( inaddr, 0, 4 );
+    
+    for( j = 0; j < 4; j++ ) {
+	memset( tmp, 0, sizeof(tmp) );
+	i = 0;
+	while( 1 ) {
+	    if( *p == '\0' ) break;
+	    if( *p == '.' ) {
+		p++;
+		break;
+	    }
+
+	    if( i <= 3 ) {
+	      tmp[i] = *p;
+	    }
+	    i++;
+	    p++;
+	}
+	inaddr[j] = strtoul( tmp, NULL, 10 );
+    }
+
+    return 0;
+}
+
 static void argval_split( char *instr, char *argname, char **argval ) {
     char *p;
 
@@ -118,6 +150,8 @@ static struct {
     int port;
     uint64_t hostid;
     int service;
+    int broadcast;
+    uint32_t addr;
 } glob;
 
 int main( int argc, char **argv ) {
@@ -170,6 +204,13 @@ int main( int argc, char **argv ) {
       if( strcmp( argv[i], "local" ) == 0 ) {
 	glob.hostid = 0;
 	i++;
+      } else if( strcmp( argv[i], "broadcast" ) == 0 ) {
+	glob.hostid = 0;
+	glob.broadcast = 1;
+	i++;
+	if( i >= argc ) usage( NULL );
+	mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	i++;
       } else {
 	sts = hostreg_host_by_name( argv[i], &host );
 	if( !sts ) {
@@ -184,29 +225,11 @@ int main( int argc, char **argv ) {
     while( clt_procs[idx].prog ) {
       info = &clt_procs[idx];
 	if( strcmp( argv[i], info->procname ) == 0 ) {
-	    struct hrauth_call hcall;
-	    struct xdr_s args, res;
-	    struct hrauth_call_opts opts;
-	    char argbuf[1024];
-	    
-	    memset( &hcall, 0, sizeof(hcall) );
-	    hcall.hostid = glob.hostid;
-	    hcall.prog = info->prog;
-	    hcall.vers = info->vers;
-	    hcall.proc = info->proc;
-	    hcall.timeout = glob.timeout;
-	    hcall.service = glob.service;
-	    xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
-	    xdr_init( &res, NULL, 0 );
-
-	    opts.mask = HRAUTH_CALL_OPT_PORT;
-	    opts.port = glob.port;
-	    
-	    i++;
-	    if( info->getargs ) info->getargs( argc, argv, i, &args );
-	    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
-	    if( sts ) usage( "RPC call failed" );
-	    if( info->results ) info->results( &res );
+	    if( glob.broadcast ) {
+	      clt_broadcast( info, argc, argv, i );
+	    } else {
+	      clt_call( info, argc, argv, i );
+	    }
 	    exit( 0 );
 	}
 	idx++;
@@ -214,6 +237,85 @@ int main( int argc, char **argv ) {
     usage( "Unknown proc \"%s\"", argv[i] );
     
     return 0;
+}
+
+static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
+  struct hrauth_call hcall;
+  struct xdr_s args, res;
+  struct hrauth_call_opts opts;
+  char argbuf[1024];
+  int sts;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = glob.hostid;
+  hcall.prog = info->prog;
+  hcall.vers = info->vers;
+  hcall.proc = info->proc;
+  hcall.timeout = glob.timeout;
+  hcall.service = glob.service;
+  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+  xdr_init( &res, NULL, 0 );
+  
+  opts.mask = HRAUTH_CALL_OPT_PORT;
+  opts.port = glob.port;
+  
+  i++;
+  if( info->getargs ) info->getargs( argc, argv, i, &args );
+  sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+  if( sts ) usage( "RPC call failed" );
+  if( info->results ) info->results( &res );
+}
+
+static void clt_broadcast_cb( struct rpc_inc *inc, void *cxt ) {
+  char ipstr[64];
+  struct clt_info *info = (struct clt_info *)cxt;
+  struct sockaddr_in *sinp = (struct sockaddr_in *)&inc->raddr;
+  
+  sprintf( ipstr,
+	   "%d.%d.%d.%d:%d",
+	   (sinp->sin_addr.s_addr >> 24) & 0xff,
+	   (sinp->sin_addr.s_addr >> 16) & 0xff,
+	   (sinp->sin_addr.s_addr >> 8) & 0xff,
+	   (sinp->sin_addr.s_addr) & 0xff,
+	   ntohs( sinp->sin_port ) );
+  printf( "RECV %s (%d)\n", ipstr, (int)(inc->xdr.count - inc->xdr.offset) );
+  if( info->results ) {
+    info->results( &inc->xdr );
+    printf( "\n" );
+  }
+}
+
+static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i ) {
+  struct rpc_call_pars pars;
+  struct xdr_s args;
+  char argbuf[1024];
+  int sts;
+  char *tmpbuf = malloc( 32*1024 );
+  struct sockaddr_in sin;
+  
+  memset( &pars, 0, sizeof(pars) );
+  pars.prog = info->prog;
+  pars.vers = info->vers;
+  pars.proc = info->proc;
+
+  memset( &sin, 0, sizeof(sin) );
+  sin.sin_family = AF_INET;
+  sin.sin_port = htons( glob.port );
+
+  sin.sin_addr.s_addr = glob.addr;
+  memcpy( &pars.raddr, &sin, sizeof(sin) );
+  pars.raddr_len = sizeof(sin);
+  pars.timeout = 1000;
+  xdr_init( &pars.buf, (uint8_t *)tmpbuf, 32*1024 );
+  
+  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+  
+  i++;
+  if( info->getargs ) info->getargs( argc, argv, i, &args );
+  sts = rpc_call_broadcast( &pars, &args, clt_broadcast_cb, info );
+  if( sts ) usage( "RPC broadcast failed" );
+  
+  free( tmpbuf );
 }
 
 static void rpcbind_results( struct xdr_s *xdr ) {

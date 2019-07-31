@@ -121,6 +121,7 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
 
 /* synchronous rpc call */
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
+int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 
 #endif
 

@@ -73,12 +73,14 @@ static void usage( char *fmt, ... ) {
   va_list args;
   struct clt_info *info;
   
-  printf( "Usage: rpclt [OPTIONS] <HOSTID|local|broadcast BCADDR> program.vers.proc [args...]\n"
+  printf( "Usage: rpclt [OPTIONS] <HOSTID|addr|local|broadcast BCADDR> program.vers.proc [args...]\n"
 	  "\n"
 	  "Where OPTIONS:\n"
 	  "      -p port             Port\n"
 	  "      -L none|integ|priv  Service level\n"
-	  "      -t timeout          Timeout (ms)\n" 
+	  "      -t timeout          Timeout (ms)\n"
+	  "      -T                  Call using TCP (addr only)\n"
+	  "      -U                  Call using UDP (addr only)\n" 
 	  "\n" );
   info = clt_procs;
   printf( "Procedures:\n" );
@@ -156,6 +158,7 @@ static struct {
     int service;
     int broadcast;
     uint32_t addr;
+    int tcp;
 } glob;
 
 int main( int argc, char **argv ) {
@@ -197,6 +200,10 @@ int main( int argc, char **argv ) {
 	    i++;
 	    if( i >= argc ) usage( NULL );
 	    glob.timeout = strtoul( argv[i], NULL, 10 );
+	} else if( strcmp( argv[i], "-T" ) == 0 ) {
+	  glob.tcp = 1;
+	} else if( strcmp( argv[i], "-U" ) == 0 ) {
+	  glob.tcp = 0;
 	} else break;
 	i++;
     }
@@ -290,6 +297,8 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   if( info->getargs ) info->getargs( argc, argv, i, &args );
   if( glob.hostid ) {
     sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+  } else if( glob.tcp ) {
+    sts = rpc_call_tcp( &pars, &args, &res );
   } else {
     sts = rpc_call_udp( &pars, &args, &res );
   }

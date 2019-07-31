@@ -999,7 +999,7 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args ) {
 
 #endif
 
-int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {
+static int hrauth_call( int tcp, struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {
     int sts;
     struct rpc_call_pars pars;
     struct hrauth_context hcxt;
@@ -1049,9 +1049,17 @@ int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s
       xdr_init( &pars.buf, (uint8_t *)tmpbuf, 32*1024 );
     }
     
-    sts = rpc_call_udp( &pars, args, res );
+    if( tcp ) sts = rpc_call_tcp( &pars, args, res );
+    else sts = rpc_call_udp( &pars, args, res );
     
     if( tmpbuf ) free( tmpbuf );
     return sts;
 }
 
+int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {
+  return hrauth_call( 0, hcall, args, res, opts );
+}
+
+int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {
+  return hrauth_call( 1, hcall, args, res, opts );
+}

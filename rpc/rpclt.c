@@ -103,6 +103,7 @@ static int mynet_pton( char *str, uint8_t *inaddr ) {
     char *p;
     char tmp[4];
     int i, j;
+    uint32_t u;
     
     p = str;
     memset( inaddr, 0, 4 );
@@ -123,9 +124,12 @@ static int mynet_pton( char *str, uint8_t *inaddr ) {
 	    i++;
 	    p++;
 	}
-	inaddr[j] = strtoul( tmp, NULL, 10 );
+	u = strtoul( tmp, NULL, 10 );
+	if( u > 255 ) return -1;
+	inaddr[j] = (uint8_t)u;
     }
-
+    if( j != 4 ) return -1;
+    
     return 0;
 }
 
@@ -210,7 +214,8 @@ int main( int argc, char **argv ) {
 	glob.broadcast = 1;
 	i++;
 	if( i >= argc ) usage( NULL );
-	mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	if( sts ) usage( "Invalid IP address" );
 	i++;
       } else {
 	sts = hostreg_host_by_name( argv[i], &host );
@@ -218,7 +223,8 @@ int main( int argc, char **argv ) {
 	  glob.hostid = host.id;
 	  i++;
 	} else {
-	  mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	  sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	  if( sts ) usage( "Invalid IP address" );
 	  i++;
 	}
       }

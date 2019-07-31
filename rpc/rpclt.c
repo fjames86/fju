@@ -245,8 +245,8 @@ int main( int argc, char **argv ) {
 	} else {
 	  sts = inet_pton( AF_INET, argv[i], &glob.addr );
 	  //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
-	  if( sts != 0 ) {
-	    glob.addr = 0;
+	  if( sts == 0 ) {
+	    glob.addr = htonl( INADDR_LOOPBACK );
 	  } else {
 	    i++;
 	  }
@@ -258,15 +258,15 @@ int main( int argc, char **argv ) {
     idx = 0;
     while( clt_procs[idx].prog ) {
       info = &clt_procs[idx];
-	if( strcmp( argv[i], info->procname ) == 0 ) {
-	    if( glob.broadcast ) {
-	      clt_broadcast( info, argc, argv, i );
-	    } else {
-	      clt_call( info, argc, argv, i );
-	    }
-	    exit( 0 );
+      if( strcmp( argv[i], info->procname ) == 0 ) {
+	if( glob.broadcast ) {
+	  clt_broadcast( info, argc, argv, i );
+	} else {
+	  clt_call( info, argc, argv, i );
 	}
-	idx++;
+	exit( 0 );
+      }
+      idx++;
     }
     usage( "Unknown proc \"%s\"", argv[i] );
     
@@ -488,10 +488,10 @@ static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "clid" ) == 0 ) {
       clid = strtoul( argval, NULL, 16 );
-    } else usage( NULL );
+    } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
-  if( !clid ) usage( NULL );
+  if( !clid ) usage( "Need CLID" );
   
   xdr_encode_uint64( xdr, clid );
 }
@@ -518,10 +518,10 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 	tmp[1] = argval[2*j + 1];
 	data[j] = strtoul( tmp, NULL, 16 );
       }
-    } else usage( NULL );
+    } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
-  if( !clid ) usage( NULL );
+  if( !clid ) usage( "Need CLID" );
   
   xdr_encode_uint64( xdr, clid );
   xdr_encode_opaque( xdr, (uint8_t *)data, REX_MAX_BUF );
@@ -539,10 +539,10 @@ static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
       argval_split( argv[i], argname, &argval );
       if( strcmp( argname, "clid" ) == 0 ) {
 	  clid = strtoull( argval, NULL, 16 );
-      } else usage( NULL );
+      } else usage( "Unknown arg \"%s\"", argname );
       i++;
   }
-  if( !clid ) usage( NULL );
+  if( !clid ) usage( "Need CLID" );
   
   sts = raft_cluster_by_id( clid, &cl );
   if( sts ) usage( "Unknown cluster" );
@@ -565,10 +565,10 @@ static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 	argval_split( argv[i], argname, &argval );
 	if( strcmp( argname, "clid" ) == 0 ) {
 	    clid = strtoull( argval, NULL, 16 );
-	} else usage( NULL );
+	} else usage( "Unknown arg \"%s\"", argname );
 	i++;
     }
-    if( !clid ) usage( NULL );
+    if( !clid ) usage( "Need CLID" );
     xdr_encode_uint64( xdr, clid );
 }
 

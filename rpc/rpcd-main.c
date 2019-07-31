@@ -93,6 +93,7 @@ int main( int argc, char **argv ) {
   int sts;
 
   /* open log */
+  mmf_ensure_dir( mmf_default_path( NULL ) );
   sts = log_open( mmf_default_path( "rpcd.log", NULL ), NULL, &logger );
   if( sts ) printf( "Warning: Failed to open rpcd debug log file\n" );
   else { 

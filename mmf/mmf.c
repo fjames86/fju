@@ -118,6 +118,10 @@ char *mmf_default_path( char *filename, ... ) {
 	if( sts ) return path;
 
 	wcstombs( path, wp, sizeof(path) );
+	strcat( path, "\\fju" );
+
+	mmf_ensure_dir( path );
+	
 	if( filename ) {
 	  va_list args;
 	  char *p;
@@ -199,7 +203,8 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 char *mmf_default_path( char *filename, ... ) {
 	static char path[256];
 
-	strcpy( path, "/etc" );
+	strcpy( path, "/opt/fju/etc" );
+	mmf_ensure_dir( path );
 	if( filename ) {
 	  va_list args;
 	  char *p;

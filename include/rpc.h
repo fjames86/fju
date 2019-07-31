@@ -264,8 +264,6 @@ int rpcbind_call_dump( struct sockaddr_in *addr, struct rpcbind_mapping *mlist, 
 int rpcbind_call_set( struct sockaddr_in *addr, struct rpcbind_mapping *m );
 void rpcbind_set_laddrs( int *prot_port, int n );
 
-int rpc_call_tcp( struct rpc_inc *inc );
-
 struct rpc_call_pars {
     uint32_t prog;
     uint32_t vers;
@@ -278,6 +276,7 @@ struct rpc_call_pars {
     struct xdr_s buf;
 };
 int rpc_call_udp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res );
+int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res );
 
 struct rpc_iterator;
 typedef void (*rpc_iterator_t)( struct rpc_iterator *it );

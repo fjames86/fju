@@ -41,21 +41,22 @@
 
 /* local log shared over RPC */
 struct nls_share {
-  uint64_t hshare;
-  char path[256];
+    uint64_t hshare;
+    char path[256];
 };
 
-/* remote shared log */
+/* remote shared log - spooled reads */
 struct nls_remote {
-  uint64_t hostid;   /* remote host id */
-  uint64_t hshare; /* shared log descriptor */
-  uint64_t seq;      /* last known log seqno and message id */
+  uint64_t hostid;        /* remote host id */
+  uint64_t hshare;        /* shared log descriptor */
+  uint64_t seq;           /* last known log seqno and message id */
   uint64_t lastid;
-  uint64_t timestamp;   /* when to next send a notreg call */
+  uint64_t timestamp;     /* when to next send a notreg call */
   uint64_t last_contact;  /* when last heard from server */
   uint32_t notify_period;
 };
 
+/* notification context - who to send a message to if local share gets updated */
 struct nls_notify {
   uint64_t tag;
   uint64_t hostid;
@@ -67,6 +68,7 @@ struct nls_notify {
   uint32_t period;
 };
 
+/* database properties */
 struct nls_prop {
     uint32_t version;
 #define NLS_VERSION 1

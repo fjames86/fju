@@ -88,8 +88,8 @@ static void usage( char *fmt, ... ) {
 	  "      -p port             Port\n"
 	  "      -L none|integ|priv  Service level\n"
 	  "      -t timeout          Timeout (ms)\n"
-	  "      -T                  Call using TCP (addr only)\n"
-	  "      -U                  Call using UDP (addr only)\n" 
+	  "      -P udp|tcp          Call using TCP or UDP protocol (addr only)\n"
+	  "      -T                  Report round trip time\n" 
 	  "\n" );
   info = clt_procs;
   printf( "Procedures:\n" );
@@ -171,6 +171,7 @@ static struct {
     int broadcast;
     uint32_t addr;
     int tcp;
+    int reporttime;
 } glob;
 
 int main( int argc, char **argv ) {
@@ -212,10 +213,15 @@ int main( int argc, char **argv ) {
 	    i++;
 	    if( i >= argc ) usage( NULL );
 	    glob.timeout = strtoul( argv[i], NULL, 10 );
+	} else if( strcmp( argv[i], "-P" ) == 0 ) {
+	    i++;
+	    if( i >= argc ) usage( NULL );
+	    if( strcmp( argv[i], "tcp" ) == 0 ) {
+		glob.tcp = 1;
+	    } else if( strcmp( argv[i], "udp" ) == 0 ) {
+	    } else usage( NULL );
 	} else if( strcmp( argv[i], "-T" ) == 0 ) {
-	  glob.tcp = 1;
-	} else if( strcmp( argv[i], "-U" ) == 0 ) {
-	  glob.tcp = 0;
+	    glob.reporttime = 1;
 	} else break;
 	i++;
     }
@@ -282,7 +288,8 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   int sts;
   struct rpc_call_pars pars;
   struct sockaddr_in *sinp;
-
+  uint64_t tstart, tend;
+      
   xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
   xdr_init( &res, NULL, 0 );
   
@@ -313,6 +320,8 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
    
   i++;
   if( info->getargs ) info->getargs( argc, argv, i, &args );
+
+  tstart = rpc_now();
   if( glob.hostid ) {
     sts = hrauth_call_udp( &hcall, &args, &res, &opts );
   } else if( glob.tcp ) {
@@ -320,7 +329,9 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   } else {
     sts = rpc_call_udp( &pars, &args, &res );
   }
+  tend = rpc_now();
   if( sts ) usage( "RPC call failed" );
+  if( glob.reporttime ) printf( "Time: %dms\n", (int)(tend - tstart) );
   if( info->results ) info->results( &res );
 }
 

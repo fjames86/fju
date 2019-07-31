@@ -621,11 +621,11 @@ static struct rpc_proc hrauth_procs[] = {
 };
 
 static struct rpc_version hrauth_vers = {
-  NULL, HRAUTH_VERSION, hrauth_procs
+  NULL, HRAUTH_RPC_VERS, hrauth_procs
 };
 
 static struct rpc_program hrauth_prog = {
-  NULL, HRAUTH_PROGRAM, &hrauth_vers
+  NULL, HRAUTH_RPC_PROG, &hrauth_vers
 };
 
 

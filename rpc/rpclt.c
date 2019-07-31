@@ -69,7 +69,7 @@ static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i )
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
-    { HRAUTH_PROGRAM, HRAUTH_VERSION, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
+    { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_list_results, "raft.list", NULL },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, raft_add_args, NULL, "raft.add", "clid=CLID" },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, raft_rem_args, NULL, "raft.rem", "clid=CLID" },

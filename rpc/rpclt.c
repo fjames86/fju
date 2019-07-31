@@ -81,7 +81,7 @@ static void usage( char *fmt, ... ) {
 	  "      -t timeout          Timeout (ms)\n" 
 	  "\n" );
   info = clt_procs;
-  printf( "Programs:\n" );
+  printf( "Procedures:\n" );
   while( info->prog ) {
       printf( "    %u:%u:%u %s %s\n",
 	      info->prog, info->vers, info->proc, info->procname, info->procargs ? info->procargs : "" );
@@ -201,6 +201,7 @@ int main( int argc, char **argv ) {
     glob.hostid = strtoull( argv[i], &term, 16 );
     if( *term ) {
       struct hostreg_host host;
+      glob.hostid = 0;
       if( strcmp( argv[i], "local" ) == 0 ) {
 	glob.hostid = 0;
 	i++;
@@ -215,6 +216,9 @@ int main( int argc, char **argv ) {
 	sts = hostreg_host_by_name( argv[i], &host );
 	if( !sts ) {
 	  glob.hostid = host.id;
+	  i++;
+	} else {
+	  mynet_pton( argv[i], (uint8_t *)&glob.addr );
 	  i++;
 	}
       }
@@ -245,23 +249,44 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   struct hrauth_call_opts opts;
   char argbuf[1024];
   int sts;
-  
-  memset( &hcall, 0, sizeof(hcall) );
-  hcall.hostid = glob.hostid;
-  hcall.prog = info->prog;
-  hcall.vers = info->vers;
-  hcall.proc = info->proc;
-  hcall.timeout = glob.timeout;
-  hcall.service = glob.service;
+  struct rpc_call_pars pars;
+  struct sockaddr_in *sinp;
+
   xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
   xdr_init( &res, NULL, 0 );
   
-  opts.mask = HRAUTH_CALL_OPT_PORT;
-  opts.port = glob.port;
-  
+  if( glob.hostid ) {
+    memset( &hcall, 0, sizeof(hcall) );
+    hcall.hostid = glob.hostid;
+    hcall.prog = info->prog;
+    hcall.vers = info->vers;
+    hcall.proc = info->proc;
+    hcall.timeout = glob.timeout;
+    hcall.service = glob.service;
+    
+    opts.mask = HRAUTH_CALL_OPT_PORT;
+    opts.port = glob.port;
+  } else {
+    memset( &pars, 0, sizeof(pars) );
+    pars.prog = info->prog;
+    pars.vers = info->vers;
+    pars.proc = info->proc;
+    sinp = (struct sockaddr_in *)&pars.raddr;
+    sinp->sin_family = AF_INET;
+    sinp->sin_port = htons( glob.port );
+    sinp->sin_addr.s_addr = glob.addr;
+    pars.raddr_len = sizeof(*sinp);
+    pars.timeout = glob.timeout;
+    xdr_init( &pars.buf, malloc( 32*1024 ), 32*1024 );
+  }
+   
   i++;
   if( info->getargs ) info->getargs( argc, argv, i, &args );
-  sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+  if( glob.hostid ) {
+    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+  } else {
+    sts = rpc_call_udp( &pars, &args, &res );
+  }
   if( sts ) usage( "RPC call failed" );
   if( info->results ) info->results( &res );
 }

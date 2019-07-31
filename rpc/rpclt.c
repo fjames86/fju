@@ -23,12 +23,20 @@
  * 
 */
 
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <inttypes.h>
 #include <time.h>
+#ifndef WIN32
+#include <arpa/inet.h>
+#endif
 
 #include <rpc.h>
 #include <hrauth.h>
@@ -101,6 +109,7 @@ static void usage( char *fmt, ... ) {
   exit( 0 );
 }
 
+#if 0
 static int mynet_pton( char *str, uint8_t *inaddr ) {
     char *p;
     char tmp[4];
@@ -129,11 +138,13 @@ static int mynet_pton( char *str, uint8_t *inaddr ) {
 	u = strtoul( tmp, NULL, 10 );
 	if( u > 255 ) return -1;
 	inaddr[j] = (uint8_t)u;
+	if( *p == '\0' ) break;
     }
     if( j != 4 ) return -1;
     
     return 0;
 }
+#endif
 
 static void argval_split( char *instr, char *argname, char **argval ) {
     char *p;
@@ -215,13 +226,15 @@ int main( int argc, char **argv ) {
       glob.hostid = 0;
       if( strcmp( argv[i], "local" ) == 0 ) {
 	glob.hostid = 0;
+	glob.addr = htonl( INADDR_LOOPBACK );
 	i++;
       } else if( strcmp( argv[i], "broadcast" ) == 0 ) {
 	glob.hostid = 0;
 	glob.broadcast = 1;
 	i++;
 	if( i >= argc ) usage( NULL );
-	sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	sts = inet_pton( AF_INET, argv[i], &glob.addr );
+	//sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
 	if( sts ) usage( "Invalid IP address" );
 	i++;
       } else {
@@ -230,9 +243,13 @@ int main( int argc, char **argv ) {
 	  glob.hostid = host.id;
 	  i++;
 	} else {
-	  sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
-	  if( sts ) usage( "Invalid IP address" );
-	  i++;
+	  sts = inet_pton( AF_INET, argv[i], &glob.addr );
+	  //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	  if( sts != 0 ) {
+	    glob.addr = 0;
+	  } else {
+	    i++;
+	  }
 	}
       }
     }

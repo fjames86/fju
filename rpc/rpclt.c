@@ -68,11 +68,15 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i );
 static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i );
 
 static struct clt_info clt_procs[] = {
+    { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
+    { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 0, NULL, NULL, "hrauth.null", NULL },    
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
+    { RAFT_RPC_PROG, RAFT_RPC_VERS, 0, NULL, NULL, "raft.null", NULL },    
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_list_results, "raft.list", NULL },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, raft_add_args, NULL, "raft.add", "clid=CLID" },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, raft_rem_args, NULL, "raft.rem", "clid=CLID" },
+    { REX_RPC_PROG, REX_RPC_VERS, 0, NULL, NULL, "rex.null", NULL },    
     { REX_RPC_PROG, REX_RPC_VERS, 1, rex_read_args, rex_read_results, "rex.read", "clid=CLID" },
     { REX_RPC_PROG, REX_RPC_VERS, 2, rex_write_args, rex_write_results, "rex.write", "clid=CLID data=DATA" },
     { 0, 0, 0, NULL, NULL, NULL }
@@ -275,7 +279,7 @@ int main( int argc, char **argv ) {
       }
       idx++;
     }
-    usage( "Unknown proc \"%s\"", argv[i] );
+    usage( "Unknown host or proc \"%s\"", argv[i] );
     
     return 0;
 }
@@ -331,7 +335,7 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   }
   tend = rpc_now();
   if( sts ) usage( "RPC call failed" );
-  if( glob.reporttime ) printf( "Time: %dms\n", (int)(tend - tstart) );
+  if( glob.reporttime ) printf( ";; Time: %dms\n", (int)(tend - tstart) );
   if( info->results ) info->results( &res );
 }
 

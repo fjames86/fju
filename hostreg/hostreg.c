@@ -261,7 +261,7 @@ char *hostreg_name_by_hostid( uint64_t hostid, char *str ) {
   int sts;
   struct hostreg_host host;
   sts = hostreg_host_by_id( hostid, &host );
-  if( sts ) return NULL;
+  if( sts ) return "";
   strncpy( str, host.name, sizeof(host.name) - 1 );
   return str;
 }

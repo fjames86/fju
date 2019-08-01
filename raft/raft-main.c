@@ -141,7 +141,7 @@ int main( int argc, char **argv ) {
                  if( strcmp( argname, "clid" ) == 0 ) {
                       if( argval ) entry.clid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-                      if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
+		     if( argval ) entry.hostid = hostreg_hostid_by_name( argval );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
@@ -168,7 +168,7 @@ int main( int argc, char **argv ) {
 		if( strcmp( argname, "clid" ) == 0 ) {
 		    if( argval ) clid = strtoull( argval, NULL, 16 );
 		} else if( strcmp( argname, "hostid" ) == 0 ) {
-		    if( argval ) hostid = strtoull( argval, NULL, 16 );
+		    if( argval ) hostid = hostreg_hostid_by_name( argval );
 		} else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
 		i++;
 	    }
@@ -257,19 +257,18 @@ int main( int argc, char **argv ) {
 static void print_cluster( struct raft_cluster *cluster, struct raft_member *member, int nmember ) {
     struct tm *tm;
   time_t now;
-  char timestr[128];
+  char timestr[128], namestr[HOSTREG_MAX_NAME];
   int j;
   
-      printf( "cluster id=%"PRIx64" state=%s termseq=%"PRIu64" leader=%"PRIx64" typeid=%x\n"
-	      "        flags=0x%x votes=%u votedid=%"PRIx64" commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
+      printf( "cluster id=%"PRIx64" state=%s termseq=%"PRIu64" leader=%"PRIx64" (%s)\n"
+	      "        typeid=%x flags=0x%x commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
 	      cluster->id,
 	      cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
 	      cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
 	      cluster->state == RAFT_STATE_LEADER ? "Leader" :
 	      "Unknown",
-	      cluster->termseq, cluster->leaderid, cluster->typeid,
-	      cluster->flags, cluster->votes, cluster->voteid,
-	      cluster->commitseq, cluster->stateseq );
+	      cluster->termseq, cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
+	      cluster->typeid, cluster->flags, cluster->commitseq, cluster->stateseq );
 	          
       for( j = 0; j < nmember; j++ ) {
 	  if( member[j].lastseen ) {
@@ -280,8 +279,8 @@ static void print_cluster( struct raft_cluster *cluster, struct raft_member *mem
 	      strcpy( timestr, "Never" );
 	  }
 
-	  printf( "    member hostid=%"PRIx64" flags=%x lastseen=%s", 
-		  member[j].hostid, member[j].flags, timestr );
+	  printf( "    member hostid=%"PRIx64" (%s) flags=%x lastseen=%s", 
+		  member[j].hostid, hostreg_name_by_hostid( member[j].hostid, namestr ), member[j].flags, timestr );
 	  if( cluster->state == RAFT_STATE_LEADER ) {
 	    printf( "nextseq=%"PRIu64" stateseq=%"PRIu64"", member[j].nextseq, member[j].stateseq );
 	  }

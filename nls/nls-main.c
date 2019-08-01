@@ -36,6 +36,7 @@
 #include <mmf.h>
 #include <time.h>
 #include "nls.h"
+#include <hostreg.h>
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
@@ -89,6 +90,9 @@ int main( int argc, char **argv ) {
     sts = nls_open();
     if( sts ) usage( "Failed to open" );
 
+    sts = hostreg_open();
+    if( sts ) usage( "Failed to open hostreg" );
+    
     i = 1;
     if( i >= argc ) {
         cmd_list();
@@ -126,7 +130,7 @@ int main( int argc, char **argv ) {
 		 if( strcmp( argname, "hshare" ) == 0 ) {
   		     if( argval ) entry.hshare = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-		     if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
+		     if( argval ) entry.hostid = hostreg_hostid_by_name( argval );
 		 } else if( strcmp( argname, "lastid" ) == 0 ) {
 		     if( argval ) entry.lastid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "seq" ) == 0 ) {
@@ -201,7 +205,7 @@ int main( int argc, char **argv ) {
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
 		 if( strcmp( argname, "hostid" ) == 0 ) {
-                      if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
+		     if( argval ) entry.hostid = hostreg_hostid_by_name( argval );
 		 } else if( strcmp( argname, "lastid" ) == 0 ) {
                       if( argval ) entry.lastid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "seq" ) == 0 ) {
@@ -252,7 +256,7 @@ static void cmd_list( void ) {
     }
     {
         struct nls_remote *lst;
-	char timestr[64], lastcstr[64];
+	char timestr[64], lastcstr[64], namestr[HOSTREG_MAX_NAME];
 	struct tm *tm;
   	time_t now;
 	
@@ -274,16 +278,16 @@ static void cmd_list( void ) {
 	    strftime( lastcstr, sizeof(lastcstr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
 	    
-	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/etc/nls/%"PRIx64"/%"PRIx64".log notify_period=%us last_contact=%s\n",
+	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" (%s) seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/opt/fju/etc/nls/%"PRIx64"/%"PRIx64".log notify_period=%us last_contact=%s\n",
 		  "remote",
-		  lst[i].hshare, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr, lst[i].hostid, lst[i].hshare, lst[i].notify_period, lastcstr );
+		  lst[i].hshare, lst[i].hostid, hostreg_name_by_hostid( lst[i].hostid, namestr ), lst[i].seq, lst[i].lastid, timestr, lst[i].hostid, lst[i].hshare, lst[i].notify_period, lastcstr );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );
     }
     {
         struct nls_notify *lst;
-	char timestr[64];
+	char timestr[64], namestr[HOSTREG_MAX_NAME];
 	struct tm *tm;
   	time_t now;
 
@@ -299,9 +303,9 @@ static void cmd_list( void ) {
 	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
 
-	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s period=%u\n",
+	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" (%s) hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s period=%u\n",
 		  "notify",
-		  lst[i].tag, lst[i].hostid, lst[i].hshare, lst[i].seq, lst[i].lastid, timestr, lst[i].period );
+		  lst[i].tag, lst[i].hostid, hostreg_name_by_hostid( lst[i].hostid, namestr ), lst[i].hshare, lst[i].seq, lst[i].lastid, timestr, lst[i].period );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );

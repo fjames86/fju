@@ -78,6 +78,8 @@ int hostreg_host_local( struct hostreg_host *host );
 int hostreg_host_list( struct hostreg_host *list, int n );
 int hostreg_host_by_id( uint64_t id, struct hostreg_host *host );
 int hostreg_host_by_name( char *name, struct hostreg_host *host );
+uint64_t hostreg_hostid_by_name( char *name );
+char *hostreg_name_by_hostid( uint64_t hostid, char *str );
 int hostreg_host_put( struct hostreg_host *entry );
 int hostreg_host_rem( uint64_t id );
 int hostreg_host_common( uint64_t hostid, char *common, int *size );

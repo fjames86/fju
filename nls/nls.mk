@@ -9,6 +9,7 @@ nls_deps += ${LIBDIR}/libmmf.a
 nls_deps += ${LIBDIR}/liblog.a
 nls_deps += ${LIBDIR}/libsec.a
 nls_deps += ${LIBDIR}/libnls.a
+nls_deps += ${LIBDIR}/libhostreg.a
 
 ${BINDIR}/nls: nls/nls-main.c ${nls_deps}
-	${CC} -o $@ nls/nls-main.c ${CFLAGS} ${LFLAGS} -lmmf -lcrypto -llog -lsec -lnls 
+	${CC} -o $@ nls/nls-main.c ${CFLAGS} ${LFLAGS} -lmmf -lcrypto -llog -lsec -lnls -lhostreg

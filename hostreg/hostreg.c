@@ -249,6 +249,24 @@ int hostreg_host_by_name( char *name, struct hostreg_host *host ) {
     return sts;
 }
 
+uint64_t hostreg_hostid_by_name( char *name ) {
+  int sts;
+  struct hostreg_host host;
+  sts = hostreg_host_by_name( name, &host );
+  if( sts ) return 0;
+  return host.id;
+}
+
+char *hostreg_name_by_hostid( uint64_t hostid, char *str ) {
+  int sts;
+  struct hostreg_host host;
+  sts = hostreg_host_by_id( hostid, &host );
+  if( sts ) return NULL;
+  strncpy( str, host.name, sizeof(host.name) - 1 );
+  return str;
+}
+  
+
 int hostreg_host_put( struct hostreg_host *host ) {
     int sts, i, idx;
     

@@ -229,11 +229,17 @@ int hostreg_host_by_id( uint64_t id, struct hostreg_host *host ) {
 
 int hostreg_host_by_name( char *name, struct hostreg_host *host ) {
     int sts, i;
+    uint64_t id;
+    char *term;
+
+    id = strtoull( name, &term, 16 );
+    if( *term ) id = 0;
+    
     if( glob.ocount <= 0 ) return -1;
     hostreg_lock();
     sts = -1;
     for( i = 0; i < glob.file->header.host_count; i++ ) {
-        if( strcmp( glob.file->host[i].name, name ) == 0 ) {
+        if( (strcmp( glob.file->host[i].name, name ) == 0) || (glob.file->host[i].id == id) ) {
             if( host ) *host = glob.file->host[i];
             sts = 0;
             break;

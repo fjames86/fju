@@ -85,6 +85,7 @@ static struct clt_info clt_procs[] = {
 static void usage( char *fmt, ... ) {
   va_list args;
   struct clt_info *info;
+  char procstr[256];
   
   printf( "Usage: rpclt [OPTIONS] <HOSTID|addr|local|broadcast BCADDR> program.vers.proc [args...]\n"
 	  "\n"
@@ -98,8 +99,9 @@ static void usage( char *fmt, ... ) {
   info = clt_procs;
   printf( "Procedures:\n" );
   while( info->prog ) {
-      printf( "    %u:%u:%u %s %s\n",
-	      info->prog, info->vers, info->proc, info->procname, info->procargs ? info->procargs : "" );
+      sprintf( procstr, "%u:%u:%u", info->prog, info->vers, info->proc );
+      printf( "    %-16s %-16s %s\n",
+	      procstr, info->procname, info->procargs ? info->procargs : "" );
       info++;
   }
   

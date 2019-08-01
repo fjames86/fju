@@ -246,7 +246,7 @@ int main( int argc, char **argv ) {
 	if( i >= argc ) usage( NULL );
 	sts = inet_pton( AF_INET, argv[i], &glob.addr );
 	//sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
-	if( sts ) usage( "Invalid IP address" );
+	if( sts != 1 ) usage( "Invalid IP address" );
 	i++;
       } else {
 	sts = hostreg_host_by_name( argv[i], &host );
@@ -256,10 +256,10 @@ int main( int argc, char **argv ) {
 	} else {
 	  sts = inet_pton( AF_INET, argv[i], &glob.addr );
 	  //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
-	  if( sts == 0 ) {
-	    glob.addr = htonl( INADDR_LOOPBACK );
-	  } else {
+	  if( sts == 1 ) {
 	    i++;
+	  } else {
+	    glob.addr = htonl( INADDR_LOOPBACK );	    
 	  }
 	}
       }

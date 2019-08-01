@@ -150,6 +150,32 @@ int mmf_ensure_dir( char *path ) {
   return 0;
 }
 
+int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
+    OVERLAPPED overlap;
+    uint32_t nbytes;
+    BOOL b;
+    
+    memset( &overlap, 0, sizeof(overlap) );
+    overlap.Offset = offset & 0xffffffff;
+    overlap.OffsetHigh = (offset >> 32) & 0xffffffff;
+    b = ReadFile( mmf->fd, buf, size, &nbytes, &overlap );
+    if( !b ) return -1;
+    return nbytes;
+}
+
+int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
+    OVERLAPPED overlap;
+    uint32_t nbytes;
+    BOOL b;
+    
+    memset( &overlap, 0, sizeof(overlap) );
+    overlap.Offset = offset & 0xffffffff;
+    overlap.OffsetHigh = (offset >> 32) & 0xffffffff;
+    b = WriteFile( mmf->fd, buf, size, &nbytes, &overlap );
+    if( !b ) return -1;
+    return nbytes;
+}
+
 #else
 int mmf_open( char *path, struct mmf_s *mmf ) {
 	memset( mmf, 0, sizeof(*mmf) );
@@ -231,5 +257,12 @@ int mmf_ensure_dir( char *path ) {
   return 0;
 }
 
+int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
+    return pread( mmf->fd, buf, size, offset );
+}
+
+int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
+    return pwrite( mmf->fd, buf, size, offset );
+}
 
 #endif

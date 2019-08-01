@@ -54,6 +54,8 @@ int mmf_remap( struct mmf_s *mmf, int size );
 int mmf_sync( struct mmf_s *mmf );
 char *mmf_default_path( char *filename, ... );
 int mmf_ensure_dir( char *path );
+int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset );
+int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset );
 
 #endif
 

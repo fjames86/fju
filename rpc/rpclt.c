@@ -529,7 +529,7 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "clid" ) == 0 ) {
-      clid = strtoul( argval, NULL, 16 );
+      clid = strtoull( argval, NULL, 16 );
     } else if( strcmp( argname, "data" ) == 0 ) {
       len = strlen( argval ) / 2;
       cnt = 0;

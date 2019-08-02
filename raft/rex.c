@@ -44,7 +44,6 @@ static void rex_state_save( uint64_t clid, char *buf, int size ) {
   char name[256];
 
   if( size > REX_MAX_BUF ) size = REX_MAX_BUF;
-  if( size % 4 ) size -= size % 4;
   
   sprintf( name, "%"PRIx64".dat", clid );
   mmf_ensure_dir( mmf_default_path( "rex", NULL ) );
@@ -103,7 +102,9 @@ static int rex_proc_read( struct rpc_inc *inc ) {
   nbytes = inc->xdr.count - inc->xdr.offset - 4;
   rex_state_load( clid, (char *)inc->xdr.buf + inc->xdr.offset + 4, &nbytes );
   xdr_encode_uint32( &inc->xdr, nbytes );
+  if( nbytes % 4 ) nbytes += 4 - (nbytes % 4);
   inc->xdr.offset += nbytes;
+
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }
@@ -177,6 +178,7 @@ static void rex_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   nbytes = xdr.count - xdr.offset - 4;
   rex_state_load( cl->id, (char *)xdr.buf + xdr.offset + 4, &nbytes );
   xdr_encode_uint32( &xdr, nbytes );
+  if( nbytes % 4 ) nbytes += 4 - (nbytes % 4);
   xdr.offset += nbytes;
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {

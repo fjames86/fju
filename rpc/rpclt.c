@@ -114,13 +114,12 @@ static void usage( char *fmt, ... ) {
     printf( "\n" );
   }
 
-  exit( 0 );
+  exit( 1 );
 }
 
 #if 0
 static int mynet_pton( char *str, uint8_t *inaddr ) {
     char *p;
-    char tmp[4];
     int i, j;
     uint32_t u;
     
@@ -478,17 +477,16 @@ static void raft_list_results( struct xdr_s *xdr ) {
 }
 
 static void rex_read_results( struct xdr_s *xdr ) {
-  int sts, len, i;
+  int sts, len;
   uint8_t *buf;
 
   sts = xdr_decode_opaque_ref( xdr, &buf, &len );
   if( sts ) usage( "XDR error" );
-
-  for( i = 0; i < len; i++ ) {
-    if( i > 0 && (i % 16) == 0 ) printf( "\n" );
-    printf( "%02x ", (uint32_t)buf[i] );
+  if( len > 0 ) {
+    if( buf[len - 1] && len < xdr->count ) buf[len] = '\0';
+    printf( "%s\n", buf );
   }
-  printf( "\n" );
+  
 }
 
 static void rex_write_results( struct xdr_s *xdr ) {
@@ -521,8 +519,7 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   uint64_t clid = 0;
   char argname[64], *argval;
   char data[REX_MAX_BUF];
-  char tmp[4];
-  int len, j, cnt = 0;
+  int len;
   
   memset( data, 0, sizeof(data) );
   
@@ -531,22 +528,15 @@ static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     if( strcmp( argname, "clid" ) == 0 ) {
       clid = strtoull( argval, NULL, 16 );
     } else if( strcmp( argname, "data" ) == 0 ) {
-      len = strlen( argval ) / 2;
-      cnt = 0;
-      for( j = 0; j < (len > REX_MAX_BUF ? REX_MAX_BUF : len); j++ ) {
-	memset( tmp, 0, sizeof(tmp) );
-	tmp[0] = argval[2*j];
-	tmp[1] = argval[2*j + 1];
-	data[j] = strtoul( tmp, NULL, 16 );
-	cnt++;
-      }
+      len = strlen( argval );
+      memcpy( data, argval, len );
     } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
   if( !clid ) usage( "Need CLID" );
   
   xdr_encode_uint64( xdr, clid );
-  xdr_encode_opaque( xdr, (uint8_t *)data, cnt );
+  xdr_encode_opaque( xdr, (uint8_t *)data, len );
 }
 
 static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {

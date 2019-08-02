@@ -656,7 +656,7 @@ static int raft_proc_set( struct rpc_inc *inc ) {
   memset( &cl, 0, sizeof(cl) );
 
   sts = xdr_decode_uint64( &inc->xdr, &cl.id );
-  if( !sts ) raft_cluster_by_id( cl.id, &cl );
+  if( !sts ) sts = raft_cluster_by_id( cl.id, &cl );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &cl.typeid );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &cl.flags );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
@@ -667,6 +667,7 @@ static int raft_proc_set( struct rpc_inc *inc ) {
   
   for( j = 0; j < m; j++ ) {
     memset( &member, 0, sizeof(member) );
+    member.clid = cl.id;
     sts = xdr_decode_uint64( &inc->xdr, &member.hostid );
     if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
     sts = raft_member_by_hostid( cl.id, member.hostid, &member );

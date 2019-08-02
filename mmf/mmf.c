@@ -84,6 +84,7 @@ int mmf_unlock( struct mmf_s *mmf ) {
 }
 int mmf_sync( struct mmf_s *mmf ) {
   if( mmf->file ) FlushViewOfFile( mmf->file, mmf->msize );
+  if( mmf->fd ) FlushFileBuffers( mmf->fd );
   return 0;
 }
 
@@ -179,6 +180,12 @@ int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
     return nbytes;
 }
 
+int mmf_truncate( struct mmf_s *mmf, int size ) {
+  SetFilePointer( mmf->fd, size, NULL, FILE_BEGIN );
+  SetEndOffFile( mmf->fd );
+  return 0;
+}
+
 #else
 int mmf_open( char *path, struct mmf_s *mmf ) {
 	memset( mmf, 0, sizeof(*mmf) );
@@ -213,6 +220,7 @@ int mmf_unlock( struct mmf_s *mmf ) {
 }
 int mmf_sync( struct mmf_s *mmf ) {
   if( mmf->file ) msync( mmf->file, mmf->msize, MS_SYNC );
+  if( mmf->fd ) fsync( mmf->fd );
   return 0;
 }
 
@@ -271,4 +279,8 @@ int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
     return pwrite( mmf->fd, buf, size, offset );
 }
 
+int mmf_truncate( struct mmf_s *mmf, int size ) {
+  ftruncate( mmf->fd, size );
+  return 0;
+}
 #endif

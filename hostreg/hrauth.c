@@ -269,11 +269,21 @@ static int hrauth_cverf( struct rpc_provider *pvr, struct rpc_msg *msg, void *pc
 
   /* decode */
   sts = hrauth_decode_verf( &tmpx, &verf );
-  if( sts ) return sts;
+  if( sts ) {
+    rpc_log( RPC_LOG_DEBUG, "verf xdr error" );
+    return sts;
+  }
 
   /* validate verifier */
-  if( verf.timestamp != sa->timestamp ) return -1;
-  if( verf.tverf != (verf.timestamp - 1) ) return -1;
+  if( verf.timestamp != sa->timestamp ) {
+    rpc_log( RPC_LOG_DEBUG, "bad timestamp timestamp=%u expected=%u tverf=%u nickname=%u",
+	     verf.timestamp, sa->timestamp, verf.tverf, verf.nickname );
+    return -1;
+  }
+  if( verf.tverf != (verf.timestamp - 1) ) {
+    rpc_log( RPC_LOG_DEBUG, "bad tverf" );
+    return -1;
+  }
   
   if( sa->nickname == 0 ) {
     sa->nickname = verf.nickname;
@@ -790,6 +800,7 @@ struct hrauth_proxy_cxt {
   uint32_t xid;
   struct rpc_provider *pvr;
   void *pcxt;
+  struct rpc_opaque_auth rverf;
   struct sockaddr_storage raddr;
   uint32_t raddr_len;
 };
@@ -801,12 +812,16 @@ static void hrauth_proxy_udp_cb( struct xdr_s *xdr, void *cxt ) {
   struct rpc_inc inc;
   char *buf = NULL;
   
-  if( !xdr ) goto done;
-		 
+  if( !xdr ) {
+    rpc_log( RPC_LOG_DEBUG, "hrauth_proxy_udp_cb timeout" );
+    goto done;
+  }
+
   /* send reply message */
   memset( &inc, 0, sizeof(inc) );
   inc.pvr = pcxt->pvr;
   inc.pcxt = pcxt->pcxt;
+  if( inc.pvr ) inc.pvr->rverf = pcxt->rverf;
   buf = malloc( 512 + xdr->count );
   xdr_init( &inc.xdr, (uint8_t *)buf, 512 + xdr->count );
   rpc_init_accept_reply( &inc, pcxt->xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -833,6 +848,7 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
   pcxt->pcxt = inc->pcxt;
   memcpy( &pcxt->raddr, &inc->raddr, inc->raddr_len );
   pcxt->raddr_len = inc->raddr_len;
+  if( inc->pvr ) pcxt->rverf = inc->pvr->rverf;
   
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
@@ -845,6 +861,7 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
   hcall.service = HRAUTH_SERVICE_PRIV;
   sts = hrauth_call_udp_async( &hcall, args, NULL );
   if( sts ) {
+    rpc_log( RPC_LOG_DEBUG, "hrauth_call_udp_async failed" );
     free( pcxt );
   }
 

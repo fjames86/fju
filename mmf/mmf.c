@@ -51,6 +51,8 @@ int mmf_open( char *path, struct mmf_s *mmf ) {
 	mmf->fd = CreateFileA( path, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
 	if( mmf->fd == INVALID_HANDLE_VALUE ) return -1;
 
+	mmf->fsize = (int)GetFileSize( mmf->fd, NULL );
+	
 	return 0;
 }
 
@@ -97,8 +99,9 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 		memset( &overlap, 0, sizeof(overlap) );
 		overlap.Offset = size - 1;
 		WriteFile( mmf->fd, "", 1, NULL, &overlap );
+		mmf->fsize = size;
 	}
-
+	
 	mmf->mapping = CreateFileMappingA( mmf->fd, NULL, PAGE_READWRITE, 0, 0, NULL );
 	if( !mmf->mapping ) return -1;
 	mmf->file = MapViewOfFile( mmf->mapping, FILE_MAP_READ|FILE_MAP_WRITE, 0, 0, size );
@@ -181,6 +184,7 @@ int mmf_open( char *path, struct mmf_s *mmf ) {
 	memset( mmf, 0, sizeof(*mmf) );
 	mmf->fd = open( path, O_RDWR|O_CREAT, 0600 );
 	if( mmf->fd < 0 ) return -1;
+	mmf->fsize = lseek( mmf->fd, 0, SEEK_END );
 	return 0;
 }
 
@@ -220,7 +224,9 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 	fsize = lseek( mmf->fd, 0, SEEK_END );
 	if( fsize < size ) {
 		pwrite( mmf->fd, "", 1, size - 1 );
+		mmf->fsize = size;
 	}
+	
 	mmf->file = mmap( NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, mmf->fd, 0 );
 	mmf->msize = size;
 	return 0;

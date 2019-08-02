@@ -44,6 +44,7 @@ struct mmf_s {
 #endif
 	int msize;
 	void *file;
+	int fsize;
 };
 
 int mmf_open( char *path, struct mmf_s *mmf );

@@ -160,8 +160,6 @@ int main( int argc, char **argv ) {
     i++;
   }
 
-  if( !fju.filepath ) fju.filepath = "fju.log";
-
   opts.mask = LOG_OPT_LBACOUNT;
   opts.mask |= LOG_OPT_FLAGS;
   opts.lbacount = logsize / LOG_LBASIZE;

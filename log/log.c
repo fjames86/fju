@@ -139,7 +139,7 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   int sts;
   struct _header *hdr;
 
-  if( !path ) return -1;
+  if( !path ) path = mmf_default_path( "fju.log", NULL );
 
   memset( log, 0, sizeof(*log) );
 

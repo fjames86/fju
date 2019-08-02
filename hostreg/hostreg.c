@@ -47,6 +47,10 @@
 #endif
 
 
+#ifdef WIN32
+#define strcasecmp _stricmp
+#endif
+
 #include "hostreg.h"
 #include <mmf.h>
 #include <sec.h>
@@ -239,7 +243,7 @@ int hostreg_host_by_name( char *name, struct hostreg_host *host ) {
     hostreg_lock();
     sts = -1;
     for( i = 0; i < glob.file->header.host_count; i++ ) {
-        if( (strcmp( glob.file->host[i].name, name ) == 0) || (glob.file->host[i].id == id) ) {
+        if( (strcasecmp( glob.file->host[i].name, name ) == 0) || (glob.file->host[i].id == id) ) {
             if( host ) *host = glob.file->host[i];
             sts = 0;
             break;

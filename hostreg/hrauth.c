@@ -1068,8 +1068,12 @@ static int hrauth_call( int tcp, struct hrauth_call *hcall, struct xdr_s *args, 
     
     if( tcp ) sts = rpc_call_tcp( &pars, args, res );
     else sts = rpc_call_udp( &pars, args, res );
-    
-    if( tmpbuf ) free( tmpbuf );
+
+    if( tmpbuf ) {
+		free( tmpbuf );
+		xdr_init( res, NULL, 0 ); /* if no tmpbuf passed in, we cannot return results */
+	}
+
     return sts;
 }
 

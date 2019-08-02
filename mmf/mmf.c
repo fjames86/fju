@@ -182,7 +182,7 @@ int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
 
 int mmf_truncate( struct mmf_s *mmf, int size ) {
   SetFilePointer( mmf->fd, size, NULL, FILE_BEGIN );
-  SetEndOffFile( mmf->fd );
+  SetEndOfFile( mmf->fd );
   return 0;
 }
 

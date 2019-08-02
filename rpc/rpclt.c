@@ -310,8 +310,9 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
     hcall.timeout = glob.timeout;
     hcall.service = glob.service;
     
-    opts.mask = HRAUTH_CALL_OPT_PORT;
+	opts.mask = HRAUTH_CALL_OPT_PORT|HRAUTH_CALL_OPT_TMPBUF;
     opts.port = glob.port;
+	xdr_init( &opts.tmpbuf, malloc( 32*1024 ), 32*1024 );
   } else {
     memset( &pars, 0, sizeof(pars) );
     pars.prog = info->prog;

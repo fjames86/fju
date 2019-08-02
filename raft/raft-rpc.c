@@ -93,11 +93,12 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   uint64_t termseq, commitseq;
   struct raft_cluster cl;
 
-  //  rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
-  //	   pcxt->clid, pcxt->hostid, pcxt->termseq );
+    rpc_log( RPC_LOG_TRACE, "raft_call_ping_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+	     pcxt->clid, pcxt->hostid, pcxt->termseq );
 
   if( !xdr ) {
-    //    rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb timeout" );
+    rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb timeout" );
+	
     /* try again? */
     sts = raft_cluster_by_id( pcxt->clid, &cl );
     sts = raft_member_by_hostid( pcxt->clid, pcxt->hostid, &member );
@@ -154,8 +155,8 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   uint8_t xdr_buf[64];
   struct raft_ping_cxt *pcxt;
   
-  //  rpc_log( RPC_LOG_DEBUG, "raft_call_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
-  //	   clid, hostid, termseq );
+  rpc_log( RPC_LOG_TRACE, "raft_call_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  	   cl->id, hostid, cl->termseq );
 
   pcxt = malloc( sizeof(*pcxt) );
   pcxt->clid = cl->id;
@@ -199,11 +200,11 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
   struct raft_cluster cl;
   uint64_t termseq;
   
-  //  rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
-  //	   pcxt->clid, pcxt->hostid, pcxt->termseq );
+  rpc_log( RPC_LOG_TRACE, "raft_call_vote_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  	   pcxt->clid, pcxt->hostid, pcxt->termseq );
 
   if( !xdr ) {
-    //rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb timeout" );
+    rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb timeout" );
     goto done;    
   }
 
@@ -256,8 +257,8 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   uint8_t xdr_buf[64];
   struct raft_ping_cxt *pcxt;
   
-  //  rpc_log( RPC_LOG_DEBUG, "raft_call_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
-  //	   clid, hostid, termseq );
+  rpc_log( RPC_LOG_TRACE, "raft_call_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  	   cl->id, hostid, cl->termseq );
 
   pcxt = malloc( sizeof(*pcxt) );
   pcxt->clid = cl->id;
@@ -466,10 +467,10 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &leaderid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &termseq );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &commitseq );
-  if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-
-  //  rpc_log( RPC_LOG_DEBUG, "raft_proc_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
-  //	   clid, leaderid, termseq );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  
+  rpc_log( RPC_LOG_TRACE, "raft_proc_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  	   clid, leaderid, termseq );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
@@ -493,7 +494,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   }
   
   if( cl.leaderid && (cl.leaderid != leaderid) ) {
-    rpc_log( RPC_LOG_DEBUG, "conflicting leadership claim with matching seqno?" );
+    rpc_log( RPC_LOG_WARN, "conflicting leadership claim with matching seqno?" );
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }
@@ -541,10 +542,10 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &termseq );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateseq );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateterm ); 
-  if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  //  rpc_log( RPC_LOG_DEBUG, "raft_proc_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
-  //	   clid, candid, termseq );
+  rpc_log( RPC_LOG_TRACE, "raft_proc_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  	   clid, candid, termseq );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 

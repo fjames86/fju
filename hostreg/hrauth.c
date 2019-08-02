@@ -348,7 +348,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* lookup existing context */
     sa = hrauth_context_by_nickname( auth.u.nickname );
     if( !sa ) return -1;
-    //rpc_log( RPC_LOG_DEBUG, "hrauth: nickname=%d", auth.u.nickname );
+    rpc_log( RPC_LOG_TRACE, "hrauth: nickname=%d", auth.u.nickname );
     break;
   case HRAUTH_FULL:
     /* allocate new context */
@@ -370,7 +370,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     sa->window = cred.window;
     sa->cipher = cred.cipher;
     sec_rand( &sa->nickname, 4 );
-    //rpc_log( RPC_LOG_DEBUG, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
+    rpc_log( RPC_LOG_TRACE, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
     break;
   default:
     return -1;
@@ -667,7 +667,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
 
   /* check for timeout */
   if( !inc ) {
-    //rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: XID=%u timeout", w->xid );
+    rpc_log( RPC_LOG_TRACE, "hrauth_call_cb: XID=%u timeout", w->xid );
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }
@@ -675,7 +675,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   /* process msg */
   sts = rpc_process_reply( inc );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
+    rpc_log( RPC_LOG_TRACE, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }

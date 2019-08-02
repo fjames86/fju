@@ -81,10 +81,12 @@ static struct rpc_logger rpcd_loggers[1];
 
 static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
   int loglvl = 0;
-  if( lvl == RPC_LOG_INFO ) loglvl = LOG_LVL_INFO;
+  if( lvl == RPC_LOG_TRACE ) loglvl = LOG_LVL_TRACE;
+  else if( lvl == RPC_LOG_INFO ) loglvl = LOG_LVL_INFO;
   else if( lvl == RPC_LOG_DEBUG ) loglvl = LOG_LVL_DEBUG;
   else if( lvl == RPC_LOG_WARN ) loglvl = LOG_LVL_WARN;
   else if( lvl == RPC_LOG_ERROR ) loglvl = LOG_LVL_ERROR;
+  else if( lvl == RPC_LOG_FATAL ) loglvl = LOG_LVL_FATAL;
   
   log_writev( &logger, loglvl, fmt, args );
 }

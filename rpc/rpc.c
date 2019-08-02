@@ -1316,6 +1316,7 @@ static void rpc_default_log( int lvl, char *fmt, va_list args ) {
 }
 
 static struct rpc_logger *loggers;
+
 void rpc_add_logger( struct rpc_logger *logger ) {
   logger->next = loggers;
   if( !logger->cb ) logger->cb = rpc_default_log;

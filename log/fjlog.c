@@ -41,7 +41,7 @@ uint64_t rpc_now( void ) {
   return (uint64_t)((tm.tv_sec * 1000ULL) + (tm.tv_nsec / (1000ULL * 1000ULL)));
 #endif
 }
-
+static char *lvlstr( int lvl );
 
 static struct {
   char *filepath;
@@ -78,7 +78,8 @@ static void usage( char *fmt, ... ) {
 	  "              -u                           Show log properties.\n"
 	  "              -F                           Create a fixed (non-circular) log.\n"
 	  "              -G                           Create a growing (non-circular) log.\n"
-	  "              -s size                      Create with size\n" 
+	  "              -s size                      Create with size\n"
+	  "              -L lvl                       Set log lvl\n" 
 	  "\n" 
 	  "  OPTIONS\n"
 	  "     -p path          Use log file by path name.\n"
@@ -103,6 +104,7 @@ int main( int argc, char **argv ) {
   int logsize = 2*1024*1024;
   struct log_opts opts;
   uint32_t logflags = 0;
+  int setlvlflags = 0, lvlflags;
   
   memset( &opts, 0, sizeof(opts) );
   fju.cmd = CMD_READ;
@@ -154,6 +156,18 @@ int main( int argc, char **argv ) {
       logflags |= LOG_FLAG_FIXED;
     } else if( strcmp( argv[i], "-G" ) == 0 ) {
       logflags |= LOG_FLAG_FIXED|LOG_FLAG_GROW;
+    } else if( strcmp( argv[i], "-L" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+
+      setlvlflags = 1;
+      if( strcasecmp( argv[i], "trace" ) == 0 ) lvlflags = LOG_LVL_TRACE;
+      else if( strcasecmp( argv[i], "debug" ) == 0 ) lvlflags = LOG_LVL_DEBUG;
+      else if( strcasecmp( argv[i], "info" ) == 0 ) lvlflags = LOG_LVL_INFO;
+      else if( strcasecmp( argv[i], "warn" ) == 0 ) lvlflags = LOG_LVL_WARN;
+      else if( strcasecmp( argv[i], "error" ) == 0 ) lvlflags = LOG_LVL_ERROR;
+      else if( strcasecmp( argv[i], "fatal" ) == 0 ) lvlflags = LOG_LVL_FATAL;
+      else usage( NULL );
     } else {
       usage( NULL );
     }
@@ -167,6 +181,8 @@ int main( int argc, char **argv ) {
   sts = log_open( fju.filepath, &opts, &fju.log );
   if( sts ) usage( "Failed to open" );
 
+  if( setlvlflags ) log_set_lvl( &fju.log, lvlflags );
+  
   switch( fju.cmd ) {
   case CMD_READ:
     cmd_read( fju.start_id, NULL );
@@ -184,7 +200,7 @@ int main( int argc, char **argv ) {
     {
       struct log_prop prop;
       log_prop( &fju.log, &prop );
-      printf( "Version %d Tag %"PRIx64" Seq %"PRIu64" LBACount %u (%uMB) Start %u Count %u LastID %"PRIx64" Flags 0x%04x\n", 
+      printf( "Version %d Tag %"PRIx64" Seq %"PRIu64" LBACount %u (%uMB) Start %u Count %u LastID %"PRIx64" Flags 0x%04x MinLvl=%s\n", 
 	      prop.version,
 	      prop.tag, 
 	      prop.seq,
@@ -193,7 +209,8 @@ int main( int argc, char **argv ) {
 	      prop.start,
 	      prop.count,
 	      prop.last_id,
-	      prop.flags );
+	      prop.flags,
+	      lvlstr( (prop.flags & LOG_FLAG_LVLMASK) >> 4 ) );
     }
     break;
   case CMD_TEST:
@@ -213,6 +230,7 @@ static char *lvlstr( int lvl ) {
   case LOG_LVL_INFO: return "INFO ";
   case LOG_LVL_WARN: return "WARN ";
   case LOG_LVL_ERROR: return "ERROR";
+  case LOG_LVL_FATAL: return "FATAL";
   }
   return "ERROR";
 }

@@ -827,7 +827,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->inc.xdr.count = c->cdata.count;
 
       /* process message and send reply */
-      //rpc_log( RPC_LOG_INFO, "Process UDP call" );
+      rpc_log( RPC_LOG_TRACE, "Process UDP call" );
       rpc.flist = rpc.flist->next;
       sts = rpc_process_incoming( &c->inc );
       rpc.flist = c;
@@ -836,7 +836,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       }
       else {
-	//rpc_log( RPC_LOG_INFO, "rpc_process_incoming failed" );
+	rpc_log( RPC_LOG_TRACE, "rpc_process_incoming failed" );
       }
 
     }
@@ -847,7 +847,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
   case RPC_LISTEN_UNIX:
 #endif
     {
-      rpc_log( RPC_LOG_INFO, "Accept TCP/UNIX" );
+      rpc_log( RPC_LOG_TRACE, "Accept TCP/UNIX" );
 
       /* get connection descriptor */
       c = rpc.flist;

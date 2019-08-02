@@ -409,7 +409,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   struct _entry *e;
   struct _header *hdr;
   int i, cnt, idx;
-  int msglen, nbytes, offset, blk_offset;
+  int msglen, nbytes, offset, blk_offset, hdrlvl;
 
   msglen = 0;
   for( i = 0; i < entry->niov; i++ ) {
@@ -425,6 +425,13 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   sts = log_lock( log );
   if( sts ) return sts;
 
+  /* check lvlmask */
+  hdrlvl = (hdr->flags & LOG_FLAG_LVLMASK) >> 4;
+  if( (entry->flags & LOG_LVL_MASK) < hdrlvl ) {
+    /* lvl too low - discard */
+    goto done;
+  }
+  
   /* check enough space */
   if( ((hdr->flags & (LOG_FLAG_FIXED|LOG_FLAG_GROW)) == (LOG_FLAG_FIXED|LOG_FLAG_GROW)) &&
       (cnt > (hdr->lbacount - hdr->count)) ) {
@@ -558,4 +565,10 @@ int log_write_buf( struct log_s *log, int lvl, char *buf, int len, uint64_t *id 
   return 0;
 }
 
-
+int log_set_lvl( struct log_s *log, int lvl ) {
+  struct _header *hdr = (struct _header *)log->mmf.file;
+  log_lock( log );
+  hdr->flags = (hdr->flags & ~LOG_FLAG_LVLMASK) | ((lvl & LOG_LVL_MASK) << 4);
+  log_unlock( log );
+  return 0;
+}

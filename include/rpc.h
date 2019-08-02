@@ -43,11 +43,12 @@
 #include <time.h>
 #include <stdint.h>
 
-#define RPC_LOG_INFO  1
+#define RPC_LOG_TRACE 0
 #define RPC_LOG_DEBUG 1
-#define RPC_LOG_ERROR 2
-#define RPC_LOG_WARN  2
-
+#define RPC_LOG_INFO  2
+#define RPC_LOG_WARN  3
+#define RPC_LOG_ERROR 4
+#define RPC_LOG_FATAL 5
 
 struct xdr_s {
   uint8_t *buf;

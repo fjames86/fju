@@ -1,4 +1,28 @@
-
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+ 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -13,16 +37,19 @@
 #include <mmf.h>
 #include <sec.h>
 #include "raft.h"
+#include <rpc.h>
+#include <hostreg.h>
+#include <hrauth.h>
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
 	    "          reset\n" 
-            "          add cluster [clid=ID] [currentterm=CURRENTTERM] [votedfor=VOTEDFOR]\n"
-            "          set cluster ID [currentterm=CURRENTTERM] [votedfor=VOTEDFOR]\n"
+            "          add cluster [clid=ID] [typeid=TYPEID] [witness=true|false]\n"
+            "          set cluster ID [typeid=TYPEID] [witness=true|false]\n"
             "          rem cluster ID\n"
-            "          add member [clid=CLID] [hostid=HOSTID] [lastseen=LASTSEEN] [nextping=NEXTPING] [nextidx=NEXTIDX] [matchidx=MATCHIDX] [flags=FLAGS]\n"
-            "          set member ID [clid=CLID] [hostid=HOSTID] [lastseen=LASTSEEN] [nextping=NEXTPING] [nextidx=NEXTIDX] [matchidx=MATCHIDX] [flags=FLAGS]\n"
-            "          rem member ID\n"
+            "          add member [clid=CLID] [hostid=HOSTID]\n"
+            "          set member\n"
+            "          rem member clid=CLID hostid=HOSTID\n"
     );
 
     if( fmt ) {
@@ -54,10 +81,16 @@ static void argval_split( char *instr, char *argname, char **argval ) {
 
 static void cmd_list( void );
 static void cmd_prop( void );
-
+			   
 int main( int argc, char **argv ) {
     int sts, i;
 
+#ifdef WIN32
+	{
+		WSADATA wsadata;
+		WSAStartup( MAKEWORD( 2, 2 ), &wsadata );
+	}
+#endif
     sts = raft_open();
     if( sts ) usage( "Failed to open" );
 
@@ -81,21 +114,23 @@ int main( int argc, char **argv ) {
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
 		 if( strcmp( argname, "clid" ) == 0 ) {
-		      if( argval ) entry.clid = strtoull( argval, NULL, 16 );
-		 } else if( strcmp( argname, "currentterm" ) == 0 ) {
-                      if( argval ) entry.currentterm = strtoull( argval, NULL, 16 );
-		 } else if( strcmp( argname, "votedfor" ) == 0 ) {
-    		      if( argval ) entry.votedfor = strtoull( argval, NULL, 16 );
-                 } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
+		      if( argval ) entry.id = strtoull( argval, NULL, 16 );
+		 } else if( strcmp( argname, "typeid" ) == 0 ) {
+		   if( argval ) entry.typeid = strtoul( argval, NULL, 16 );
+		 } else if( strcmp( argname, "witness" ) == 0 ) {
+		   if( argval ) {
+		     if( strcmp( argval, "true" ) == 0 ) entry.flags |= RAFT_CLUSTER_WITNESS;
+		     else entry.flags &= ~RAFT_CLUSTER_WITNESS;
+		   }		   
+                 } else {
+		     printf( "Unknown field name %s\n", argname ); usage( NULL );
+		 }
                  i++;
             }
-	    if( !entry.clid ) sec_rand( &entry.clid, sizeof(entry.clid) );
-            sts = raft_cluster_add( &entry );
+	    if( !entry.id ) sec_rand( &entry.id, sizeof(entry.id) );
+            sts = raft_cluster_set( &entry );
             if( sts ) usage( "Failed to add cluster" );
-            printf( "Added cluster ID=%"PRIx64"\n", entry.clid );
-
-	    /* add local host as member */	    
-	    raft_member_add_local( entry.clid );
+            printf( "Added cluster ID=%"PRIx64"\n", entry.id );
         } else if( strcmp( argv[i], "member" ) == 0 ) {
             struct raft_member entry;
             char argname[64], *argval;
@@ -106,23 +141,13 @@ int main( int argc, char **argv ) {
                  if( strcmp( argname, "clid" ) == 0 ) {
                       if( argval ) entry.clid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-                      if( argval ) entry.hostid = strtoull( argval, NULL, 16 );		      
-                } else if( strcmp( argname, "lastseen" ) == 0 ) {
-                      if( argval ) entry.lastseen = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "nextping" ) == 0 ) {
-                      if( argval ) entry.nextping = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "nextidx" ) == 0 ) {
-                      if( argval ) entry.nextidx = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "matchidx" ) == 0 ) {
-                      if( argval ) entry.matchidx = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "flags" ) == 0 ) {
-                      if( argval ) entry.flags = strtoul( argval, NULL, 16 );
+		     if( argval ) entry.hostid = hostreg_hostid_by_name( argval );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
-            sts = raft_member_add( &entry );
+            sts = raft_member_set( &entry );
             if( sts ) usage( "Failed to add member" );
-            printf( "Added member ID=%"PRIx64"\n", entry.memberid );
+            printf( "Added member ID=%"PRIx64"\n", entry.hostid );
         } else usage( NULL );
     } else if( strcmp( argv[i], "rem" ) == 0 ) {
         i++;
@@ -135,75 +160,93 @@ int main( int argc, char **argv ) {
             sts = raft_cluster_rem( tag );
             if( sts ) usage( "Failed to rem cluster" );
         } else if( strcmp( argv[i], "member" ) == 0 ) {
-            uint64_t tag;
+	    char argname[64], *argval;
+	    uint64_t clid = 0, hostid = 0;
             i++;
-            if( i >= argc ) usage( NULL );
-            tag = strtoull( argv[i], NULL, 16 );
-            sts = raft_member_rem( tag );
+	    while( i < argc ) {
+	        argval_split( argv[i], argname, &argval );
+		if( strcmp( argname, "clid" ) == 0 ) {
+		    if( argval ) clid = strtoull( argval, NULL, 16 );
+		} else if( strcmp( argname, "hostid" ) == 0 ) {
+		    if( argval ) hostid = hostreg_hostid_by_name( argval );
+		} else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
+		i++;
+	    }
+            sts = raft_member_rem( clid, hostid );
             if( sts ) usage( "Failed to rem member" );
         } else usage( NULL );
     } else if( strcmp( argv[i], "set" ) == 0 ) {
-        uint64_t tag;
         i++;
         if( i >= argc ) usage( NULL );
         if( strcmp( argv[i], "cluster" ) == 0 ) {
-            struct raft_cluster entry;
-            char argname[64], *argval;
-            memset( &entry, 0, sizeof(entry) );
-            i++;
-            if( i >= argc ) usage( NULL );
-            tag = strtoull( argv[i], NULL, 16 );
-            sts = raft_cluster_by_id( tag, &entry );
-            if( sts ) usage( "Failed to lookup" );
-            i++;
-            while( i < argc ) {
-                 argval_split( argv[i], argname, &argval );
-                 if( strcmp( argname, "currentterm" ) == 0 ) {
-                      if( argval ) entry.currentterm = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "votedfor" ) == 0 ) {
-                      if( argval ) entry.votedfor = strtoull( argval, NULL, 16 );
-                 } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
-                 i++;
-            }
-            sts = raft_cluster_set( &entry );
-            if( sts ) usage( "Failed to set cluster" );
-        } else if( strcmp( argv[i], "member" ) == 0 ) {
-            struct raft_member entry;
-            char argname[64], *argval;
-            memset( &entry, 0, sizeof(entry) );
-            i++;
-            if( i >= argc ) usage( NULL );
-            tag = strtoull( argv[i], NULL, 16 );
-            sts = raft_member_by_id( tag, &entry );
-            if( sts ) usage( "Failed to lookup" );
-            i++;
-            while( i < argc ) {
-                 argval_split( argv[i], argname, &argval );
-                 if( strcmp( argname, "clid" ) == 0 ) {
-                      if( argval ) entry.clid = strtoull( argval, NULL, 16 );
-		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-		   if( argval ) entry.hostid = strtoull( argval, NULL, 16 );		      
-                } else if( strcmp( argname, "lastseen" ) == 0 ) {
-                      if( argval ) entry.lastseen = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "nextping" ) == 0 ) {
-                      if( argval ) entry.nextping = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "nextidx" ) == 0 ) {
-                      if( argval ) entry.nextidx = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "matchidx" ) == 0 ) {
-                      if( argval ) entry.matchidx = strtoull( argval, NULL, 16 );
-                } else if( strcmp( argname, "flags" ) == 0 ) {
-                      if( argval ) entry.flags = strtoul( argval, NULL, 16 );
-                 } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
-                 i++;
-            }
-            sts = raft_member_set( &entry );
-            if( sts ) usage( "Failed to set member" );
-	} else if( strcmp( argv[i], "port") == 0 ) {
-     	    int port;
+	  char argname[64], *argval;
+	  uint64_t clid;
+	  struct raft_cluster cl;
+	  
+	  i++;
+	  if( i >= argc ) usage( NULL );
+	  clid = strtoull( argv[i], NULL, 16 );
+	  sts = raft_cluster_by_id( clid, &cl );
+	  i++;
+	  while( i < argc ) {
+	    argval_split( argv[i], argname, &argval );
+	    if( strcmp( argname, "state" ) == 0 ) {
+	      if( argval ) {
+		if( strcmp( argval, "follower" ) == 0 ) cl.state = RAFT_STATE_FOLLOWER;
+		else if( strcmp( argval, "candidate" ) == 0 ) cl.state = RAFT_STATE_CANDIDATE;
+		else if( strcmp( argval, "leader" ) == 0 ) cl.state = RAFT_STATE_LEADER;
+	      }
+	    } else if( strcmp( argname, "typeid" ) == 0 ) {
+	      if( argval ) cl.typeid = strtoul( argval, NULL, 16 );
+	    } else if( strcmp( argname, "witness" ) == 0 ) {
+	      if( argval ) {
+		if( strcmp( argval, "true" ) == 0 ) cl.flags |= RAFT_CLUSTER_WITNESS;
+		else cl.flags &= ~RAFT_CLUSTER_WITNESS;
+	      }		   
+	    } else usage( NULL );
 	    i++;
-	    if( i >= argc ) usage( NULL );
-	    port = strtoul( argv[i], NULL, 10 );
-	    raft_set_port( port );
+	  }
+	  raft_cluster_set( &cl );	  
+	} else if( strcmp( argv[i], "member" ) == 0 ) {
+	} else if( strcmp( argv[i], "prop" ) == 0 ) {
+            char argname[64], *argval;
+	    uint32_t elec_low, elec_high, term_low, term_high;
+	    uint32_t rpc_timeout, rpc_retry;
+	      
+	    elec_low = 0;
+	    elec_high = 0;
+	    term_low = 0;
+	    term_high = 0;
+	    rpc_timeout = 0;
+	    rpc_retry = 0;
+	    
+            i++;
+            while( i < argc ) {
+                 argval_split( argv[i], argname, &argval );
+                 if( strcmp( argname, "elec_low" ) == 0 ) {
+                      if( argval ) elec_low = strtoul( argval, NULL, 10 );
+		 } else if( strcmp( argname, "elec_high" ) == 0 ) {
+                      if( argval ) elec_high = strtoul( argval, NULL, 10 );
+		 } else if( strcmp( argname, "term_low" ) == 0 ) {
+                      if( argval ) term_low = strtoul( argval, NULL, 10 );
+		 } else if( strcmp( argname, "term_high" ) == 0 ) {
+                      if( argval ) term_high = strtoul( argval, NULL, 10 );
+		 } else if( strcmp( argname, "rpc_timeout" ) == 0 ) {
+                      if( argval ) rpc_timeout = strtoul( argval, NULL, 10 );
+		 } else if( strcmp( argname, "rpc_retry" ) == 0 ) {
+                      if( argval ) rpc_retry = strtoul( argval, NULL, 10 );
+                 } else {
+		     printf( "Unknown field name %s\n", argname ); usage( NULL );
+		 }
+                 i++;
+            }
+	    raft_set_timeouts( elec_low ? &elec_low : NULL,
+			       elec_high ? &elec_high : NULL,
+			       term_low ? &term_low : NULL,
+			       term_high ? &term_high : NULL );
+	    if( rpc_timeout ) raft_set_rpc_timeout( rpc_timeout );
+	    if( rpc_retry ) raft_set_rpc_retry( rpc_retry );
+	    
         } else usage( NULL );
     } else usage( NULL );
 
@@ -211,57 +254,55 @@ int main( int argc, char **argv ) {
     return 0;
 }
 
-static void cmd_list( void ) {
-  int sts, i, n, m, j;
-  struct raft_cluster *cluster;
-  struct raft_member member[RAFT_MAX_CLUSTER_MEMBER];
-  char timestr[64];
-  struct tm *tm;
+static void print_cluster( struct raft_cluster *cluster, struct raft_member *member, int nmember ) {
+    struct tm *tm;
   time_t now;
-  char strflags[128];
+  char timestr[128], namestr[HOSTREG_MAX_NAME];
+  int j;
+  
+      printf( "cluster id=%"PRIx64" state=%s termseq=%"PRIu64" leader=%"PRIx64" (%s)\n"
+	      "        typeid=%x flags=0x%x commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
+	      cluster->id,
+	      cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
+	      cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
+	      cluster->state == RAFT_STATE_LEADER ? "Leader" :
+	      "Unknown",
+	      cluster->termseq, cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
+	      cluster->typeid, cluster->flags, cluster->commitseq, cluster->stateseq );
+	          
+      for( j = 0; j < nmember; j++ ) {
+	  if( member[j].lastseen ) {
+	    now = (time_t)member[j].lastseen;
+	    tm = localtime( &now );
+	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+	  } else {
+	      strcpy( timestr, "Never" );
+	  }
+
+	  printf( "    member hostid=%"PRIx64" (%s) flags=%x lastseen=%s", 
+		  member[j].hostid, hostreg_name_by_hostid( member[j].hostid, namestr ), member[j].flags, timestr );
+	  if( cluster->state == RAFT_STATE_LEADER ) {
+	    printf( "nextseq=%"PRIu64" stateseq=%"PRIu64"", member[j].nextseq, member[j].stateseq );
+	  }
+	  printf( "\n" );
+    }  
+}
+
+static void cmd_list( void ) {
+  int i, n, m;
+  struct raft_cluster *cluster;
+  struct raft_member *member;
   
   n = raft_cluster_list( NULL, 0 );
   cluster = (struct raft_cluster *)malloc( sizeof(*cluster) * n );
+
+  member = (struct raft_member *)malloc( sizeof(*member) * 256 );
+  
   m = raft_cluster_list( cluster, n );
   if( m < n ) n = m;
   for( i = 0; i < n; i++ ) {
-    printf( "cluster clid=%"PRIx64" currentterm=%"PRIx64" votedfor=%"PRIx64" \n", cluster[i].clid, cluster[i].currentterm, cluster[i].votedfor );
-    
-    /* print all members of this cluster */
-    m = raft_member_list_by_clid( cluster[i].clid, member, RAFT_MAX_CLUSTER_MEMBER );
-    for( j = 0; j < m; j++ ) {
-        now = member[j].lastseen;
-	if( !now ) strcpy( timestr, "Never" );
-	else {		     
-	  tm = localtime( &now );
-	  strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
-	}
-
-	strcpy( strflags, "" );
-	if( member[j].flags & RAFT_MEMBER_ONLINE ) {
-	  if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
-	  strcat( strflags, "ONLINE" );
-	}
-	if( member[j].flags & RAFT_MEMBER_LOCAL ) {
-	  if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
-	  strcat( strflags, "LOCAL" );
-	}	
-	if( strcmp( strflags, "" ) != 0 ) strcat( strflags, "|" );
-	switch( member[j].flags & RAFT_MEMBER_STATEMASK ) {
-	case RAFT_MEMBER_LEADER:
-	  strcat( strflags, "LEADER" );
-	  break;
-	case RAFT_MEMBER_FOLLOWER:
-	  strcat( strflags, "FOLLOWER" );
-	  break;
-	case RAFT_MEMBER_CANDIDATE:
-	  strcat( strflags, "CANDIDATE" );
-	  break;
-	}
-	
-	printf( "    member memberid=%"PRIx64" hostid=%"PRIx64" lastseen=%s nextping=%"PRIx64" nextidx=%"PRIx64" matchidx=%"PRIx64" flags=%s (%x) \n", 
-		member[j].memberid, member[j].hostid, timestr, member[j].nextping, member[j].nextidx, member[j].matchidx, strflags, member[j].flags );
-    }
+    m = raft_member_list( cluster[i].id, member, 256 );
+    print_cluster( &cluster[i], member, m );
   }
   free( cluster );
   printf( "\n" );
@@ -270,9 +311,9 @@ static void cmd_list( void ) {
 static void cmd_prop( void ) {
      struct raft_prop prop;
      raft_prop( &prop );
-     printf( "seq=%"PRIu64"\n", prop.seq );
+     printf( "seq=%"PRIu64" rpc-timeout=%u rpc-retry=%u\n", prop.seq, prop.rpc_timeout, prop.rpc_retry );
+     printf( "Timeouts: election=[%d, %d] term=[%d, %d]\n", prop.elec_low, prop.elec_high, prop.term_low, prop.term_high );
      printf( "cluster=%d/%d\n", prop.cluster_count, prop.cluster_max );
      printf( "member=%d/%d\n", prop.member_count, prop.member_max );
-     printf( "port=%d\n", prop.port );
 }
 

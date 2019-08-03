@@ -139,7 +139,7 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   int sts;
   struct _header *hdr;
 
-  if( !path ) return -1;
+  if( !path ) path = mmf_default_path( "fju.log", NULL );
 
   memset( log, 0, sizeof(*log) );
 
@@ -238,10 +238,10 @@ int log_prop( struct log_s *log, struct log_prop *prop ) {
 
 int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, int *nelist ) {
   int sts;
+  char *p;
   struct _header *hdr;
-  char *p, *q;
   struct _entry *e;
-  int i, j, k, len;
+  int i, j;
   int idx, nbytes, msgcnt, offset, blk_offset;
 
   if( nelist ) *nelist = 0;
@@ -389,7 +389,7 @@ int log_read_entry( struct log_s *log, uint64_t id, struct log_entry *entry ) {
 int log_read_buf( struct log_s *log, uint64_t id, char *buf, int len, int *msglen ) {
   struct log_entry entry;
   struct log_iov iov[1];
-  int sts, ne;
+  int sts;
   
   memset( &entry, 0, sizeof(entry) );
   iov[0].buf = buf;
@@ -405,12 +405,11 @@ int log_read_buf( struct log_s *log, uint64_t id, char *buf, int len, int *msgle
 
 int log_write( struct log_s *log, struct log_entry *entry ) {
   int sts;
-  char *p, *q;
+  char *p;
   struct _entry *e;
   struct _header *hdr;
-  int i, j, k, len, cnt;
-  int idx;
-  int msglen, nbytes, offset, blk_offset;
+  int i, cnt, idx;
+  int msglen, nbytes, offset, blk_offset, hdrlvl;
 
   msglen = 0;
   for( i = 0; i < entry->niov; i++ ) {
@@ -426,6 +425,13 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   sts = log_lock( log );
   if( sts ) return sts;
 
+  /* check lvlmask */
+  hdrlvl = (hdr->flags & LOG_FLAG_LVLMASK) >> 4;
+  if( (entry->flags & LOG_LVL_MASK) < hdrlvl ) {
+    /* lvl too low - discard */
+    goto done;
+  }
+  
   /* check enough space */
   if( ((hdr->flags & (LOG_FLAG_FIXED|LOG_FLAG_GROW)) == (LOG_FLAG_FIXED|LOG_FLAG_GROW)) &&
       (cnt > (hdr->lbacount - hdr->count)) ) {
@@ -559,4 +565,10 @@ int log_write_buf( struct log_s *log, int lvl, char *buf, int len, uint64_t *id 
   return 0;
 }
 
-
+int log_set_lvl( struct log_s *log, int lvl ) {
+  struct _header *hdr = (struct _header *)log->mmf.file;
+  log_lock( log );
+  hdr->flags = (hdr->flags & ~LOG_FLAG_LVLMASK) | ((lvl & LOG_LVL_MASK) << 4);
+  log_unlock( log );
+  return 0;
+}

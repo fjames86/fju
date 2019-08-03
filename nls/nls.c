@@ -1,4 +1,28 @@
-
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+ 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -206,6 +230,8 @@ int nls_share_by_hshare( uint64_t hshare, struct nls_share *share ) {
 
 int nls_share_add( struct nls_share *share ) {
     int sts, i;
+    if( strcmp( share->path, "" ) == 0 ) return -1;
+    
     if( glob.ocount <= 0 ) return -1;
     nls_lock();
     sts = -1;
@@ -257,9 +283,7 @@ int nls_share_set( struct nls_share *share ) {
 }
 
 int nls_share_open( struct nls_share *share, struct log_s *log ) {
-  char name[256];
-  sprintf( name, "%"PRIx64".log", share->hshare );
-  return log_open( mmf_default_path( "nls", name, NULL ), NULL, log );
+  return log_open( share->path, NULL, log );
 }
 
 

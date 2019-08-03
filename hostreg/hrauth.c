@@ -1,4 +1,28 @@
-
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+ 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -180,7 +204,6 @@ static int hrauth_cauth( struct rpc_provider *pvr, struct rpc_msg *msg, void *pc
   struct hrauth_context *sa = (struct hrauth_context *)pcxt;
   struct hrauth_auth auth;
   struct xdr_s tmpx;
-  int sts;
   struct hrauth_verf verf;
   struct hostreg_prop prop;
   
@@ -246,15 +269,26 @@ static int hrauth_cverf( struct rpc_provider *pvr, struct rpc_msg *msg, void *pc
 
   /* decode */
   sts = hrauth_decode_verf( &tmpx, &verf );
-  if( sts ) return sts;
+  if( sts ) {
+    rpc_log( RPC_LOG_DEBUG, "verf xdr error" );
+    return sts;
+  }
 
   /* validate verifier */
-  if( verf.timestamp != sa->timestamp ) return -1;
-  if( verf.tverf != (verf.timestamp - 1) ) return -1;
+  if( verf.timestamp != sa->timestamp ) {
+    rpc_log( RPC_LOG_DEBUG, "bad timestamp timestamp=%u expected=%u tverf=%u nickname=%u",
+	     verf.timestamp, sa->timestamp, verf.tverf, verf.nickname );
+    return -1;
+  }
+  if( verf.tverf != (verf.timestamp - 1) ) {
+    rpc_log( RPC_LOG_DEBUG, "bad tverf" );
+    return -1;
+  }
   
   if( sa->nickname == 0 ) {
     sa->nickname = verf.nickname;
   } else if( verf.nickname != sa->nickname ) {
+    rpc_log( RPC_LOG_DEBUG, "hrauth_cverf unexpected nickname" );
     return -1;
   }
 
@@ -314,7 +348,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* lookup existing context */
     sa = hrauth_context_by_nickname( auth.u.nickname );
     if( !sa ) return -1;
-    rpc_log( RPC_LOG_DEBUG, "hrauth: nickname=%d", auth.u.nickname );
+    rpc_log( RPC_LOG_TRACE, "hrauth: nickname=%d", auth.u.nickname );
     break;
   case HRAUTH_FULL:
     /* allocate new context */
@@ -336,11 +370,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     sa->window = cred.window;
     sa->cipher = cred.cipher;
     sec_rand( &sa->nickname, 4 );
-    rpc_log( RPC_LOG_DEBUG, "hrauth: full service=%d window=%d cipher=%08x nickname=%d",
-	     cred.service,
-	     cred.window,
-	     cred.cipher,
-	     sa->nickname );
+    rpc_log( RPC_LOG_TRACE, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
     break;
   default:
     return -1;
@@ -532,25 +562,6 @@ static int hostreg_encode_host( struct xdr_s *xdr, struct hostreg_host *x ) {
   }
   return 0;
 }
-static int hostreg_decode_host( struct xdr_s *xdr, struct hostreg_host *x ) {
-  int sts, i;
-  memset( x, 0, sizeof(*x) );
-  sts = xdr_decode_uint64( xdr, &x->id );
-  if( sts ) return sts;
-  sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
-  if( sts ) return sts;
-  x->publen = sizeof(x->pubkey);
-  sts = xdr_decode_opaque( xdr, x->pubkey, (int *)&x->publen );
-  if( sts ) return sts;
-  sts = xdr_decode_uint32( xdr, &x->naddr );
-  if( sts ) return sts;
-  if( x->naddr > HOSTREG_MAX_ADDR ) return -1;
-  for( i = 0; i < x->naddr; i++ ) {
-    sts = xdr_decode_uint32( xdr, &x->addr[i] );
-    if( sts ) return sts;
-  }
-  return 0;
-}
 
 static int hrauth_proc_local( struct rpc_inc *inc ) {
   int handle;
@@ -620,11 +631,11 @@ static struct rpc_proc hrauth_procs[] = {
 };
 
 static struct rpc_version hrauth_vers = {
-  NULL, HRAUTH_VERSION, hrauth_procs
+  NULL, HRAUTH_RPC_VERS, hrauth_procs
 };
 
 static struct rpc_program hrauth_prog = {
-  NULL, HRAUTH_PROGRAM, &hrauth_vers
+  NULL, HRAUTH_RPC_PROG, &hrauth_vers
 };
 
 
@@ -656,7 +667,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
 
   /* check for timeout */
   if( !inc ) {
-    rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: XID=%u timeout", w->xid );
+    rpc_log( RPC_LOG_TRACE, "hrauth_call_cb: XID=%u timeout", w->xid );
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }
@@ -664,7 +675,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   /* process msg */
   sts = rpc_process_reply( inc );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
+    rpc_log( RPC_LOG_TRACE, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }
@@ -677,11 +688,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   free( w );         /* free waiter */
 }
 
-int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args ) {
-  return hrauth_call_udp2( hcall, args, NULL );
-}
-
-int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
+int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
   int sts, handle;
   struct rpc_waiter *w;
   struct hostreg_host host;
@@ -698,6 +705,7 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   struct xdr_s tmpbuf;
   struct rpc_conn *conn = NULL;
   int port;
+  uint32_t addridx, addrmask;
   
   /* lookup host */
   sts = hostreg_host_by_id( hcall->hostid, &host );
@@ -747,15 +755,24 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
   rpc_complete_call( &inc, handle );
 
   /* send */
-  memset( &sin, 0, sizeof(sin) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = htons( port );
-  sin.sin_addr.s_addr = host.addr[0]; /* always use first address? */
-  sts = sendto( fd, inc.xdr.buf, inc.xdr.offset, 0,
-	  (struct sockaddr *)&sin, sizeof(sin) );
-  if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
-
+  addridx = 0;
+  addrmask = (opts && (opts->mask & HRAUTH_CALL_OPT_ADDRMASK)) ? opts->addrmask : 1;
+  while( addrmask && (addridx < host.naddr) ) {
+    if( addrmask & 0x1 ) {
+      memset( &sin, 0, sizeof(sin) );
+      sin.sin_family = AF_INET;
+      sin.sin_port = htons( port );
+      sin.sin_addr.s_addr = host.addr[addridx]; 
+      sts = sendto( fd, inc.xdr.buf, inc.xdr.offset, 0,
+		    (struct sockaddr *)&sin, sizeof(sin) );
+      if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
+    }
+    addridx++;
+    addrmask = addrmask >> 1;
+  }
+  
   /* await reply - copy args so we can resend on failure */
+  /* XXX: we don't do auto resends so we don't need to copy args */
   w = malloc( sizeof(*w) + sizeof(*hcallp) + args->offset );
   hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w));
   hcallp->hcall = *hcall;
@@ -774,13 +791,86 @@ int hrauth_call_udp2( struct hrauth_call *hcall, struct xdr_s *args, struct hrau
 
   /* cleanup */
   if( conn ) rpc_conn_release( conn );
-  
-  
-  
+    
   return 0;  
 }
 
+
+struct hrauth_proxy_cxt {
+  uint32_t xid;
+  struct rpc_provider *pvr;
+  void *pcxt;
+  struct rpc_opaque_auth rverf;
+  struct sockaddr_storage raddr;
+  uint32_t raddr_len;
+};
+
+static void hrauth_proxy_udp_cb( struct xdr_s *xdr, void *cxt ) {
+  struct hrauth_proxy_cxt *pcxt = (struct hrauth_proxy_cxt *)cxt;
+  struct rpc_listen *listen;
+  int handle;
+  struct rpc_inc inc;
+  char *buf = NULL;
+  
+  if( !xdr ) {
+    rpc_log( RPC_LOG_DEBUG, "hrauth_proxy_udp_cb timeout" );
+    goto done;
+  }
+
+  /* send reply message */
+  memset( &inc, 0, sizeof(inc) );
+  inc.pvr = pcxt->pvr;
+  inc.pcxt = pcxt->pcxt;
+  if( inc.pvr ) inc.pvr->rverf = pcxt->rverf;
+  buf = malloc( 512 + xdr->count );
+  xdr_init( &inc.xdr, (uint8_t *)buf, 512 + xdr->count );
+  rpc_init_accept_reply( &inc, pcxt->xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_fixed( &inc.xdr, xdr->buf + xdr->offset, xdr->count - xdr->offset );
+  rpc_complete_accept_reply( &inc, handle );
+
+  listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+  if( listen ) sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0, (struct sockaddr *)&pcxt->raddr, pcxt->raddr_len );
+  
+ done:
+  if( buf ) free( buf );
+  free( pcxt );
+  return;
+}
+
+int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args ) {
+  int sts;
+  struct hrauth_call hcall;
+  struct hrauth_proxy_cxt *pcxt;
+
+  pcxt = malloc( sizeof(*pcxt) );
+  pcxt->xid = inc->msg.xid;
+  pcxt->pvr = inc->pvr;
+  pcxt->pcxt = inc->pcxt;
+  memcpy( &pcxt->raddr, &inc->raddr, inc->raddr_len );
+  pcxt->raddr_len = inc->raddr_len;
+  if( inc->pvr ) pcxt->rverf = inc->pvr->rverf;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = inc->msg.u.call.prog;
+  hcall.vers = inc->msg.u.call.vers;
+  hcall.proc = inc->msg.u.call.proc;
+  hcall.donecb = hrauth_proxy_udp_cb;
+  hcall.cxt = pcxt;
+  hcall.timeout = 500;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  sts = hrauth_call_udp_async( &hcall, args, NULL );
+  if( sts ) {
+    rpc_log( RPC_LOG_DEBUG, "hrauth_call_udp_async failed" );
+    free( pcxt );
+  }
+
+  return sts;
+}
+
 /* ------ an equivalent for TCP is MUCH harder. ------ */
+
+#if 0
 
 struct hrauth_tcp_cxt {
   struct hrauth_call hcall;
@@ -881,7 +971,7 @@ static void call_tcp_cb( rpc_conn_event_t event, struct rpc_conn *c ) {
   return;
 }
 
-int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args ) {
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args ) {
   int sts;
   struct hrauth_tcp_cxt *cxt;
   struct hostreg_host host;
@@ -922,4 +1012,75 @@ int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args ) {
  done:
   if( sts ) free( cxt );
   return sts;
+}
+
+#endif
+
+static int hrauth_call( int tcp, struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {
+    int sts;
+    struct rpc_call_pars pars;
+    struct hrauth_context hcxt;
+    struct sockaddr_in sin;
+    char *tmpbuf = NULL;
+    int port;
+    struct hostreg_host host;
+    struct rpc_listen *listen;
+    
+    port = opts && opts->mask & HRAUTH_CALL_OPT_PORT ? opts->port : 0;
+    if( !port ) {
+	listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+	if( !listen ) return -1;
+	port = ntohs( listen->addr.sin.sin_port );
+    }
+
+    memset( &sin, 0, sizeof(sin) );
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons( port );
+
+    if( hcall->hostid ) {
+      sts = hostreg_host_by_id( hcall->hostid, &host );
+      if( sts ) return sts;   
+      sin.sin_addr.s_addr = host.addr[0];
+    } else {
+      sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
+    }      
+
+    memset( &pars, 0, sizeof(pars) );
+    pars.prog = hcall->prog;
+    pars.vers = hcall->vers;
+    pars.proc = hcall->proc;
+    if( hcall->service != -1 ) {
+	sts = hrauth_init( &hcxt, hcall->hostid );
+	hcxt.service = hcall->service;
+	pars.pvr = hrauth_provider();
+	pars.pcxt = &hcxt;
+    }
+    memcpy( &pars.raddr, &sin, sizeof(sin) );
+    pars.raddr_len = sizeof(sin);
+    pars.timeout = hcall->timeout ? hcall->timeout : 1000;
+
+    if( opts && opts->mask & HRAUTH_CALL_OPT_TMPBUF ) {
+      pars.buf = opts->tmpbuf;
+    } else {
+      tmpbuf = malloc( 32*1024 );
+      xdr_init( &pars.buf, (uint8_t *)tmpbuf, 32*1024 );
+    }
+    
+    if( tcp ) sts = rpc_call_tcp( &pars, args, res );
+    else sts = rpc_call_udp( &pars, args, res );
+
+    if( tmpbuf ) {
+      xdr_init( res, NULL, 0 ); /* if no tmpbuf passed in, we cannot return results */
+      free( tmpbuf );
+    }
+
+    return sts;
+}
+
+int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {
+  return hrauth_call( 0, hcall, args, res, opts );
+}
+
+int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts ) {
+  return hrauth_call( 1, hcall, args, res, opts );
 }

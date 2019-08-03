@@ -1,4 +1,28 @@
-
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+ 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -36,7 +60,6 @@ static void usage( char *fmt, ... ) {
             "          set ID [name=NAME] [pubkey=PUBKEY] [addr=ADDR] ]\n"
             "          rem ID\n"
 	    "          common ID\n"
-	    "          call [addr=ADDR] [port=PORT]\n" 
     );
 
     if( fmt ) {
@@ -73,7 +96,6 @@ static void bn2hex( char *bn, char *hex, int len );
 static int mynet_pton( char *str, uint8_t *inaddr );
 static char *mynet_ntop( uint32_t inaddr, char *str );
 static void cmd_common( uint64_t id );
-static void cmd_call( uint32_t addr, int port );
 
 int main( int argc, char **argv ) {
     int sts, i;
@@ -188,26 +210,6 @@ int main( int argc, char **argv ) {
 	if( i >= argc ) usage( NULL );
 	id = strtoull( argv[i], NULL, 16 );
 	cmd_common( id );
-    } else if( strcmp( argv[i], "call" ) == 0 ) {
-        uint32_t addr;
-        int port;
-	char argname[64], *argval;
-
-	addr = htonl( INADDR_LOOPBACK );
-	port = 8000;
-	
-	i++;
-	while( i < argc ) {
-	  argval_split( argv[i], argname, &argval );
-	  if( strcmp( argname, "addr" ) == 0 ) {
-	    mynet_pton( argval, (uint8_t *)&addr );
-	  } else if( strcmp( argname, "port" ) == 0 ) {
-	    port = strtoul( argval, NULL, 10 );
-	  } else usage( NULL );
-	  i++;
-	}
-
-	cmd_call( addr, port );
     } else usage( NULL );
 
     hostreg_close();
@@ -231,7 +233,7 @@ static void print_host( struct hostreg_host *host ) {
 }
 
 static void cmd_list( void ) {
-    int sts, i, n, m, j;
+    int i, n, m;
     struct hostreg_host *lst;
 
     n = hostreg_host_list( NULL, 0 );
@@ -248,9 +250,7 @@ static void cmd_list( void ) {
 static void cmd_prop( void ) {
      struct hostreg_prop prop;
      char hex[256];
-     struct ifaddrs *ifl, *ifa;
-     struct sockaddr_in *sinp;
-	 struct hostreg_host host;
+     struct hostreg_host host;
 
      hostreg_prop( &prop );
      printf( "seq=%"PRIu64"\n", prop.seq );
@@ -258,10 +258,10 @@ static void cmd_prop( void ) {
      bn2hex( (char *)prop.privkey, hex, prop.privlen );
      printf( "privkey=%s\n", hex );
 
-	 hostreg_host_local( &host );
-	 print_host( &host );
-
-	 printf( "\n" );
+     hostreg_host_local( &host );
+     print_host( &host );
+     
+     printf( "\n" );
 }
 
 static void hex2bn( char *hex, struct sec_buf *buf ) {
@@ -352,62 +352,3 @@ static void cmd_common( uint64_t id ) {
   printf( "%s\n", hex );  
 }
 
-static int hostreg_decode_host( struct xdr_s *xdr, struct hostreg_host *x ) {
-  int sts, i;
-  memset( x, 0, sizeof(*x) );
-  sts = xdr_decode_uint64( xdr, &x->id );
-  if( sts ) return sts;
-  sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
-  if( sts ) return sts;
-  x->publen = sizeof(x->pubkey);
-  sts = xdr_decode_opaque( xdr, x->pubkey, (int *)&x->publen );
-  if( sts ) return sts;
-  sts = xdr_decode_uint32( xdr, &x->naddr );
-  if( sts ) return sts;
-  if( x->naddr > HOSTREG_MAX_ADDR ) return -1;
-  for( i = 0; i < x->naddr; i++ ) {
-    sts = xdr_decode_uint32( xdr, &x->addr[i] );
-    if( sts ) return sts;
-  }
-  return 0;
-}
-
-static void cmd_call( uint32_t addr, int port ) {
-  struct rpc_inc inc;
-  struct sockaddr_in *sinp;
-  int handle;
-  int sts;
-  struct hostreg_host host;
-  uint8_t *rpc_buf = malloc( 32*1024 );
-
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, rpc_buf, 32*1024 );
-  rpc_init_call( &inc, HRAUTH_PROGRAM, HRAUTH_VERSION, 1, &handle );
-  rpc_complete_call( &inc, handle );
-
-  sinp = (struct sockaddr_in *)&inc.raddr;
-  sinp->sin_family = AF_INET;
-  sinp->sin_port = htons( port );
-  sinp->sin_addr.s_addr = addr;
-  inc.raddr_len = sizeof(*sinp);
-  
-  sts = rpc_call_udp( &inc );  
-  if( sts ) {
-    char addrstr[64];
-    mynet_ntop( addr, addrstr );
-    usage( "Failed to call addr=%s port=%d", addrstr, port );
-  }
-  
-  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-
-  sts = rpc_process_reply( &inc );
-  if( sts ) usage( "Failed to receive reply" );
-  
-  /* decode results */
-  memset( &host, 0, sizeof(host) );
-  sts = hostreg_decode_host( &inc.xdr, &host );
-  if( sts ) usage( "Failed to decode host" );
-  print_host( &host );
-
-  free( rpc_buf );
-}

@@ -43,11 +43,12 @@
 #include <time.h>
 #include <stdint.h>
 
-#define RPC_LOG_INFO  1
+#define RPC_LOG_TRACE 0
 #define RPC_LOG_DEBUG 1
-#define RPC_LOG_ERROR 2
-#define RPC_LOG_WARN  2
-
+#define RPC_LOG_INFO  2
+#define RPC_LOG_WARN  3
+#define RPC_LOG_ERROR 4
+#define RPC_LOG_FATAL 5
 
 struct xdr_s {
   uint8_t *buf;
@@ -264,22 +265,19 @@ int rpcbind_call_dump( struct sockaddr_in *addr, struct rpcbind_mapping *mlist, 
 int rpcbind_call_set( struct sockaddr_in *addr, struct rpcbind_mapping *m );
 void rpcbind_set_laddrs( int *prot_port, int n );
 
-int rpc_call_tcp( struct rpc_inc *inc );
-
-int rpc_call_udp( struct rpc_inc *inc );
-
-struct rpc_call_opts {
-	uint32_t mask;
-#define RPC_CALL_OPT_TIMEOUT 0x0001 
-#define RPC_CALL_OPT_FD      0x0002 
-	int timeout;
-#ifdef WIN32
-	UINT_PTR fd;
-#else
-	int fd;
-#endif
+struct rpc_call_pars {
+    uint32_t prog;
+    uint32_t vers;
+    uint32_t proc;
+    struct rpc_provider *pvr;
+    void *pcxt;
+    struct sockaddr_storage raddr;
+    uint32_t raddr_len;
+    int timeout;
+    struct xdr_s buf;
 };
-int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts );
+int rpc_call_udp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res );
+int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res );
 
 struct rpc_iterator;
 typedef void (*rpc_iterator_t)( struct rpc_iterator *it );
@@ -292,7 +290,7 @@ struct rpc_iterator {
 };
 void rpc_iterator_register( struct rpc_iterator *it );
 void rpc_iterator_unregister( struct rpc_iterator *it );
-int rpc_iterator_timeout( void );
+int rpc_iterator_timeout( int timeout );
 void rpc_iterator_service( void );
 
 uint64_t rpc_now( void );
@@ -330,5 +328,9 @@ void rpc_waiter_service( void );
 int rpc_errno( void );
 char *rpc_strerror( int sts );
 
+typedef void (*rpc_broadcast_cb_t)( struct rpc_inc *inc, void *cxt );
+int rpc_call_broadcast( struct rpc_call_pars *pars, struct xdr_s *args, rpc_broadcast_cb_t cb, void *cxt );
+
+				   
 #endif
 

@@ -455,7 +455,7 @@ static void rpc_poll( int timeout ) {
 	int revents[RPC_MAX_LISTEN + RPC_MAX_CONN];
 	struct xdr_s tmpx;
 	uint8_t tmpbuf[4];
-	struct rpc_conn *c, *prev, *next;
+	struct rpc_conn *c;
 
 #ifndef WIN32
 	memset( pfd, 0, sizeof(pfd) );
@@ -827,17 +827,16 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->inc.xdr.count = c->cdata.count;
 
       /* process message and send reply */
-      //rpc_log( RPC_LOG_INFO, "Process UDP call" );
+      rpc_log( RPC_LOG_TRACE, "Process UDP call" );
       rpc.flist = rpc.flist->next;
       sts = rpc_process_incoming( &c->inc );
       rpc.flist = c;
       if( sts == 0 ) {
-	printf( "xxx xdrlen3=%d\n", c->inc.xdr.offset );
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       }
       else {
-	//rpc_log( RPC_LOG_INFO, "rpc_process_incoming failed" );
+	rpc_log( RPC_LOG_TRACE, "rpc_process_incoming failed" );
       }
 
     }
@@ -848,7 +847,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
   case RPC_LISTEN_UNIX:
 #endif
     {
-      rpc_log( RPC_LOG_INFO, "Accept TCP/UNIX" );
+      rpc_log( RPC_LOG_TRACE, "Accept TCP/UNIX" );
 
       /* get connection descriptor */
       c = rpc.flist;
@@ -956,9 +955,9 @@ static void rpcd_run( void ) {
 		rpc_close_connections();
 
 		/* compute timeout */
-		timeout = rpc_iterator_timeout();
+		timeout = rpc_iterator_timeout( 1000 );
 		if( timeout > 1000 ) timeout = 1000;
-		if( timeout < 0 ) timeout = 1000;
+		if( timeout < 0 ) timeout = 0;
 
 		/* poll networking */
 		rpc_poll( timeout );

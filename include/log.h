@@ -45,9 +45,10 @@ struct log_opts {
 #define LOG_OPT_FLAGS    0x0002 
   uint32_t lbacount;               /* if creating log (opening for first time), use this many blocks */
   uint32_t flags;
-#define LOG_FLAG_CIRCULAR 0x0000
-#define LOG_FLAG_FIXED    0x0001
+#define LOG_FLAG_CIRCULAR 0x0000   /* default - circular log */
+#define LOG_FLAG_FIXED    0x0001   /* opposite of circular - only append entries at end */
 #define LOG_FLAG_GROW     0x0002   /* dynamically grow, requires LOG_FLAG_FIXED */
+#define LOG_FLAG_LVLMASK  0x00f0
 };
 
 struct log_prop {
@@ -127,6 +128,9 @@ int log_writef( struct log_s *log, int lvl, char *fmt, ... );
 
 /* write single buffer */
 int log_write_buf( struct log_s *log, int lvl, char *buf, int len, uint64_t *id );
+
+/* set minimum lvl */
+int log_set_lvl( struct log_s *log, int lvl );
 
 #endif
 

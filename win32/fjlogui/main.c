@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
 
 #define _CRT_SECURE_NO_WARNINGS 
 
@@ -155,8 +179,6 @@ static int nls_decode_prop( struct xdr_s *xdr, struct nls_share *share, struct l
   int sts;
   
   sts = xdr_decode_uint64( xdr, &share->hshare );
-  if( !sts ) sts = xdr_decode_string( xdr, share->name, sizeof(share->name) );  
-
   if( !sts ) sts = xdr_decode_uint32( xdr, &prop->version );  
   if( !sts ) sts = xdr_decode_uint64( xdr, &prop->seq );
   if( !sts ) sts = xdr_decode_uint32( xdr, &prop->lbacount );
@@ -277,7 +299,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   opts.fd = glob.fd;  
   xdr_init( &opts.tmpbuf, glob.buf, sizeof(glob.buf) );
   opts.port = glob.port;
-  sts = hrauth_call_udp2( &hcall, &xdr, &opts );
+  sts = hrauth_call_udp_async( &hcall, &xdr, &opts );
   if( sts ) {
     free( nlscxtp );
   }
@@ -473,64 +495,50 @@ static void load_log( char *path, uint64_t id ) {
 }
 
 static int call_list_shares( uint64_t hostid, int port, struct nls_share *share, int n ) {
- struct rpc_inc inc;
   int sts, handle, b, i;
   struct nls_share tmpshare;
   struct hostreg_host host;
   struct sockaddr_in sin;
   struct log_prop prop;
-  struct rpc_call_opts copts;
-
+  struct rpc_call_pars pars;
+  struct xdr_s res;
+      
   sts = hostreg_host_by_id( hostid,&host );
   if(sts) return sts;
 
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, glob.buf, sizeof(glob.buf) );
-
-  rpc_init_call( &inc, NLS_RPC_PROG, NLS_RPC_VERS, 1, &handle );
   memset( &sin,0,sizeof( sin ) );
   sin.sin_family = AF_INET;
   sin.sin_port = htons( port );
   sin.sin_addr.s_addr = host.addr[0];
-  rpc_complete_call( &inc, handle );
 
-  memcpy( &inc.raddr, &sin, sizeof(struct sockaddr_in) );
-  inc.raddr_len = sizeof(struct sockaddr_in);
-    
-  memset( &copts, 0, sizeof(copts) );
-  copts.mask = RPC_CALL_OPT_TIMEOUT|RPC_CALL_OPT_FD;
-  copts.timeout = 1000;
-  copts.fd = glob.fd;
-  sts = rpc_call_udp2( &inc, &copts );
+  memset( &pars, 0, sizeof(pars) );
+  pars.prog = NLS_RPC_PROG;
+  pars.vers = NLS_RPC_VERS;
+  pars.proc = 1;
+  memcpy( &pars.raddr, &sin, sizeof(sin) );
+  pars.raddr_len = sizeof(sin);
+  pars.timeout = 500;
+  xdr_init( &pars.buf, glob.buf, sizeof(glob.buf) );
+  sts = rpc_call_udp( &pars, NULL, &res );
   if( sts ) {
 	  goto done;
   }
 
-  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-  if(sts) {
-	  goto done;
-  }
-
-  sts = rpc_process_reply( &inc );
-  if( sts ) {
-	  goto done;
-  }
-  
   /* decode result from xdr */
-  sts = xdr_decode_boolean( &inc.xdr, &b );
+  sts = xdr_decode_boolean( &res, &b );
   if( sts ) {
 	  goto done;
   }
   i = 0;
   while( b ) {
-    sts = nls_decode_prop( &inc.xdr, &tmpshare, &prop );
+    sts = nls_decode_prop( &res, &tmpshare, &prop );
 	if( sts ) {
 		goto done;
 	}
 	if( i < n ) {
 		share[i] = tmpshare;
 	}
-	sts = xdr_decode_boolean( &inc.xdr, &b );
+	sts = xdr_decode_boolean( &res, &b );
 	if( sts ) {
 		goto done;
 	}
@@ -574,15 +582,14 @@ static INT_PTR WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam
 				char str[128];
 				int sts;
 				struct hostreg_host host;
-				char name[64];
 				uint64_t hshare;
 
-				GetDlgItemTextA( hwnd,IDC_COMBO_HOST,str,sizeof( str ) );
-				sts = hostreg_host_by_name( str,&host );
+				GetDlgItemTextA( hwnd, IDC_COMBO_HOST, str, sizeof( str ) );
+				sts = hostreg_host_by_name( str, &host );
 				glob.hostid = host.id;
 
-				GetDlgItemTextA( hwnd,IDC_COMBO_LOG,str,sizeof( str ) );
-				sscanf( str,"%s - %llx", name, &hshare );
+				GetDlgItemTextA( hwnd, IDC_COMBO_LOG, str, sizeof( str ) );
+				sscanf( str, "%llx", &hshare );
 				glob.hshare = hshare;
 			}
 			/* fall through */
@@ -612,7 +619,7 @@ static INT_PTR WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam
 					SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_RESETCONTENT,0,0 );
 					if(sts > 32) sts= 32;
 					for(i = 0; i < sts; i++) {
-						sprintf( str,"%s - %llx",shares[i].name,shares[i].hshare );
+						sprintf( str,"%llx", shares[i].hshare );
 						SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_ADDSTRING,0,str );
 					}
 					if(sts > 0) SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_SETCURSEL,0,0 );

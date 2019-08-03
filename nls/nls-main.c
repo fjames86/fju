@@ -1,4 +1,28 @@
-
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+ 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -12,17 +36,18 @@
 #include <mmf.h>
 #include <time.h>
 #include "nls.h"
+#include <hostreg.h>
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
 	    "          set prop [rpc=RPC] [notreg=NOTREG] [notify=NOTIFY]\n"
 	    "\n" 
-            "          add share [name=NAME] [hshare=HSHARE] \n"
-            "          set share HSHARE [name=NAME]\n"
+            "          add share path=PATH [hshare=HSHARE]\n"
+            "          set share HSHARE [path=PATH]\n"
             "          rem share HSHARE\n"
 	    "\n" 
-            "          add remote [name=NAME] [hshare=HSHARE] [hostid=HOSTID] [remote_period=PERIOD]\n"
-            "          set remote HSHARE [name=NAME] [hostid=HOSTID] [remote_period=PERIOD]\n"
+            "          add remote [hshare=HSHARE] [hostid=HOSTID] [remote_period=PERIOD]\n"
+            "          set remote HSHARE [hostid=HOSTID] [remote_period=PERIOD]\n"
             "          rem remote HSHARE\n"
 	    "\n"
             "          rem notify TAG\n"
@@ -65,6 +90,9 @@ int main( int argc, char **argv ) {
     sts = nls_open();
     if( sts ) usage( "Failed to open" );
 
+    sts = hostreg_open();
+    if( sts ) usage( "Failed to open hostreg" );
+    
     i = 1;
     if( i >= argc ) {
         cmd_list();
@@ -82,8 +110,8 @@ int main( int argc, char **argv ) {
             i++;
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
-                 if( strcmp( argname, "name" ) == 0 ) {
-                      if( argval ) strncpy( entry.name, argval, sizeof(entry.name) );
+                 if( strcmp( argname, "path" ) == 0 ) {
+                      if( argval ) strncpy( entry.path, argval, sizeof(entry.path) );
                 } else if( strcmp( argname, "hshare" ) == 0 ) {
                       if( argval ) entry.hshare = strtoull( argval, NULL, 16 );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
@@ -99,12 +127,10 @@ int main( int argc, char **argv ) {
             i++;
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
-                 if( strcmp( argname, "name" ) == 0 ) {
-		     if( argval ) strncpy( entry.name, argval, sizeof(entry.name) );
-		 } else if( strcmp( argname, "hshare" ) == 0 ) {
+		 if( strcmp( argname, "hshare" ) == 0 ) {
   		     if( argval ) entry.hshare = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-		     if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
+		     if( argval ) entry.hostid = hostreg_hostid_by_name( argval );
 		 } else if( strcmp( argname, "lastid" ) == 0 ) {
 		     if( argval ) entry.lastid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "seq" ) == 0 ) {
@@ -159,8 +185,8 @@ int main( int argc, char **argv ) {
             i++;
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
-                 if( strcmp( argname, "name" ) == 0 ) {
-                      if( argval ) strncpy( entry.name, argval, sizeof(entry.name) );
+                 if( strcmp( argname, "path" ) == 0 ) {
+		     if( argval ) strncpy( entry.path, argval, sizeof(entry.path) );
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
@@ -178,10 +204,8 @@ int main( int argc, char **argv ) {
             i++;
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
-                 if( strcmp( argname, "name" ) == 0 ) {
-                      if( argval ) strncpy( entry.name, argval, sizeof(entry.name) );
-		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-                      if( argval ) entry.hostid = strtoull( argval, NULL, 16 );
+		 if( strcmp( argname, "hostid" ) == 0 ) {
+		     if( argval ) entry.hostid = hostreg_hostid_by_name( argval );
 		 } else if( strcmp( argname, "lastid" ) == 0 ) {
                       if( argval ) entry.lastid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "seq" ) == 0 ) {
@@ -217,7 +241,7 @@ int main( int argc, char **argv ) {
 }
 
 static void cmd_list( void ) {
-    int sts, i, n, m;
+    int i, n, m;
     {
         struct nls_share *lst;
         n = nls_share_list( NULL, 0 );
@@ -225,14 +249,14 @@ static void cmd_list( void ) {
         m = nls_share_list( lst, n );
         if( m < n ) n = m;
         for( i = 0; i < n; i++ ) {
-	  printf( "%-16s %-8"PRIx64" name=%s path=/etc/nls/%"PRIx64".log\n", "share", lst[i].hshare, lst[i].name, lst[i].hshare );
+	    printf( "%-16s %-8"PRIx64" path=%s\n", "share", lst[i].hshare, lst[i].path );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );
     }
     {
         struct nls_remote *lst;
-	char timestr[64], lastcstr[64];
+	char timestr[64], lastcstr[64], namestr[HOSTREG_MAX_NAME];
 	struct tm *tm;
   	time_t now;
 	
@@ -254,16 +278,16 @@ static void cmd_list( void ) {
 	    strftime( lastcstr, sizeof(lastcstr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
 	    
-	  printf( "%-16s %-8"PRIx64" name=%s hostid=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/etc/nls/%"PRIx64"/%"PRIx64".log notify_period=%us last_contact=%s\n",
+	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" (%s) seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/opt/fju/etc/nls/%"PRIx64"/%"PRIx64".log notify_period=%us last_contact=%s\n",
 		  "remote",
-		  lst[i].hshare, lst[i].name, lst[i].hostid, lst[i].seq, lst[i].lastid, timestr, lst[i].hostid, lst[i].hshare, lst[i].notify_period, lastcstr );
+		  lst[i].hshare, lst[i].hostid, hostreg_name_by_hostid( lst[i].hostid, namestr ), lst[i].seq, lst[i].lastid, timestr, lst[i].hostid, lst[i].hshare, lst[i].notify_period, lastcstr );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );
     }
     {
         struct nls_notify *lst;
-	char timestr[64];
+	char timestr[64], namestr[HOSTREG_MAX_NAME];
 	struct tm *tm;
   	time_t now;
 
@@ -279,9 +303,9 @@ static void cmd_list( void ) {
 	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
 
-	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s period=%u\n",
+	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" (%s) hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s period=%u\n",
 		  "notify",
-		  lst[i].tag, lst[i].hostid, lst[i].hshare, lst[i].seq, lst[i].lastid, timestr, lst[i].period );
+		  lst[i].tag, lst[i].hostid, hostreg_name_by_hostid( lst[i].hostid, namestr ), lst[i].hshare, lst[i].seq, lst[i].lastid, timestr, lst[i].period );
         }
         free( lst );
         if( n > 0 ) printf( "\n" );

@@ -597,6 +597,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, &handle );
 	return 0;
       }
+
       return -1;
     }
 
@@ -838,11 +839,7 @@ int rpcbind_register( void ) {
 
 /* ----------------------------------------------------------------- */
 
-int rpc_call_udp( struct rpc_inc *inc ) {
-	return rpc_call_udp2( inc, NULL );
-}
-
-int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
+static int rpc_docall_udp( struct rpc_inc *inc, int timeout ) {
 #ifdef WIN32
   SOCKET fd;
 #else
@@ -852,19 +849,14 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
   int sts;
   struct sockaddr_in sin;
   
-  if( opts && opts->mask & RPC_CALL_OPT_FD ) {
-	  fd = opts->fd;
-  } else {
-	fd = socket( AF_INET, SOCK_DGRAM, 0 );
-	if( fd < 0 ) return -1;
-    
-	memset( &sin, 0, sizeof(sin) );
-	sin.sin_family = AF_INET;
-	sts = bind( fd, (struct sockaddr *)&sin, sizeof(sin) );
-	if( sts < 0 ) goto done;
-  }
+  fd = socket( AF_INET, SOCK_DGRAM, 0 );
+  if( fd < 0 ) return -1;
+  
+  memset( &sin, 0, sizeof(sin) );
+  sin.sin_family = AF_INET;
+  sts = bind( fd, (struct sockaddr *)&sin, sizeof(sin) );
+  if( sts < 0 ) goto done;
 
-  printf( "xxxx xdrlen2=%d\n", inc->xdr.offset );
   sts = sendto( fd, inc->xdr.buf, inc->xdr.offset, 0,
 		(struct sockaddr *)&inc->raddr, inc->raddr_len );
   if( sts < 0 ) goto done;
@@ -876,7 +868,7 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
     
     evt = WSACreateEvent();
     WSAEventSelect( fd, evt, FD_READ );
-    sts = WSAWaitForMultipleEvents( 1, &evt, TRUE, opts && opts->mask & RPC_CALL_OPT_TIMEOUT ? opts->timeout : 1000, FALSE );
+    sts = WSAWaitForMultipleEvents( 1, &evt, TRUE, timeout ? timeout : 1000, FALSE );
 	if( sts != WSA_WAIT_EVENT_0 ) {
 		SetLastError( WAIT_TIMEOUT );
 		sts = -1;
@@ -890,7 +882,7 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
   pfd[0].fd = fd;
   pfd[0].events = POLLIN;
   pfd[0].revents = 0;
-  sts = poll( pfd, 1, opts && opts->mask & RPC_CALL_OPT_TIMEOUT ? opts->timeout : 1000 );
+  sts = poll( pfd, 1, timeout ? timeout : 1000 );
   if( sts != 1 ) {
     sts = -1;
     goto done;
@@ -911,30 +903,207 @@ int rpc_call_udp2( struct rpc_inc *inc, struct rpc_call_opts *opts ) {
   sts = 0;
 done:
 
-  if( opts && opts->mask & RPC_CALL_OPT_FD ) {
-  } else {
 #ifdef WIN32
-	closesocket( fd );
+  closesocket( fd );
 #else
-	close( fd );
+  close( fd );
 #endif
-  }
 
   return sts;
 }
 
-int rpc_call_tcp( struct rpc_inc *inc ) {
+/* simple rpc call */
+int rpc_call_udp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res ) {
+    int sts, handle;
+    struct rpc_inc inc;
+
+    memset( &inc, 0, sizeof(inc) );
+    memcpy( &inc.raddr, &pars->raddr, pars->raddr_len );
+    inc.raddr_len = pars->raddr_len;
+        
+    inc.pvr = pars->pvr;
+    inc.pcxt = pars->pcxt;
+
+    xdr_init( &inc.xdr, pars->buf.buf, pars->buf.count );
+    sts = rpc_init_call( &inc, pars->prog, pars->vers, pars->proc, &handle );
+    if( sts ) goto done;
+    if( args ) {
+	sts = xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+	if( sts ) goto done;
+    }
+    sts = rpc_complete_call( &inc, handle );
+    if( sts ) goto done;
+
+    sts = rpc_docall_udp( &inc, pars->timeout );
+    if( sts ) goto done;
+
+    sts = rpc_decode_msg( &inc.xdr, &inc.msg );
+    if( sts ) goto done;
+    
+    sts = rpc_process_reply( &inc );
+    if( sts ) goto done;
+
+    if( res ) *res = inc.xdr;
+    sts = 0;
+done:
+    return sts;
+};
+
+
+static int rpc_dobroadcast( struct rpc_inc *inc, int timeout, rpc_broadcast_cb_t cb, void *cxt ) {
+#ifdef WIN32
+  SOCKET fd;
+#else
+  int fd;
+  struct pollfd pfd[1];
+#endif
+  int sts, bc;
+  struct sockaddr_in sin;
+  uint64_t to;
+  int64_t tmo;
+  uint32_t xid;
+
+  xid = inc->msg.xid;
+  
+  fd = socket( AF_INET, SOCK_DGRAM, 0 );
+  if( fd < 0 ) return -1;
+  
+  memset( &sin, 0, sizeof(sin) );
+  sin.sin_family = AF_INET;
+  sts = bind( fd, (struct sockaddr *)&sin, sizeof(sin) );
+  if( sts < 0 ) goto done;
+
+  bc = 1;
+  sts = setsockopt( fd, SOL_SOCKET, SO_BROADCAST, &bc, sizeof(bc) );
+  if( sts < 0 ) goto done;
+  
+  sts = sendto( fd, inc->xdr.buf, inc->xdr.offset, 0,
+		(struct sockaddr *)&inc->raddr, inc->raddr_len );
+  if( sts < 0 ) goto done;
+
+  to = rpc_now() + timeout;
+  while( rpc_now() < to ) {
+  
+#ifdef WIN32
+    {
+      HANDLE evt;
+      WSANETWORKEVENTS events;
+    
+      evt = WSACreateEvent();
+      WSAEventSelect( fd, evt, FD_READ );
+      sts = WSAWaitForMultipleEvents( 1, &evt, TRUE, timeout ? timeout : 1000, FALSE );
+      if( sts != WSA_WAIT_EVENT_0 ) {
+	SetLastError( WAIT_TIMEOUT );
+	sts = -1;
+	goto done;
+      }
+
+      WSAEnumNetworkEvents( fd, evt, &events );
+      WSACloseEvent( evt );
+    }
+#else
+    pfd[0].fd = fd;
+    pfd[0].events = POLLIN;
+    pfd[0].revents = 0;
+
+    tmo = to - rpc_now();
+    if( tmo < 0 ) goto done;
+    
+    sts = poll( pfd, 1, (int)tmo );
+    if( sts != 1 ) {
+      sts = -1;
+      goto done;
+    }
+    if( !(pfd[0].revents & POLLIN) ) {
+      sts = -1;
+      goto done;
+    }
+#endif
+  
+    sts = recvfrom( fd, inc->xdr.buf, inc->xdr.buf_size, 0,
+		    (struct sockaddr *)&inc->raddr, &inc->raddr_len );
+    if( sts < 0 ) goto done;
+    
+    inc->xdr.offset = 0;
+    inc->xdr.count = sts;
+
+    sts = rpc_decode_msg( &inc->xdr, &inc->msg );
+    if( sts ) continue;
+
+    if( inc->msg.xid != xid ) continue;
+    
+    sts = rpc_process_reply( inc );
+    if( sts ) continue;
+
+    cb( inc, cxt );
+  }
+  
+  sts = 0;
+done:
+
+#ifdef WIN32
+  closesocket( fd );
+#else
+  close( fd );
+#endif
+
+  return sts;
+}
+
+int rpc_call_broadcast( struct rpc_call_pars *pars, struct xdr_s *args, rpc_broadcast_cb_t cb, void *cxt ) {
+    int sts, handle;
+    struct rpc_inc inc;
+
+    memset( &inc, 0, sizeof(inc) );
+    memcpy( &inc.raddr, &pars->raddr, pars->raddr_len );
+    inc.raddr_len = pars->raddr_len;
+        
+    inc.pvr = pars->pvr;
+    inc.pcxt = pars->pcxt;
+
+    xdr_init( &inc.xdr, pars->buf.buf, pars->buf.count );
+    sts = rpc_init_call( &inc, pars->prog, pars->vers, pars->proc, &handle );
+    if( sts ) goto done;
+    if( args ) {
+	sts = xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+	if( sts ) goto done;
+    }
+    sts = rpc_complete_call( &inc, handle );
+    if( sts ) goto done;
+
+    sts = rpc_dobroadcast( &inc, pars->timeout, cb, cxt );
+    sts = 0;
+done:
+    return sts;  
+}
+
+int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *res ) {
 #ifdef WIN32
   SOCKET fd;
 #else
   int fd;
 #endif
-  int sts;
+  int sts, handle, offset;
   struct sockaddr_in sin;
-  int offset;
   uint8_t lbuf[4];
   struct xdr_s tmpx;
   uint32_t len;
+  struct rpc_inc inc;
+  
+  /* prepare message */
+  memset( &inc, 0, sizeof(inc) );
+  inc.pvr = pars->pvr;
+  inc.pcxt = pars->pcxt;  
+  xdr_init( &inc.xdr, pars->buf.buf, pars->buf.count );
+  sts = rpc_init_call( &inc, pars->prog, pars->vers, pars->proc, &handle );
+  if( sts ) return sts;
+  if( args ) {
+    sts = xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+    if( sts ) return sts;
+  }
+  sts = rpc_complete_call( &inc, handle );
+  if( sts ) return sts;
+  
   
   fd = socket( AF_INET, SOCK_STREAM, 0 );
   if( fd < 0 ) return -1;
@@ -943,16 +1112,16 @@ int rpc_call_tcp( struct rpc_inc *inc ) {
   sin.sin_family = AF_INET;
   sts = bind( fd, (struct sockaddr *)&sin, sizeof(sin) );
   if( sts < 0 ) goto done;
-  sts = connect( fd, (struct sockaddr *)&inc->raddr, sizeof(struct sockaddr_in) );
+  sts = connect( fd, (struct sockaddr *)&pars->raddr, pars->raddr_len );
   if( sts < 0 ) goto done;
 
   xdr_init( &tmpx, lbuf, 4 );
-  xdr_encode_uint32( &tmpx, inc->xdr.offset | 0x80000000 );
+  xdr_encode_uint32( &tmpx, inc.xdr.offset | 0x80000000 );
   sts = send( fd, lbuf, 4, 0 );
-    
+
   offset = 0;
-  while( offset < inc->xdr.offset ) {
-    sts = send( fd, inc->xdr.buf, inc->xdr.offset, 0 );
+  while( offset < inc.xdr.offset ) {
+    sts = send( fd, inc.xdr.buf, inc.xdr.offset, 0 );
     if( sts < 0 ) goto done;
     offset += sts;
   }
@@ -969,16 +1138,16 @@ int rpc_call_tcp( struct rpc_inc *inc ) {
     
   len &= ~0x80000000;
     
-  if( (int)len > inc->xdr.buf_size ) {
+  if( (int)len > inc.xdr.buf_size ) {
     sts = -1;
     goto done;
   }
     
-  xdr_reset( &inc->xdr );
+  xdr_reset( &inc.xdr );
 
   offset = 0;
   while( offset < (int)len ) {
-    sts = recv( fd, inc->xdr.buf + offset, len - offset, 0 );
+    sts = recv( fd, inc.xdr.buf + offset, len - offset, 0 );
     if( sts < 0 ) {
 #ifdef WIN32
       sts = GetLastError();
@@ -992,9 +1161,10 @@ int rpc_call_tcp( struct rpc_inc *inc ) {
     }
     offset += sts;
   }
-  inc->xdr.offset = 0;
-  inc->xdr.count = len;
-    
+  inc.xdr.offset = 0;
+  inc.xdr.count = len;
+  if( res ) *res = inc.xdr;
+  
   sts = 0;
  done:
 #ifdef WIN32
@@ -1008,31 +1178,29 @@ int rpc_call_tcp( struct rpc_inc *inc ) {
 
 
 int rpcbind_call_dump( struct sockaddr_in *addr, struct rpcbind_mapping *mlist, int n ) {
-  struct rpc_inc inc;
+  int sts;
+  struct rpc_call_pars pars;
   uint8_t *buf;
-  int sts, handle;
-       
+  struct xdr_s res;
+
   buf = malloc( 64 * 1024 );
 
-  memset( &inc, 0, sizeof(inc) );
-  xdr_init( &inc.xdr, buf, 64 * 1024 );
+  memset( &pars, 0, sizeof(pars) );
+  pars.prog = 100000;
+  pars.vers = 2;
+  pars.proc = 4;
+  memcpy( &pars.raddr, addr, sizeof(*addr) );
+  pars.raddr_len = sizeof(*addr);
+  xdr_init( &pars.buf, buf, 64 * 1024 );
 
-  rpc_init_call( &inc, 100000, 2, 4, &handle );
-  memcpy( &inc.raddr, addr, sizeof(struct sockaddr_in) );
-  inc.raddr_len = sizeof(struct sockaddr_in);
-    
-  sts = rpc_call_tcp( &inc );
-  if( sts ) goto done;
-
-  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
-  
-  sts = rpc_process_reply( &inc );
+  sts = rpc_call_tcp( &pars, NULL, &res );
   if( sts ) goto done;
   
   /* decode result from xdr */
-  sts = rpcbind_decode_mapping_list( &inc.xdr, mlist, n );
+  sts = rpcbind_decode_mapping_list( &res, mlist, n );
   if( sts ) goto done;
   
+  sts = 0;  
  done:
   free( buf );
     
@@ -1055,8 +1223,7 @@ int rpcbind_call_set( struct sockaddr_in *addr, struct rpcbind_mapping *m ) {
   memcpy( &inc.raddr, addr, sizeof(struct sockaddr_in) );
   inc.raddr_len = sizeof(struct sockaddr_in);
 
-  sts = rpc_call_udp( &inc );
-  //  sts = rpc_call_tcp( &inc );
+  sts = rpc_docall_udp( &inc, 1000 );
 
   free( buf );
     
@@ -1115,21 +1282,18 @@ void rpc_iterator_service( void ) {
 
 }
 
-int rpc_iterator_timeout( void ) {
+int rpc_iterator_timeout( int timeout ) {
   struct rpc_iterator *it;
   uint64_t now;
-  int timeout;
 
-
-  timeout = -1;
   it = itlist;
   now = rpc_now();
   while( it ) {
     if( (it->timeout == 0) || (now >= it->timeout) ) {
       timeout = 0;
       break;
-    } else if( (int)(now - it->timeout) > timeout ) {
-      timeout = (int)(now - it->timeout);
+    } else if( (int)(it->timeout - now) < timeout ) {
+      timeout = (int)(it->timeout - now);
     }
 
     it = it->next;
@@ -1152,6 +1316,7 @@ static void rpc_default_log( int lvl, char *fmt, va_list args ) {
 }
 
 static struct rpc_logger *loggers;
+
 void rpc_add_logger( struct rpc_logger *logger ) {
   logger->next = loggers;
   if( !logger->cb ) logger->cb = rpc_default_log;

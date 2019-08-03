@@ -1,4 +1,28 @@
-
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+ 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -42,8 +66,6 @@ static int nls_proc_null( struct rpc_inc *inc ) {
 
 static int nls_encode_prop( struct xdr_s *xdr, struct nls_share *share, struct log_prop *prop ) {
   xdr_encode_uint64( xdr, share->hshare );
-  xdr_encode_string( xdr, share->name );  
-
   xdr_encode_uint32( xdr, prop->version );
   xdr_encode_uint64( xdr, prop->seq );
   xdr_encode_uint32( xdr, prop->lbacount );
@@ -58,8 +80,6 @@ static int nls_decode_prop( struct xdr_s *xdr, struct nls_share *share, struct l
   int sts;
   
   sts = xdr_decode_uint64( xdr, &share->hshare );
-  if( !sts ) sts = xdr_decode_string( xdr, share->name, sizeof(share->name) );  
-
   if( !sts ) sts = xdr_decode_uint32( xdr, &prop->version );  
   if( !sts ) sts = xdr_decode_uint64( xdr, &prop->seq );
   if( !sts ) sts = xdr_decode_uint32( xdr, &prop->lbacount );
@@ -79,7 +99,7 @@ static int nls_encode_share( struct xdr_s *xdr, struct nls_share *share ) {
   memset( &prop, 0, sizeof(prop) );
   sts = nls_share_open( share, &log );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "failed to open shared log name=%s", share->name );
+    rpc_log( RPC_LOG_ERROR, "failed to open shared log %"PRIx64"", share->hshare );
   } else {
     log_prop( &log, &prop );
     log_close( &log );
@@ -92,9 +112,7 @@ static int nls_encode_share( struct xdr_s *xdr, struct nls_share *share ) {
 static int nls_proc_list( struct rpc_inc *inc ) {
   int handle;
   int sts, i;
-  uint64_t seq, lastid;
   struct nls_share shares[32];
-  struct log_prop prop;
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
@@ -113,10 +131,8 @@ static int nls_proc_list( struct rpc_inc *inc ) {
 static int nls_proc_prop( struct rpc_inc *inc ) {
   int handle;
   uint64_t hshare;
-  struct log_prop prop;
   struct nls_share share;
   int sts;
-  struct log_s log;
   
   sts = xdr_decode_uint64( &inc->xdr, &hshare );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
@@ -221,8 +237,6 @@ static int nls_proc_read( struct rpc_inc *inc ) {
   if( tmpconn ) rpc_conn_release( tmpconn );
   rpc_complete_accept_reply( inc, handle );
 
-  printf( "xxx xdrlen=%d\n", inc->xdr.offset );
-  
   return 0;
 }
 
@@ -294,7 +308,7 @@ static int nls_proc_notreg( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &hshare );
   if( !sts ) sts = xdr_decode_fixed( &inc->xdr, cookie, NLS_MAX_COOKIE );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &notify_period );
-  if( sts ) rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
   
   /* lookup context or add new one */
   sts = nls_notify_by_hshare( hostid, hshare, &notify );
@@ -412,7 +426,6 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   sts = nls_remote_by_hshare( rshare.hshare, &remote );
   if( sts ) goto done;
 
-  strncpy( remote.name, rshare.name, sizeof(remote.name) - 1 );
   remote.seq = prop.seq;
   remote.lastid = prop.last_id;
   remote.last_contact = time( NULL );
@@ -461,7 +474,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   xdr_encode_uint64( &xdr, hshare );
   xdr_encode_uint64( &xdr, lastid );
   xdr_encode_uint32( &xdr, xdrcount );  
-  sts = hrauth_call_udp( &hcall, &xdr );
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     free( nlscxtp );
     rpc_log( RPC_LOG_ERROR, "nls_call_read: hrauth_call failed" );
@@ -543,7 +556,7 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   xdr_encode_uint64( &xdr, hshare );
   xdr_encode_fixed( &xdr, cookiep ? cookiep : cookie, NLS_MAX_COOKIE );
   xdr_encode_uint32( &xdr, remote.notify_period );
-  sts = hrauth_call_udp( &hcall, &xdr );
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "nls_call_notreg: hrauth_call failed" );
   }
@@ -758,7 +771,7 @@ static void nls_call_notify( struct nls_notify *notify ) {
   xdr_encode_uint64( &xdr, notify->seq );
   xdr_encode_uint64( &xdr, notify->lastid );
   xdr_encode_fixed( &xdr, notify->cookie, NLS_MAX_COOKIE );
-  sts = hrauth_call_udp( &hcall, &xdr );
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "nls_call_notify: hrauth_call failed" );
     free( ncxt );

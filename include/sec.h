@@ -1,18 +1,18 @@
 /*
  * MIT License
- *
- * Copyright (c) 2018 Frank James
- *
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- *
+ * 
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -20,40 +20,35 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
- */
+ * 
+*/
+ 
+#ifndef SEC_H
+#define SEC_H
 
-#ifndef MMF_H
-#define MMF_H
+#include <stdint.h>
 
-#ifdef WIN32
-#include <WinSock2.h>
-#include <Windows.h>
-#else
-#include <unistd.h>
-#endif
-
-#include <stdarg.h>
-
-struct mmf_s {
-#ifdef WIN32
-	HANDLE fd;
-	HANDLE mapping;
-#else
-	int fd;
-#endif
-	int msize;
-	void *file;
+#define SEC_MAX_KEYBUF 128 
+struct sec_buf {
+  int len;
+  char *buf;
 };
+void sec_buf_init( struct sec_buf *sbuf, char *buf, int len );
 
-int mmf_open( char *path, struct mmf_s *mmf );
-int mmf_close( struct mmf_s *mmf );
-int mmf_lock( struct mmf_s *mmf );
-int mmf_unlock( struct mmf_s *mmf );
-int mmf_remap( struct mmf_s *mmf, int size );
-int mmf_sync( struct mmf_s *mmf );
-char *mmf_default_path( char *filename, ... );
-int mmf_ensure_dir( char *path );
+#define SEC_ECDH_MAX_PRIVKEY 32
+#define SEC_ECDH_MAX_PUBKEY  64 
+#define SEC_ECDH_MAX_COMMON  20
+int ecdh_generate( struct sec_buf *local_priv, struct sec_buf *local_public );
+int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, struct sec_buf *common );
+
+#define SEC_SHA1_MAX_HASH 20
+void sha1( uint8_t *hash, struct sec_buf *iov, int n );
+void sha1_hmac( uint8_t *hash, uint8_t *key, struct sec_buf *iov, int n );
+
+#define SEC_AES_MAX_KEY 16
+void aes_encrypt( uint8_t *key, uint8_t *buf, int n );
+void aes_decrypt( uint8_t *key, uint8_t *buf, int n );
+
+void sec_rand( void *buf, int n );
 
 #endif
-

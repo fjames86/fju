@@ -402,7 +402,6 @@ static int shauth_cauth( struct rpc_provider *pvr, struct rpc_msg *msg, void *pc
   struct shauth_context *sa = (struct shauth_context *)pcxt;
   struct shauth_auth auth;
   struct xdr_s tmpx;
-  int sts;
   struct shauth_verf verf;
   
   memset( &auth, 0, sizeof(auth) );  

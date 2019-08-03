@@ -1,10 +1,35 @@
-
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+ 
 #include "rpcd.h"
 #include "shauth.h"
 #include <hrauth.h>
 #include <raft.h>
 #include <log.h>
 #include <nls.h>
+#include <rex.h>
 
 #define SHAUTH_SECRET "123abcd123"
 
@@ -42,9 +67,11 @@ static void init_cb( void ) {
 
   hrauth_register();
 
-  //raft_register();
+  raft_register();
 
   nls_register();
+
+  rex_register();
 }
 
 static int logger_open = 0;
@@ -54,10 +81,12 @@ static struct rpc_logger rpcd_loggers[1];
 
 static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
   int loglvl = 0;
-  if( lvl == RPC_LOG_INFO ) loglvl = LOG_LVL_INFO;
+  if( lvl == RPC_LOG_TRACE ) loglvl = LOG_LVL_TRACE;
+  else if( lvl == RPC_LOG_INFO ) loglvl = LOG_LVL_INFO;
   else if( lvl == RPC_LOG_DEBUG ) loglvl = LOG_LVL_DEBUG;
   else if( lvl == RPC_LOG_WARN ) loglvl = LOG_LVL_WARN;
   else if( lvl == RPC_LOG_ERROR ) loglvl = LOG_LVL_ERROR;
+  else if( lvl == RPC_LOG_FATAL ) loglvl = LOG_LVL_FATAL;
   
   log_writev( &logger, loglvl, fmt, args );
 }
@@ -66,6 +95,7 @@ int main( int argc, char **argv ) {
   int sts;
 
   /* open log */
+  mmf_ensure_dir( mmf_default_path( NULL ) );
   sts = log_open( mmf_default_path( "rpcd.log", NULL ), NULL, &logger );
   if( sts ) printf( "Warning: Failed to open rpcd debug log file\n" );
   else { 

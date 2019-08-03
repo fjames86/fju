@@ -9,7 +9,6 @@
 
 (drx:defxstruct share ()
   (hshare :uint64)
-  (name :string)
   (version :uint32)
   (seq :uint64)
   (lbacount :uint32)

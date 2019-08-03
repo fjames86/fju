@@ -51,6 +51,8 @@ int mmf_open( char *path, struct mmf_s *mmf ) {
 	mmf->fd = CreateFileA( path, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
 	if( mmf->fd == INVALID_HANDLE_VALUE ) return -1;
 
+	mmf->fsize = (int)GetFileSize( mmf->fd, NULL );
+	
 	return 0;
 }
 
@@ -82,6 +84,7 @@ int mmf_unlock( struct mmf_s *mmf ) {
 }
 int mmf_sync( struct mmf_s *mmf ) {
   if( mmf->file ) FlushViewOfFile( mmf->file, mmf->msize );
+  if( mmf->fd ) FlushFileBuffers( mmf->fd );
   return 0;
 }
 
@@ -97,8 +100,9 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 		memset( &overlap, 0, sizeof(overlap) );
 		overlap.Offset = size - 1;
 		WriteFile( mmf->fd, "", 1, NULL, &overlap );
+		mmf->fsize = size;
 	}
-
+	
 	mmf->mapping = CreateFileMappingA( mmf->fd, NULL, PAGE_READWRITE, 0, 0, NULL );
 	if( !mmf->mapping ) return -1;
 	mmf->file = MapViewOfFile( mmf->mapping, FILE_MAP_READ|FILE_MAP_WRITE, 0, 0, size );
@@ -118,6 +122,10 @@ char *mmf_default_path( char *filename, ... ) {
 	if( sts ) return path;
 
 	wcstombs( path, wp, sizeof(path) );
+	strcat( path, "\\fju" );
+
+	mmf_ensure_dir( path );
+	
 	if( filename ) {
 	  va_list args;
 	  char *p;
@@ -146,10 +154,44 @@ int mmf_ensure_dir( char *path ) {
   return 0;
 }
 
+int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
+    OVERLAPPED overlap;
+    uint32_t nbytes;
+    BOOL b;
+    
+    memset( &overlap, 0, sizeof(overlap) );
+    overlap.Offset = offset & 0xffffffff;
+    overlap.OffsetHigh = (offset >> 32) & 0xffffffff;
+    b = ReadFile( mmf->fd, buf, size, &nbytes, &overlap );
+    if( !b ) return -1;
+    return nbytes;
+}
+
+int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
+    OVERLAPPED overlap;
+    uint32_t nbytes;
+    BOOL b;
+    
+    memset( &overlap, 0, sizeof(overlap) );
+    overlap.Offset = offset & 0xffffffff;
+    overlap.OffsetHigh = (offset >> 32) & 0xffffffff;
+    b = WriteFile( mmf->fd, buf, size, &nbytes, &overlap );
+    if( !b ) return -1;
+    return nbytes;
+}
+
+int mmf_truncate( struct mmf_s *mmf, int size ) {
+  SetFilePointer( mmf->fd, size, NULL, FILE_BEGIN );
+  SetEndOfFile( mmf->fd );
+  return 0;
+}
+
 #else
 int mmf_open( char *path, struct mmf_s *mmf ) {
+	memset( mmf, 0, sizeof(*mmf) );
 	mmf->fd = open( path, O_RDWR|O_CREAT, 0600 );
 	if( mmf->fd < 0 ) return -1;
+	mmf->fsize = lseek( mmf->fd, 0, SEEK_END );
 	return 0;
 }
 
@@ -178,6 +220,7 @@ int mmf_unlock( struct mmf_s *mmf ) {
 }
 int mmf_sync( struct mmf_s *mmf ) {
   if( mmf->file ) msync( mmf->file, mmf->msize, MS_SYNC );
+  if( mmf->fd ) fsync( mmf->fd );
   return 0;
 }
 
@@ -189,7 +232,9 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 	fsize = lseek( mmf->fd, 0, SEEK_END );
 	if( fsize < size ) {
 		pwrite( mmf->fd, "", 1, size - 1 );
+		mmf->fsize = size;
 	}
+	
 	mmf->file = mmap( NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, mmf->fd, 0 );
 	mmf->msize = size;
 	return 0;
@@ -198,7 +243,8 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 char *mmf_default_path( char *filename, ... ) {
 	static char path[256];
 
-	strcpy( path, "/etc" );
+	strcpy( path, "/opt/fju/etc" );
+	mmf_ensure_dir( path );
 	if( filename ) {
 	  va_list args;
 	  char *p;
@@ -225,5 +271,16 @@ int mmf_ensure_dir( char *path ) {
   return 0;
 }
 
+int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
+    return pread( mmf->fd, buf, size, offset );
+}
 
+int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset ) {
+    return pwrite( mmf->fd, buf, size, offset );
+}
+
+int mmf_truncate( struct mmf_s *mmf, int size ) {
+  ftruncate( mmf->fd, size );
+  return 0;
+}
 #endif

@@ -39,11 +39,11 @@
 #include <arpa/inet.h>
 #endif
 
-#include <rpc.h>
-#include <hrauth.h>
-#include <hostreg.h>
-#include <raft.h>
-#include <rex.h>
+#include <fju/rpc.h>
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
+#include <fju/raft.h>
+#include <fju/rex.h>
 
 struct clt_info {
     uint32_t prog;

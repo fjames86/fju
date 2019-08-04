@@ -23,13 +23,12 @@
  * 
 */
  
-#include <rpc.h>
-#include <sec.h>
+#include <fju/rpc.h>
+#include <fju/sec.h>
 #include <inttypes.h>
-#include <hrauth.h>
-#include <hostreg.h>
-
-#include "raft.h"
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
+#include <fju/raft.h>
 
 static struct {  
   struct raft_prop prop;

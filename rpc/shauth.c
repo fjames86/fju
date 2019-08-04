@@ -40,7 +40,14 @@
  * This is similar to how "real" auth flavours work, e.g. RPC_AUTH_DES or RPC_AUTH_GSS.
  */
 
-#include "shauth.h"
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
+
+#include <stdint.h>
+#include <fju/rpc.h>
+#include <fju/shauth.h>
 
 
 #ifdef WIN32

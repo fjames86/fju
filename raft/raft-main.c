@@ -34,12 +34,12 @@
 #include <stdarg.h>
 #include <inttypes.h>
 #include <time.h>
-#include <mmf.h>
-#include <sec.h>
-#include "raft.h"
-#include <rpc.h>
-#include <hostreg.h>
-#include <hrauth.h>
+#include <fju/mmf.h>
+#include <fju/sec.h>
+#include <fju/raft.h>
+#include <fju/rpc.h>
+#include <fju/hostreg.h>
+#include <fju/hrauth.h>
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"

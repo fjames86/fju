@@ -33,7 +33,7 @@
 #include <stdint.h>
 #include <assert.h>
 
-#include "lht.h"
+#include <fju/lht.h>
 
 #define LHT_REHASH_THRESHOLD 75
 

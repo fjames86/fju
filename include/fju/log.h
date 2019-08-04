@@ -29,7 +29,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <mmf.h>
+#include <fju/mmf.h>
 
 #define LOG_LBASIZE 64               /* lba size fixed to 64 bytes */
 

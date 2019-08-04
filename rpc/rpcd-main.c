@@ -23,13 +23,13 @@
  * 
 */
  
-#include "rpcd.h"
-#include "shauth.h"
-#include <hrauth.h>
-#include <raft.h>
-#include <log.h>
-#include <nls.h>
-#include <rex.h>
+#include <fju/rpcd.h>
+#include <fju/shauth.h>
+#include <fju/hrauth.h>
+#include <fju/raft.h>
+#include <fju/log.h>
+#include <fju/nls.h>
+#include <fju/rex.h>
 
 #define SHAUTH_SECRET "123abcd123"
 

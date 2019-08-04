@@ -36,7 +36,7 @@
 #include <Windows.h>
 #endif
 
-#include "rpc.h"
+#include <fju/rpc.h>
 
 #include <errno.h>
 #include <stdarg.h>

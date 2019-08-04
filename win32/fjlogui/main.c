@@ -30,12 +30,12 @@
 #include <ws2tcpip.h>
 #include <time.h>
 
-#include <rpc.h>
-#include <log.h>
-#include <hostreg.h>
-#include <hrauth.h>
-#include <nls.h>
-#include <rpcd.h>
+#include <fju/rpc.h>
+#include <fju/log.h>
+#include <fju/hostreg.h>
+#include <fju/hrauth.h>
+#include <fju/nls.h>
+#include <fju/rpcd.h>
 
 
 #include "fjlogui.h"

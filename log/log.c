@@ -29,7 +29,7 @@
 #include <Windows.h>
 #endif
 
-#include "log.h"
+#include <fju/log.h>
 
 #include <stdio.h>
 #include <string.h>

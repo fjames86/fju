@@ -45,11 +45,11 @@
 #include <netinet/in.h>
 #endif
 
-#include "hostreg.h"
-#include "hrauth.h"
-#include <mmf.h>
-#include <sec.h>
-#include <rpcd.h>
+#include <fju/hostreg.h>
+#include <fju/hrauth.h>
+#include <fju/mmf.h>
+#include <fju/sec.h>
+#include <fju/rpcd.h>
 
 static int hrauth_common( uint64_t remoteid, uint8_t *common ) {
   int sts;

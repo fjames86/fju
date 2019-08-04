@@ -27,16 +27,16 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include "nls.h"
+#include <fju/nls.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mmf.h>
-#include <sec.h>
-#include <rpc.h>
-#include <rpcd.h>
+#include <fju/mmf.h>
+#include <fju/sec.h>
+#include <fju/rpc.h>
+#include <fju/rpcd.h>
 #include <sys/stat.h>
-#include <hostreg.h>
+#include <fju/hostreg.h>
 
 #include "nls-private.h"
 

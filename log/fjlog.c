@@ -23,6 +23,11 @@
  *
  */
 
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -30,7 +35,7 @@
 #include <time.h>
 #include <inttypes.h>
 
-#include "log.h"
+#include <fju/log.h>
 
 uint64_t rpc_now( void ) {
 #ifdef WIN32
@@ -282,15 +287,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 	  }
     } else {
       ut = (time_t)entry.timestamp;
-#ifdef WIN32
-	  {
-		  static struct tm u_tm;		 
-		  localtime_s( &u_tm, (time_t *)&ut );
-		  tm = &u_tm;
-	  }
-#else
       tm = localtime( (time_t *)&ut );
-#endif
       strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
       
       if( entry.flags & LOG_BINARY ) {

@@ -23,15 +23,15 @@
  * 
 */
  
-#include "rex.h"
+#include <fju/rex.h>
 
-#include <rpc.h>
-#include <hrauth.h>
-#include <hostreg.h>
-#include "raft.h"
-#include <mmf.h>
-#include <rpcd.h>
-#include <rex.h>
+#include <fju/rpc.h>
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
+#include <fju/raft.h>
+#include <fju/mmf.h>
+#include <fju/rpcd.h>
+#include <fju/rex.h>
 
 #ifdef WIN32
 #define PRIx64 "llx"

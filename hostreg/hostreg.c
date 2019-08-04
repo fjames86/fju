@@ -48,12 +48,14 @@
 
 
 #ifdef WIN32
+#ifndef MSYS
 #define strcasecmp _stricmp
 #endif
+#endif
 
-#include "hostreg.h"
-#include <mmf.h>
-#include <sec.h>
+#include <fju/hostreg.h>
+#include <fju/mmf.h>
+#include <fju/sec.h>
 
 #define HOSTREG_MAX_HOST 32
 

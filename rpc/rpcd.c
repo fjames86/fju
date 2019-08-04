@@ -32,7 +32,7 @@
  * is filled out with the reply data and should then be used to send back to the client.
  */
 
-#include "rpcd.h"
+#include <fju/rpcd.h>
 
 static struct {
 	int foreground;

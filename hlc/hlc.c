@@ -1,6 +1,6 @@
 
-#include "hlc.h"
-#include <sec.h>
+#include <fju/hlc.h>
+#include <fju/sec.h>
 #include <string.h>
 
 int hlc_open( char *path, struct hlc_s *hlc ) {

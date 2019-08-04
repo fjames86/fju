@@ -26,7 +26,7 @@
 #ifndef SHAUTH_H
 #define SHAUTH_H
 
-#include "rpc.h"
+#include <rpc.h>
 
 #define RPC_AUTH_SHAUTH 100334
 

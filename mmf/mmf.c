@@ -27,7 +27,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include "mmf.h"
+#include <fju/mmf.h>
 
 #ifdef WIN32
 #include <Shlobj.h>

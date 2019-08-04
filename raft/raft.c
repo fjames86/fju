@@ -30,14 +30,15 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mmf.h>
-#include <rpc.h>
-#include <hostreg.h>
 #include <inttypes.h>
-#include <log.h>
-#include <sec.h>
 
-#include "raft.h"
+#include <fju/mmf.h>
+#include <fju/rpc.h>
+#include <fju/hostreg.h>
+#include <fju/log.h>
+#include <fju/sec.h>
+
+#include <fju/raft.h>
 
 #define RAFT_ELEC_LOW 200      /* minimum election timeout */
 #define RAFT_ELEC_HIGH 1000    /* maximum eleection timeout */

@@ -1,7 +1,7 @@
 
 hlc: ${BINDIR}/hlc ${LIBDIR}/libhlc.a 
 
-${LIBDIR}/libhlc.a: hlc/hlc.c include/hlc.h 
+${LIBDIR}/libhlc.a: hlc/hlc.c include/fju/hlc.h 
 	${CC} -c hlc/hlc.c ${CFLAGS} 
 	${AR} rcs $@ hlc.o 
 

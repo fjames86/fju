@@ -1,0 +1,83 @@
+
+
+BINDIR=bin
+LIBDIR=lib
+CFLAGS += -Iinclude -g -Wall -DWIN32 -DMSYS
+LFLAGS += -L${LIBDIR} -luuid -luser32 -lws2_32 -lole32 -liphlpapi -ladvapi32 -luuid -lole32 -lbcrypt
+
+
+libs += ${LIBDIR}/libmmf.a
+libs += ${LIBDIR}/libsec.a
+libs += ${LIBDIR}/liblog.a
+libs += ${LIBDIR}/libhostreg.a
+libs += ${LIBDIR}/libhrauth.a
+libs += ${LIBDIR}/libnls.a
+libs += ${LIBDIR}/libraft.a
+libs += ${LIBDIR}/librex.a
+libs += ${LIBDIR}/librpc.a 
+
+progs += ${BINDIR}/fjlog.exe
+progs += ${BINDIR}/hostreg.exe
+#progs += ${BINDIR}/nls.exe
+progs += ${BINDIR}/raft.exe
+progs += ${BINDIR}/rpclt.exe
+progs += ${BINDIR}/rpcd.exe
+
+
+.PHONY: all clean 
+
+all: ${libs} ${progs}
+
+clean:
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
+
+${LIBDIR}/libmmf.a: mmf/mmf.c
+	gcc -c ${CFLAGS} mmf/mmf.c
+	ar rcs ${LIBDIR}/libmmf.a mmf.o
+
+${LIBDIR}/libsec.a: sec/sec.c
+	gcc -c ${CFLAGS} sec/sec.c
+	ar rcs ${LIBDIR}/libsec.a sec.o
+
+${LIBDIR}/liblog.a: log/log.c
+	gcc -c ${CFLAGS} log/log.c
+	ar rcs ${LIBDIR}/liblog.a log.o
+
+${LIBDIR}/libhostreg.a: hostreg/hostreg.c 
+	gcc -c ${CFLAGS} hostreg/hostreg.c 
+	ar rcs ${LIBDIR}/libhostreg.a hostreg.o
+
+${LIBDIR}/libhrauth.a: hostreg/hrauth.c 
+	gcc -c ${CFLAGS} hostreg/hrauth.c 
+	ar rcs ${LIBDIR}/libhrauth.a hrauth.o
+
+${LIBDIR}/libraft.a: raft/raft.c 
+	gcc -c ${CFLAGS} raft/raft.c raft/raft-rpc.c 
+	ar rcs ${LIBDIR}/libraft.a raft.o raft-rpc.o
+
+${LIBDIR}/librex.a: raft/rex.c 
+	gcc -c ${CFLAGS} raft/rex.c
+	ar rcs ${LIBDIR}/librex.a rex.o
+
+${LIBDIR}/libnls.a: nls/nls.c nls/nls-rpc.c
+	gcc -c ${CFLAGS} nls/nls.c nls/nls-rpc.c
+	ar rcs ${LIBDIR}/libnls.a nls.o nls-rpc.o
+
+${LIBDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c 
+	gcc -c ${CFLAGS} rpc/rpc.c rpc/rpcd.c rpc/shauth.c 
+	ar rcs ${LIBDIR}/librpc.a rpc.o rpcd.o shauth.o
+
+${BINDIR}/fjlog.exe: log/fjlog.c
+	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -llog -lmmf -lole32 -luuid
+
+${BINDIR}/hostreg.exe: hostreg/hostreg-main.c
+	gcc -o ${BINDIR}/hostreg.exe ${CFLAGS} hostreg/hostreg-main.c -L${LIBDIR} -lhostreg -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi
+
+${BINDIR}/raft.exe: raft/raft-main.c
+	gcc -o ${BINDIR}/raft.exe ${CFLAGS} raft/raft-main.c -L${LIBDIR} -lraft -lhostreg -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi
+
+${BINDIR}/rpclt.exe: rpc/rpclt.c 
+	gcc -o ${BINDIR}/rpclt.exe ${CFLAGS} rpc/rpclt.c -L${LIBDIR} -lrpc -lraft -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32
+
+${BINDIR}/rpcd.exe: rpc/rpcd-main.c 
+	gcc -o ${BINDIR}/rpcd.exe ${CFLAGS} rpc/rpcd-main.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls

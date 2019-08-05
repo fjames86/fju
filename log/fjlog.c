@@ -39,7 +39,9 @@
 #include <fju/log.h>
 
 #ifdef WIN32
+#ifndef MSYS
 #define strcasecmp _stricmp
+#endif
 #endif
 
 uint64_t rpc_now( void ) {

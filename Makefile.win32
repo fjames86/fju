@@ -22,7 +22,7 @@ progs += ${BINDIR}/hostreg.exe
 progs += ${BINDIR}/raft.exe
 progs += ${BINDIR}/rpclt.exe
 progs += ${BINDIR}/rpcd.exe
-
+progs += ${BINDIR}/fjlogui.exe
 
 .PHONY: all clean 
 
@@ -81,3 +81,7 @@ ${BINDIR}/rpclt.exe: rpc/rpclt.c
 
 ${BINDIR}/rpcd.exe: rpc/rpcd-main.c 
 	gcc -o ${BINDIR}/rpcd.exe ${CFLAGS} rpc/rpcd-main.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls
+
+${BINDIR}/fjlogui.exe: win32/fjlogui/main.c win32/fjlogui/bitmaps.c
+	gcc -o ${BINDIR}/fjlogui.exe ${CFLAGS} win32/fjlogui/main.c win32/fjlogui/bitmaps.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls -lgdi32 -lcomdlg32 -lcomctl32
+

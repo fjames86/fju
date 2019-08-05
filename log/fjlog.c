@@ -24,6 +24,7 @@
  */
 
 #ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
 #include <Winsock2.h>
 #include <Windows.h>
 #endif
@@ -36,6 +37,10 @@
 #include <inttypes.h>
 
 #include <fju/log.h>
+
+#ifdef WIN32
+#define strcasecmp _stricmp
+#endif
 
 uint64_t rpc_now( void ) {
 #ifdef WIN32

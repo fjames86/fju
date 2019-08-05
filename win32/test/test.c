@@ -29,7 +29,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "mmf.h"
+#include <fju/mmf.h>
 
 struct _file {
   uint32_t magic;

@@ -1,5 +1,4 @@
 
-
 PROJECTS += mmf
 PROJECTS += log
 PROJECTS += sec
@@ -37,6 +36,4 @@ install:
 	mkdir -p /opt/fju/bin
 	cp bin/* /opt/fju/bin
 	cp rpcd.sh /opt/fju 
-
-
 

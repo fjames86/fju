@@ -36,6 +36,8 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#define MMF_DEFAULT_PREFIX "fju"
+
 struct mmf_s {
 #ifdef WIN32
 	HANDLE fd;

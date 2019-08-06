@@ -70,6 +70,7 @@ static struct {
   int nmsgs;
   int read_reverse;
   int print_quiet;
+  uint32_t ltag;
 } fju;
 
 static void usage( char *fmt, ... ) {
@@ -88,19 +89,18 @@ static void usage( char *fmt, ... ) {
           "              -f                           Follow log.\n"
 	  "              -r                           Reset log, clearing all messages.\n"
 	  "              -u                           Show log properties.\n"
-	  "              -F                           Create a fixed (non-circular) log.\n"
-	  "              -G                           Create a growing (non-circular) log.\n"
-	  "              -s size                      Create with size\n"
-	  "              -L lvl                       Set log lvl\n" 
 	  "\n" 
 	  "  OPTIONS\n"
-	  "     -p path          Use log file by path name.\n"
-	  "     -R               Read reverse.\n" 
-	  "\n" 
-	  "  Where:\n"
-	  "     -b               Read/write binary.\n" 
-	  "     -i id            Read starting from msg ID\n" 
-	  "     -n nmsgs         Read no more than nmsgs\n" 
+	  "     -p path                               Use log file by path name.\n"
+	  "     -R                                    Read reverse.\n"
+	  "     -F                                    Create a fixed (non-circular) log.\n"
+	  "     -G                                    Create a growing (non-circular) log.\n"
+	  "     -s size                               Create with size\n"
+	  "     -L lvl                                Set log filter level: trace, debug, info, warn, error, fatal\n"
+	  "     -T ltag                               Set log tag to filter or write messages\n"
+	  "     -b                                    Read/write binary.\n" 
+	  "     -i id                                 Read starting from msg ID\n" 
+	  "     -n nmsgs                              Read no more than nmsgs\n" 
 	  "\n" );
   exit( 0 );
 }
@@ -180,6 +180,11 @@ int main( int argc, char **argv ) {
       else if( strcasecmp( argv[i], "error" ) == 0 ) lvlflags = LOG_LVL_ERROR;
       else if( strcasecmp( argv[i], "fatal" ) == 0 ) lvlflags = LOG_LVL_FATAL;
       else usage( NULL );
+      fju.cmd = CMD_PROP;
+    } else if( strcmp( argv[i], "-T" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      fju.ltag = strtol( argv[i], NULL, 16 );
     } else {
       usage( NULL );
     }
@@ -192,7 +197,8 @@ int main( int argc, char **argv ) {
   opts.flags = logflags;
   sts = log_open( fju.filepath, &opts, &fju.log );
   if( sts ) usage( "Failed to open" );
-
+  fju.log.ltag = fju.ltag;
+  
   if( setlvlflags ) log_set_lvl( &fju.log, lvlflags );
   
   switch( fju.cmd ) {
@@ -256,7 +262,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
   char timestr[128];
   int msglen, nmsgs;
   struct log_iov iov[1];
-
+  
   nmsgs = 0;
   memset( &entry, 0, sizeof(entry) );
   msglen = 1024;
@@ -284,7 +290,9 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
     if( sts < 0 ) break;
     if( n == 0 ) break;
 
-    if( fju.flags & LOG_BINARY ) {
+    if( fju.ltag && (entry.ltag != fju.ltag) ) {
+      /* do nothing if filtering on tag but wrong tag */
+    } else if( fju.flags & LOG_BINARY ) {
       if( !fju.print_quiet ) {
 #ifdef WIN32
 		  WriteFile( GetStdHandle( STD_OUTPUT_HANDLE ), msg, entry.msglen, NULL, NULL );
@@ -299,7 +307,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
       
       if( entry.flags & LOG_BINARY ) {
 	int i;
-	printf( "%s %6u:%s %"PRIx64"\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
+	printf( "%s %-4x %4u:%s %"PRIx64"\n", timestr, entry.ltag, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
 	if( !fju.print_quiet ) {
 	  printf( "  0000  " );
 	  for( i = 0; i < entry.msglen; i++ ) {
@@ -311,7 +319,11 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 	  printf( "\n" );
 	}
       } else {
-	if( !fju.print_quiet ) printf( "%s %6u:%s %"PRIx64" %s\n", timestr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, msg );
+	if( !fju.print_quiet ) {
+	  printf( "%s %-4x %4u:%s %"PRIx64" %s\n",
+		  timestr, entry.ltag, entry.pid,
+		  lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, msg );
+	}
       }
     }
     if( fju.read_reverse ) {

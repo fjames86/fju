@@ -283,10 +283,16 @@ static int rex_proc_write( struct rpc_inc *inc ) {
   rex_state_save( cl.id, buf, len );
   
   /* TODO: don't acknowlege until replicated on a quorum number of members? */
-
+#if 1
   rex_log( LOG_LVL_DEBUG, "success?" );
   xdr_encode_boolean( &inc->xdr, 1 );
   xdr_encode_uint64( &inc->xdr, cl.leaderid );
+#else
+  /* save reply data */
+  rpc_get_reply_data( inc, &rdata );
+
+  /* send pings and wait for them all to complete, or timeout */
+#endif
   
  done:
 

@@ -818,12 +818,7 @@ int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
 
 
 struct hrauth_proxy_cxt {
-  uint32_t xid;
-  struct rpc_provider *pvr;
-  void *pcxt;
-  struct rpc_opaque_auth rverf;
-  struct sockaddr_storage raddr;
-  uint32_t raddr_len;
+  struct rpc_reply_data rdata;
 };
 
 static void hrauth_proxy_udp_cb( struct xdr_s *xdr, void *cxt ) {
@@ -840,17 +835,17 @@ static void hrauth_proxy_udp_cb( struct xdr_s *xdr, void *cxt ) {
 
   /* send reply message */
   memset( &inc, 0, sizeof(inc) );
-  inc.pvr = pcxt->pvr;
-  inc.pcxt = pcxt->pcxt;
-  if( inc.pvr ) inc.pvr->rverf = pcxt->rverf;
+  inc.pvr = pcxt->rdata.pvr;
+  inc.pcxt = pcxt->rdata.pcxt;
+  if( inc.pvr ) inc.pvr->rverf = pcxt->rdata.rverf;
   buf = malloc( 512 + xdr->count );
   xdr_init( &inc.xdr, (uint8_t *)buf, 512 + xdr->count );
-  rpc_init_accept_reply( &inc, pcxt->xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_init_accept_reply( &inc, pcxt->rdata.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_fixed( &inc.xdr, xdr->buf + xdr->offset, xdr->count - xdr->offset );
   rpc_complete_accept_reply( &inc, handle );
 
   listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
-  if( listen ) sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0, (struct sockaddr *)&pcxt->raddr, pcxt->raddr_len );
+  if( listen ) sendto( listen->fd, inc.xdr.buf, inc.xdr.offset, 0, (struct sockaddr *)&pcxt->rdata.raddr, pcxt->rdata.raddr_len );
   
  done:
   if( buf ) free( buf );
@@ -864,12 +859,7 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
   struct hrauth_proxy_cxt *pcxt;
 
   pcxt = malloc( sizeof(*pcxt) );
-  pcxt->xid = inc->msg.xid;
-  pcxt->pvr = inc->pvr;
-  pcxt->pcxt = inc->pcxt;
-  memcpy( &pcxt->raddr, &inc->raddr, inc->raddr_len );
-  pcxt->raddr_len = inc->raddr_len;
-  if( inc->pvr ) pcxt->rverf = inc->pvr->rverf;
+  rpc_get_reply_data( inc, &pcxt->rdata );
   
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;

@@ -317,6 +317,15 @@ char *rpc_strerror( int sts );
 typedef void (*rpc_broadcast_cb_t)( struct rpc_inc *inc, void *cxt );
 int rpc_call_broadcast( struct rpc_call_pars *pars, struct xdr_s *args, rpc_broadcast_cb_t cb, void *cxt );
 
+struct rpc_reply_data {
+  uint32_t xid;
+  struct rpc_provider *pvr;
+  void *pcxt;
+  struct rpc_opaque_auth rverf;
+  struct sockaddr_storage raddr;
+  uint32_t raddr_len;
+};
+void rpc_get_reply_data( struct rpc_inc *inc, struct rpc_reply_data *rdata );
 				   
 #endif
 

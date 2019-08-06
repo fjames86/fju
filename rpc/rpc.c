@@ -570,7 +570,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     
   switch( inc->msg.tag ) {
   case RPC_CALL:
-    rpc_log( RPC_LOG_INFO, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
+    rpc_log( RPC_LOG_DEBUG, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
 
     /* lookup function */
     sts = rpc_program_find( inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,
@@ -634,8 +634,27 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     break;
   case RPC_REPLY:
     /* check for a waiter or drop */
+    rpc_log( RPC_LOG_DEBUG, "REPLY %u %s %s",
+	     inc->msg.xid,
+	     inc->msg.u.reply.tag == RPC_MSG_ACCEPT ? "Accept" : "Reject",
+	     inc->msg.u.reply.tag == RPC_MSG_ACCEPT ?
+	     (inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_SUCCESS ? "Success" :
+	     inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROG_UNAVAIL ? "ProgUnavail" :
+	     inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROG_MISMATCH ? "ProgMismatch" :
+	     inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROC_UNAVAIL ? "ProcUnavail" :
+	     inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_GARBAGE_ARGS ? "GarbageArgs" :
+	     inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_SYSTEM_ERROR ? "SystemError" :
+	      "Other") :
+	     (inc->msg.u.reply.u.reject.tag == RPC_REJECT_RPCMISMATCH ? "RPCMismatch" :
+	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_BADCRED ? "BadCred" :
+	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_REJECTED ? "Rejected" :
+	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_BADVERF ? "BadVerf" :
+	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_REJECTEDVERF ? "RejectedVerf" :
+	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_TOOWEAK ? "TooWeak" :
+	      "Other") );
+	     
     rpc_waiter_invoke( inc->msg.xid, inc );
-    break;
+    return 1;
   }
     
   return -1;
@@ -1443,3 +1462,19 @@ char *rpc_strerror( int sts ) {
 #endif
     return buf;
 }
+
+
+void rpc_get_reply_data( struct rpc_inc *inc, struct rpc_reply_data *rdata ) {
+  rdata->xid = inc->msg.xid;
+  rdata->pvr = inc->pvr;
+  rdata->pcxt = inc->pcxt;
+  if( inc->pvr ) rdata->rverf = inc->pvr->rverf;
+  else memset( &rdata->rverf, 0, sizeof(rdata->rverf) );
+  rdata->raddr = inc->raddr;
+  rdata->raddr_len = inc->raddr_len;
+}
+
+
+
+
+

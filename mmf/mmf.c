@@ -27,7 +27,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include "mmf.h"
+#include <fju/mmf.h>
 
 #ifdef WIN32
 #include <Shlobj.h>
@@ -122,7 +122,7 @@ char *mmf_default_path( char *filename, ... ) {
 	if( sts ) return path;
 
 	wcstombs( path, wp, sizeof(path) );
-	strcat( path, "\\fju" );
+	strcat( path, "\\" MMF_DEFAULT_PREFIX );
 
 	mmf_ensure_dir( path );
 	
@@ -243,7 +243,7 @@ int mmf_remap( struct mmf_s *mmf, int size ) {
 char *mmf_default_path( char *filename, ... ) {
 	static char path[256];
 
-	strcpy( path, "/opt/fju/etc" );
+	strcpy( path, "/opt/" MMF_DEFAULT_PREFIX );
 	mmf_ensure_dir( path );
 	if( filename ) {
 	  va_list args;

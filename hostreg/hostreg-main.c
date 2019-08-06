@@ -37,10 +37,10 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <inttypes.h>
-#include <mmf.h>
-#include <sec.h>
-#include "hrauth.h"
-#include <rpc.h>
+#include <fju/mmf.h>
+#include <fju/sec.h>
+#include <fju/hrauth.h>
+#include <fju/rpc.h>
 
 #ifndef WIN32
 #include <sys/types.h>
@@ -49,7 +49,7 @@
 #include <netinet/in.h>
 #endif
 
-#include "hostreg.h"
+#include <fju/hostreg.h>
 
 static void print_host( struct hostreg_host *host );
 

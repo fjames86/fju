@@ -29,7 +29,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <mmf.h>
+#include <fju/mmf.h>
 
 #define LOG_LBASIZE 64               /* lba size fixed to 64 bytes */
 
@@ -37,6 +37,7 @@
 struct log_s {
   struct mmf_s mmf;
   uint32_t pid;
+  uint32_t ltag;
 };
 
 struct log_opts {
@@ -81,7 +82,7 @@ struct log_entry {
 #define LOG_LVL_WARN      0x00000003
 #define LOG_LVL_ERROR     0x00000004
 #define LOG_LVL_FATAL     0x00000005
-#define LOG_BINARY        0x00000010    /* if set, msg contains opaque binary data, otherwise nul-terminated string */ 
+#define LOG_BINARY        0x00000010    /* if set, msg contains opaque binary data, otherwise nul-terminated string */
 
   /* io buffers */
   int niov;
@@ -89,6 +90,7 @@ struct log_entry {
 
   int msglen;                           /* total length of message */
   uint64_t prev_id;
+  uint32_t ltag;
 };
 
 /* open/close file */

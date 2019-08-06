@@ -35,10 +35,10 @@
 #include <stdarg.h>
 #include <inttypes.h>
 
-#include "rpc.h"
-#include "shauth.h"
-#include <hrauth.h>
-#include <hostreg.h>
+#include <fju/rpc.h>
+#include <fju/shauth.h>
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
 
 static void usage( char *fmt, ... ) {
   va_list args;

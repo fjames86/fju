@@ -23,19 +23,37 @@
  * 
 */
  
-#include <rpc.h>
-#include <sec.h>
+#include <fju/rpc.h>
+#include <fju/sec.h>
 #include <inttypes.h>
-#include <hrauth.h>
-#include <hostreg.h>
-
-#include "raft.h"
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
+#include <fju/raft.h>
+#include <fju/log.h>
 
 static struct {  
   struct raft_prop prop;
   uint64_t nextprop;
   struct raft_notify_context *notlist;
+  struct log_s log;
 } glob;
+
+static void raft_log( int lvl, char *fmt, ... ) {
+  static int initialized = 0;
+  int sts;
+  va_list args;
+
+  if( !initialized ) {
+    sts = log_open( NULL, NULL, &glob.log );
+    if( sts ) return;
+    glob.log.ltag = RAFT_RPC_PROG;
+    initialized = 1;
+  }
+  
+  va_start( args, fmt );
+  log_writev( &glob.log, lvl, fmt, args );
+  va_end( args );
+}
 
 static void raft_iter_cb( struct rpc_iterator *iter );
 static uint32_t term_timeout( void );
@@ -93,17 +111,17 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   uint64_t termseq, commitseq;
   struct raft_cluster cl;
 
-    rpc_log( RPC_LOG_TRACE, "raft_call_ping_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+    raft_log( LOG_LVL_TRACE, "raft_call_ping_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
 	     pcxt->clid, pcxt->hostid, pcxt->termseq );
 
   if( !xdr ) {
-    rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb timeout" );
+    raft_log( LOG_LVL_DEBUG, "raft_call_ping_cb timeout" );
 	
     /* try again? */
     sts = raft_cluster_by_id( pcxt->clid, &cl );
     sts = raft_member_by_hostid( pcxt->clid, pcxt->hostid, &member );
     if( member.retry > 0 ) {
-      rpc_log( RPC_LOG_DEBUG, "raft_call_ping_cb host %"PRIx64" timeout - retrying %u", pcxt->hostid, member.retry );
+      raft_log( LOG_LVL_DEBUG, "raft_call_ping_cb host %"PRIx64" timeout - retrying %u", pcxt->hostid, member.retry );
       member.retry--;
       raft_member_set( &member );	
       raft_call_ping( &cl, pcxt->hostid );
@@ -155,7 +173,7 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   uint8_t xdr_buf[64];
   struct raft_ping_cxt *pcxt;
   
-  rpc_log( RPC_LOG_TRACE, "raft_call_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  raft_log( LOG_LVL_TRACE, "raft_call_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
   	   cl->id, hostid, cl->termseq );
 
   pcxt = malloc( sizeof(*pcxt) );
@@ -180,7 +198,7 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     free( pcxt );
-    rpc_log( RPC_LOG_ERROR, "raft_call_ping: hrauth_call failed" );
+    raft_log( LOG_LVL_ERROR, "raft_call_ping: hrauth_call failed" );
   }
 
 }
@@ -200,11 +218,11 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
   struct raft_cluster cl;
   uint64_t termseq;
   
-  rpc_log( RPC_LOG_TRACE, "raft_call_vote_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  raft_log( LOG_LVL_TRACE, "raft_call_vote_cb clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
   	   pcxt->clid, pcxt->hostid, pcxt->termseq );
 
   if( !xdr ) {
-    rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb timeout" );
+    raft_log( LOG_LVL_DEBUG, "raft_call_vote_cb timeout" );
     goto done;    
   }
 
@@ -238,7 +256,7 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
     raft_cluster_set( &cl );
 
     if( cl.votes >= raft_cluster_quorum( cl.id ) ) {
-      rpc_log( RPC_LOG_DEBUG, "raft_call_vote_cb sufficient votes received - LEADER" );
+      raft_log( LOG_LVL_DEBUG, "raft_call_vote_cb sufficient votes received - LEADER" );
       raft_transition_leader( &cl );
     }
       
@@ -257,7 +275,7 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   uint8_t xdr_buf[64];
   struct raft_ping_cxt *pcxt;
   
-  rpc_log( RPC_LOG_TRACE, "raft_call_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  raft_log( LOG_LVL_TRACE, "raft_call_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
   	   cl->id, hostid, cl->termseq );
 
   pcxt = malloc( sizeof(*pcxt) );
@@ -283,7 +301,7 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     free( pcxt );
-    rpc_log( RPC_LOG_ERROR, "raft_call_vote: hrauth_call failed" );
+    raft_log( LOG_LVL_ERROR, "raft_call_vote: hrauth_call failed" );
   }
 
 }
@@ -383,7 +401,7 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
     case RAFT_STATE_FOLLOWER:
       /* check for term timeout */
       if( now >= cl[i].timeout ) {
-	rpc_log( RPC_LOG_DEBUG, "term timeout %"PRIu64" >= %"PRIu64" - transition to candidate", now, cl[i].timeout );
+	raft_log( LOG_LVL_DEBUG, "term timeout %"PRIu64" >= %"PRIu64" - transition to candidate", now, cl[i].timeout );
 	raft_transition_candidate( &cl[i] );
       }
       
@@ -392,11 +410,11 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
       /* check for election timeout */
       if( now >= cl[i].timeout ) {
 	if( cl[i].votes >= raft_cluster_quorum( cl[i].id ) ) {
-	  rpc_log( RPC_LOG_DEBUG, "candidate election successful" );
+	  raft_log( LOG_LVL_DEBUG, "candidate election successful" );
 	  raft_transition_leader( &cl[i] );
 	} else {
 	  /* not enough votes gathered, transition back to candidate */
-	  rpc_log( RPC_LOG_DEBUG, "candidate election timeout votes=%u/%u",
+	  raft_log( LOG_LVL_DEBUG, "candidate election timeout votes=%u/%u",
 		   cl[i].votes, raft_cluster_quorum( cl[i].id ) );
 	  raft_transition_candidate( &cl[i] );
 	}
@@ -469,7 +487,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &commitseq );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
   
-  rpc_log( RPC_LOG_TRACE, "raft_proc_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  raft_log( LOG_LVL_TRACE, "raft_proc_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
   	   clid, leaderid, termseq );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -494,7 +512,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   }
   
   if( cl.leaderid && (cl.leaderid != leaderid) ) {
-    rpc_log( RPC_LOG_WARN, "conflicting leadership claim with matching seqno?" );
+    raft_log( LOG_LVL_WARN, "conflicting leadership claim with matching seqno?" );
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }
@@ -544,7 +562,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateterm ); 
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  rpc_log( RPC_LOG_TRACE, "raft_proc_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
+  raft_log( LOG_LVL_TRACE, "raft_proc_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
   	   clid, candid, termseq );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );

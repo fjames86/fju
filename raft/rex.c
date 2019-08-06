@@ -23,20 +23,41 @@
  * 
 */
  
-#include "rex.h"
+#include <fju/rex.h>
 
-#include <rpc.h>
-#include <hrauth.h>
-#include <hostreg.h>
-#include "raft.h"
-#include <mmf.h>
-#include <rpcd.h>
-#include <rex.h>
+#include <fju/rpc.h>
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
+#include <fju/raft.h>
+#include <fju/mmf.h>
+#include <fju/rpcd.h>
+#include <fju/log.h>
 
 #ifdef WIN32
 #define PRIx64 "llx"
 #define PRIu64 "llu"
 #endif
+
+static struct {
+  struct log_s log;
+} glob;
+
+static void rex_log( int lvl, char *fmt, ... ) {
+  static int initialized = 0;
+  int sts;
+  va_list args;
+  
+  if( !initialized ) {
+    sts = log_open( NULL, NULL, &glob.log );
+    if( sts ) return;
+    glob.log.ltag = REX_RPC_PROG;
+    initialized = 1;
+  }
+  
+  va_start( args, fmt );
+  log_writev( &glob.log, lvl, fmt, args );
+  va_end( args );
+}
 
 static void rex_state_save( uint64_t clid, char *buf, int size ) {
   int sts;
@@ -51,7 +72,7 @@ static void rex_state_save( uint64_t clid, char *buf, int size ) {
   sts = mmf_open( mmf_default_path( "rex", name, NULL ), &mmf );  
   if( sts ) return;
 
-  rpc_log( RPC_LOG_DEBUG, "rex_state_save: size=%u\n", size );
+  rex_log( LOG_LVL_DEBUG, "rex_state_save: size=%u\n", size );
   mmf_write( &mmf, buf, size, 0 );
   mmf_truncate( &mmf, size );
   mmf_sync( &mmf );  
@@ -123,7 +144,7 @@ static void rex_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   struct raft_cluster cl;
   
   if( !xdr ) {
-    //rpc_log( RPC_LOG_DEBUG, "rex_call_ping_cb timeout" );
+    //rex_log( LOG_LVL_DEBUG, "rex_call_ping_cb timeout" );
     goto done;
   }
 
@@ -182,7 +203,7 @@ static void rex_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   xdr.offset += nbytes;
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "raft_call_ping: hrauth_call failed" );
+    rex_log( LOG_LVL_ERROR, "raft_call_ping: hrauth_call failed" );
     free( pcxt );
   }
 
@@ -225,7 +246,7 @@ static int rex_proc_write( struct rpc_inc *inc ) {
 
   sts = raft_cluster_by_id( clid, &cl );
   if( sts ) {
-    rpc_log( RPC_LOG_DEBUG, "no cluster" );
+    rex_log( LOG_LVL_DEBUG, "no cluster" );
     xdr_encode_boolean( &inc->xdr, 0 );
     xdr_encode_uint64( &inc->xdr, 0 );
     goto done;
@@ -236,19 +257,19 @@ static int rex_proc_write( struct rpc_inc *inc ) {
     uint8_t argbuf[64];
 
     if( !cl.leaderid ) {
-      rpc_log( RPC_LOG_DEBUG, "no leader" );
+      rex_log( LOG_LVL_DEBUG, "no leader" );
       xdr_encode_boolean( &inc->xdr, 0 );
       xdr_encode_uint64( &inc->xdr, cl.leaderid );      
       goto done;
     }
     
-    rpc_log( RPC_LOG_DEBUG, "sending proxy call" );
+    rex_log( LOG_LVL_DEBUG, "sending proxy call" );
     xdr_init( &args, argbuf, sizeof(argbuf) );
     xdr_encode_uint64( &args, clid );
     xdr_encode_opaque( &args, (uint8_t *)buf, len );
     inc->msg = msg;
     sts = hrauth_call_udp_proxy( inc, cl.leaderid, &args );
-    if( sts ) rpc_log( RPC_LOG_DEBUG, "proxy call failed!\n" );
+    if( sts ) rex_log( LOG_LVL_DEBUG, "proxy call failed!\n" );
     rpc_conn_release( tmpconn );
     return 1;
   }
@@ -258,14 +279,20 @@ static int rex_proc_write( struct rpc_inc *inc ) {
   cl.commitseq = cl.stateseq;
   raft_cluster_set( &cl );
 
-  rpc_log( RPC_LOG_DEBUG, "buf=%p len=%u", buf, len );
+  rex_log( LOG_LVL_DEBUG, "buf=%p len=%u", buf, len );
   rex_state_save( cl.id, buf, len );
   
   /* TODO: don't acknowlege until replicated on a quorum number of members? */
-
-  rpc_log( RPC_LOG_DEBUG, "success?" );
+#if 1
+  rex_log( LOG_LVL_DEBUG, "success?" );
   xdr_encode_boolean( &inc->xdr, 1 );
   xdr_encode_uint64( &inc->xdr, cl.leaderid );
+#else
+  /* save reply data */
+  rpc_get_reply_data( inc, &rdata );
+
+  /* send pings and wait for them all to complete, or timeout */
+#endif
   
  done:
 

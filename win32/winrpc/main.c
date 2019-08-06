@@ -29,7 +29,7 @@
 #include <ws2tcpip.h>
 
 #include "winrpc.h"
-#include <rpc.h>
+#include <fju/rpc.h>
 
 static struct {
 	int exiting;

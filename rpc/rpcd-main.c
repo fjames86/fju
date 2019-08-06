@@ -23,13 +23,15 @@
  * 
 */
  
-#include "rpcd.h"
-#include "shauth.h"
-#include <hrauth.h>
-#include <raft.h>
-#include <log.h>
-#include <nls.h>
-#include <rex.h>
+#include <fju/rpcd.h>
+#include <fju/shauth.h>
+#include <fju/hrauth.h>
+#include <fju/raft.h>
+#include <fju/log.h>
+#include <fju/nls.h>
+#include <fju/rex.h>
+
+#include "rpc-private.h"
 
 #define SHAUTH_SECRET "123abcd123"
 
@@ -80,7 +82,12 @@ static struct log_s logger;
 static struct rpc_logger rpcd_loggers[1];
 
 static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
+  static int mypid = 0;
   int loglvl = 0;
+
+  if( !mypid ) mypid = getpid();
+  logger.pid = mypid;
+  
   if( lvl == RPC_LOG_TRACE ) loglvl = LOG_LVL_TRACE;
   else if( lvl == RPC_LOG_INFO ) loglvl = LOG_LVL_INFO;
   else if( lvl == RPC_LOG_DEBUG ) loglvl = LOG_LVL_DEBUG;
@@ -95,12 +102,11 @@ int main( int argc, char **argv ) {
   int sts;
 
   /* open log */
-  mmf_ensure_dir( mmf_default_path( NULL ) );
-  sts = log_open( mmf_default_path( "rpcd.log", NULL ), NULL, &logger );
-  if( sts ) printf( "Warning: Failed to open rpcd debug log file\n" );
+  sts = log_open( NULL, NULL, &logger );
+  if( sts ) printf( "Warning: rpcd failed to open default log file\n" );
   else { 
     logger_open = 1;
-
+    logger.ltag = RPC_LOG_LTAG;
     rpcd_loggers[0].cb = rpcd_logger_cb;
     rpc_add_logger( &rpcd_loggers[0] );
   }

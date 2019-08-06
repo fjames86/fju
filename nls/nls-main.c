@@ -25,6 +25,8 @@
  
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
+#include <Winsock2.h>
+#include <Windows.h>
 #endif
 
 #include <stdlib.h>
@@ -33,10 +35,10 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <inttypes.h>
-#include <mmf.h>
+#include <fju/mmf.h>
 #include <time.h>
-#include "nls.h"
-#include <hostreg.h>
+#include <fju/nls.h>
+#include <fju/hostreg.h>
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"

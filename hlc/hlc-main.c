@@ -4,7 +4,7 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include "hlc.h"
+#include <fju/hlc.h>
 
 static struct {
   int cmd;

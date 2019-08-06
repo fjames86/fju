@@ -32,7 +32,12 @@
  * is filled out with the reply data and should then be used to send back to the client.
  */
 
-#include "rpcd.h"
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
+#include <fju/rpcd.h>
+#include "rpc-private.h"
 
 static struct {
 	int foreground;
@@ -71,6 +76,7 @@ static void WINAPI rpcd_svc( DWORD argc, char **argv );
 static void rpcd_run( void );
 static void rpc_accept( struct rpc_listen *lis );
 static void rpc_close_connections( void );
+static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, char *ipstr );
 
 #ifndef WIN32
 static void rpc_sig( int sig, siginfo_t *info, void *context ) {
@@ -662,6 +668,10 @@ static void rpc_poll( int timeout ) {
 							c->nstate = RPC_NSTATE_RECV;
 							c->cstate = RPC_CSTATE_RECVLEN;
 						}
+					} else if( sts > 0 ) {
+					  rpc_log( RPC_LOG_TRACE, "rpc_process_incoming noresponse" );
+					} else {
+					  rpc_log( RPC_LOG_ERROR, "rpc_process_incoming failed" );
 					}
 
 				}
@@ -801,7 +811,8 @@ void rpc_conn_release( struct rpc_conn *c ) {
 static void rpc_accept( struct rpc_listen *lis ) {
   struct rpc_conn *c;
   int sts;
-
+  char ipstr[64];
+  
   switch( lis->type ) {
   case RPC_LISTEN_UDP:
   case RPC_LISTEN_UDP6:
@@ -827,16 +838,18 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->inc.xdr.count = c->cdata.count;
 
       /* process message and send reply */
-      rpc_log( RPC_LOG_TRACE, "Process UDP call" );
+      mynet_ntop( lis->type, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len, ipstr );
+      rpc_log( RPC_LOG_DEBUG, "UDP Incoming %s count=%d", ipstr, c->cdata.count );
       rpc.flist = rpc.flist->next;
       sts = rpc_process_incoming( &c->inc );
       rpc.flist = c;
       if( sts == 0 ) {
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
-      }
-      else {
-	rpc_log( RPC_LOG_TRACE, "rpc_process_incoming failed" );
+      } else if( sts > 0 ) {
+	rpc_log( RPC_LOG_TRACE, "rpc_process_incoming noresponse" );
+      } else {
+	rpc_log( RPC_LOG_ERROR, "rpc_process_incoming failed" );
       }
 
     }
@@ -872,6 +885,9 @@ static void rpc_accept( struct rpc_listen *lis ) {
 
       c->next = rpc.clist;
       rpc.clist = c;
+
+      mynet_ntop( lis->type, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len, ipstr );
+      rpc_log( RPC_LOG_DEBUG, "Accept Incoming Connection %s", ipstr );
     }
     break;
   }
@@ -1087,3 +1103,47 @@ void rpc_conn_close( struct rpc_conn *c ) {
 }
 
     
+static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, char *ipstr ) {
+  struct sockaddr_in *sinp;
+  struct sockaddr_in6 *sinp6;
+  int i;
+
+  switch( type ) {
+  case RPC_LISTEN_UDP:
+  case RPC_LISTEN_TCP:
+    if( alen != sizeof(*sinp) ) return NULL;
+    sinp = (struct sockaddr_in *)addr;
+    sprintf( ipstr, "%d.%d.%d.%d:%d",
+	     (sinp->sin_addr.s_addr) & 0xff,
+	     (sinp->sin_addr.s_addr >> 8) & 0xff,
+	     (sinp->sin_addr.s_addr >> 16) & 0xff,
+	     (sinp->sin_addr.s_addr >> 24) & 0xff,
+	     ntohs( sinp->sin_port ) );
+    break;
+  case RPC_LISTEN_UDP6:
+  case RPC_LISTEN_TCP6:
+    if( alen != sizeof(*sinp6) ) return NULL;
+    sinp6 = (struct sockaddr_in6 *)addr;
+    strcpy( ipstr, "" );
+    for( i = 0; i < 8; i++ ) {
+      if( i > 0 ) sprintf( ipstr + strlen( ipstr ), ":" );
+      if( sinp6->sin6_addr.s6_addr[2*i] == 0 &&
+	  sinp6->sin6_addr.s6_addr[2*i + 1] == 0 ) {
+      } else {
+	sprintf( ipstr + strlen( ipstr ), "%02x%02x",
+		 (uint32_t)sinp6->sin6_addr.s6_addr[2*i],
+		 (uint32_t)sinp6->sin6_addr.s6_addr[2*i + 1] );
+      }
+    }
+    sprintf( ipstr + strlen( ipstr ), ":%d", ntohs( sinp6->sin6_port ) );
+    break;
+  case RPC_LISTEN_UNIX:
+    strcpy( ipstr, "unix" );
+    break;
+  default:
+    sprintf( ipstr, "unknown" );
+    break;
+  }
+  
+  return ipstr;	     
+}

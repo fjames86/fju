@@ -35,7 +35,7 @@
 #define NLS_H
 
 #include <stdint.h>
-#include <log.h>
+#include <fju/log.h>
 
 #define NLS_MAX_COOKIE 16
 

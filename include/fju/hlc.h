@@ -7,7 +7,7 @@
  * hashed log chain 
  */
 
-#include <log.h>
+#include <fju/log.h>
 
 struct hlc_s {
   struct log_s log;

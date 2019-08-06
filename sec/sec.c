@@ -52,7 +52,7 @@
 #include <fcntl.h>
 #endif
 
-#include "sec.h"
+#include <fju/sec.h>
 
 void sec_buf_init( struct sec_buf *sbuf, char *buf, int len ) {
 	sbuf->buf = buf;

@@ -29,7 +29,7 @@
 #include <Windows.h>
 #endif
 
-#include "log.h"
+#include <fju/log.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -49,13 +49,14 @@
 
 struct _header {
   uint32_t magic;
-#define LOG_MAGIC 0x109a1cde
+#define LOG_MAGIC 0x109a1cdf
   uint32_t version;
 #define LOG_VERSION 1
 
   uint32_t lbacount;  /* total number of blocks */
 #define LOG_LBACOUNT 16384
-
+  uint32_t unused;
+  
   uint64_t seq;       /* seqno: increments on msg write */
   uint32_t start;     /* index of first (oldest) msg */
   uint32_t count;     /* number of blocks following index containing msgs */
@@ -63,7 +64,7 @@ struct _header {
   uint32_t lock_pid; 
   uint32_t lock_mode;
   uint32_t flags;
-  uint32_t unused;
+  uint32_t unused2;
   uint64_t tag;
   
   uint32_t spare[48]; /* future expansion */
@@ -71,16 +72,16 @@ struct _header {
 
 struct _entry {
   uint32_t magic;      /* msg start identifier */
-  uint32_t count;      /* number of blocks, including header. XXX: this is redundant, can be computed from msglen */
+  uint32_t msglen;     /* length of msg data */
   uint64_t id;         /* msg identifier */
   uint64_t timestamp;  /* when msg written */
   uint32_t pid;        /* who wrote msg */
   uint32_t flags;      /* msg flags */
-  uint32_t msglen;     /* length of msg data */
   uint64_t prev_id;    /* id of previous message */
   uint64_t seq;
+  uint32_t ltag;       /* writer identifier */
   
-  uint8_t spare[12];   /* future expansion */
+  uint32_t spare[3];   /* future expansion */
 };
 
 #if 1
@@ -242,7 +243,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
   struct _header *hdr;
   struct _entry *e;
   int i, j;
-  int idx, nbytes, msgcnt, offset, blk_offset;
+  int idx, nbytes, msgcnt, offset, blk_offset, ecount;
 
   if( nelist ) *nelist = 0;
   i = 0;
@@ -265,7 +266,8 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
     p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
     e = (struct _entry *)p;
     if( e->magic != LOG_MAGIC ) goto done;
-    idx = (idx + e->count) % hdr->lbacount;
+    ecount = 1 + (e->msglen / LOG_LBASIZE) + (e->msglen % LOG_LBASIZE ? 1 : 0);
+    idx = (idx + ecount) % hdr->lbacount;
 
     /* test if we have reached the end of the log - if so there are no more messages */
     if( idx == ((hdr->start + hdr->count) % hdr->lbacount) ) goto done;
@@ -288,6 +290,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
     elist[i].msglen = e->msglen;
     elist[i].prev_id = e->prev_id;
     elist[i].seq = e->seq;
+    elist[i].ltag = e->ltag;
     
     j = 0; /* iov index */
     offset = 0; /* current iov offset */
@@ -409,7 +412,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   struct _entry *e;
   struct _header *hdr;
   int i, cnt, idx;
-  int msglen, nbytes, offset, blk_offset, hdrlvl;
+  int msglen, nbytes, offset, blk_offset, hdrlvl, ecount;
 
   msglen = 0;
   for( i = 0; i < entry->niov; i++ ) {
@@ -458,10 +461,11 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
     }
     
     do {
-      /* oh dear - we will overwrite, keep advancing the starting point until there is space */
+      /* oh dear - we will overwrite, keep advancing the starting point until there is space */      
       e = (struct _entry *)((char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * hdr->start));
-      hdr->start = (hdr->start + e->count) %  hdr->lbacount;
-      hdr->count -= e->count;
+      ecount = 1 + (e->msglen / LOG_LBASIZE) + (e->msglen % LOG_LBASIZE ? 1 : 0);
+      hdr->start = (hdr->start + ecount) %  hdr->lbacount;
+      hdr->count -= ecount;
     } while( (int)(hdr->lbacount - hdr->count) < cnt );
   }
   hdr->count += cnt;
@@ -469,7 +473,6 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   /* now write data at end */
   e = (struct _entry *)((char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx));
   e->magic = LOG_MAGIC;
-  e->count = cnt;
   e->id = ((hdr->seq & 0xffffffff) << 32) | idx;
   e->timestamp = time( NULL );
   e->pid = log->pid;
@@ -477,6 +480,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   e->msglen = msglen;
   e->prev_id = hdr->last_id;
   e->seq = hdr->seq;
+  e->ltag = log->ltag;
   hdr->last_id = e->id;
 
   entry->id = e->id;

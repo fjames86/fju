@@ -38,7 +38,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-#include <sec.h>
+#include <fju/sec.h>
 
 static void usage( char *fmt, ... ) {
   if( fmt ) {

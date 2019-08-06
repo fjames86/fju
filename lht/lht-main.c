@@ -29,7 +29,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <inttypes.h>
-#include "lht.h"
+#include <fju/lht.h>
 
 static struct {
   char *filepath;

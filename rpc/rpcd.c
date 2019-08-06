@@ -33,6 +33,7 @@
  */
 
 #include <fju/rpcd.h>
+#include "rpc-private.h"
 
 static struct {
 	int foreground;

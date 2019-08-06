@@ -49,6 +49,7 @@
 #include <fju/rpc.h>
 #include <fju/shauth.h>
 
+#include "rpc-private.h"
 
 #ifdef WIN32
 

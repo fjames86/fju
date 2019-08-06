@@ -307,7 +307,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
       
       if( entry.flags & LOG_BINARY ) {
 	int i;
-	printf( "%s %-4x %4u:%s %"PRIx64"\n", timestr, entry.ltag, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
+	printf( "%s %-8x %4u:%s %"PRIx64"\n", timestr, entry.ltag, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
 	if( !fju.print_quiet ) {
 	  printf( "  0000  " );
 	  for( i = 0; i < entry.msglen; i++ ) {
@@ -320,7 +320,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 	}
       } else {
 	if( !fju.print_quiet ) {
-	  printf( "%s %-4x %4u:%s %"PRIx64" %s\n",
+	  printf( "%s %-8x %4u:%s %"PRIx64" %s\n",
 		  timestr, entry.ltag, entry.pid,
 		  lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, msg );
 	}

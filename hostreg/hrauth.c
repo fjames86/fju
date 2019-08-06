@@ -50,6 +50,27 @@
 #include <fju/mmf.h>
 #include <fju/sec.h>
 #include <fju/rpcd.h>
+#include <fju/log.h>
+
+static void hrauth_log( int lvl, char *fmt, ... ) {
+  static struct log_s log;
+  static int initialized = 0;
+  int sts;
+  va_list args;
+
+  if( !initialized ) {
+    sts = log_open( NULL, NULL, &log );
+    if( sts ) return;
+    log.ltag = HRAUTH_RPC_PROG;
+    initialized = 1;
+  }
+  
+  va_start( args, fmt );
+  log_writev( &log, lvl, fmt, args );
+  va_end( args );
+}
+
+
 
 static int hrauth_common( uint64_t remoteid, uint8_t *common ) {
   int sts;
@@ -270,25 +291,25 @@ static int hrauth_cverf( struct rpc_provider *pvr, struct rpc_msg *msg, void *pc
   /* decode */
   sts = hrauth_decode_verf( &tmpx, &verf );
   if( sts ) {
-    rpc_log( RPC_LOG_DEBUG, "verf xdr error" );
+    hrauth_log( LOG_LVL_DEBUG, "verf xdr error" );
     return sts;
   }
 
   /* validate verifier */
   if( verf.timestamp != sa->timestamp ) {
-    rpc_log( RPC_LOG_DEBUG, "bad timestamp timestamp=%u expected=%u tverf=%u nickname=%u",
+    hrauth_log( LOG_LVL_DEBUG, "bad timestamp timestamp=%u expected=%u tverf=%u nickname=%u",
 	     verf.timestamp, sa->timestamp, verf.tverf, verf.nickname );
     return -1;
   }
   if( verf.tverf != (verf.timestamp - 1) ) {
-    rpc_log( RPC_LOG_DEBUG, "bad tverf" );
+    hrauth_log( LOG_LVL_DEBUG, "bad tverf" );
     return -1;
   }
   
   if( sa->nickname == 0 ) {
     sa->nickname = verf.nickname;
   } else if( verf.nickname != sa->nickname ) {
-    rpc_log( RPC_LOG_DEBUG, "hrauth_cverf unexpected nickname" );
+    hrauth_log( LOG_LVL_DEBUG, "hrauth_cverf unexpected nickname" );
     return -1;
   }
 
@@ -348,7 +369,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* lookup existing context */
     sa = hrauth_context_by_nickname( auth.u.nickname );
     if( !sa ) return -1;
-    rpc_log( RPC_LOG_TRACE, "hrauth: nickname=%d", auth.u.nickname );
+    hrauth_log( LOG_LVL_TRACE, "hrauth: nickname=%d", auth.u.nickname );
     break;
   case HRAUTH_FULL:
     /* allocate new context */
@@ -360,7 +381,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* derive common key */
     sts = hrauth_common( auth.u.full.id, sa->key );
     if( sts ) {
-      rpc_log( RPC_LOG_DEBUG, "hrauth: unknown host %"PRIx64"", auth.u.full.id );
+      hrauth_log( LOG_LVL_DEBUG, "hrauth: unknown host %"PRIx64"", auth.u.full.id );
       return sts;
     }
     hrauth_decrypt( tmpx.buf, tmpx.count, sa->key, sa->cipher );
@@ -370,7 +391,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     sa->window = cred.window;
     sa->cipher = cred.cipher;
     sec_rand( &sa->nickname, 4 );
-    rpc_log( RPC_LOG_TRACE, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
+    hrauth_log( LOG_LVL_TRACE, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
     break;
   default:
     return -1;
@@ -384,12 +405,12 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
   now = time( NULL );
   if( ((now > verf.timestamp) ? (now - verf.timestamp) : (verf.timestamp - now)) > sa->window ) {
     /* clock skew */
-    rpc_log( RPC_LOG_DEBUG, "clock skew now=%d verf.timestamp=%d", (int)now, (int)verf.timestamp );
+    hrauth_log( LOG_LVL_DEBUG, "clock skew now=%d verf.timestamp=%d", (int)now, (int)verf.timestamp );
     sa->nickname = 0;
     return -1;
   }
   if( verf.tverf != (verf.timestamp - 1) ) {
-    rpc_log( RPC_LOG_DEBUG, "invalid tverf %d != %d", verf.tverf, verf.timestamp );
+    hrauth_log( LOG_LVL_DEBUG, "invalid tverf %d != %d", verf.tverf, verf.timestamp );
     sa->nickname = 0;
     return -1;
   }
@@ -667,7 +688,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
 
   /* check for timeout */
   if( !inc ) {
-    rpc_log( RPC_LOG_TRACE, "hrauth_call_cb: XID=%u timeout", w->xid );
+    hrauth_log( LOG_LVL_TRACE, "hrauth_call_cb: XID=%u timeout", w->xid );
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }
@@ -675,7 +696,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   /* process msg */
   sts = rpc_process_reply( inc );
   if( sts ) {
-    rpc_log( RPC_LOG_TRACE, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
+    hrauth_log( LOG_LVL_TRACE, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
     hcallp->donecb( NULL, hcallp->cxt );
     goto done;
   }
@@ -765,7 +786,7 @@ int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
       sin.sin_addr.s_addr = host.addr[addridx]; 
       sts = sendto( fd, inc.xdr.buf, inc.xdr.offset, 0,
 		    (struct sockaddr *)&sin, sizeof(sin) );
-      if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", strerror( errno ) );
+      if( sts < 0 ) hrauth_log( LOG_LVL_ERROR, "sendto: %s", strerror( errno ) );
     }
     addridx++;
     addrmask = addrmask >> 1;
@@ -813,7 +834,7 @@ static void hrauth_proxy_udp_cb( struct xdr_s *xdr, void *cxt ) {
   char *buf = NULL;
   
   if( !xdr ) {
-    rpc_log( RPC_LOG_DEBUG, "hrauth_proxy_udp_cb timeout" );
+    hrauth_log( LOG_LVL_DEBUG, "hrauth_proxy_udp_cb timeout" );
     goto done;
   }
 
@@ -861,7 +882,7 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
   hcall.service = HRAUTH_SERVICE_PRIV;
   sts = hrauth_call_udp_async( &hcall, args, NULL );
   if( sts ) {
-    rpc_log( RPC_LOG_DEBUG, "hrauth_call_udp_async failed" );
+    hrauth_log( LOG_LVL_DEBUG, "hrauth_call_udp_async failed" );
     free( pcxt );
   }
 
@@ -890,7 +911,7 @@ static void call_tcp_waiter_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
 
   /* check for timeout */
   if( !inc ) {
-    rpc_log( RPC_LOG_ERROR, "hrauth_call_tcp: XID=%u timeout", w->xid );
+    hrauth_log( LOG_LVL_ERROR, "hrauth_call_tcp: XID=%u timeout", w->xid );
     cxt->hcall.donecb( NULL, cxt->hcall.cxt );
     goto done;
   }
@@ -898,7 +919,7 @@ static void call_tcp_waiter_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   /* process msg */
   sts = rpc_process_reply( inc );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "hrauth_call_tcp: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
+    hrauth_log( LOG_LVL_ERROR, "hrauth_call_tcp: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
     cxt->hcall.donecb( NULL, cxt->hcall.cxt );
     goto done;
   }

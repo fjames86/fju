@@ -46,6 +46,8 @@
 #include <poll.h>
 #endif
 
+#include "rpc-private.h"
+
 void xdr_init( struct xdr_s *xdr, uint8_t *buf, int size ) {
   xdr->buf = buf;
   xdr->buf_size = size;

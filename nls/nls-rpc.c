@@ -50,10 +50,28 @@
 
 static struct {
   struct nls_prop prop;
+  struct log_s log;
 } glob;
 
 static uint64_t nls_share_seqno( uint64_t hshare, uint64_t *lastid );
 static uint64_t nls_remote_seqno( uint64_t hshare, uint64_t *lastid );
+
+static void nls_log( int lvl, char *fmt, ... ) {
+  static int initialized = 0;
+  int sts;
+  va_list args;
+  
+  if( !initialized ) {
+    sts = log_open( NULL, NULL, &glob.log );
+    if( sts ) return;
+    glob.log.ltag = NLS_RPC_PROG;
+    initialized = 1;
+  }
+  
+  va_start( args, fmt );
+  log_writev( &glob.log, lvl, fmt, args );
+  va_end( args );
+}
 
 /* --------------- rpc services --------------------- */
 
@@ -99,7 +117,7 @@ static int nls_encode_share( struct xdr_s *xdr, struct nls_share *share ) {
   memset( &prop, 0, sizeof(prop) );
   sts = nls_share_open( share, &log );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "failed to open shared log %"PRIx64"", share->hshare );
+    nls_log( LOG_LVL_ERROR, "failed to open shared log %"PRIx64"", share->hshare );
   } else {
     log_prop( &log, &prop );
     log_close( &log );
@@ -140,7 +158,7 @@ static int nls_proc_prop( struct rpc_inc *inc ) {
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   sts = nls_share_by_hshare( hshare, &share );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "failed to lookup share hshare=%"PRIu64"", hshare );
+    nls_log( LOG_LVL_ERROR, "failed to lookup share hshare=%"PRIu64"", hshare );
     xdr_encode_boolean( &inc->xdr, 0 );
   } else {
     xdr_encode_boolean( &inc->xdr, 1 );
@@ -169,7 +187,7 @@ static int nls_proc_read( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &xdrcount );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  rpc_log( RPC_LOG_DEBUG, "proc_read: hshare=%"PRIx64" id=%"PRIx64" xdrcount=%u", hshare, id, xdrcount );
+  nls_log( LOG_LVL_DEBUG, "proc_read: hshare=%"PRIx64" id=%"PRIx64" xdrcount=%u", hshare, id, xdrcount );
   if( xdrcount > NLS_MAX_XDRCOUNT ) xdrcount = NLS_MAX_XDRCOUNT;
   if( xdrcount < 1024 ) xdrcount = 1024;
   
@@ -360,35 +378,35 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   
   /* do nothing if call timed out? */
   if( !xdr ) {
-    rpc_log( RPC_LOG_ERROR, "nls_read_cb timeout" );
+    nls_log( LOG_LVL_ERROR, "nls_read_cb timeout" );
     goto done;
   }
 
   /* decode results */
   sts = xdr_decode_boolean( xdr, &b );
   if( sts || !b ) {
-    rpc_log( RPC_LOG_ERROR, "error stauts" );
+    nls_log( LOG_LVL_ERROR, "error stauts" );
     goto done;
   }
 
   sts = nls_decode_prop( xdr, &rshare, &prop );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "nls_decode_prop failed" );
+    nls_log( LOG_LVL_ERROR, "nls_decode_prop failed" );
     goto done;
   }
-  rpc_log( RPC_LOG_DEBUG, "reading entries for log hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64"",
+  nls_log( LOG_LVL_DEBUG, "reading entries for log hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64"",
 	   rshare.hshare, prop.seq, prop.last_id );
   
   sts = nls_remote_by_hshare( rshare.hshare, &remote );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "nls_remote_by_hshare failed" );
+    nls_log( LOG_LVL_ERROR, "nls_remote_by_hshare failed" );
     goto done;
   }
   
   /* open local log and write new entries */
   sts = nls_remote_open( &remote, &log );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "nls_remote_open failed" );
+    nls_log( LOG_LVL_ERROR, "nls_remote_open failed" );
     goto done;
   }
   logopen = 1;
@@ -402,7 +420,7 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
     if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
     if( !sts ) sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
     if( sts ) {
-      rpc_log( RPC_LOG_ERROR, "Failed to decode" );
+      nls_log( LOG_LVL_ERROR, "Failed to decode" );
       goto done;
     }
 
@@ -452,7 +470,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   struct xdr_s xdr;
   uint8_t xdr_buf[32];
   
-  rpc_log( RPC_LOG_DEBUG, "nls_call_read hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" xdrcount=%u",
+  nls_log( LOG_LVL_DEBUG, "nls_call_read hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" xdrcount=%u",
 	   hostid, hshare, seq, lastid, xdrcount );
 
   nlscxtp = malloc( sizeof(*nlscxtp) );
@@ -477,7 +495,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     free( nlscxtp );
-    rpc_log( RPC_LOG_ERROR, "nls_call_read: hrauth_call failed" );
+    nls_log( LOG_LVL_ERROR, "nls_call_read: hrauth_call failed" );
   }
 
 }
@@ -494,7 +512,7 @@ static void nls_call_notreg_cb( struct xdr_s *xdr, void *cxt ) {
   struct nls_notreg_cxt *ncxt = (struct nls_notreg_cxt *)cxt;
   
   if( !xdr ) {
-    rpc_log( RPC_LOG_ERROR, "nls_call_notreg_cb: timeout" );
+    nls_log( LOG_LVL_ERROR, "nls_call_notreg_cb: timeout" );
     goto done;
   }
 
@@ -528,7 +546,7 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   struct nls_notreg_cxt *ncxt;
   struct nls_remote remote;
   
-  rpc_log( RPC_LOG_DEBUG, "nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", hostid, hshare );
+  nls_log( LOG_LVL_DEBUG, "nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", hostid, hshare );
 
   sts = hostreg_prop( &prop );
   if( sts ) return;
@@ -558,7 +576,7 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   xdr_encode_uint32( &xdr, remote.notify_period );
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "nls_call_notreg: hrauth_call failed" );
+    nls_log( LOG_LVL_ERROR, "nls_call_notreg: hrauth_call failed" );
   }
 }
 
@@ -639,7 +657,7 @@ static void nls_clt_iter_cb( struct rpc_iterator *iter ) {
   for( i = 0; i < n; i++ ) {
     if( (remote[i].timestamp == 0) || (remote[i].timestamp < now) ) {
       /* ask for a callback */
-      rpc_log( RPC_LOG_DEBUG, "nls_clt_iter_cb nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", remote[i].hostid, remote[i].hshare );
+      nls_log( LOG_LVL_DEBUG, "nls_clt_iter_cb nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", remote[i].hostid, remote[i].hshare );
       nls_call_notreg( remote[i].hostid, remote[i].hshare, NULL );
       
       /* schedule to ask again later */
@@ -727,7 +745,7 @@ static void nls_notify_cb( struct xdr_s *xdr, void *cxt ) {
     if( sts ) goto done;
     if( !b ) {
 	/* doesn't want notifications for this hshare */
-	rpc_log( RPC_LOG_DEBUG, "Deleting notification context hostid=%"PRIx64" hshare=%"PRIx64"", ncxt->hostid, ncxt->hshare );
+	nls_log( LOG_LVL_DEBUG, "Deleting notification context hostid=%"PRIx64" hshare=%"PRIx64"", ncxt->hostid, ncxt->hshare );
 	
 	nls_notify_rem( ncxt->tag );
     }
@@ -746,7 +764,7 @@ static void nls_call_notify( struct nls_notify *notify ) {
   struct hostreg_prop prop;
   struct nls_notify_cxt *ncxt;
   
-  rpc_log( RPC_LOG_DEBUG, "nls_call_notify hostid=%"PRIx64" hshare=%"PRIx64"", notify->hostid, notify->hshare );
+  nls_log( LOG_LVL_DEBUG, "nls_call_notify hostid=%"PRIx64" hshare=%"PRIx64"", notify->hostid, notify->hshare );
 
   sts = hostreg_prop( &prop );
   if( sts ) return;
@@ -773,7 +791,7 @@ static void nls_call_notify( struct nls_notify *notify ) {
   xdr_encode_fixed( &xdr, notify->cookie, NLS_MAX_COOKIE );
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
-    rpc_log( RPC_LOG_ERROR, "nls_call_notify: hrauth_call failed" );
+    nls_log( LOG_LVL_ERROR, "nls_call_notify: hrauth_call failed" );
     free( ncxt );
   }
     
@@ -803,7 +821,7 @@ static void nls_svr_iter_cb( struct rpc_iterator *iter ) {
 	notify[i].lastid = lastid;
 	nls_notify_set( &notify[i] );
 	
-	rpc_log( RPC_LOG_DEBUG, "nls_svr_iter_cb nls_call_notify hostid=%"PRIx64"", notify[i].hostid );
+	nls_log( LOG_LVL_DEBUG, "nls_svr_iter_cb nls_call_notify hostid=%"PRIx64"", notify[i].hostid );
 	nls_call_notify( &notify[i] );
       }
 

@@ -32,6 +32,10 @@
  * is filled out with the reply data and should then be used to send back to the client.
  */
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <fju/rpcd.h>
 #include "rpc-private.h"
 

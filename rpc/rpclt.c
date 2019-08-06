@@ -350,10 +350,10 @@ static void clt_broadcast_cb( struct rpc_inc *inc, void *cxt ) {
   
   sprintf( ipstr,
 	   "%d.%d.%d.%d:%d",
-	   (sinp->sin_addr.s_addr >> 24) & 0xff,
-	   (sinp->sin_addr.s_addr >> 16) & 0xff,
-	   (sinp->sin_addr.s_addr >> 8) & 0xff,
 	   (sinp->sin_addr.s_addr) & 0xff,
+	   (sinp->sin_addr.s_addr >> 8) & 0xff,
+	   (sinp->sin_addr.s_addr >> 16) & 0xff,
+	   (sinp->sin_addr.s_addr >> 24) & 0xff,
 	   ntohs( sinp->sin_port ) );
   printf( "RECV %s (%d)\n", ipstr, (int)(inc->xdr.count - inc->xdr.offset) );
   if( info->results ) {

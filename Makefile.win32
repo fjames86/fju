@@ -68,7 +68,7 @@ ${LIBDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c
 	ar rcs ${LIBDIR}/librpc.a rpc.o rpcd.o shauth.o
 
 ${BINDIR}/fjlog.exe: log/fjlog.c
-	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -llog -lmmf -lole32 -luuid
+	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -llog -lmmf -lole32 -luuid 
 
 ${BINDIR}/hostreg.exe: hostreg/hostreg-main.c
 	gcc -o ${BINDIR}/hostreg.exe ${CFLAGS} hostreg/hostreg-main.c -L${LIBDIR} -lhostreg -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi
@@ -83,5 +83,5 @@ ${BINDIR}/rpcd.exe: rpc/rpcd-main.c
 	gcc -o ${BINDIR}/rpcd.exe ${CFLAGS} rpc/rpcd-main.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls
 
 ${BINDIR}/fjlogui.exe: win32/fjlogui/main.c win32/fjlogui/bitmaps.c
-	gcc -o ${BINDIR}/fjlogui.exe ${CFLAGS} win32/fjlogui/main.c win32/fjlogui/bitmaps.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls -lgdi32 -lcomdlg32 -lcomctl32
+	gcc -o ${BINDIR}/fjlogui.exe ${CFLAGS} win32/fjlogui/main.c win32/fjlogui/bitmaps.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls -lgdi32 -lcomdlg32 -lcomctl32 
 

@@ -121,7 +121,8 @@ int main( int argc, char **argv ) {
   
   memset( &opts, 0, sizeof(opts) );
   fju.cmd = CMD_READ;
-
+  fju.lvlflags = LOG_LVL_INFO;
+  
   i = 1;
   while( i < argc ) {
     if( strcmp( argv[i], "-p" ) == 0 ) {

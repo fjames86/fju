@@ -111,7 +111,7 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            -L path          Listen on AF_UNIX socket file\n"
 #endif
-		"            -R               Don't register with rpcbind service.\n"
+		"            -R               Register with rpcbind service.\n"
 		"            -q               Quiet. Don't log to stdout\n"
 #ifndef WIN32
 		"            -p pidfile       Write a pidfile here\n"
@@ -137,7 +137,8 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 	int i;
 
 	rpc.init_cb = init_cb;
-
+	rpc.no_rpcregister = 1;
+	
 	/* parse command line */
 	i = 1;
 	while( i < argc ) {
@@ -195,7 +196,7 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 		else if( strcmp( argv[i], "-f" ) == 0 ) {
 			rpc.foreground = 1;
 		} else if( strcmp( argv[i], "-R" ) == 0 ) {
-	        	rpc.no_rpcregister = 1;
+	        	rpc.no_rpcregister = 0;
 		} else if( strcmp( argv[i], "-q" ) == 0 ) {
 	        	rpc.quiet = 1;			
 		} else if( strcmp( argv[i], "-p" ) == 0 ) {

@@ -130,6 +130,79 @@ static void usage( char *fmt, ... ) {
 	exit( 0 );
 }
 
+static void parse_args( int argc, char **argv ) {
+    int i;
+    i = 1;
+    while( i < argc ) {
+	if( strcmp( argv[i], "-t" ) == 0 ) {
+	    if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
+
+	    rpc.listen[rpc.nlisten].type = RPC_LISTEN_TCP;
+	    i++;
+	    if( i >= argc ) usage( NULL );
+	    rpc.listen[rpc.nlisten].addr.sin.sin_family = AF_INET;
+	    rpc.listen[rpc.nlisten].addr.sin.sin_port = htons( atoi( argv[i] ) );
+	    rpc.nlisten++;
+	}
+	else if( strcmp( argv[i], "-t6" ) == 0 ) {
+	    if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
+
+	    rpc.listen[rpc.nlisten].type = RPC_LISTEN_TCP6;
+	    i++;
+	    if( i >= argc ) usage( NULL );
+	    rpc.listen[rpc.nlisten].addr.sin6.sin6_family = AF_INET6;
+	    rpc.listen[rpc.nlisten].addr.sin6.sin6_port = htons( atoi( argv[i] ) );
+	    rpc.nlisten++;
+	}
+	else if( strcmp( argv[i], "-u" ) == 0 ) {
+	    if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
+
+	    rpc.listen[rpc.nlisten].type = RPC_LISTEN_UDP;
+	    i++;
+	    if( i >= argc ) usage( NULL );
+	    rpc.listen[rpc.nlisten].addr.sin.sin_family = AF_INET;
+	    rpc.listen[rpc.nlisten].addr.sin.sin_port = htons( atoi( argv[i] ) );
+	    rpc.nlisten++;
+	}
+	else if( strcmp( argv[i], "-u6" ) == 0 ) {
+	    if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
+
+	    rpc.listen[rpc.nlisten].type = RPC_LISTEN_UDP6;
+	    i++;
+	    if( i >= argc ) usage( NULL );
+	    rpc.listen[rpc.nlisten].addr.sin6.sin6_family = AF_INET6;
+	    rpc.listen[rpc.nlisten].addr.sin6.sin6_port = htons( atoi( argv[i] ) );
+	    rpc.nlisten++;
+#ifndef WIN32
+	} else if( strcmp( argv[i], "-L" ) == 0 ) {
+	    if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
+
+	    rpc.listen[rpc.nlisten].type = RPC_LISTEN_UNIX;
+	    i++;
+	    if( i >= argc ) usage( NULL );
+	    rpc.listen[rpc.nlisten].addr.sun.sun_family = AF_UNIX;
+	    strncpy( rpc.listen[rpc.nlisten].addr.sun.sun_path, argv[i], sizeof(rpc.listen[rpc.nlisten].addr.sun.sun_path) );
+	    rpc.nlisten++;
+#endif
+	}
+	else if( strcmp( argv[i], "-f" ) == 0 ) {
+	    rpc.foreground = 1;
+	} else if( strcmp( argv[i], "-R" ) == 0 ) {
+	    rpc.no_rpcregister = 0;
+	} else if( strcmp( argv[i], "-q" ) == 0 ) {
+	    rpc.quiet = 1;			
+	} else if( strcmp( argv[i], "-p" ) == 0 ) {
+	    i++;
+	    if( i >= argc ) usage( NULL );
+	    rpc.pidfile = argv[i];
+	}
+	else usage( NULL );
+
+	i++;
+    }
+    
+}
+
 int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 #ifndef WIN32
 	struct sigaction sa;
@@ -140,77 +213,7 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 	rpc.no_rpcregister = 1;
 	
 	/* parse command line */
-	i = 1;
-	while( i < argc ) {
-		if( strcmp( argv[i], "-t" ) == 0 ) {
-			if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
-
-			rpc.listen[rpc.nlisten].type = RPC_LISTEN_TCP;
-			i++;
-			if( i >= argc ) usage( NULL );
-			rpc.listen[rpc.nlisten].addr.sin.sin_family = AF_INET;
-			rpc.listen[rpc.nlisten].addr.sin.sin_port = htons( atoi( argv[i] ) );
-			rpc.nlisten++;
-		}
-		else if( strcmp( argv[i], "-t6" ) == 0 ) {
-			if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
-
-			rpc.listen[rpc.nlisten].type = RPC_LISTEN_TCP6;
-			i++;
-			if( i >= argc ) usage( NULL );
-			rpc.listen[rpc.nlisten].addr.sin6.sin6_family = AF_INET6;
-			rpc.listen[rpc.nlisten].addr.sin6.sin6_port = htons( atoi( argv[i] ) );
-			rpc.nlisten++;
-		}
-		else if( strcmp( argv[i], "-u" ) == 0 ) {
-			if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
-
-			rpc.listen[rpc.nlisten].type = RPC_LISTEN_UDP;
-			i++;
-			if( i >= argc ) usage( NULL );
-			rpc.listen[rpc.nlisten].addr.sin.sin_family = AF_INET;
-			rpc.listen[rpc.nlisten].addr.sin.sin_port = htons( atoi( argv[i] ) );
-			rpc.nlisten++;
-		}
-		else if( strcmp( argv[i], "-u6" ) == 0 ) {
-			if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
-
-			rpc.listen[rpc.nlisten].type = RPC_LISTEN_UDP6;
-			i++;
-			if( i >= argc ) usage( NULL );
-			rpc.listen[rpc.nlisten].addr.sin6.sin6_family = AF_INET6;
-			rpc.listen[rpc.nlisten].addr.sin6.sin6_port = htons( atoi( argv[i] ) );
-			rpc.nlisten++;
-#ifndef WIN32
-		} else if( strcmp( argv[i], "-L" ) == 0 ) {
-			if( rpc.nlisten >= RPC_MAX_LISTEN ) usage( "Out of listen descriptors" );
-
-			rpc.listen[rpc.nlisten].type = RPC_LISTEN_UNIX;
-			i++;
-			if( i >= argc ) usage( NULL );
-			rpc.listen[rpc.nlisten].addr.sun.sun_family = AF_UNIX;
-			strncpy( rpc.listen[rpc.nlisten].addr.sun.sun_path, argv[i], sizeof(rpc.listen[rpc.nlisten].addr.sun.sun_path) );
-			rpc.nlisten++;
-#endif
-		}
-		else if( strcmp( argv[i], "-f" ) == 0 ) {
-			rpc.foreground = 1;
-		} else if( strcmp( argv[i], "-R" ) == 0 ) {
-	        	rpc.no_rpcregister = 0;
-		} else if( strcmp( argv[i], "-q" ) == 0 ) {
-	        	rpc.quiet = 1;			
-		} else if( strcmp( argv[i], "-p" ) == 0 ) {
-			i++;
-			if( i >= argc ) usage( NULL );
-			rpc.pidfile = argv[i];
-		}
-		else usage( NULL );
-
-		i++;
-	}
-
-
-
+	parse_args( argc, argv );
 
 	if( !rpc.foreground ) {
 #ifdef WIN32
@@ -305,6 +308,8 @@ static void WINAPI rpcd_svc( DWORD argc, char **argv ) {
 	rpc.svcsts.dwControlsAccepted = SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_STOP;
 	SetServiceStatus( rpc.hsvc, &rpc.svcsts );
 
+	parse_args( argc, argv );
+	
 	rpcd_run();
 
 	rpc.svcsts.dwCurrentState = SERVICE_STOPPED;

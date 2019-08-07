@@ -85,7 +85,13 @@ static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
   static int mypid = 0;
   int loglvl = 0;
 
-  if( !mypid ) mypid = getpid();
+  if( !mypid ) {
+#ifdef WIN32
+      mypid = GetCurrentProcessId();
+#else
+      mypid = getpid();
+#endif
+  }
   logger.pid = mypid;
   
   if( lvl == RPC_LOG_TRACE ) loglvl = LOG_LVL_TRACE;

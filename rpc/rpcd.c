@@ -207,7 +207,6 @@ int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
-	int i;
 
 	rpc.init_cb = init_cb;
 	rpc.no_rpcregister = 1;

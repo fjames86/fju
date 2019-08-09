@@ -47,6 +47,8 @@ int ftab_acquire( struct ftab_s *ftab, uint64_t id );
 int ftab_free( struct ftab_s *ftab, uint64_t id );
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
+int ftab_set_flags( struct ftab_s *ftab, uint64_t id, uint32_t flags, uint32_t mask );
+int ftab_set_nextid( struct ftab_s *ftab, uint64_t id, uint64_t nextid );
 
 #endif
 

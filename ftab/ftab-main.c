@@ -29,12 +29,17 @@ static struct {
 #define CMD_FREE 3
 #define CMD_READ 4
 #define CMD_WRITE 5
+#define CMD_SET 6
   char *path;
   struct ftab_s ftab;
   int binary;
   uint64_t id;
-    uint32_t lbasize;
-    uint32_t lbacount;
+  uint32_t lbasize;
+  uint32_t lbacount;
+    uint32_t flags;
+    uint64_t nextid;
+    int setflags;
+    int setnextid;
 } glob;
 
 static void usage( char *fmt, ... ) {
@@ -45,7 +50,8 @@ static void usage( char *fmt, ... ) {
 	    "               alloc\n"
 	    "               free ID\n"
 	    "               read ID\n"
-	    "               write ID\n" 
+	    "               write ID\n"
+	    "               set ID [flags=FLAGS] [next=NEXT]\n" 
 	    "\n"
     );
 
@@ -60,7 +66,6 @@ static void usage( char *fmt, ... ) {
     exit( 0 );
 }
 
-#if 0
 static void argval_split( char *instr, char *argname, char **argval ) {
     char *p;
 
@@ -76,7 +81,6 @@ static void argval_split( char *instr, char *argname, char **argval ) {
     }
     *argname = '\0';
 }
-#endif
 
 static void cmd_list( void );
 static void cmd_prop( void );
@@ -113,6 +117,9 @@ int main( int argc, char **argv ) {
     glob.cmd = CMD_PROP;
   } else if( strcmp( argv[i], "alloc" ) == 0 ) {
     glob.cmd = CMD_ALLOC;
+    i++;
+    if( i >= argc ) usage( NULL );
+    glob.id = strtoull( argv[i], NULL, 16 );    
   } else if( strcmp( argv[i], "free" ) == 0 ) {
     glob.cmd = CMD_FREE;
     i++;
@@ -135,6 +142,26 @@ int main( int argc, char **argv ) {
     i++;
     if( i >= argc ) usage( NULL );
     glob.id = strtoull( argv[i], NULL, 16 );
+  } else if( strcmp( argv[i], "set" ) == 0 ) {
+      char argname[64], *argval;
+
+      glob.cmd = CMD_SET;      
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.id = strtoull( argv[i], NULL, 16 );
+      i++;
+      
+      while( i < argc ) {
+	  argval_split( argv[i], argname, &argval );
+	  if( strcmp( argname, "flags" ) == 0 ) {
+	      glob.flags = strtoul( argval, NULL, 16 );
+	      glob.setflags = 1;
+	  } else if( strcmp( argname, "next" ) == 0 ) {
+	      glob.nextid = strtoull( argval, NULL, 16 );
+	      glob.setnextid = 1;
+	  } else usage( NULL );
+	  i++;
+      }
   } else usage( NULL );
 
   if( !glob.path ) glob.path = "ftab.dat";
@@ -160,10 +187,14 @@ int main( int argc, char **argv ) {
     cmd_prop();
     break;
   case CMD_ALLOC:
-    sts = ftab_alloc( &glob.ftab, &glob.id );
-    if( sts ) usage( "Alloc failed" );
-    printf( "%"PRIx64"\n", glob.id );
-    break;
+      if( glob.id ) {
+	  sts = ftab_acquire( &glob.ftab, glob.id );
+      } else {
+	  sts = ftab_alloc( &glob.ftab, &glob.id );
+      }
+      if( sts ) usage( "Alloc failed" );
+      printf( "%"PRIx64"\n", glob.id );
+      break;
   case CMD_FREE:
     sts = ftab_free( &glob.ftab, glob.id );
     if( sts ) usage( "Failed to free" );
@@ -174,6 +205,18 @@ int main( int argc, char **argv ) {
   case CMD_WRITE:
     cmd_write();
     break;
+  case CMD_SET:
+      if( glob.setflags ) {
+	  sts = ftab_set_flags( &glob.ftab, glob.id, glob.flags, 0xffffffff );
+	  if( sts ) usage( "Failed to set flags" );
+      }
+      if( glob.setnextid ) {
+	  sts = ftab_set_nextid( &glob.ftab, glob.id, glob.nextid );
+	  if( sts ) usage( "Failed to set nextid" );
+      }
+      break;
+  default:
+      break;
   }
   
   ftab_close( &glob.ftab );

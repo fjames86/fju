@@ -271,3 +271,37 @@ int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t off
 
     return sts;
 }
+
+int ftab_set_flags( struct ftab_s *ftab, uint64_t id, uint32_t flags, uint32_t mask ) {
+    int sts = -1;
+    struct ftab_entry *e;
+    
+    ftab_lock( ftab );
+
+    e = ftab_get_entry( ftab, id );
+    if( e ) {
+	e->flags = (e->flags & ~mask) | (flags & mask);
+	sts = 0;
+    }
+    
+    ftab_unlock( ftab );
+
+    return sts;    
+}
+
+int ftab_set_nextid( struct ftab_s *ftab, uint64_t id, uint64_t nextid ) {
+    int sts = -1;
+    struct ftab_entry *e;
+    
+    ftab_lock( ftab );
+
+    e = ftab_get_entry( ftab, id );
+    if( e ) {
+	e->nextid = nextid;
+	sts = 0;
+    }
+    
+    ftab_unlock( ftab );
+
+    return sts;    
+}

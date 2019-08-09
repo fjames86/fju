@@ -27,7 +27,15 @@ struct ftab_prop {
   uint32_t lbasize;
 };
 
-int ftab_open( char *path, void *reserved, struct ftab_s *ftab );
+struct ftab_opts {
+    uint32_t mask;
+#define FTAB_OPT_LBASIZE      0x0001
+#define FTAB_OPT_LBACOUNT     0x0002 
+    uint32_t lbasize;
+    uint32_t lbacount;
+};
+
+int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab );
 int ftab_close( struct ftab_s *ftab );
 int ftab_prop( struct ftab_s *ftab, struct ftab_prop *prop );
 

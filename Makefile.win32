@@ -14,7 +14,8 @@ libs += ${LIBDIR}/libhrauth.a
 libs += ${LIBDIR}/libnls.a
 libs += ${LIBDIR}/libraft.a
 libs += ${LIBDIR}/librex.a
-libs += ${LIBDIR}/librpc.a 
+libs += ${LIBDIR}/librpc.a
+libs += ${LIBDIR}/libftab.a 
 
 progs += ${BINDIR}/fjlog.exe
 progs += ${BINDIR}/hostreg.exe
@@ -23,6 +24,7 @@ progs += ${BINDIR}/raft.exe
 progs += ${BINDIR}/rpclt.exe
 progs += ${BINDIR}/rpcd.exe
 progs += ${BINDIR}/fjlogui.exe
+progs += ${BINDIR}/ftab.exe
 
 .PHONY: all clean 
 
@@ -67,6 +69,10 @@ ${LIBDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c
 	gcc -c ${CFLAGS} rpc/rpc.c rpc/rpcd.c rpc/shauth.c 
 	ar rcs ${LIBDIR}/librpc.a rpc.o rpcd.o shauth.o
 
+${LIBDIR}/libftab.a: ftab/ftab.c
+	gcc -c ${CFLAGS} ftab/ftab.c
+	ar rcs ${LIBDIR}/libftab.a ftab.o
+
 ${BINDIR}/fjlog.exe: log/fjlog.c
 	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -llog -lmmf -lole32 -luuid 
 
@@ -85,3 +91,5 @@ ${BINDIR}/rpcd.exe: rpc/rpcd-main.c
 ${BINDIR}/fjlogui.exe: win32/fjlogui/main.c win32/fjlogui/bitmaps.c
 	gcc -o ${BINDIR}/fjlogui.exe ${CFLAGS} win32/fjlogui/main.c win32/fjlogui/bitmaps.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls -lgdi32 -lcomdlg32 -lcomctl32 
 
+${BINDIR}/ftab.exe: ftab/ftab-main.c
+	gcc -o ${BINDIR}/ftab.exe ${CFLAGS} ftab/ftab-main.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls -lftab -lmmf -luuid -lole32 

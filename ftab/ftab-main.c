@@ -33,6 +33,8 @@ static struct {
   struct ftab_s ftab;
   int binary;
   uint64_t id;
+    uint32_t lbasize;
+    uint32_t lbacount;
 } glob;
 
 static void usage( char *fmt, ... ) {
@@ -83,13 +85,22 @@ static void cmd_write( void );
 
 int main( int argc, char **argv ) {
   int sts, i;
-
+  struct ftab_opts opts;
+  
   i = 1;
   while( i < argc ) {
     if( strcmp( argv[i], "-p" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
       glob.path = argv[i];
+    } else if( strcmp( argv[i], "-C" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.lbacount = strtoul( argv[i], NULL, 10 );
+    } else if( strcmp( argv[i], "-S" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.lbasize = strtoul( argv[i], NULL, 10 );
     } else break;
     i++;
   }
@@ -127,7 +138,18 @@ int main( int argc, char **argv ) {
   } else usage( NULL );
 
   if( !glob.path ) glob.path = "ftab.dat";
-  sts = ftab_open( glob.path, NULL, &glob.ftab );
+
+  memset( &opts, 0, sizeof(opts) );
+  if( glob.lbasize ) {
+      opts.mask |= FTAB_OPT_LBASIZE;
+      opts.lbasize = glob.lbasize;
+  }
+  if( glob.lbacount ) {
+      opts.mask |= FTAB_OPT_LBACOUNT;
+      opts.lbacount = glob.lbacount;
+  }
+  
+  sts = ftab_open( glob.path, &opts, &glob.ftab );
   if( sts ) usage( "Failed to open \"%s\"", glob.path );
   
   switch( glob.cmd ) {

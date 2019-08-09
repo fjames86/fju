@@ -24,7 +24,7 @@ struct ftab_file {
   struct ftab_entry entry[1];
 };
 
-int ftab_open( char *path, void *reserved, struct ftab_s *ftab ) {
+int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
   int sts, i;
   struct ftab_file *f;
   struct ftab_entry *e;
@@ -44,10 +44,11 @@ int ftab_open( char *path, void *reserved, struct ftab_s *ftab ) {
     f->header.version = FTAB_VERSION;
     f->header.seq = 1;
     f->header.count = 0;
-    f->header.max = FTAB_LBACOUNT;
-    f->header.lbasize = FTAB_LBASIZE;
+    f->header.max = (opts && (opts->mask & FTAB_OPT_LBACOUNT)) ? opts->lbacount : FTAB_LBACOUNT;
+    f->header.lbasize = (opts && (opts->mask & FTAB_OPT_LBASIZE)) ? opts->lbasize : FTAB_LBASIZE;
 
-    mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );
+    sts = mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );
+    if( sts ) goto bad;
     for( i = 0; i < f->header.max; i++ ) {
       e = &f->entry[i];
       e->id = 0;
@@ -60,7 +61,8 @@ int ftab_open( char *path, void *reserved, struct ftab_s *ftab ) {
   } else if( f->header.version != FTAB_VERSION ) {
     goto bad;
   } else {
-    mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );
+      sts = mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );
+      if( sts ) goto bad;
   }
     
   return 0;

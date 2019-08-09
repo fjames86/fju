@@ -114,6 +114,23 @@ int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n ) {
   return i;
 }
 
+int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry ) {
+    int sts, i;
+    struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
+
+    sts = -1;
+    ftab_lock( ftab );
+    for( i = 0; i < f->header.count; i++ ) {
+	if( f->entry[i].id == id ) {
+	    if( entry ) *entry = f->entry[i];
+	    sts = 0;
+	    break;
+	}
+    }
+    ftab_unlock( ftab );
+    
+    return sts;
+}
 
 int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
   int sts, i;
@@ -125,7 +142,7 @@ int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
   if( f->header.count < f->header.max ) {
     i = f->header.count;
     f->entry[i].seq++;
-    f->entry[i].id = ((uint64_t)f->entry[i].seq << 32) | f->entry[i].blkidx;
+    f->entry[i].id = (f->header.seq << 32) | f->entry[i].blkidx;
     f->entry[i].flags = 0;
     f->entry[i].refcount = 1;
     f->entry[i].nextid = 0;
@@ -149,6 +166,7 @@ int ftab_acquire( struct ftab_s *ftab, uint64_t id ) {
     if( f->entry[i].id == id ) {
       f->entry[i].seq++;
       f->entry[i].refcount++;
+      f->header.seq++;      
       sts = 0;
       break;
     }

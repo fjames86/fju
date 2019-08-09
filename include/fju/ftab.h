@@ -40,6 +40,8 @@ int ftab_close( struct ftab_s *ftab );
 int ftab_prop( struct ftab_s *ftab, struct ftab_prop *prop );
 
 int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n );
+int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry );
+
 int ftab_alloc( struct ftab_s *ftab, uint64_t *id );
 int ftab_acquire( struct ftab_s *ftab, uint64_t id );
 int ftab_free( struct ftab_s *ftab, uint64_t id );

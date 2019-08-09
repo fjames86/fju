@@ -215,7 +215,7 @@ static void cmd_read( void ) {
   ftab_prop( &glob.ftab, &prop );
   buf = malloc( prop.lbasize );
 
-  sts = ftab_read( &glob.ftab, glob.id, buf, prop.lbasize );
+  sts = ftab_read( &glob.ftab, glob.id, buf, prop.lbasize, 0 );
   
   if( glob.binary ) {
 #ifdef WIN32
@@ -262,6 +262,6 @@ static void cmd_write( void ) {
     offset += sts;    
   } while( offset < prop.lbasize ); 
 
-  ftab_write( &glob.ftab, glob.id, buf, offset );
+  ftab_write( &glob.ftab, glob.id, buf, offset, 0 );
   free( buf );
 }

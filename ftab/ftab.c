@@ -208,23 +208,21 @@ int ftab_free( struct ftab_s *ftab, uint64_t id ) {
 }
 
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
-  int sts, i, nbytes;
+  int sts, nbytes, idx;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-  char *p;
-
-  /* TODO: offset */
+  uint64_t off;
+  
+  idx = id & 0xffffffff;
   
   sts = -1;  
   ftab_lock( ftab );
-  for( i = 0; i < f->header.count; i++ ) {
-    if( f->entry[i].id == id ) {
-      p = ((char *)f) + sizeof(f->header) + (sizeof(struct ftab_entry) * f->header.max) + (f->header.lbasize * f->entry[i].blkidx);
+  if( idx < f->header.max ) {
+      if( offset >= f->header.lbasize ) offset = f->header.lbasize;      
+      off = sizeof(struct ftab_header) + (sizeof(struct ftab_entry) * f->header.max) + (idx * f->header.lbasize) + offset;
       nbytes = n;
-      if( nbytes > f->header.lbasize ) nbytes = f->header.lbasize;
-      memcpy( buf, p, nbytes );
-      sts = 0;
-      break;
-    }
+      if( nbytes > (f->header.lbasize - offset) ) nbytes = f->header.lbasize - offset;
+      mmf_read( &ftab->mmf, buf, nbytes, offset );
+      sts = nbytes;
   }
   ftab_unlock( ftab );
   
@@ -232,25 +230,21 @@ int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offs
 }
 
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
-  int sts, i, nbytes;
+  int sts, nbytes, idx;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-  char *p;
-
-  /* TODO: offset */
+  uint64_t off;
+  
+  idx = id & 0xffffffff;
   
   sts = -1;  
   ftab_lock( ftab );
-  for( i = 0; i < f->header.count; i++ ) {
-    if( f->entry[i].id == id ) {
-      p = ((char *)f) + sizeof(f->header) + (sizeof(struct ftab_entry) * f->header.max) + (f->header.lbasize * f->entry[i].blkidx);
+  if( idx < f->header.max ) {
+      if( offset >= f->header.lbasize ) offset = f->header.lbasize;      
+      off = sizeof(struct ftab_header) + (sizeof(struct ftab_entry) * f->header.max) + (idx * f->header.lbasize) + offset;
       nbytes = n;
-      if( nbytes > f->header.lbasize ) nbytes = f->header.lbasize;
-      memcpy( p, buf, nbytes );
-      f->entry[i].seq++;
-      f->header.seq++;
-      sts = 0;
-      break;
-    }
+      if( nbytes > (f->header.lbasize - offset) ) nbytes = f->header.lbasize - offset;
+      mmf_write( &ftab->mmf, buf, nbytes, offset );
+      sts = nbytes;
   }
   ftab_unlock( ftab );
   

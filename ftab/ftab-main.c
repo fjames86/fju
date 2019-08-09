@@ -223,6 +223,8 @@ static void cmd_write( void ) {
   ftab_prop( &glob.ftab, &prop );
   
   buf = malloc( prop.lbasize );
+  memset( buf, 0, prop.lbasize );
+  
   offset = 0;
   do {
 #ifdef WIN32

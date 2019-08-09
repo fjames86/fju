@@ -1,4 +1,10 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -9,6 +15,11 @@
 
 #include <fju/mmf.h>
 #include <fju/ftab.h>
+
+#ifdef WIN32
+#define PRIu64 "llu"
+#define PRIx64 "llx"
+#endif
 
 static struct {
   int cmd;

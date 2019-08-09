@@ -10,6 +10,7 @@ PROJECTS += rpc
 PROJECTS += dh
 PROJECTS += lht 
 PROJECTS += ef
+PROJECTS += ftab
 
 BINDIR=bin
 LIBDIR=lib

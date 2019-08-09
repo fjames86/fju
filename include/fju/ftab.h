@@ -45,8 +45,8 @@ int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry
 int ftab_alloc( struct ftab_s *ftab, uint64_t *id );
 int ftab_acquire( struct ftab_s *ftab, uint64_t id );
 int ftab_free( struct ftab_s *ftab, uint64_t id );
-int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n );
-int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n );
+int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
+int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
 
 #endif
 

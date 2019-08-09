@@ -207,10 +207,12 @@ int ftab_free( struct ftab_s *ftab, uint64_t id ) {
   return sts;
 }
 
-int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n ) {
+int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
   int sts, i, nbytes;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
   char *p;
+
+  /* TODO: offset */
   
   sts = -1;  
   ftab_lock( ftab );
@@ -229,10 +231,12 @@ int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n ) {
   return sts;  
 }
 
-int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n ) {
+int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
   int sts, i, nbytes;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
   char *p;
+
+  /* TODO: offset */
   
   sts = -1;  
   ftab_lock( ftab );

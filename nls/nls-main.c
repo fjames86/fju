@@ -280,7 +280,7 @@ static void cmd_list( void ) {
 	    strftime( lastcstr, sizeof(lastcstr), "%Y-%m-%d %H:%M:%S", tm );
 	  }
 	    
-	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" (%s) seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/opt/fju/etc/nls/%"PRIx64"/%"PRIx64".log notify_period=%us last_contact=%s\n",
+	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" (%s) seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/opt/fju/nls/%"PRIx64"/%"PRIx64".log notify_period=%us last_contact=%s\n",
 		  "remote",
 		  lst[i].hshare, lst[i].hostid, hostreg_name_by_hostid( lst[i].hostid, namestr ), lst[i].seq, lst[i].lastid, timestr, lst[i].hostid, lst[i].hshare, lst[i].notify_period, lastcstr );
         }

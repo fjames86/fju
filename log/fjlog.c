@@ -71,6 +71,7 @@ static struct {
   int read_reverse;
   int print_quiet;
   uint32_t ltag;
+  int lvlflags;
 } fju;
 
 static void usage( char *fmt, ... ) {
@@ -116,11 +117,12 @@ int main( int argc, char **argv ) {
   int logsize = 2*1024*1024;
   struct log_opts opts;
   uint32_t logflags = 0;
-  int setlvlflags = 0, lvlflags;
+  int setlvlflags = 0;
   
   memset( &opts, 0, sizeof(opts) );
   fju.cmd = CMD_READ;
-
+  fju.lvlflags = LOG_LVL_INFO;
+  
   i = 1;
   while( i < argc ) {
     if( strcmp( argv[i], "-p" ) == 0 ) {
@@ -173,14 +175,14 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
 
       setlvlflags = 1;
-      if( strcasecmp( argv[i], "trace" ) == 0 ) lvlflags = LOG_LVL_TRACE;
-      else if( strcasecmp( argv[i], "debug" ) == 0 ) lvlflags = LOG_LVL_DEBUG;
-      else if( strcasecmp( argv[i], "info" ) == 0 ) lvlflags = LOG_LVL_INFO;
-      else if( strcasecmp( argv[i], "warn" ) == 0 ) lvlflags = LOG_LVL_WARN;
-      else if( strcasecmp( argv[i], "error" ) == 0 ) lvlflags = LOG_LVL_ERROR;
-      else if( strcasecmp( argv[i], "fatal" ) == 0 ) lvlflags = LOG_LVL_FATAL;
+      if( strcasecmp( argv[i], "trace" ) == 0 ) fju.lvlflags = LOG_LVL_TRACE;
+      else if( strcasecmp( argv[i], "debug" ) == 0 ) fju.lvlflags = LOG_LVL_DEBUG;
+      else if( strcasecmp( argv[i], "info" ) == 0 ) fju.lvlflags = LOG_LVL_INFO;
+      else if( strcasecmp( argv[i], "warn" ) == 0 ) fju.lvlflags = LOG_LVL_WARN;
+      else if( strcasecmp( argv[i], "error" ) == 0 ) fju.lvlflags = LOG_LVL_ERROR;
+      else if( strcasecmp( argv[i], "fatal" ) == 0 ) fju.lvlflags = LOG_LVL_FATAL;
       else usage( NULL );
-      fju.cmd = CMD_PROP;
+      if( fju.cmd != CMD_WRITE ) fju.cmd = CMD_PROP;
     } else if( strcmp( argv[i], "-T" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -199,7 +201,7 @@ int main( int argc, char **argv ) {
   if( sts ) usage( "Failed to open" );
   fju.log.ltag = fju.ltag;
   
-  if( setlvlflags ) log_set_lvl( &fju.log, lvlflags );
+  if( setlvlflags && (fju.cmd != CMD_WRITE) ) log_set_lvl( &fju.log, fju.lvlflags );
   
   switch( fju.cmd ) {
   case CMD_READ:
@@ -375,7 +377,7 @@ static void cmd_write( void ) {
   entry.iov[0].len = offset;
   entry.iov[0].buf = buf;
   entry.niov = 1;
-  entry.flags = fju.flags | LOG_LVL_INFO;
+  entry.flags = fju.flags | fju.lvlflags;
   sts = log_write( &fju.log, &entry );
   if( sts ) usage( "Failed to write entry" );
   free( buf );

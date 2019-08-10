@@ -1,22 +1,25 @@
 #!/bin/sh
 
+pidfile=/etc/rpcd.pid
+udpport=8000
+
 cmd=$1
 if [ $cmd = "start" ]; then
-    if [ -e /etc/rpcd.pid ] && $(kill -0 $(cat /etc/rpcd.pid)); then
-	echo "/etc/rpcd.pid exists and pid $(cat /etc/rpcd.pid) exists - restarting"
-	kill $(cat /etc/rpcd.pid)
+    if [ -e $pidfile ] && $(kill -0 $(cat $pidfile)); then
+	echo "$pidfile exists and pid $(cat $pidfile) exists - restarting"
+	kill $(cat $pidfile)
 	sleep 1 
     fi
     
-    bin/rpcd -R -u 8000 -p /etc/rpcd.pid 
+    bin/rpcd -u $udpport -p $pidfile
 elif [ $cmd = "stop" ]; then
-    if [ -e /etc/rpcd.pid ]; then 
-	kill $(cat /etc/rpcd.pid)
-	rm -f /etc/rpcd.pid
+    if [ -e $pidfile ]; then 
+	kill $(cat $pidfile)
+	rm -f $pidfile
     fi
 elif [ $cmd = "status" ]; then
-    if [ -e /etc/rpcd.pid ]; then
-	bin/rpcinfo -p 8000
+    if [ -e $pidfile ]; then
+	bin/rpcinfo -p $udpport
     else
 	echo "rpcd not running"
     fi

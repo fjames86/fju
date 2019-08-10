@@ -30,6 +30,7 @@ static struct {
 #define CMD_READ 4
 #define CMD_WRITE 5
 #define CMD_SET 6
+#define CMD_RESET 7 
   char *path;
   struct ftab_s ftab;
   int binary;
@@ -43,15 +44,16 @@ static struct {
 } glob;
 
 static void usage( char *fmt, ... ) {
-    printf( "Usage: <path> CMD args...\n"
+    printf( "Usage: [-p path] [-S lbasize] [-C lbacount] CMD args...\n"
 	    "Where CMD:\n"
 	    "               list\n"
 	    "               prop\n"
+	    "               reset\n" 
 	    "               alloc\n"
 	    "               free ID\n"
 	    "               read ID\n"
 	    "               write ID\n"
-	    "               set ID [flags=FLAGS] [next=NEXT]\n" 
+	    "               set ID [flags=FLAGS] [nextid=NEXT]\n" 
 	    "\n"
     );
 
@@ -118,8 +120,9 @@ int main( int argc, char **argv ) {
   } else if( strcmp( argv[i], "alloc" ) == 0 ) {
     glob.cmd = CMD_ALLOC;
     i++;
-    if( i >= argc ) usage( NULL );
-    glob.id = strtoull( argv[i], NULL, 16 );    
+    if( i < argc ) {
+	glob.id = strtoull( argv[i], NULL, 16 );
+    }
   } else if( strcmp( argv[i], "free" ) == 0 ) {
     glob.cmd = CMD_FREE;
     i++;
@@ -156,12 +159,14 @@ int main( int argc, char **argv ) {
 	  if( strcmp( argname, "flags" ) == 0 ) {
 	      glob.flags = strtoul( argval, NULL, 16 );
 	      glob.setflags = 1;
-	  } else if( strcmp( argname, "next" ) == 0 ) {
+	  } else if( strcmp( argname, "nextid" ) == 0 ) {
 	      glob.nextid = strtoull( argval, NULL, 16 );
 	      glob.setnextid = 1;
 	  } else usage( NULL );
 	  i++;
       }
+  } else if( strcmp( argv[i], "reset" ) == 0 ) {
+      glob.cmd = CMD_RESET;
   } else usage( NULL );
 
   if( !glob.path ) glob.path = "ftab.dat";
@@ -214,6 +219,9 @@ int main( int argc, char **argv ) {
 	  sts = ftab_set_nextid( &glob.ftab, glob.id, glob.nextid );
 	  if( sts ) usage( "Failed to set nextid" );
       }
+      break;
+  case CMD_RESET:
+      ftab_reset( &glob.ftab );
       break;
   default:
       break;

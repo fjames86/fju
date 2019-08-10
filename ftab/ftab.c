@@ -98,6 +98,33 @@ int ftab_prop( struct ftab_s *ftab, struct ftab_prop *prop ) {
   return 0;
 }
 
+int ftab_reset( struct ftab_s *ftab ) {
+    int i;
+    struct ftab_entry *e;
+    struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
+    
+    ftab_lock( ftab );
+    
+    f->header.magic = FTAB_MAGIC;
+    f->header.version = FTAB_VERSION;
+    f->header.seq = 1;
+    f->header.count = 0;
+
+    for( i = 0; i < f->header.max; i++ ) {
+      e = &f->entry[i];
+      e->id = 0;
+      e->blkidx = i;
+      e->seq = 1;
+      e->flags = 0;
+      e->refcount = 0;
+      e->nextid = 0;
+    }
+
+    ftab_unlock( ftab );
+
+    return 0;
+}
+
 int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n ) {
   int i;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
@@ -241,35 +268,49 @@ static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id ) {
 }
 
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
-    int sts = -1;
+    int sts, nbytes, cnt;
     struct ftab_entry *e;
-    
+    struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
+	
     ftab_lock( ftab );
 
+    sts = -1;
     e = ftab_get_entry( ftab, id );
-    if( e ) {
-	sts = ftab_read_block( ftab, e->blkidx, buf, n, 0 );       
-    }
-    
-    ftab_unlock( ftab );
+    if( !e ) goto done;
 
-    return sts;
+    if( offset > f->header.lbasize ) offset = f->header.lbasize;
+    nbytes = f->header.lbasize - offset;
+    if( nbytes > n ) nbytes = n;
+    ftab_read_block( ftab, e->blkidx, buf, nbytes, offset );
+    sts = 0;
+    cnt = nbytes;
+
+done:
+    ftab_unlock( ftab );
+    return sts ? sts : cnt;
 }
 
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
-    int sts = -1;
+    int sts, nbytes, cnt;
     struct ftab_entry *e;
-    
+    struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
+	
     ftab_lock( ftab );
 
+    sts = -1;
     e = ftab_get_entry( ftab, id );
-    if( e ) {
-	sts = ftab_write_block( ftab, e->blkidx, buf, n, 0 );
-    }
-    
-    ftab_unlock( ftab );
+    if( !e ) goto done;
 
-    return sts;
+    if( offset > f->header.lbasize ) offset = f->header.lbasize;
+    nbytes = f->header.lbasize - offset;
+    if( nbytes > n ) nbytes = n;
+    ftab_write_block( ftab, e->blkidx, buf, nbytes, offset );
+    sts = 0;
+    cnt = nbytes;
+
+done:
+    ftab_unlock( ftab );
+    return sts ? sts : cnt;
 }
 
 int ftab_set_flags( struct ftab_s *ftab, uint64_t id, uint32_t flags, uint32_t mask ) {

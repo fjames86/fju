@@ -38,6 +38,7 @@ struct ftab_opts {
 int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab );
 int ftab_close( struct ftab_s *ftab );
 int ftab_prop( struct ftab_s *ftab, struct ftab_prop *prop );
+int ftab_reset( struct ftab_s *ftab );
 
 int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n );
 int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry );

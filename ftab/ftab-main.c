@@ -37,10 +37,11 @@ static struct {
   uint64_t id;
   uint32_t lbasize;
   uint32_t lbacount;
-    uint32_t flags;
-    uint64_t nextid;
-    int setflags;
-    int setnextid;
+  uint32_t flags;
+  uint64_t nextid;
+  int setflags;
+  int setnextid;
+  uint32_t offset;
 } glob;
 
 static void usage( char *fmt, ... ) {
@@ -52,7 +53,7 @@ static void usage( char *fmt, ... ) {
 	    "               alloc\n"
 	    "               free ID\n"
 	    "               read ID\n"
-	    "               write ID\n"
+	    "               write ID [offset=OFFSET]\n"
 	    "               set ID [flags=FLAGS] [nextid=NEXT]\n" 
 	    "\n"
     );
@@ -92,7 +93,8 @@ static void cmd_write( void );
 int main( int argc, char **argv ) {
   int sts, i;
   struct ftab_opts opts;
-  
+  char argname[64], *argval;
+      
   i = 1;
   while( i < argc ) {
     if( strcmp( argv[i], "-p" ) == 0 ) {
@@ -140,14 +142,20 @@ int main( int argc, char **argv ) {
       } else usage( NULL );
       i++;
     }
-  } else if( strcmp( argv[i], "write" ) == 0 ) {
+  } else if( strcmp( argv[i], "write" ) == 0 ) {      
     glob.cmd = CMD_WRITE;
     i++;
     if( i >= argc ) usage( NULL );
     glob.id = strtoull( argv[i], NULL, 16 );
+    i++;
+    while( i < argc ) {
+	argval_split( arggv[i], argname, &argval );
+	if( strcmp( argname, "offset" ) == 0 ) {
+	    glob.offset = strtoul( argval, NULL, 10 );
+	} else usage( NULL );
+	i++;
+    }
   } else if( strcmp( argv[i], "set" ) == 0 ) {
-      char argname[64], *argval;
-
       glob.cmd = CMD_SET;      
       i++;
       if( i >= argc ) usage( NULL );
@@ -314,7 +322,7 @@ static void cmd_write( void ) {
     offset += sts;    
   } while( offset < prop.lbasize ); 
 
-  sts = ftab_write( &glob.ftab, glob.id, buf, offset, 0 );
+  sts = ftab_write( &glob.ftab, glob.id, buf, offset, glob.offset );
   if( sts < 0 ) usage( "Failed to write" );
   free( buf );
 }

@@ -177,11 +177,7 @@ int main( int argc, char **argv ) {
     cmd_prop();
     break;
   case CMD_ALLOC:
-      if( glob.id ) {
-	  sts = ftab_acquire( &glob.ftab, glob.id );
-      } else {
-	  sts = ftab_alloc( &glob.ftab, NULL, 0, &glob.id );
-      }
+      sts = ftab_alloc( &glob.ftab, NULL, 0, &glob.id );
       if( sts ) usage( "Alloc failed" );
       printf( "%"PRIx64"\n", glob.id );
       break;

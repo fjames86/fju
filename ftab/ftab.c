@@ -304,3 +304,30 @@ int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv, int npriv ) {
     return sts;    
 }
 
+int ftab_swap( struct ftab_s *ftab, uint64_t id1, uint64_t id2 ) {
+    int sts = -1, i;
+    struct ftab_entry tmpe, *e;
+    struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
+    int idx1, idx2;
+
+    idx1 = -1;
+    idx2 = -1;
+    ftab_lock( ftab );
+
+    for( i = 0; i < f->header.count; i++ ) {
+	if( f->entry[i].id == id1 ) idx1 = i;
+	if( f->entry[i].id == id2 ) idx2 = i;
+	if( idx1 != -1 && idx2 != -1 ) break;
+    }
+
+    if( idx1 != -1 && idx2 != -1 ) {
+	tmpe = f->entry[idx1];
+	f->entry[idx1] = f->entry[idx2];
+	f->entry[idx2] = tmpe;
+	sts = 0;
+    }
+    
+    ftab_unlock( ftab );
+
+    return sts;    
+}

@@ -4,14 +4,14 @@
 
 #include <fju/mmf.h>
 
+#define FTAB_MAX_PRIV 16
+
 /* 32 byte entry */
 struct ftab_entry {
   uint64_t id;
   uint32_t blkidx;
   uint32_t seq;
-  uint32_t flags;
-  uint32_t refcount;
-  uint64_t nextid;
+  char priv[FTAB_MAX_PRIV];
 };
 
 struct ftab_s {
@@ -43,13 +43,11 @@ int ftab_reset( struct ftab_s *ftab );
 int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n );
 int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry );
 
-int ftab_alloc( struct ftab_s *ftab, uint64_t *id );
-int ftab_acquire( struct ftab_s *ftab, uint64_t id );
+int ftab_alloc( struct ftab_s *ftab, char *priv, int npriv, uint64_t *id );
 int ftab_free( struct ftab_s *ftab, uint64_t id );
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
-int ftab_set_flags( struct ftab_s *ftab, uint64_t id, uint32_t flags, uint32_t mask );
-int ftab_set_nextid( struct ftab_s *ftab, uint64_t id, uint64_t nextid );
+int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv, int n );
 
 #endif
 

@@ -54,9 +54,7 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
       e->id = 0;
       e->blkidx = i;
       e->seq = 1;
-      e->flags = 0;
-      e->refcount = 0;
-      e->nextid = 0;
+      memset( e->priv, 0, sizeof(e->priv) );
     }
   } else if( f->header.version != FTAB_VERSION ) {
     goto bad;
@@ -115,9 +113,7 @@ int ftab_reset( struct ftab_s *ftab ) {
       e->id = 0;
       e->blkidx = i;
       e->seq = 1;
-      e->flags = 0;
-      e->refcount = 0;
-      e->nextid = 0;
+      memset( e->priv, 0, sizeof(e->priv) );
     }
 
     ftab_unlock( ftab );
@@ -159,7 +155,7 @@ int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry
     return sts;
 }
 
-int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
+int ftab_alloc( struct ftab_s *ftab, char *priv, int npriv, uint64_t *id ) {
   int sts, i;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
 
@@ -170,9 +166,8 @@ int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
     i = f->header.count;
     f->entry[i].seq++;
     f->entry[i].id = (f->header.seq << 32) | f->entry[i].blkidx;
-    f->entry[i].flags = 0;
-    f->entry[i].refcount = 1;
-    f->entry[i].nextid = 0;
+    if( priv && npriv > 0 ) memcpy( f->entry[i].priv, priv, npriv > FTAB_MAX_PRIV ? FTAB_MAX_PRIV : npriv );
+    else memset( f->entry[i].priv, 0, FTAB_MAX_PRIV );
     f->header.seq++;
     f->header.count++;
     if( id ) *id = f->entry[i].id;
@@ -192,7 +187,6 @@ int ftab_acquire( struct ftab_s *ftab, uint64_t id ) {
   for( i = 0; i < f->header.count; i++ ) {
     if( f->entry[i].id == id ) {
       f->entry[i].seq++;
-      f->entry[i].refcount++;
       f->header.seq++;      
       sts = 0;
       break;
@@ -213,18 +207,13 @@ int ftab_free( struct ftab_s *ftab, uint64_t id ) {
   for( i = 0; i < f->header.count; i++ ) {
     if( f->entry[i].id == id ) {
       f->entry[i].seq++;
-      f->entry[i].refcount--;
-
-      if( f->entry[i].refcount == 0 ) {	
-	if( i != (f->header.count - 1) ) {
+      if( i != (f->header.count - 1) ) {
 	  tmpe = f->entry[i];
 	  f->entry[i] = f->entry[f->header.count - 1];
 	  f->entry[f->header.count - 1] = tmpe;
-	}
-	f->header.count--;
-	f->header.seq++;
       }
-      
+      f->header.count--;
+      f->header.seq++;
       sts = 0;
       break;
     }
@@ -313,7 +302,7 @@ done:
     return sts ? sts : cnt;
 }
 
-int ftab_set_flags( struct ftab_s *ftab, uint64_t id, uint32_t flags, uint32_t mask ) {
+int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv, int npriv ) {
     int sts = -1;
     struct ftab_entry *e;
     
@@ -321,7 +310,7 @@ int ftab_set_flags( struct ftab_s *ftab, uint64_t id, uint32_t flags, uint32_t m
 
     e = ftab_get_entry( ftab, id );
     if( e ) {
-	e->flags = (e->flags & ~mask) | (flags & mask);
+	memcpy( e->priv, priv, npriv > FTAB_MAX_PRIV ? FTAB_MAX_PRIV : npriv );
 	sts = 0;
     }
     
@@ -330,19 +319,3 @@ int ftab_set_flags( struct ftab_s *ftab, uint64_t id, uint32_t flags, uint32_t m
     return sts;    
 }
 
-int ftab_set_nextid( struct ftab_s *ftab, uint64_t id, uint64_t nextid ) {
-    int sts = -1;
-    struct ftab_entry *e;
-    
-    ftab_lock( ftab );
-
-    e = ftab_get_entry( ftab, id );
-    if( e ) {
-	e->nextid = nextid;
-	sts = 0;
-    }
-    
-    ftab_unlock( ftab );
-
-    return sts;    
-}

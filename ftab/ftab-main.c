@@ -37,10 +37,6 @@ static struct {
   uint64_t id;
   uint32_t lbasize;
   uint32_t lbacount;
-  uint32_t flags;
-  uint64_t nextid;
-  int setflags;
-  int setnextid;
   uint32_t offset;
 } glob;
 
@@ -54,7 +50,6 @@ static void usage( char *fmt, ... ) {
 	    "               free ID\n"
 	    "               read ID\n"
 	    "               write ID [offset=OFFSET]\n"
-	    "               set ID [flags=FLAGS] [nextid=NEXT]\n" 
 	    "\n"
     );
 
@@ -149,30 +144,12 @@ int main( int argc, char **argv ) {
     glob.id = strtoull( argv[i], NULL, 16 );
     i++;
     while( i < argc ) {
-	argval_split( arggv[i], argname, &argval );
+	argval_split( argv[i], argname, &argval );
 	if( strcmp( argname, "offset" ) == 0 ) {
 	    glob.offset = strtoul( argval, NULL, 10 );
 	} else usage( NULL );
 	i++;
     }
-  } else if( strcmp( argv[i], "set" ) == 0 ) {
-      glob.cmd = CMD_SET;      
-      i++;
-      if( i >= argc ) usage( NULL );
-      glob.id = strtoull( argv[i], NULL, 16 );
-      i++;
-      
-      while( i < argc ) {
-	  argval_split( argv[i], argname, &argval );
-	  if( strcmp( argname, "flags" ) == 0 ) {
-	      glob.flags = strtoul( argval, NULL, 16 );
-	      glob.setflags = 1;
-	  } else if( strcmp( argname, "nextid" ) == 0 ) {
-	      glob.nextid = strtoull( argval, NULL, 16 );
-	      glob.setnextid = 1;
-	  } else usage( NULL );
-	  i++;
-      }
   } else if( strcmp( argv[i], "reset" ) == 0 ) {
       glob.cmd = CMD_RESET;
   } else usage( NULL );
@@ -203,7 +180,7 @@ int main( int argc, char **argv ) {
       if( glob.id ) {
 	  sts = ftab_acquire( &glob.ftab, glob.id );
       } else {
-	  sts = ftab_alloc( &glob.ftab, &glob.id );
+	  sts = ftab_alloc( &glob.ftab, NULL, 0, &glob.id );
       }
       if( sts ) usage( "Alloc failed" );
       printf( "%"PRIx64"\n", glob.id );
@@ -218,16 +195,6 @@ int main( int argc, char **argv ) {
   case CMD_WRITE:
     cmd_write();
     break;
-  case CMD_SET:
-      if( glob.setflags ) {
-	  sts = ftab_set_flags( &glob.ftab, glob.id, glob.flags, 0xffffffff );
-	  if( sts ) usage( "Failed to set flags" );
-      }
-      if( glob.setnextid ) {
-	  sts = ftab_set_nextid( &glob.ftab, glob.id, glob.nextid );
-	  if( sts ) usage( "Failed to set nextid" );
-      }
-      break;
   case CMD_RESET:
       ftab_reset( &glob.ftab );
       break;
@@ -241,7 +208,7 @@ int main( int argc, char **argv ) {
 }
 
 static void cmd_list( void ) {
-  int i, n, m;
+    int i, n, m, j;
   struct ftab_entry *e;
 
   n = ftab_list( &glob.ftab, NULL, 0 );
@@ -249,10 +216,11 @@ static void cmd_list( void ) {
   m = ftab_list( &glob.ftab, e, n );
   if( m < n ) n = m;
 
-  printf( "%-12s %-8s %-8s %-8s %-8s %-12s\n", "id", "blk", "seq", "flags", "refcount", "nextid" );
+  printf( "%-12s %-8s %-8s\n", "id", "blk", "seq" );
   for( i = 0; i < n; i++ ) {
-    printf( "%-12"PRIx64" %-8u %-8u 0x%04x   %-8u %-12"PRIx64"\n",
-	    e[i].id, e[i].blkidx, e[i].seq, e[i].flags, e[i].refcount, e[i].nextid );
+      printf( "%-12"PRIx64" %-8u %-8u  ", e[i].id, e[i].blkidx, e[i].seq );
+      for( j = 0; j < FTAB_MAX_PRIV; j++ ) printf( "%02x ", (uint32_t)e[i].priv[j] );
+      printf( "\n" );
   }
 
   free( e );  
@@ -288,7 +256,6 @@ static void cmd_read( void ) {
     for( i = 0; i < prop.lbasize; i++ ) {
       if( ((i % 8) == 0) && ((i % 16) != 0) ) printf( "  " );
       if( i && ((i % 16) == 0) ) printf( "\n  %04o  ", i );
-      
       printf( "%02x ", (uint8_t)buf[i] );
     }
     printf( "\n" );

@@ -58,6 +58,10 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
     }
   } else if( f->header.version != FTAB_VERSION ) {
     goto bad;
+  } else if( opts && (opts->mask & FTAB_OPT_LBASIZE) && (opts->lbasize != f->header.lbasize) ) {
+      goto bad;
+  } else if( opts && (opts->mask & FTAB_OPT_LBACOUNT) && (opts->lbacount != f->header.max) ) {
+      goto bad;      
   } else {
       sts = mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );
       if( sts ) goto bad;
@@ -172,25 +176,6 @@ int ftab_alloc( struct ftab_s *ftab, char *priv, int npriv, uint64_t *id ) {
     f->header.count++;
     if( id ) *id = f->entry[i].id;
     sts = 0;
-  }
-  ftab_unlock( ftab );
-  
-  return sts;
-}
-
-int ftab_acquire( struct ftab_s *ftab, uint64_t id ) {
-  int sts, i;
-  struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-  
-  sts = -1;  
-  ftab_lock( ftab );
-  for( i = 0; i < f->header.count; i++ ) {
-    if( f->entry[i].id == id ) {
-      f->entry[i].seq++;
-      f->header.seq++;      
-      sts = 0;
-      break;
-    }
   }
   ftab_unlock( ftab );
   

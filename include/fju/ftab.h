@@ -48,7 +48,6 @@ int ftab_free( struct ftab_s *ftab, uint64_t id );
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
 int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv );
-int ftab_swap( struct ftab_s *ftab, uint64_t id1, uint64_t id2 );
 
 #endif
 

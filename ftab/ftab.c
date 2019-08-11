@@ -199,9 +199,9 @@ int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id ) {
 }
 
 int ftab_free( struct ftab_s *ftab, uint64_t id ) {
-  int sts, i;
+  int sts;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-  struct ftab_entry tmpe, *e;
+  struct ftab_entry *e;
  
   sts = -1;  
   ftab_lock( ftab );
@@ -243,7 +243,6 @@ static int ftab_write_block( struct ftab_s *ftab, uint32_t idx, char *buf, int n
 }
 
 static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id ) {
-    int i;
     uint32_t idx, seq;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
     
@@ -256,7 +255,7 @@ static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id ) {
 }
 
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
-    uint32_t nbytes, idx;
+    uint32_t nbytes;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
     struct ftab_entry *e;
     
@@ -277,7 +276,7 @@ int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offs
 }
 
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
-    uint32_t nbytes, idx;
+    uint32_t nbytes;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
     struct ftab_entry *e;
     
@@ -314,30 +313,3 @@ int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv ) {
     return sts;    
 }
 
-int ftab_swap( struct ftab_s *ftab, uint64_t id1, uint64_t id2 ) {
-    int sts = -1, i;
-    struct ftab_entry tmpe, *e;
-    struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-    int idx1, idx2;
-
-    idx1 = -1;
-    idx2 = -1;
-    ftab_lock( ftab );
-
-    for( i = 0; i < f->header.max; i++ ) {
-	if( f->entry[i].id == id1 ) idx1 = i;
-	if( f->entry[i].id == id2 ) idx2 = i;
-	if( idx1 != -1 && idx2 != -1 ) break;
-    }
-
-    if( idx1 != -1 && idx2 != -1 ) {
-	tmpe = f->entry[idx1];
-	f->entry[idx1] = f->entry[idx2];
-	f->entry[idx2] = tmpe;
-	sts = 0;
-    }
-    
-    ftab_unlock( ftab );
-
-    return sts;    
-}

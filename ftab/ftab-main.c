@@ -162,8 +162,6 @@ int main( int argc, char **argv ) {
       glob.npop = strtoul( argv[i], NULL, 10 );
   } else usage( NULL );
 
-  if( !glob.path ) glob.path = "ftab.dat";
-
   memset( &opts, 0, sizeof(opts) );
   if( glob.lbasize ) {
       opts.mask |= FTAB_OPT_LBASIZE;

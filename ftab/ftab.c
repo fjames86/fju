@@ -33,7 +33,8 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
   struct ftab_entry *e;
   
   memset( ftab, 0, sizeof(*ftab) );
-  
+
+  if( !path ) path = mmf_default_path( "ftab.dat", NULL );
   sts = mmf_open( path, &ftab->mmf );
   if( sts ) return sts;
 

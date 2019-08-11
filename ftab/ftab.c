@@ -177,7 +177,8 @@ int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id ) {
   e = NULL;
   for( i = 0; i < f->header.max; i++ ) {
       if( f->entry[(startidx + i) % f->header.max].id == 0 ) {
-	  e = &f->entry[i];
+	  e = &f->entry[(startidx + i) % f->header.max];
+	  i = (startidx + i) % f->header.max;
 	  break;
       }
   }

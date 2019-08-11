@@ -225,7 +225,7 @@ static void cmd_list( void ) {
 
   printf( "%-12s %-8s %-8s\n", "id", "blk", "seq" );
   for( i = 0; i < n; i++ ) {
-      printf( "%-12"PRIx64" %-8u %-8u  ", e[i].id, e[i].blkidx, e[i].seq );
+      printf( "%-12"PRIx64" %-8u %-8u  ", e[i].id, i, e[i].seq );
       for( j = 0; j < FTAB_MAX_PRIV; j++ ) printf( "%02x ", (uint32_t)e[i].priv[j] );
       printf( "\n" );
   }
@@ -245,11 +245,16 @@ static void cmd_read( void ) {
   struct ftab_prop prop;
   char *buf;
   int sts, i;
-  
+  uint64_t start, end;
   ftab_prop( &glob.ftab, &prop );
   buf = malloc( prop.lbasize );
 
-  sts = ftab_read( &glob.ftab, glob.id, buf, prop.lbasize, 0 );
+  start = rpc_now();
+  for( i = 0; i < 1000; i++ ) {
+      sts = ftab_read( &glob.ftab, glob.id, buf, prop.lbasize, 0 );
+  }
+  end = rpc_now();
+  printf( "ftab_read: %ums\n", end - start );
   if( sts < 0 ) usage( "Failed to read" );
 
   if( glob.binary ) {

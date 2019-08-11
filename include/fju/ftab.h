@@ -9,7 +9,7 @@
 /* 32 byte entry */
 struct ftab_entry {
   uint64_t id;
-  uint32_t blkidx;
+  uint32_t reserved;
   uint32_t seq;
   char priv[FTAB_MAX_PRIV];
 };

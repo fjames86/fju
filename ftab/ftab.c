@@ -24,6 +24,8 @@ struct ftab_file {
   struct ftab_entry entry[1];
 };
 
+static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id );
+
 int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
   int sts, i;
   struct ftab_file *f;
@@ -52,7 +54,6 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
     for( i = 0; i < f->header.max; i++ ) {
       e = &f->entry[i];
       e->id = 0;
-      e->blkidx = i;
       e->seq = 1;
       memset( e->priv, 0, sizeof(e->priv) );
     }
@@ -116,7 +117,6 @@ int ftab_reset( struct ftab_s *ftab ) {
     for( i = 0; i < f->header.max; i++ ) {
       e = &f->entry[i];
       e->id = 0;
-      e->blkidx = i;
       e->seq = 1;
       memset( e->priv, 0, sizeof(e->priv) );
     }
@@ -127,19 +127,22 @@ int ftab_reset( struct ftab_s *ftab ) {
 }
 
 int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n ) {
-  int i;
+    int i, idx;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
   
   ftab_lock( ftab );
-  for( i = 0; i < f->header.count; i++ ) {
-    if( i < n ) {
-      elist[i] = f->entry[i];
-    }
+  idx = 0;
+  for( i = 0; i < f->header.max; i++ ) {
+      if( f->entry[i].id ) {
+	  if( idx < n ) {
+	      elist[idx] = f->entry[i];
+	  }
+	  idx++;
+      }
   }
-  i = f->header.count;
   ftab_unlock( ftab );
   
-  return i;
+  return idx;
 }
 
 int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry ) {
@@ -148,7 +151,7 @@ int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry
 
     sts = -1;
     ftab_lock( ftab );
-    for( i = 0; i < f->header.count; i++ ) {
+    for( i = 0; i < f->header.max; i++ ) {
 	if( f->entry[i].id == id ) {
 	    if( entry ) *entry = f->entry[i];
 	    sts = 0;
@@ -163,20 +166,28 @@ int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry
 int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id ) {
   int sts, i;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-
+  struct ftab_entry *e;
+  
   sts = -1;
   
   ftab_lock( ftab );
-  if( f->header.count < f->header.max ) {
-    i = f->header.count;
-    f->entry[i].seq++;
-    f->entry[i].id = (f->header.seq << 32) | f->entry[i].blkidx;
-    if( priv ) memcpy( f->entry[i].priv, priv, FTAB_MAX_PRIV );
-    else memset( f->entry[i].priv, 0, FTAB_MAX_PRIV );
-    f->header.seq++;
-    f->header.count++;
-    if( id ) *id = f->entry[i].id;
-    sts = 0;
+  e = NULL;
+  for( i = 0; i < f->header.max; i++ ) {
+      if( f->entry[i].id == 0 ) {
+	  e = &f->entry[i];
+	  break;
+      }
+  }
+  if( e ) {
+      e->seq++;
+      e->id = (((uint64_t)f->entry[i].seq) << 32) | i;
+      if( priv ) memcpy( e->priv, priv, FTAB_MAX_PRIV );
+      else memset( e->priv, 0, FTAB_MAX_PRIV );
+      f->header.seq++;
+      f->header.count++;
+      if( id ) *id = f->entry[i].id;
+      
+      sts = 0;
   }
   ftab_unlock( ftab );
   
@@ -186,23 +197,17 @@ int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id ) {
 int ftab_free( struct ftab_s *ftab, uint64_t id ) {
   int sts, i;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-  struct ftab_entry tmpe;
-  
+  struct ftab_entry tmpe, *e;
+ 
   sts = -1;  
   ftab_lock( ftab );
-  for( i = 0; i < f->header.count; i++ ) {
-    if( f->entry[i].id == id ) {
-      f->entry[i].seq++;
-      if( i != (f->header.count - 1) ) {
-	  tmpe = f->entry[i];
-	  f->entry[i] = f->entry[f->header.count - 1];
-	  f->entry[f->header.count - 1] = tmpe;
-      }
+  e = ftab_get_entry( ftab, id );
+  if( e ) {
+      e->id = 0;
+      e->seq++;
+      sts = 0;
       f->header.count--;
       f->header.seq++;
-      sts = 0;
-      break;
-    }
   }
   ftab_unlock( ftab );
   
@@ -235,9 +240,13 @@ static int ftab_write_block( struct ftab_s *ftab, uint32_t idx, char *buf, int n
 
 static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id ) {
     int i;
+    uint32_t idx, seq;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-    for( i = 0; i < f->header.count; i++ ) {
-	if( f->entry[i].id == id ) return &f->entry[i];
+    
+    idx = id & 0xffffffff;
+    seq = (id >> 32) & 0xffffffff;
+    if( f->entry[idx].id == id && f->entry[idx].seq == seq ) {
+	return &f->entry[idx];
     }
     return NULL;
 }
@@ -245,14 +254,19 @@ static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id ) {
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
     uint32_t nbytes, idx;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
+    struct ftab_entry *e;
     
     ftab_lock( ftab );
 
-    idx = id & 0xffffffff;
-    if( offset > f->header.lbasize ) offset = f->header.lbasize;
-    nbytes = f->header.lbasize - offset;
-    if( nbytes > n ) nbytes = n;    
-    ftab_read_block( ftab, idx, buf, nbytes, offset );
+    e = ftab_get_entry( ftab, id );
+    if( e ) {
+	if( offset > f->header.lbasize ) offset = f->header.lbasize;
+	nbytes = f->header.lbasize - offset;
+	if( nbytes > n ) nbytes = n;    
+	ftab_read_block( ftab, id & 0xffffffff, buf, nbytes, offset );
+    } else {
+	nbytes = -1;
+    }
 
     ftab_unlock( ftab );
     return nbytes;
@@ -261,14 +275,19 @@ int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offs
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
     uint32_t nbytes, idx;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
+    struct ftab_entry *e;
     
     ftab_lock( ftab );
 
-    idx = id & 0xffffffff;
-    if( offset > f->header.lbasize ) offset = f->header.lbasize;
-    nbytes = f->header.lbasize - offset;
-    if( nbytes > n ) nbytes = n;    
-    ftab_write_block( ftab, idx, buf, nbytes, offset );
+    e = ftab_get_entry( ftab, id );
+    if( e ) {
+	if( offset > f->header.lbasize ) offset = f->header.lbasize;
+	nbytes = f->header.lbasize - offset;
+	if( nbytes > n ) nbytes = n;    
+	ftab_write_block( ftab, id & 0xffffffff, buf, nbytes, offset );
+    } else {
+	nbytes = -1;
+    }
 
     ftab_unlock( ftab );
     return nbytes;
@@ -301,7 +320,7 @@ int ftab_swap( struct ftab_s *ftab, uint64_t id1, uint64_t id2 ) {
     idx2 = -1;
     ftab_lock( ftab );
 
-    for( i = 0; i < f->header.count; i++ ) {
+    for( i = 0; i < f->header.max; i++ ) {
 	if( f->entry[i].id == id1 ) idx1 = i;
 	if( f->entry[i].id == id2 ) idx2 = i;
 	if( idx1 != -1 && idx2 != -1 ) break;

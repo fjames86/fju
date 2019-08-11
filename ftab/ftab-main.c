@@ -30,7 +30,8 @@ static struct {
 #define CMD_READ 4
 #define CMD_WRITE 5
 #define CMD_SET 6
-#define CMD_RESET 7 
+#define CMD_RESET 7
+#define CMD_POPULATE 8
   char *path;
   struct ftab_s ftab;
   int binary;
@@ -38,6 +39,7 @@ static struct {
   uint32_t lbasize;
   uint32_t lbacount;
   uint32_t offset;
+  uint32_t npop;
 } glob;
 
 static void usage( char *fmt, ... ) {
@@ -84,6 +86,7 @@ static void cmd_list( void );
 static void cmd_prop( void );
 static void cmd_read( void );
 static void cmd_write( void );
+static void cmd_populate( void );
 
 int main( int argc, char **argv ) {
   int sts, i;
@@ -152,6 +155,11 @@ int main( int argc, char **argv ) {
     }
   } else if( strcmp( argv[i], "reset" ) == 0 ) {
       glob.cmd = CMD_RESET;
+  } else if( strcmp( argv[i], "populate" ) == 0 ) {
+      glob.cmd = CMD_POPULATE;
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.npop = strtoul( argv[i], NULL, 10 );
   } else usage( NULL );
 
   if( !glob.path ) glob.path = "ftab.dat";
@@ -177,7 +185,7 @@ int main( int argc, char **argv ) {
     cmd_prop();
     break;
   case CMD_ALLOC:
-      sts = ftab_alloc( &glob.ftab, NULL, 0, &glob.id );
+      sts = ftab_alloc( &glob.ftab, NULL, &glob.id );
       if( sts ) usage( "Alloc failed" );
       printf( "%"PRIx64"\n", glob.id );
       break;
@@ -193,6 +201,9 @@ int main( int argc, char **argv ) {
     break;
   case CMD_RESET:
       ftab_reset( &glob.ftab );
+      break;
+  case CMD_POPULATE:
+      cmd_populate();
       break;
   default:
       break;
@@ -240,7 +251,7 @@ static void cmd_read( void ) {
 
   sts = ftab_read( &glob.ftab, glob.id, buf, prop.lbasize, 0 );
   if( sts < 0 ) usage( "Failed to read" );
-  
+
   if( glob.binary ) {
 #ifdef WIN32
     WriteFile( GetStdHandle( STD_OUTPUT_HANDLE ), buf, prop.lbasize, NULL, NULL );
@@ -288,4 +299,13 @@ static void cmd_write( void ) {
   sts = ftab_write( &glob.ftab, glob.id, buf, offset, glob.offset );
   if( sts < 0 ) usage( "Failed to write" );
   free( buf );
+}
+
+static void cmd_populate( void ) {
+    int i;
+    uint64_t id;
+    for( i = 0; i < glob.npop; i++ ) {
+	ftab_alloc( &glob.ftab, NULL, &id );
+	printf( "%"PRIx64"\n", id );
+    }
 }

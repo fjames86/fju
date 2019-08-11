@@ -36,7 +36,6 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
 
   sts = mmf_remap( &ftab->mmf, sizeof(f->header) );
   if( sts ) goto bad;
-
   f = ftab->mmf.file;
   
   if( f->header.magic != FTAB_MAGIC ) {
@@ -47,8 +46,9 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
     f->header.max = (opts && (opts->mask & FTAB_OPT_LBACOUNT)) ? opts->lbacount : FTAB_LBACOUNT;
     f->header.lbasize = (opts && (opts->mask & FTAB_OPT_LBASIZE)) ? opts->lbasize : FTAB_LBASIZE;
 
-    sts = mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );
+    sts = mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );    
     if( sts ) goto bad;
+    f = ftab->mmf.file;
     for( i = 0; i < f->header.max; i++ ) {
       e = &f->entry[i];
       e->id = 0;
@@ -65,6 +65,7 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
   } else {
       sts = mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );
       if( sts ) goto bad;
+      f = ftab->mmf.file;
   }
     
   return 0;
@@ -159,7 +160,7 @@ int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry
     return sts;
 }
 
-int ftab_alloc( struct ftab_s *ftab, char *priv, int npriv, uint64_t *id ) {
+int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id ) {
   int sts, i;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
 
@@ -170,7 +171,7 @@ int ftab_alloc( struct ftab_s *ftab, char *priv, int npriv, uint64_t *id ) {
     i = f->header.count;
     f->entry[i].seq++;
     f->entry[i].id = (f->header.seq << 32) | f->entry[i].blkidx;
-    if( priv && npriv > 0 ) memcpy( f->entry[i].priv, priv, npriv > FTAB_MAX_PRIV ? FTAB_MAX_PRIV : npriv );
+    if( priv ) memcpy( f->entry[i].priv, priv, FTAB_MAX_PRIV );
     else memset( f->entry[i].priv, 0, FTAB_MAX_PRIV );
     f->header.seq++;
     f->header.count++;
@@ -242,52 +243,38 @@ static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id ) {
 }
 
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
-    int sts, nbytes, cnt;
-    struct ftab_entry *e;
+    uint32_t nbytes, idx;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-	
+    
     ftab_lock( ftab );
 
-    sts = -1;
-    e = ftab_get_entry( ftab, id );
-    if( !e ) goto done;
-
+    idx = id & 0xffffffff;
     if( offset > f->header.lbasize ) offset = f->header.lbasize;
     nbytes = f->header.lbasize - offset;
-    if( nbytes > n ) nbytes = n;
-    ftab_read_block( ftab, e->blkidx, buf, nbytes, offset );
-    sts = 0;
-    cnt = nbytes;
+    if( nbytes > n ) nbytes = n;    
+    ftab_read_block( ftab, idx, buf, nbytes, offset );
 
-done:
     ftab_unlock( ftab );
-    return sts ? sts : cnt;
+    return nbytes;
 }
 
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset ) {
-    int sts, nbytes, cnt;
-    struct ftab_entry *e;
+    uint32_t nbytes, idx;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-	
+    
     ftab_lock( ftab );
 
-    sts = -1;
-    e = ftab_get_entry( ftab, id );
-    if( !e ) goto done;
-
+    idx = id & 0xffffffff;
     if( offset > f->header.lbasize ) offset = f->header.lbasize;
     nbytes = f->header.lbasize - offset;
-    if( nbytes > n ) nbytes = n;
-    ftab_write_block( ftab, e->blkidx, buf, nbytes, offset );
-    sts = 0;
-    cnt = nbytes;
+    if( nbytes > n ) nbytes = n;    
+    ftab_write_block( ftab, idx, buf, nbytes, offset );
 
-done:
     ftab_unlock( ftab );
-    return sts ? sts : cnt;
+    return nbytes;
 }
 
-int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv, int npriv ) {
+int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv ) {
     int sts = -1;
     struct ftab_entry *e;
     
@@ -295,7 +282,7 @@ int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv, int npriv ) {
 
     e = ftab_get_entry( ftab, id );
     if( e ) {
-	memcpy( e->priv, priv, npriv > FTAB_MAX_PRIV ? FTAB_MAX_PRIV : npriv );
+	memcpy( e->priv, priv, FTAB_MAX_PRIV );
 	sts = 0;
     }
     

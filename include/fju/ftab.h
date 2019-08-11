@@ -43,11 +43,11 @@ int ftab_reset( struct ftab_s *ftab );
 int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n );
 int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry );
 
-int ftab_alloc( struct ftab_s *ftab, char *priv, int npriv, uint64_t *id );
+int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id );
 int ftab_free( struct ftab_s *ftab, uint64_t id );
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
-int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv, int n );
+int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv );
 int ftab_swap( struct ftab_s *ftab, uint64_t id1, uint64_t id2 );
 
 #endif

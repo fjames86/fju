@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include <fju/ftab.h>
+#include <fju/sec.h>
 
 #define FTAB_LBASIZE     64
 #define FTAB_LBACOUNT    4096 
@@ -167,13 +168,15 @@ int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id ) {
   int sts, i;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
   struct ftab_entry *e;
+  uint32_t startidx;
   
   sts = -1;
   
   ftab_lock( ftab );
+  startidx = sec_rand_uint32() % f->header.max;  
   e = NULL;
   for( i = 0; i < f->header.max; i++ ) {
-      if( f->entry[i].id == 0 ) {
+      if( f->entry[(startidx + i) % f->header.max].id == 0 ) {
 	  e = &f->entry[i];
 	  break;
       }

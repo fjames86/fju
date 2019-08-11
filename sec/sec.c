@@ -402,3 +402,9 @@ void sec_rand( void *buf, int n ) {
   read( fd, buf, n );
 }
 #endif
+
+uint32_t sec_rand_uint32( void ) {
+    uint32_t u32;
+    sec_rand( &u32, sizeof(u32) );
+    return u32;
+}

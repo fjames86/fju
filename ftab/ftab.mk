@@ -7,4 +7,4 @@ ${LIBDIR}/libftab.a: ftab/ftab.c include/fju/ftab.h
 
 
 ${BINDIR}/ftab: ftab/ftab-main.c ${LIBDIR}/libmmf.a ${LIBDIR}/libftab.a
-	${CC} -o $@ ftab/ftab-main.c ${CFLAGS} ${LFLAGS} -lmmf -lftab
+	${CC} -o $@ ftab/ftab-main.c ${CFLAGS} ${LFLAGS} -lmmf -lsec -lftab 

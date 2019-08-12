@@ -26,8 +26,10 @@ struct ftab_header {
   uint32_t max;
   uint32_t count;
   uint32_t lbasize;
+
+  uint32_t cookie[FTAB_MAX_COOKIE];
   
-  uint32_t spare[57];
+  uint32_t spare[41];
 };
 
 struct ftab_file {
@@ -59,7 +61,8 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
     f->header.count = 0;
     f->header.max = (opts && (opts->mask & FTAB_OPT_LBACOUNT)) ? opts->lbacount : FTAB_LBACOUNT;
     f->header.lbasize = (opts && (opts->mask & FTAB_OPT_LBASIZE)) ? opts->lbasize : FTAB_LBASIZE;
-
+    if( opts && (opts->mask & FTAB_OPT_COOKIE) ) memcpy( f->header.cookie, opts->cookie, FTAB_MAX_COOKIE );
+    
     sts = mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );    
     if( sts ) goto bad;
     f = ftab->mmf.file;
@@ -109,6 +112,15 @@ int ftab_prop( struct ftab_s *ftab, struct ftab_prop *prop ) {
   prop->max = f->header.max;
   prop->count = f->header.count;
   prop->lbasize = f->header.lbasize;
+  memcpy( prop->cookie, f->header.cookie, FTAB_MAX_COOKIE );
+  ftab_unlock( ftab );
+  return 0;
+}
+
+int ftab_set_cookie( struct ftab_s *ftab, char *cookie ) {
+  struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
+  ftab_lock( ftab );
+  memcpy( f->header.cookie, cookie, FTAB_MAX_COOKIE );
   ftab_unlock( ftab );
   return 0;
 }

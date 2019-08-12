@@ -33,6 +33,7 @@ static struct {
 #define CMD_WRITE 5
 #define CMD_SET 6
 #define CMD_RESET 7
+#define CMD_COOKIE 8 
   char *path;
   struct ftab_s ftab;
   int binary;
@@ -41,6 +42,7 @@ static struct {
   uint32_t lbacount;
   uint32_t offset;
   uint32_t npop;
+  char cookie[FTAB_MAX_COOKIE];
 } glob;
 
 static void usage( char *fmt, ... ) {
@@ -53,6 +55,7 @@ static void usage( char *fmt, ... ) {
 	    "               free ID\n"
 	    "               read ID\n"
 	    "               write ID [offset=OFFSET]\n"
+	    "               cookie ...\n" 
 	    "\n"
     );
 
@@ -89,7 +92,7 @@ static void cmd_read( void );
 static void cmd_write( void );
 
 int main( int argc, char **argv ) {
-  int sts, i;
+  int sts, i, j;
   struct ftab_opts opts;
   char argname[64], *argval;
       
@@ -159,6 +162,14 @@ int main( int argc, char **argv ) {
     }
   } else if( strcmp( argv[i], "reset" ) == 0 ) {
       glob.cmd = CMD_RESET;
+  } else if( strcmp( argv[i], "cookie" ) == 0 ) {
+    glob.cmd = CMD_COOKIE;
+    i++;
+    for( j = 0; j < FTAB_MAX_COOKIE; j++ ) {
+      if( i >= argc ) break;
+      glob.cookie[j] = strtoul( argv[i], NULL, 16 );
+      i++;
+    }
   } else usage( NULL );
 
   memset( &opts, 0, sizeof(opts) );
@@ -202,6 +213,9 @@ int main( int argc, char **argv ) {
   case CMD_RESET:
       ftab_reset( &glob.ftab );
       break;
+  case CMD_COOKIE:
+      ftab_set_cookie( &glob.ftab, glob.cookie );
+      break;
   default:
       break;
   }
@@ -230,9 +244,15 @@ static void cmd_list( void ) {
 
 static void cmd_prop( void ) {
   struct ftab_prop prop;
+  int i;
   ftab_prop( &glob.ftab, &prop );
   printf( "Version %u Seq %"PRIu64" count %u/%u lbasize %u\n",
 	  prop.version, prop.seq, prop.count, prop.max, prop.lbasize );
+  printf( "Cookie " );
+  for( i = 0; i < FTAB_MAX_COOKIE; i++ ) {
+    printf( "%02x ", (uint32_t)(uint8_t)prop.cookie[i] );
+  }
+  printf( "\n" );
 }
     
 

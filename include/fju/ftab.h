@@ -4,16 +4,6 @@
 
 #include <fju/mmf.h>
 
-#define FTAB_MAX_PRIV 16
-
-/* 32 byte entry */
-struct ftab_entry {
-  uint64_t id;
-  uint32_t reserved;
-  uint32_t seq;
-  char priv[FTAB_MAX_PRIV];
-};
-
 struct ftab_s {
   struct mmf_s mmf;
 };
@@ -40,14 +30,10 @@ int ftab_close( struct ftab_s *ftab );
 int ftab_prop( struct ftab_s *ftab, struct ftab_prop *prop );
 int ftab_reset( struct ftab_s *ftab );
 
-int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n );
-int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry );
-
-int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id );
+int ftab_alloc( struct ftab_s *ftab, uint64_t *id );
 int ftab_free( struct ftab_s *ftab, uint64_t id );
 int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
 int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offset );
-int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv );
 
 #endif
 

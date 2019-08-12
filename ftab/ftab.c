@@ -5,8 +5,18 @@
 #include <fju/ftab.h>
 #include <fju/sec.h>
 
-#define FTAB_LBASIZE     64
-#define FTAB_LBACOUNT    4096 
+#include "ftab-private.h"
+
+/* these parameters give a default 1MB file */
+#define FTAB_LBASIZE     64          /* data block size */
+#define FTAB_LBACOUNT    13104       /* number of blocks */
+
+/* 16 byte entry */
+struct ftab_entry {
+  uint64_t id;
+  uint32_t seq;
+  uint32_t reserved;
+};
 
 struct ftab_header {
   uint32_t magic;
@@ -56,8 +66,7 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
     for( i = 0; i < f->header.max; i++ ) {
       e = &f->entry[i];
       e->id = 0;
-      e->seq = 1;
-      memset( e->priv, 0, sizeof(e->priv) );
+      e->seq = sec_rand_uint32();
     }
   } else if( f->header.version != FTAB_VERSION ) {
     goto bad;
@@ -119,8 +128,7 @@ int ftab_reset( struct ftab_s *ftab ) {
     for( i = 0; i < f->header.max; i++ ) {
       e = &f->entry[i];
       e->id = 0;
-      e->seq = 1;
-      memset( e->priv, 0, sizeof(e->priv) );
+      e->seq = sec_rand_uint32();
     }
 
     ftab_unlock( ftab );
@@ -128,8 +136,8 @@ int ftab_reset( struct ftab_s *ftab ) {
     return 0;
 }
 
-int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n ) {
-    int i, idx;
+int ftab_list( struct ftab_s *ftab, uint64_t *id, int n ) {
+  int i, idx;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
   
   ftab_lock( ftab );
@@ -137,7 +145,7 @@ int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n ) {
   for( i = 0; i < f->header.max; i++ ) {
       if( f->entry[i].id ) {
 	  if( idx < n ) {
-	      elist[idx] = f->entry[i];
+	      id[idx] = f->entry[i].id;
 	  }
 	  idx++;
       }
@@ -147,25 +155,7 @@ int ftab_list( struct ftab_s *ftab, struct ftab_entry *elist, int n ) {
   return idx;
 }
 
-int ftab_entry_by_id( struct ftab_s *ftab, uint64_t id, struct ftab_entry *entry ) {
-    int sts, i;
-    struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-
-    sts = -1;
-    ftab_lock( ftab );
-    for( i = 0; i < f->header.max; i++ ) {
-	if( f->entry[i].id == id ) {
-	    if( entry ) *entry = f->entry[i];
-	    sts = 0;
-	    break;
-	}
-    }
-    ftab_unlock( ftab );
-    
-    return sts;
-}
-
-int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id ) {
+int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
   int sts, i;
   struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
   struct ftab_entry *e;
@@ -186,8 +176,6 @@ int ftab_alloc( struct ftab_s *ftab, char *priv, uint64_t *id ) {
   if( e ) {
       e->seq++;
       e->id = (((uint64_t)f->entry[i].seq) << 32) | i;
-      if( priv ) memcpy( e->priv, priv, FTAB_MAX_PRIV );
-      else memset( e->priv, 0, FTAB_MAX_PRIV );
       f->header.seq++;
       f->header.count++;
       if( id ) *id = f->entry[i].id;
@@ -248,6 +236,8 @@ static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id ) {
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
     
     idx = id & 0xffffffff;
+    if( idx >= f->header.max ) return NULL;
+    
     seq = (id >> 32) & 0xffffffff;
     if( f->entry[idx].id == id && f->entry[idx].seq == seq ) {
 	return &f->entry[idx];
@@ -295,22 +285,5 @@ int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t off
 
     ftab_unlock( ftab );
     return nbytes;
-}
-
-int ftab_set_priv( struct ftab_s *ftab, uint64_t id, char *priv ) {
-    int sts = -1;
-    struct ftab_entry *e;
-    
-    ftab_lock( ftab );
-
-    e = ftab_get_entry( ftab, id );
-    if( e ) {
-	memcpy( e->priv, priv, FTAB_MAX_PRIV );
-	sts = 0;
-    }
-    
-    ftab_unlock( ftab );
-
-    return sts;    
 }
 

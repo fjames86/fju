@@ -2,7 +2,8 @@
 #include <fju/fdtab.h>
 #include <string.h>
 
-  
+#define FDT_HEADER_SIZE 8
+
 int fdtab_open( char *path, struct ftab_opts *opts, struct fdtab_s *fdt ) {
   int sts;
   struct ftab_prop prop;
@@ -11,7 +12,7 @@ int fdtab_open( char *path, struct ftab_opts *opts, struct fdtab_s *fdt ) {
   if( sts ) return sts;
 
   sts = ftab_prop( &fdt->ftab, &prop );
-  fdt->lbasize = prop.lbasize;
+  fdt->lbasize = prop.lbasize - FDT_HEADER_SIZE;
   
   return 0;
 }
@@ -21,14 +22,13 @@ int fdtab_close( struct fdtab_s *fdt ) {
   return 0;
 }
 
-#define FDT_HEADER_SIZE 8
-
 int fdtab_alloc( struct fdtab_s *fdt, uint32_t size, uint64_t *id ) {
   int sts, nblks;
   uint64_t tid, nextid;
 
-  nblks = size / (fdt->lbasize - FDT_HEADER_SIZE);
+  nblks = size / fdt->lbasize;
   if( size % fdt->lbasize != 0 ) nblks++;
+  if( nblks == 0 ) nblks = 1;
   
   sts = ftab_alloc( &fdt->ftab, &tid );
   if( sts ) return sts;
@@ -71,7 +71,8 @@ int fdtab_realloc( struct fdtab_s *fdt, uint64_t id, uint32_t newsize ) {
   uint64_t tid;
   int nblks;
 
-  nblks = newsize / (fdt->lbasize - FDT_HEADER_SIZE);
+  nblks = newsize / fdt->lbasize;
+  if( newsize % fdt->lbasize != 0 ) nblks++;
   if( nblks == 0 ) nblks = 1;
 
   while( nblks ) {
@@ -83,7 +84,7 @@ int fdtab_realloc( struct fdtab_s *fdt, uint64_t id, uint32_t newsize ) {
   }
 
   if( nblks > 0 ) {
-    sts = fdtab_alloc( fdt, nblks * (fdt->lbasize - FDT_HEADER_SIZE), &tid );
+    sts = fdtab_alloc( fdt, nblks * fdt->lbasize, &tid );
     if( sts ) return sts;
     ftab_write( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
   }
@@ -96,12 +97,12 @@ int fdtab_size( struct fdtab_s *fdt, uint64_t id ) {
   uint64_t tid;
   
   /* start reading from here */
-  cnt = fdt->lbasize - FDT_HEADER_SIZE;
+  cnt = fdt->lbasize;
   sts = ftab_read( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
   if( sts < 0 ) return sts;
   id = tid;
   while( id ) {
-    cnt += fdt->lbasize - FDT_HEADER_SIZE;
+    cnt += fdt->lbasize;
     sts = ftab_read( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
     if( sts < 0 ) return sts;
     id = tid;
@@ -115,8 +116,8 @@ int fdtab_read( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t off
   uint64_t tid;
   
   /* skip this many starting blocks */
-  nblks = offset / (fdt->lbasize - FDT_HEADER_SIZE);
-  offset = offset % (fdt->lbasize - FDT_HEADER_SIZE);
+  nblks = offset / fdt->lbasize;
+  offset = offset % fdt->lbasize;
   
   while( nblks ) {
     sts = ftab_read( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
@@ -128,7 +129,7 @@ int fdtab_read( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t off
   /* start reading from here */
   cnt = 0;
   nbytes = n;
-  if( nbytes > (fdt->lbasize - FDT_HEADER_SIZE) ) nbytes = fdt->lbasize - FDT_HEADER_SIZE;
+  if( nbytes > fdt->lbasize ) nbytes = fdt->lbasize;
   sts = ftab_read( &fdt->ftab, id, buf, nbytes, FDT_HEADER_SIZE + offset );
   if( sts < 0 ) return sts;
   buf += nbytes;
@@ -139,7 +140,7 @@ int fdtab_read( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t off
   
   while( id && n ) {
     nbytes = n;
-    if( nbytes > (fdt->lbasize - FDT_HEADER_SIZE) ) nbytes = fdt->lbasize - FDT_HEADER_SIZE;
+    if( nbytes > fdt->lbasize ) nbytes = fdt->lbasize;
     sts = ftab_read( &fdt->ftab, id, buf, nbytes, FDT_HEADER_SIZE );
     if( sts < 0 ) return sts;
     buf += nbytes;
@@ -158,8 +159,8 @@ int fdtab_write( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t of
   uint64_t tid;
   
   /* skip this many starting blocks */
-  nblks = offset / (fdt->lbasize - FDT_HEADER_SIZE);
-  offset = offset % (fdt->lbasize - FDT_HEADER_SIZE);
+  nblks = offset / fdt->lbasize;
+  offset = offset % fdt->lbasize;
   
   while( nblks ) {
     sts = ftab_read( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
@@ -171,7 +172,7 @@ int fdtab_write( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t of
   /* start writing from here */
   cnt = 0;
   nbytes = n;
-  if( nbytes > (fdt->lbasize - FDT_HEADER_SIZE) ) nbytes = fdt->lbasize - FDT_HEADER_SIZE;
+  if( nbytes > fdt->lbasize ) nbytes = fdt->lbasize;
   sts = ftab_write( &fdt->ftab, id, buf, nbytes, FDT_HEADER_SIZE + offset );
   if( sts < 0 ) return sts;
   buf += nbytes;
@@ -182,7 +183,7 @@ int fdtab_write( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t of
   
   while( id && n ) {
     nbytes = n;
-    if( nbytes > (fdt->lbasize - FDT_HEADER_SIZE) ) nbytes = fdt->lbasize - FDT_HEADER_SIZE;
+    if( nbytes > fdt->lbasize ) nbytes = fdt->lbasize;
     sts = ftab_write( &fdt->ftab, id, buf, nbytes, FDT_HEADER_SIZE );
     if( sts < 0 ) return sts;
     buf += nbytes;

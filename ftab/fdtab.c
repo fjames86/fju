@@ -120,6 +120,32 @@ int fdtab_size( struct fdtab_s *fdt, uint64_t id ) {
   return size;
 }
 
+int fdtab_truncate( struct fdtab_s *fdt, uint64_t id, uint32_t size ) {
+  /* walk to final block, free all blocks coming after */
+  int sts, nblks, i;
+  uint64_t tid, startid;
+
+  startid = id;
+			  
+  nblks = size / fdt->lbasize;
+  if( size % fdt->lbasize ) nblks++;
+  for( i = 0; i < nblks; i++ ) {
+    sts = ftab_read( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
+    if( sts < 0 ) return sts;
+    id = tid;
+  }
+
+  /* clear next pointer and set size */
+  tid = 0;
+  ftab_write( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
+  ftab_write( &fdt->ftab, startid, (char *)&size, sizeof(size), 8 );
+  
+  /* free data blocks */
+  fdtab_free( fdt, id );
+
+  return 0;
+}
+
 int fdtab_read( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t offset ) {
   int sts, nblks, cnt, nbytes;
   uint32_t size, foff;

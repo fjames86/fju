@@ -41,7 +41,7 @@ static struct {
 static void usage( char *fmt, ... ) {
     printf( "Usage: [-p path] [-S lbasize] [-C lbacount] CMD args...\n"
 	    "Where CMD:\n"
-	    "               alloc [count=COUNT] [size=SIZE]\n"
+	    "               alloc [count=COUNT] [size=SIZE] [id=ID]\n"
 	    "               free ID\n"
 	    "               read ID\n"
 	    "               write ID [offset=OFFSET]\n"
@@ -102,7 +102,7 @@ int main( int argc, char **argv ) {
   }
   
   if( i >= argc ) {
-    glob.cmd = CMD_ALLOC;
+    glob.cmd = 0;
   } else if( strcmp( argv[i], "alloc" ) == 0 ) {
     glob.cmd = CMD_ALLOC;
     i++;
@@ -187,7 +187,8 @@ int main( int argc, char **argv ) {
     cmd_write();
     break;
   default:
-      break;
+    usage( NULL );
+    break;
   }
   
   fdtab_close( &glob.ftab );

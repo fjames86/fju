@@ -9,15 +9,13 @@
 
 /* these parameters give a default 1MB file */
 #define FTAB_LBASIZE     64          /* data block size */
-#define FTAB_LBACOUNT    13104       /* number of blocks */
+#define FTAB_LBACOUNT    14560       /* number of blocks */
 
-/* 16 byte entry */
+/* 8 byte entry */
 struct ftab_entry {
   uint32_t flags;
 #define FTAB_ACTIVE      0x0001 
-  uint32_t spare;
   uint32_t seq;
-  uint32_t reserved;
 };
 
 struct ftab_header {

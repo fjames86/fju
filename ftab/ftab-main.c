@@ -183,7 +183,7 @@ int main( int argc, char **argv ) {
   }
   
   sts = ftab_open( glob.path, &opts, &glob.ftab );
-  if( sts ) usage( "Failed to open \"%s\"", glob.path );
+  if( sts ) usage( "Failed to open \"%s\"", glob.path ? glob.path : "default" );
   
   switch( glob.cmd ) {
   case CMD_LIST:

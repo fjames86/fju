@@ -13,7 +13,9 @@
 
 /* 16 byte entry */
 struct ftab_entry {
-  uint64_t id;
+  uint32_t flags;
+#define FTAB_ACTIVE      0x0001 
+  uint32_t spare;
   uint32_t seq;
   uint32_t reserved;
 };
@@ -68,7 +70,7 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
     f = ftab->mmf.file;
     for( i = 0; i < f->header.max; i++ ) {
       e = &f->entry[i];
-      e->id = 0;
+      e->flags = 0;
       e->seq = sec_rand_uint32();
     }
   } else if( f->header.version != FTAB_VERSION ) {
@@ -139,7 +141,7 @@ int ftab_reset( struct ftab_s *ftab ) {
 
     for( i = 0; i < f->header.max; i++ ) {
       e = &f->entry[i];
-      e->id = 0;
+      e->flags = 0;
       e->seq = sec_rand_uint32();
     }
 
@@ -155,9 +157,9 @@ int ftab_list( struct ftab_s *ftab, uint64_t *id, int n ) {
   ftab_lock( ftab );
   idx = 0;
   for( i = 0; i < f->header.max; i++ ) {
-      if( f->entry[i].id ) {
+      if( f->entry[i].flags & FTAB_ACTIVE ) {
 	  if( idx < n ) {
-	      id[idx] = f->entry[i].id;
+	    id[idx] = ((uint64_t)f->entry[i].seq) << 32 | i;
 	  }
 	  idx++;
       }
@@ -179,7 +181,7 @@ int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
   startidx = sec_rand_uint32() % f->header.max;  
   e = NULL;
   for( i = 0; i < f->header.max; i++ ) {
-      if( f->entry[(startidx + i) % f->header.max].id == 0 ) {
+      if( (f->entry[(startidx + i) % f->header.max].flags & FTAB_ACTIVE) == 0 ) {
 	  e = &f->entry[(startidx + i) % f->header.max];
 	  i = (startidx + i) % f->header.max;
 	  break;
@@ -187,10 +189,10 @@ int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
   }
   if( e ) {
       e->seq++;
-      e->id = (((uint64_t)f->entry[i].seq) << 32) | i;
+      e->flags |= FTAB_ACTIVE;
       f->header.seq++;
       f->header.count++;
-      if( id ) *id = f->entry[i].id;
+      if( id ) *id = (((uint64_t)e->seq) << 32) | i;
       
       sts = 0;
   }
@@ -208,7 +210,7 @@ int ftab_free( struct ftab_s *ftab, uint64_t id ) {
   ftab_lock( ftab );
   e = ftab_get_entry( ftab, id );
   if( e ) {
-      e->id = 0;
+      e->flags &= ~FTAB_ACTIVE;
       e->seq++;
       sts = 0;
       f->header.count--;
@@ -251,7 +253,7 @@ static struct ftab_entry *ftab_get_entry( struct ftab_s *ftab, uint64_t id ) {
     if( idx >= f->header.max ) return NULL;
     
     seq = (id >> 32) & 0xffffffff;
-    if( f->entry[idx].id == id && f->entry[idx].seq == seq ) {
+    if( (f->entry[idx].flags & FTAB_ACTIVE) && (f->entry[idx].seq == seq) ) {
 	return &f->entry[idx];
     }
     return NULL;

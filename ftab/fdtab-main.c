@@ -41,7 +41,7 @@ static struct {
 static void usage( char *fmt, ... ) {
     printf( "Usage: [-p path] [-S lbasize] [-C lbacount] CMD args...\n"
 	    "Where CMD:\n"
-	    "               alloc [count=COUNT]\n"
+	    "               alloc [count=COUNT] [size=SIZE]\n"
 	    "               free ID\n"
 	    "               read ID\n"
 	    "               write ID [offset=OFFSET]\n"
@@ -112,6 +112,8 @@ int main( int argc, char **argv ) {
 	glob.npop = strtoul( argval, NULL, 10 );
       } else if( strcmp( argname, "size" ) == 0 ) {
 	glob.size = strtoul( argval, NULL, 10 );
+      } else if( strcmp( argname, "id" ) == 0 ) {
+	glob.id = strtoull( argval, NULL, 16 );
       } else usage( NULL );
       i++;
     }
@@ -162,11 +164,16 @@ int main( int argc, char **argv ) {
   
   switch( glob.cmd ) {
   case CMD_ALLOC:
-    if( !glob.npop ) glob.npop = 1;
-    for( i = 0; i < glob.npop; i++ ) {
-      sts = fdtab_alloc( &glob.ftab, glob.size, &glob.id );
-      if( sts ) usage( "Alloc failed" );
-      printf( "%"PRIx64"\n", glob.id );
+    if( glob.id ) {
+      sts = fdtab_realloc( &glob.ftab, glob.id, glob.size );
+      if( sts < 0 ) usage( "Failed to realloc" );
+    } else {
+      if( !glob.npop ) glob.npop = 1;
+      for( i = 0; i < glob.npop; i++ ) {
+	sts = fdtab_alloc( &glob.ftab, glob.size, &glob.id );
+	if( sts ) usage( "Alloc failed" );
+	printf( "%"PRIx64"\n", glob.id );
+      }
     }
     break;
   case CMD_FREE:

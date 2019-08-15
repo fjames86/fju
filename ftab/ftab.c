@@ -191,7 +191,7 @@ int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
       f->header.seq++;
       f->header.count++;
       if( id ) *id = (((uint64_t)e->seq) << 32) | i;
-      
+
       sts = 0;
   }
   ftab_unlock( ftab );

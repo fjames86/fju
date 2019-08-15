@@ -24,9 +24,9 @@
 static void usage( char *fmt, ... ) {
     printf( "Usage: CMD args...\n"
 	    "Where CMD:\n"
-	    "               list [path]\n"
+	    "               [list] [path]\n"
 	    "               get path name\n"
-	    "               put path name u32|u64|string|key value\n"
+	    "               put path name u32|u64|string|opaque value\n"
 	    "               rem path name\n" 
 	    "\n"
     );
@@ -39,7 +39,73 @@ static void usage( char *fmt, ... ) {
         va_end( args );
         printf( "\n" );
     }
-    exit( 0 );
+    exit( 1 );
+}
+
+static void cmd_list( int argc, char **argv, int i ) {
+  struct freg_entry *elist;
+  int sts, n, j;
+  uint64_t id;
+  uint32_t u32;
+  uint64_t u64;
+  char *buf;
+  int len;
+    
+  id = 0;
+
+  if( i < argc ) {
+    sts = freg_subkey( 0, argv[i], 0, &id );
+    if( sts ) usage( "Unknown path \"%s\"", argv[i] );
+  }
+  sts = freg_list( id, NULL, 0 );
+  if( sts < 0 ) usage( "Failed to list" );
+  elist = malloc( sizeof(*elist) * sts );
+  n = freg_list( id, elist, sts );
+  if( n < sts ) n = sts;
+  printf( "%-8s %-32s %-8s\n", "Type", "Name", "Len" );
+  for( i = 0; i < n; i++ ) {
+    printf( "%-8s %-32s %-8u ",
+	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ? "u32" :
+	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_UINT64 ? "u64" :
+	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ? "string" :
+	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_OPAQUE ? "opaque" :
+	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ? "key" :
+	    "unknown",
+	    elist[i].name,
+	    elist[i].len );
+    switch( elist[i].flags & FREG_TYPE_MASK ) {
+    case FREG_TYPE_UINT32:
+      sts = freg_get( id, elist[i].name, NULL, (char *)&u32, sizeof(u32), NULL );
+      printf( "%u", u32 );
+      break;
+    case FREG_TYPE_UINT64:
+      sts = freg_get( id, elist[i].name, NULL, (char *)&u64, sizeof(u64), NULL );
+      printf( "%"PRIu64"", u64 );
+      break;
+    case FREG_TYPE_KEY:
+      sts = freg_get( id, elist[i].name, NULL, (char *)&u64, sizeof(u64), NULL );
+      printf( "%"PRIx64"", u64 );      
+      break;
+    case FREG_TYPE_STRING:
+      sts = freg_get( id, elist[i].name, NULL, NULL, 0, &len );
+      buf = malloc( len );
+      sts = freg_get( id, elist[i].name, NULL, buf, len, NULL );
+      printf( "%s", buf );
+      break;
+    case FREG_TYPE_OPAQUE:
+      sts = freg_get( id, elist[i].name, NULL, NULL, 0, &len );
+      buf = malloc( len );
+      sts = freg_get( id, elist[i].name, NULL, buf, len, NULL );
+      for( j = 0; j < len; j++ ) {
+	printf( "%02x ", (uint32_t)(uint8_t)buf[j] );
+      }
+      break;      
+    }
+    
+    printf( "\n" );
+  }
+  printf( "\n" );
+  free( elist );  
 }
 
 int main( int argc, char **argv ) {
@@ -50,35 +116,11 @@ int main( int argc, char **argv ) {
   if( sts ) usage( "Failed to open" );
 
   i = 1;
-  if( (i >= argc) || (strcmp( argv[i], "list" ) == 0) ) {
-    struct freg_entry *elist;
-    int n;
-    id = 0;
-    
+  if( i >= argc ) {
+    cmd_list( argc, argv, i );
+  } else if( strcmp( argv[i], "list" ) == 0 ) {
     i++;
-    if( i < argc ) {
-      sts = freg_subkey( 0, argv[i], 0, &id );
-      if( sts ) usage( "Unknown path \"%s\"", argv[i] );
-    }
-    sts = freg_list( id, NULL, 0 );
-    if( sts < 0 ) usage( "Failed to list" );
-    elist = malloc( sizeof(*elist) * sts );
-    n = freg_list( id, elist, sts );
-    if( n < sts ) n = sts;
-    printf( "%-64s %-8s %-8s\n", "Name", "Type", "Len" );
-    for( i = 0; i < n; i++ ) {
-      printf( "%-64s %-8s %-8u\n",
-	      elist[i].name,
-	      (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ? "u32" :
-	      (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_UINT64 ? "u64" :
-	      (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ? "string" :
-	      (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_OPAQUE ? "opaque" :
-	      (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ? "key" :
-	      "unknown",
-	      elist[i].len );
-    }
-    printf( "\n" );
-    free( elist );
+    cmd_list( argc, argv, i );
   } else if( strcmp( argv[i], "get" ) == 0 ) {
     uint32_t flags;
     char *buf;
@@ -92,10 +134,9 @@ int main( int argc, char **argv ) {
     if( i >= argc ) usage( NULL );
     sts = freg_get( id, argv[i], &flags, NULL, 0, &len );
     if( sts ) usage( "Failed to get" );
-    printf( "xx len=%d\n", len );
     buf = malloc( len );
     sts = freg_get( id, argv[i], &flags, buf, len, NULL );
-    if( sts ) usage( "Failed to get2" );
+    if( sts ) usage( "Failed to get data" );
     switch( flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
       printf( "%u\n", *(uint32_t *)buf );
@@ -140,10 +181,10 @@ int main( int argc, char **argv ) {
 	flags = FREG_TYPE_UINT32;
       } else if( strcmp( argv[i], "u64" ) == 0 ) {
 	flags = FREG_TYPE_UINT64;
-      } else if( strcmp( argv[i], "string" ) == 0 ) {
+      } else if( (strcmp( argv[i], "string" ) == 0) || (strcmp( argv[i], "str" ) == 0) ) {
 	flags = FREG_TYPE_STRING;
-      } else if( strcmp( argv[i], "key" ) == 0 ) {
-	flags = FREG_TYPE_KEY;
+      } else if( (strcmp( argv[i], "opaque" ) == 0) ) {
+	flags = FREG_TYPE_OPAQUE;	
       } else usage( NULL );
       
       i++;
@@ -169,12 +210,16 @@ int main( int argc, char **argv ) {
 	break;
       case FREG_TYPE_STRING:
 	buf = argv[i];
-	len = strlen( argv[i] );
+	len = strlen( argv[i] ) + 1;
 	break;
-      case FREG_TYPE_KEY:
-	u64 = strtoull( argv[i], NULL, 16 );
-	buf = (char *)&u64;
-	len = sizeof(u64);	
+      case FREG_TYPE_OPAQUE:
+	len = 0;
+	buf = malloc( 4096 );
+	while( i < argc ) {
+	  buf[len] = strtoul( argv[i], NULL, 16 );
+	  len++;
+	  i++;
+	}
 	break;
       default:
 	usage( NULL );
@@ -192,7 +237,7 @@ int main( int argc, char **argv ) {
     if( i >= argc ) usage( NULL );
     sts = freg_rem( id, argv[i] );
     if( sts ) usage( "Failed to remove value" );
-  } else usage( NULL );
+  } else cmd_list( argc, argv, i );
   
   freg_close();
 

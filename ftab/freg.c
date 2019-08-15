@@ -266,7 +266,7 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len 
 
 int freg_rem( uint64_t parentid, char *name ) {  
   int sts, idx, size, type;
-  struct freg_s e, tmpe;
+  struct freg_s e, tmpe, e2;
 
   if( !glob.ocount ) return -1;
   if( !parentid ) parentid = glob.rootid;
@@ -284,9 +284,9 @@ int freg_rem( uint64_t parentid, char *name ) {
     nentry = fdtab_size( &glob.fdt, e.datap ) / sizeof(e);    
     offset = 0;
     for( i = 0; i < nentry; i++ ) {
-      sts = fdtab_read( &glob.fdt, e.datap, (char *)&e, sizeof(e), offset );
-      freg_rem( e.datap, e.name );
-      offset += sizeof(e);
+      sts = fdtab_read( &glob.fdt, e.datap, (char *)&e2, sizeof(e2), offset );
+      freg_rem( e.datap, e2.name );
+      offset += sizeof(e2);
     }
   }
   

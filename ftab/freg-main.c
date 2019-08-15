@@ -76,11 +76,11 @@ static void cmd_list( int argc, char **argv, int i ) {
     switch( elist[i].flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
       sts = freg_get( id, elist[i].name, NULL, (char *)&u32, sizeof(u32), NULL );
-      printf( "%u", u32 );
+      printf( "%u (0x%x)", u32, u32 );
       break;
     case FREG_TYPE_UINT64:
       sts = freg_get( id, elist[i].name, NULL, (char *)&u64, sizeof(u64), NULL );
-      printf( "%"PRIu64"", u64 );
+      printf( "%"PRIu64" (0x%"PRIx64")", u64, u64 );
       break;
     case FREG_TYPE_KEY:
       sts = freg_get( id, elist[i].name, NULL, (char *)&u64, sizeof(u64), NULL );
@@ -193,12 +193,26 @@ int main( int argc, char **argv ) {
       if( sts ) usage( "Failed to create subkey" );      
       break;
     case FREG_TYPE_UINT32:
-      if( i < argc ) u32 = strtoul( argv[i], NULL, 10 );
+      if( i < argc ) {
+	char *term;
+	u32 = strtoul( argv[i], &term, 10 );
+	if( *term ) {
+	  u32 = strtoul( argv[i], &term, 16 );
+	  if( *term ) usage( "Failed to parse u32" );
+	}
+      }
       buf = (char *)&u32;
       len = sizeof(u32);
       break;
     case FREG_TYPE_UINT64:
-      if( i < argc ) u64 = strtoull( argv[i], NULL, 10 );
+      if( i < argc ) {
+	char *term;
+	u64 = strtoull( argv[i], &term, 10 );
+	if( *term ) {
+	  u64 = strtoull( argv[i], &term, 16 );
+	  if( *term ) usage( "Failed to parse u64 \"%s\"", argv[i] );
+	}
+      }
       buf = (char *)&u64;
       len = sizeof(u64);
       break;

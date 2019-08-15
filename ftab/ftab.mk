@@ -1,5 +1,5 @@
 
-ftab: ${LIBDIR}/libftab.a ${BINDIR}/ftab ${LIBDIR}/libfdtab.a ${BINDIR}/fdtab ${LIBDIR}/libfreg.a
+ftab: ${LIBDIR}/libftab.a ${BINDIR}/ftab ${LIBDIR}/libfdtab.a ${BINDIR}/fdtab ${LIBDIR}/libfreg.a ${BINDIR}/freg 
 
 ${LIBDIR}/libftab.a: ftab/ftab.c include/fju/ftab.h 
 	${CC} -c ${CFLAGS} ftab/ftab.c 
@@ -18,3 +18,6 @@ ${BINDIR}/ftab: ftab/ftab-main.c ${LIBDIR}/libmmf.a ${LIBDIR}/libftab.a
 
 ${BINDIR}/fdtab: ftab/fdtab-main.c ${LIBDIR}/libmmf.a ${LIBDIR}/libfdtab.a ${LIBDIR}/libftab.a
 	${CC} -o $@ ftab/fdtab-main.c ${CFLAGS} ${LFLAGS} -lfdtab -lmmf -lftab -lsec -lcrypto 
+
+${BINDIR}/freg: ftab/freg-main.c ${LIBDIR}/libmmf.a ${LIBDIR}/libfdtab.a ${LIBDIR}/libftab.a ${LIBDIR}/libfreg.a
+	${CC} -o $@ ftab/freg-main.c ${CFLAGS} ${LFLAGS} -lfdtab -lmmf -lftab -lsec -lcrypto -lfreg 

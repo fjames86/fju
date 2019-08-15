@@ -14,7 +14,7 @@ PROJECTS += ftab
 
 BINDIR=bin
 LIBDIR=lib
-CFLAGS += -Iinclude -g -Wall
+CFLAGS=-Iinclude -g -Wall
 LFLAGS += -L${LIBDIR}
 
 

@@ -88,10 +88,9 @@ int fdtab_realloc( struct fdtab_s *fdt, uint64_t id, uint32_t newsize ) {
   sts = ftab_read( &fdt->ftab, id, (char *)&size, sizeof(size), 8 );
   if( sts < 0 ) return sts;
   if( size >= newsize ) return 0;
-  
+
   nblks = newsize / fdt->lbasize;
-  if( newsize % fdt->lbasize != 0 ) nblks++;
-  if( nblks == 0 ) nblks = 1;
+  if( (newsize % fdt->lbasize) != 0 ) nblks++;
 
   while( nblks ) {
     sts = ftab_read( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
@@ -123,26 +122,33 @@ int fdtab_size( struct fdtab_s *fdt, uint64_t id ) {
 int fdtab_truncate( struct fdtab_s *fdt, uint64_t id, uint32_t size ) {
   /* walk to final block, free all blocks coming after */
   int sts, nblks, i;
-  uint64_t tid, startid;
+  uint64_t tid, startid, previd;
 
   startid = id;
-			  
+  previd = 0;
+  
   nblks = size / fdt->lbasize;
   if( size % fdt->lbasize ) nblks++;
+  if( !nblks ) nblks = 1;
   for( i = 0; i < nblks; i++ ) {
     sts = ftab_read( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
     if( sts < 0 ) return sts;
+    previd = id;
     id = tid;
   }
 
-  /* clear next pointer and set size */
-  tid = 0;
-  ftab_write( &fdt->ftab, id, (char *)&tid, sizeof(tid), 0 );
-  ftab_write( &fdt->ftab, startid, (char *)&size, sizeof(size), 8 );
+  /* clear next pointer */
+  if( previd ) {
+    tid = 0;
+    ftab_write( &fdt->ftab, previd, (char *)&tid, sizeof(tid), 0 );  
+  }
   
-  /* free data blocks */
+  /* clear data blocks */
   fdtab_free( fdt, id );
 
+  /* set size */
+  ftab_write( &fdt->ftab, startid, (char *)&size, sizeof(size), 8 );
+  
   return 0;
 }
 
@@ -171,7 +177,7 @@ int fdtab_read( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t off
   cnt = 0;
   nbytes = n;
   foff = nblks * fdt->lbasize;
-  if( nbytes > fdt->lbasize ) nbytes = fdt->lbasize;
+  if( nbytes > (fdt->lbasize - offset) ) nbytes = fdt->lbasize - offset;
   sts = ftab_read( &fdt->ftab, id, buf, nbytes, FDT_HEADER_SIZE + offset );
   if( sts < 0 ) return sts;
   buf += nbytes;
@@ -226,7 +232,7 @@ int fdtab_write( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t of
   /* start writing from here */
   cnt = 0;
   nbytes = n;
-  if( nbytes > fdt->lbasize ) nbytes = fdt->lbasize;
+  if( nbytes > (fdt->lbasize - offset) ) nbytes = fdt->lbasize - offset;
   sts = ftab_write( &fdt->ftab, id, buf, nbytes, FDT_HEADER_SIZE + offset );
   if( sts < 0 ) return sts;
   buf += nbytes;

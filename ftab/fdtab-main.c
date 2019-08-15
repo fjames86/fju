@@ -27,6 +27,7 @@ static struct {
 #define CMD_FREE 3
 #define CMD_READ 4
 #define CMD_WRITE 5
+#define CMD_TRUNCATE 6
   char *path;
   struct fdtab_s ftab;
   int binary;
@@ -45,6 +46,7 @@ static void usage( char *fmt, ... ) {
 	    "               free ID\n"
 	    "               read ID\n"
 	    "               write ID [offset=OFFSET]\n"
+	    "               truncate ID [offset=OFFSET]\n" 
 	    "\n"
     );
 
@@ -147,6 +149,19 @@ int main( int argc, char **argv ) {
 	} else usage( NULL );
 	i++;
     }
+  } else if( strcmp( argv[i], "truncate" ) == 0 ) {      
+    glob.cmd = CMD_TRUNCATE;
+    i++;
+    if( i >= argc ) usage( NULL );
+    glob.id = strtoull( argv[i], NULL, 16 );
+    i++;
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "offset" ) == 0 ) {
+	    glob.offset = strtoul( argval, NULL, 10 );
+	} else usage( NULL );
+	i++;
+    }    
   } else usage( NULL );
 
   memset( &opts, 0, sizeof(opts) );
@@ -186,6 +201,10 @@ int main( int argc, char **argv ) {
   case CMD_WRITE:
     cmd_write();
     break;
+  case CMD_TRUNCATE:
+    sts = fdtab_truncate( &glob.ftab, glob.id, glob.offset );
+    if( sts ) usage( "Failed to truncate" );
+    break;    
   default:
     usage( NULL );
     break;

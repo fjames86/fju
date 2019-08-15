@@ -246,8 +246,8 @@ static void cmd_prop( void ) {
   struct ftab_prop prop;
   int i;
   ftab_prop( &glob.ftab, &prop );
-  printf( "Version %u Seq %"PRIu64" count %u/%u lbasize %u\n",
-	  prop.version, prop.seq, prop.count, prop.max, prop.lbasize );
+  printf( "Version %u Seq %"PRIu64" count %u/%u (%u%%) lbasize %u usage %ukb/%ukb\n",
+	  prop.version, prop.seq, prop.count, prop.max, (100 * prop.count) / prop.max, prop.lbasize, (prop.count * prop.lbasize) / 1024, (prop.max * prop.lbasize) / 1024 );
   printf( "Cookie " );
   for( i = 0; i < FTAB_MAX_COOKIE; i++ ) {
     printf( "%02x ", (uint32_t)(uint8_t)prop.cookie[i] );

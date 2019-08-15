@@ -25,9 +25,9 @@ static void usage( char *fmt, ... ) {
     printf( "Usage: CMD args...\n"
 	    "Where CMD:\n"
 	    "               [list] [path]\n"
-	    "               get path name\n"
-	    "               put path name u32|u64|string|opaque value\n"
-	    "               rem path name\n" 
+	    "               get path\n"
+	    "               put path u32|u64|string|opaque|key [value]\n"
+	    "               rem path\n" 
 	    "\n"
     );
 
@@ -128,14 +128,10 @@ int main( int argc, char **argv ) {
     
     i++;
     if( i >= argc ) usage( NULL );
-    sts = freg_subkey( 0, argv[i], 0, &id );
-    if( sts ) usage( "Failed to get key" );
-    i++;
-    if( i >= argc ) usage( NULL );
-    sts = freg_get( id, argv[i], &flags, NULL, 0, &len );
+    sts = freg_get( 0, argv[i], &flags, NULL, 0, &len );
     if( sts ) usage( "Failed to get" );
     buf = malloc( len );
-    sts = freg_get( id, argv[i], &flags, buf, len, NULL );
+    sts = freg_get( 0, argv[i], &flags, buf, len, NULL );
     if( sts ) usage( "Failed to get data" );
     switch( flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
@@ -161,7 +157,7 @@ int main( int argc, char **argv ) {
     free( buf );
     
   } else if( strcmp( argv[i], "put" ) == 0 ) {
-    char *path, *name = NULL;
+    char *path;
     uint32_t flags, u32;
     uint64_t u64;
     char *buf;
@@ -171,71 +167,72 @@ int main( int argc, char **argv ) {
     if( i >= argc ) usage( NULL );
     path = argv[i];
     i++;
-    if( i < argc ) {
-      name = argv[i];
-      i++;
-      if( i >= argc ) usage( NULL );
+    if( i >= argc ) usage( NULL );
+    flags = 0;
+    if( strcmp( argv[i], "u32" ) == 0 ) {
+      flags = FREG_TYPE_UINT32;
+    } else if( strcmp( argv[i], "u64" ) == 0 ) {
+      flags = FREG_TYPE_UINT64;
+    } else if( (strcmp( argv[i], "string" ) == 0) || (strcmp( argv[i], "str" ) == 0) ) {
+      flags = FREG_TYPE_STRING;
+    } else if( (strcmp( argv[i], "opaque" ) == 0) ) {
+      flags = FREG_TYPE_OPAQUE;
+    } else if( strcmp( argv[i], "key" ) == 0 ) {
+      flags = FREG_TYPE_KEY;
+    } else usage( NULL );    
 
-      flags = 0;
-      if( strcmp( argv[i], "u32" ) == 0 ) {
-	flags = FREG_TYPE_UINT32;
-      } else if( strcmp( argv[i], "u64" ) == 0 ) {
-	flags = FREG_TYPE_UINT64;
-      } else if( (strcmp( argv[i], "string" ) == 0) || (strcmp( argv[i], "str" ) == 0) ) {
-	flags = FREG_TYPE_STRING;
-      } else if( (strcmp( argv[i], "opaque" ) == 0) ) {
-	flags = FREG_TYPE_OPAQUE;	
-      } else usage( NULL );
-      
-      i++;
-      if( i >= argc ) usage( NULL );
-    }
+    i++;
     
-    sts = freg_subkey( 0, path, FREG_CREATE, &id );
-    if( sts ) usage( "Failed to create subkey" );
-
-    if( name ) {
-      buf = NULL;
-      len = 0;
-      switch( flags & FREG_TYPE_MASK ) {
-      case FREG_TYPE_UINT32:
-	u32 = strtoul( argv[i], NULL, 10 );
-	buf = (char *)&u32;
-	len = sizeof(u32);
-	break;
-      case FREG_TYPE_UINT64:
-	u64 = strtoull( argv[i], NULL, 10 );
-	buf = (char *)&u64;
-	len = sizeof(u64);
-	break;
-      case FREG_TYPE_STRING:
+    buf = NULL;
+    len = 0;
+    u32 = 0;
+    u64 = 0;
+    switch( flags & FREG_TYPE_MASK ) {
+    case FREG_TYPE_KEY:
+      sts = freg_subkey( 0, path, FREG_CREATE, &id );
+      if( sts ) usage( "Failed to create subkey" );      
+      break;
+    case FREG_TYPE_UINT32:
+      if( i < argc ) u32 = strtoul( argv[i], NULL, 10 );
+      buf = (char *)&u32;
+      len = sizeof(u32);
+      break;
+    case FREG_TYPE_UINT64:
+      if( i < argc ) u64 = strtoull( argv[i], NULL, 10 );
+      buf = (char *)&u64;
+      len = sizeof(u64);
+      break;
+    case FREG_TYPE_STRING:
+      if( i < argc ) {
 	buf = argv[i];
 	len = strlen( argv[i] ) + 1;
-	break;
-      case FREG_TYPE_OPAQUE:
+      } else {
+	buf = NULL;
 	len = 0;
-	buf = malloc( 4096 );
-	while( i < argc ) {
-	  buf[len] = strtoul( argv[i], NULL, 16 );
-	  len++;
-	  i++;
-	}
-	break;
-      default:
-	usage( NULL );
       }
-      
-      freg_put( id, name, flags, buf, len );
+      break;
+    case FREG_TYPE_OPAQUE:
+      len = 0;
+      buf = malloc( 4096 );
+      while( i < argc ) {
+	buf[len] = strtoul( argv[i], NULL, 16 );
+	len++;
+	i++;
+      }
+      break;
+    default:
+      usage( NULL );
+      break;
     }
-    
+
+    if( (flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
+      sts = freg_put( 0, path, flags, buf, len );
+      if( sts ) usage( "Failed to put" );
+    }
   } else if( strcmp( argv[i], "rem" ) == 0 ) {
     i++;
     if( i >= argc ) usage( NULL );
-    sts = freg_subkey( 0, argv[i], 0, &id );
-    if( sts ) usage( "Failed to get subkey" );
-    i++;
-    if( i >= argc ) usage( NULL );
-    sts = freg_rem( id, argv[i] );
+    sts = freg_rem( 0, argv[i] );
     if( sts ) usage( "Failed to remove value" );
   } else cmd_list( argc, argv, i );
   

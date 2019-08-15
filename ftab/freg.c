@@ -132,19 +132,65 @@ static int get_entry( uint64_t parentid, char *name, struct freg_s *e, int *idx 
   return -1;
 }
 
+static int get_subentry( uint64_t parentid, char *path, uint64_t *id, char *name ) {
+  int sts;
+  char *p, *q;
+  char tmpname[FREG_MAX_NAME];
+  uint32_t tmpflags;
+  uint64_t tmpid;
+  int idx;
+  
+  p = path;
+  if( *p == '/' ) p++;  
+  while( *p ) {
+    /* get next name */
+    q = tmpname;
+    idx = 0;
+    while( *p && (*p != '/') && (idx < FREG_MAX_NAME - 1) ) {
+      *q = *p;
+      q++;
+      p++;
+      idx++;
+    }
+    if( idx >= (FREG_MAX_NAME - 1) ) return -1;
+    *q = '\0';
+    if( *p == '/' ) p++;
+    if( strcmp( tmpname, "" ) == 0 ) return -1;
+    if( *p == '\0' ) break;
+    
+    sts = freg_get( parentid, tmpname, &tmpflags, (char *)&tmpid, sizeof(tmpid), NULL );
+    if( sts ) return sts;
+    else if( (tmpflags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
+      return -1;
+    }
+
+    /* continue to next level */
+    parentid = tmpid;
+  }
+
+  if( name ) strncpy( name, tmpname, FREG_MAX_NAME - 1 );
+  if( id ) *id = parentid;
+
+  return 0;
+}
+
+
 int freg_get( uint64_t parentid, char *name, uint32_t *flags, char *buf, int len, int *lenp ) {
   /* read entries until we find one with a matching name */
   int sts, nbytes, type, size;
   struct freg_s e;
-
+  char tmpname[FREG_MAX_NAME];
+  
   if( !glob.ocount ) return -1;
   if( !parentid ) parentid = glob.rootid;
   if( strcmp( name, "" ) == 0 ) return -1;
+
+  sts = get_subentry( parentid, name, &parentid, tmpname );
+  if( sts ) return sts;
   
-  sts = get_entry( parentid, name, &e, NULL );
+  sts = get_entry( parentid, tmpname, &e, NULL );
   if( sts < 0 ) return sts;
   if( flags ) *flags = e.flags;
-
   
   type = e.flags & FREG_TYPE_MASK;
   switch( type ) {
@@ -189,10 +235,14 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len 
   struct freg_s e;
   uint32_t type;
   uint64_t datap;
+  char tmpname[FREG_MAX_NAME];
   
   if( !glob.ocount ) return -1;
   if( !parentid ) parentid = glob.rootid;
   if( strcmp( name, "" ) == 0 ) return -1;
+
+  sts = get_subentry( parentid, name, &parentid, tmpname );
+  if( sts ) return sts;
   
   type = flags & FREG_TYPE_MASK;
   datap = 0;
@@ -213,7 +263,7 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len 
     return -1;
   }
 
-  sts = get_entry( parentid, name, &e, &idx );
+  sts = get_entry( parentid, tmpname, &e, &idx );
   if( sts == 0 ) {
     /* write existing */
 
@@ -239,7 +289,7 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len 
   } else {
     /* add new */
     memset( &e, 0, sizeof(e) );
-    strncpy( e.name, name, FREG_MAX_NAME - 1 );
+    strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
     e.flags = flags;
     switch( type ) {
     case FREG_TYPE_OPAQUE:
@@ -267,12 +317,16 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len 
 int freg_rem( uint64_t parentid, char *name ) {  
   int sts, idx, size, type;
   struct freg_s e, tmpe, e2;
-
+  char tmpname[FREG_MAX_NAME];
+  
   if( !glob.ocount ) return -1;
   if( !parentid ) parentid = glob.rootid;
   if( strcmp( name, "" ) == 0 ) return -1;
+
+  sts = get_subentry( parentid, name, &parentid, tmpname );
+  if( sts ) return sts;
   
-  sts = get_entry( parentid, name, &e, &idx );
+  sts = get_entry( parentid, tmpname, &e, &idx );
   if( sts < 0 ) return sts;
 
   /* if this is a subkey entry, recursively free all its children */

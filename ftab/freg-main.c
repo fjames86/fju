@@ -15,6 +15,8 @@
 
 #include <fju/mmf.h>
 #include <fju/freg.h>
+#include <fju/sec.h>
+#include <fju/ftab.h>
 
 #ifdef WIN32
 #define PRIu64 "llu"
@@ -28,7 +30,9 @@ static void usage( char *fmt, ... ) {
 	    "               [get] path\n"
 	    "               put path u32|u64|string|opaque|key [value]\n"
 	    "               rem path\n"
-	    "               dump [path]\n" 
+	    "               dump [path]\n"
+	    "               populate [count]\n"
+	    "               reset\n" 
 	    "\n"
     );
 
@@ -45,6 +49,7 @@ static void usage( char *fmt, ... ) {
 
 static void cmd_get( char *path );
 static void cmd_dump( uint64_t parentid, char *path );
+static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count );
 
 static void cmd_list( int argc, char **argv, int i ) {
   struct freg_entry *elist;
@@ -278,6 +283,20 @@ int main( int argc, char **argv ) {
       if( sts ) usage( "Unknown key \"%s\"", argv[i] );
     }
     cmd_dump( parentid, path );
+  } else if( strcmp( argv[i], "populate" ) == 0 ) {
+    int count = 100;
+    i++;
+    if( i < argc ) {
+      count = strtoul( argv[i], NULL, 10 );
+    }
+    while( count ) {
+      cmd_populate( 0, 8, 8, &count );
+    }
+  } else if( strcmp( argv[i], "reset" ) == 0 ) {
+    struct ftab_s ftab;
+    ftab_open( "/opt/fju/freg.dat", NULL, &ftab );
+    ftab_reset( &ftab );
+    ftab_close( &ftab );
   } else cmd_list( argc, argv, i );
   
   freg_close();
@@ -362,4 +381,46 @@ static void cmd_dump( uint64_t parentid, char *path ) {
   }  
 
   free( elist );
+}
+
+static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count ) {
+  char name[FREG_MAX_NAME];
+  uint32_t u32;
+  uint64_t id;
+  int sts, i;
+
+  for( i = 0; i < depth; i++ ) {
+    if( !(*count) ) return;
+    u32 = sec_rand_uint32();
+    sprintf( name, "%u", u32 );    
+    sts = freg_subkey( parentid, name, FREG_CREATE, &id );
+    if( sts ) {
+      *count = 0;
+      return;
+    }
+    (*count)--;
+    cmd_populate( id, depth - 1, breadth, count );
+  }
+
+  for( i = 0; i < breadth; i++ ) {
+    if( !(*count) ) return;
+    u32 = sec_rand_uint32();
+    sprintf( name, "%u", u32 );    
+    if( u32 % 2 ) {
+      sts = freg_put( parentid, name, FREG_TYPE_UINT32, (char *)&u32, sizeof(u32) );
+      if( sts ) {
+	*count = 0;
+	return;
+      }
+    } else {
+      sts = freg_put( parentid, name, FREG_TYPE_STRING, name, strlen( name ) + 1 );
+      if( sts ) {
+	*count = 0;
+	return;
+      }
+    }
+    
+    (*count)--;
+  }
+  
 }

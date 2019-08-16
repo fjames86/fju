@@ -142,9 +142,10 @@
     <ClCompile Include="..\..\rpc\shauth.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\rpc.h" />
-    <ClInclude Include="..\..\include\rpcd.h" />
-    <ClInclude Include="..\..\include\shauth.h" />
+    <ClInclude Include="..\..\include\fju\rpc.h" />
+    <ClInclude Include="..\..\include\fju\rpcd.h" />
+    <ClInclude Include="..\..\include\fju\shauth.h" />
+    <ClInclude Include="..\..\rpc\rpc-private.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

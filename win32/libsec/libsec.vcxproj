@@ -139,7 +139,7 @@
     <ClCompile Include="..\..\sec\sec.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\sec.h" />
+    <ClInclude Include="..\..\include\fju\sec.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -140,7 +140,7 @@
     <ClCompile Include="..\..\nls\nls.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\nls.h" />
+    <ClInclude Include="..\..\include\fju\nls.h" />
     <ClInclude Include="..\..\nls\nls-private.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

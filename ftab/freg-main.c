@@ -43,6 +43,7 @@ static void usage( char *fmt, ... ) {
 }
 
 static void cmd_get( char *path );
+static void cmd_dump( uint64_t parentid, char *path );
 
 static void cmd_list( int argc, char **argv, int i ) {
   struct freg_entry *elist;
@@ -141,7 +142,6 @@ static void cmd_get( char *path ) {
     break;
   case FREG_TYPE_OPAQUE:
     for( i = 0; i < len; i++ ) {
-      if( i && (i % 16 == 0) ) printf( "\n" );
       printf( "%02x", (uint32_t)(uint8_t)buf[i] );
     }
     printf( "\n" );
@@ -267,6 +267,8 @@ int main( int argc, char **argv ) {
     if( i >= argc ) usage( NULL );
     sts = freg_rem( 0, argv[i] );
     if( sts ) usage( "Failed to remove value" );
+  } else if( strcmp( argv[i], "dump" ) == 0 ) {
+    cmd_dump( 0, "" );
   } else cmd_list( argc, argv, i );
   
   freg_close();
@@ -274,3 +276,81 @@ int main( int argc, char **argv ) {
   return 0;
 }
 
+static void cmd_get2( uint64_t parentid, char *path, char *name ) {
+  uint32_t flags;
+  char *buf;
+  int len, i, sts;
+    
+  sts = freg_get( parentid, name, &flags, NULL, 0, &len );
+  if( sts ) return;
+  buf = malloc( len );
+  sts = freg_get( parentid, name, &flags, buf, len, NULL );
+  if( sts ) goto done;
+  switch( flags & FREG_TYPE_MASK ) {
+  case FREG_TYPE_UINT32:
+    printf( "%s/%s u32 %u\n", path, name, *(uint32_t *)buf );
+    break;
+  case FREG_TYPE_UINT64:
+    printf( "%s/%s u64 %"PRIu64"\n", path, name, *(uint64_t *)buf );
+    break;
+  case FREG_TYPE_KEY:
+    printf( "%s/%s key\n", path, name );
+    break;
+  case FREG_TYPE_STRING:
+    printf( "%s/%s str %s\n", path, name, buf );
+    break;
+  case FREG_TYPE_OPAQUE:
+    printf( "%s/%s opaque ", path, name );
+    for( i = 0; i < len; i++ ) {
+      printf( "%02x", (uint32_t)(uint8_t)buf[i] );
+    }
+    printf( "\n" );
+    break;
+  }
+ done:
+  free( buf );
+}
+
+static void cmd_dump( uint64_t parentid, char *path ) {
+  int i;
+  uint64_t u64;
+  struct freg_entry *elist;
+  int nelist, n;
+  char *ppath;
+  
+  nelist = freg_list( parentid, NULL, 0 );
+  if( nelist <= 0 ) return;
+  elist = malloc( sizeof(*elist) * nelist );
+  n = freg_list( parentid, elist, nelist );
+  if( n < nelist ) nelist = n;
+  
+  /* print data first */
+  for( i = 0; i < nelist; i++ ) {
+    switch( elist[i].flags & FREG_TYPE_MASK ) {
+    case FREG_TYPE_KEY:
+      break;
+    default:
+      cmd_get2( parentid, path, elist[i].name );
+      break;	
+    }
+  }
+  /* recurse into subkeys second */
+  for( i = 0; i < nelist; i++ ) {
+    switch( elist[i].flags & FREG_TYPE_MASK ) {
+    case FREG_TYPE_KEY:
+      /* recurse */
+      freg_get( parentid, elist[i].name, NULL, (char *)&u64, sizeof(u64), NULL );
+      
+      ppath = malloc( strlen( path ) + strlen( elist[i].name ) + 2 );
+      sprintf( ppath, "%s/%s", path, elist[i].name );
+      printf( "%s key\n", ppath );
+      cmd_dump( u64, ppath );
+      free( ppath );
+      break;
+    default:
+      break;
+    }
+  }  
+
+  free( elist );
+}

@@ -49,7 +49,7 @@
 #endif
 
 static void usage( char *fmt, ... ) {
-    printf( "Usage: CMD args...\n"
+  fprintf( stderr, "Usage: CMD args...\n"
 	    "Where CMD:\n"
 	    "               [list] [path]\n"
 	    "               [get] path\n"
@@ -63,11 +63,11 @@ static void usage( char *fmt, ... ) {
 
     if( fmt ) {
         va_list args;
-        printf( "Error: " );
+        fprintf( stderr, "Error: " );
         va_start( args, fmt );
-        vprintf( fmt, args );
+        vfprintf( stderr, fmt, args );
         va_end( args );
-        printf( "\n" );
+        fprintf( stderr, "\n" );
     }
     exit( 1 );
 }

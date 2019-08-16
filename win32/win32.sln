@@ -92,6 +92,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libfju", "libfju\libfju.vcx
 		{82BE9BD1-BFF7-4C5D-95FC-369F5589C4C4} = {82BE9BD1-BFF7-4C5D-95FC-369F5589C4C4}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "freg", "freg\freg.vcxproj", "{F9388C2F-E422-4913-B2F5-5F484F9B4F93}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -366,6 +368,18 @@ Global
 		{7207AEFE-743F-45AF-A0AD-F5AF608A2DCF}.Release|Win32.Build.0 = Release|Win32
 		{7207AEFE-743F-45AF-A0AD-F5AF608A2DCF}.Release|x64.ActiveCfg = Release|x64
 		{7207AEFE-743F-45AF-A0AD-F5AF608A2DCF}.Release|x64.Build.0 = Release|x64
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Debug|Win32.Build.0 = Debug|Win32
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Debug|x64.ActiveCfg = Debug|x64
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Debug|x64.Build.0 = Debug|x64
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|Win32.ActiveCfg = Release|Win32
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|Win32.Build.0 = Release|Win32
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|x64.ActiveCfg = Release|x64
+		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

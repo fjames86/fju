@@ -27,7 +27,8 @@ static void usage( char *fmt, ... ) {
 	    "               [list] [path]\n"
 	    "               [get] path\n"
 	    "               put path u32|u64|string|opaque|key [value]\n"
-	    "               rem path\n" 
+	    "               rem path\n"
+	    "               dump [path]\n" 
 	    "\n"
     );
 
@@ -268,7 +269,15 @@ int main( int argc, char **argv ) {
     sts = freg_rem( 0, argv[i] );
     if( sts ) usage( "Failed to remove value" );
   } else if( strcmp( argv[i], "dump" ) == 0 ) {
-    cmd_dump( 0, "" );
+    uint64_t parentid = 0;
+    char *path = "";
+    
+    i++;
+    if( i < argc ) {
+      sts = freg_subkey( 0, argv[i], 0, &parentid );
+      if( sts ) usage( "Unknown key \"%s\"", argv[i] );
+    }
+    cmd_dump( parentid, path );
   } else cmd_list( argc, argv, i );
   
   freg_close();

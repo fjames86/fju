@@ -6,7 +6,7 @@ ${LIBDIR}/liblog.a: log/log.c include/fju/log.h
 	${AR} rcs $@ log.o
 
 
-${BINDIR}/fjlog: log/fjlog.c ${LIBDIR}/libmmf.a ${LIBDIR}/liblog.a 
-	${CC} -o $@ log/fjlog.c ${CFLAGS} ${LFLAGS} -llog -lmmf
+${BINDIR}/fjlog: log/fjlog.c ${LIBFJU}
+	${CC} -o $@ log/fjlog.c ${CFLAGS} ${LFLAGS} -lfju
 
 LIBRARIES+=log

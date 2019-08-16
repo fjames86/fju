@@ -21,3 +21,8 @@ ${BINDIR}/fdtab: ftab/fdtab-main.c ${LIBDIR}/libmmf.a ${LIBDIR}/libfdtab.a ${LIB
 
 ${BINDIR}/freg: ftab/freg-main.c ${LIBDIR}/libmmf.a ${LIBDIR}/libfdtab.a ${LIBDIR}/libftab.a ${LIBDIR}/libfreg.a
 	${CC} -o $@ ftab/freg-main.c ${CFLAGS} ${LFLAGS} -lfdtab -lmmf -lftab -lsec -lcrypto -lfreg 
+
+
+LIBRARIES+=ftab
+LIBRARIES+=fdtab
+LIBRARIES+=freg

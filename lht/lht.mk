@@ -11,3 +11,5 @@ lht_deps += ${LIBDIR}/liblht.a
 
 ${BINDIR}/lht: lht/lht-main.c ${lht_deps}
 	${CC} -o $@ lht/lht-main.c ${CFLAGS} ${LFLAGS} -llog -lmmf -llht 
+
+LIBRARIES+=lht

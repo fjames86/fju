@@ -13,3 +13,5 @@ hlc_deps += ${LIBDIR}/libhlc.a
 
 ${BINDIR}/hlc: hlc/hlc-main.c ${hlc_deps}
 	${CC} -o $@ hlc/hlc-main.c ${CFLAGS} ${LFLAGS} -lmmf -lcrypto -llog -lsec -lnls -lhlc 
+
+LIBRARIES+=hlc

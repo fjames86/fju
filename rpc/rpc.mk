@@ -24,3 +24,5 @@ ${BINDIR}/rpcinfo: rpc/rpcinfo.c ${rpc_deps} rpc/rpc-private.h
 
 ${BINDIR}/rpclt: rpc/rpclt.c ${rpc_deps} rpc/rpc-private.h
 	${CC} -o $@ rpc/rpclt.c ${CFLAGS} ${LFLAGS} -lmmf -lrpc -lcrypto -lsec -lhostreg -lhrauth -lraft -llog 
+
+LIBRARIES+=rpc

@@ -13,3 +13,5 @@ nls_deps += ${LIBDIR}/libhostreg.a
 
 ${BINDIR}/nls: nls/nls-main.c ${nls_deps}
 	${CC} -o $@ nls/nls-main.c ${CFLAGS} ${LFLAGS} -lmmf -lcrypto -llog -lsec -lnls -lhostreg
+
+LIBRARIES+=nls

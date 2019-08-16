@@ -11,16 +11,19 @@ PROJECTS += dh
 PROJECTS += lht 
 PROJECTS += ef
 PROJECTS += ftab
+LIBRARIES=
 
 BINDIR=bin
 LIBDIR=lib
-CFLAGS=-Iinclude -g -Wall
+CFLAGS=-Iinclude -g -Wall -fPIC
 LFLAGS += -L${LIBDIR}
 
 
+LIBFJU=${LIBDIR}/libfju.so
+
 .PHONY: all clean tar install ${PROJECTS}
 
-all: ${PROJECTS}
+all: ${PROJECTS} ${LIBFJU}
 	rm -f *.o
 
 clean:
@@ -38,3 +41,11 @@ install:
 	cp bin/* /opt/fju/bin
 	cp rpcd.sh /opt/fju 
 
+FJU_DEPS=
+FJU_LIBS=
+.for lib in ${LIBRARIES}
+FJU_DEPS+=${LIBDIR}/lib${lib}.a
+FJU_LIBS+=-l${lib}
+.endfor
+${LIBFJU}: ${FJU_DEPS}
+	cc -shared -o ${LIBDIR}/libfju.so -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive 

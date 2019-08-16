@@ -25,7 +25,7 @@ static void usage( char *fmt, ... ) {
     printf( "Usage: CMD args...\n"
 	    "Where CMD:\n"
 	    "               [list] [path]\n"
-	    "               get path\n"
+	    "               [get] path\n"
 	    "               put path u32|u64|string|opaque|key [value]\n"
 	    "               rem path\n" 
 	    "\n"
@@ -42,6 +42,8 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
 }
 
+static void cmd_get( char *path );
+
 static void cmd_list( int argc, char **argv, int i ) {
   struct freg_entry *elist;
   int sts, n, j;
@@ -55,8 +57,14 @@ static void cmd_list( int argc, char **argv, int i ) {
 
   if( i < argc ) {
     sts = freg_subkey( 0, argv[i], 0, &id );
-    if( sts ) usage( "Unknown path \"%s\"", argv[i] );
+    if( sts ) {
+      sts = freg_get( 0, argv[i], NULL, NULL, 0, NULL );
+      if( sts ) usage( "Unknown path \"%s\"", argv[i] );
+      cmd_get( argv[i] );
+      return;
+    }
   }
+    
   sts = freg_list( id, NULL, 0 );
   if( sts < 0 ) usage( "Failed to list" );
   elist = malloc( sizeof(*elist) * sts );
@@ -76,11 +84,11 @@ static void cmd_list( int argc, char **argv, int i ) {
     switch( elist[i].flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
       sts = freg_get( id, elist[i].name, NULL, (char *)&u32, sizeof(u32), NULL );
-      printf( "%u (0x%x)", u32, u32 );
+      printf( "%u (%x)", u32, u32 );
       break;
     case FREG_TYPE_UINT64:
       sts = freg_get( id, elist[i].name, NULL, (char *)&u64, sizeof(u64), NULL );
-      printf( "%"PRIu64" (0x%"PRIx64")", u64, u64 );
+      printf( "%"PRIu64" (%"PRIx64")", u64, u64 );
       break;
     case FREG_TYPE_KEY:
       sts = freg_get( id, elist[i].name, NULL, (char *)&u64, sizeof(u64), NULL );
@@ -97,7 +105,7 @@ static void cmd_list( int argc, char **argv, int i ) {
       buf = malloc( len );
       sts = freg_get( id, elist[i].name, NULL, buf, len, NULL );
       for( j = 0; j < len; j++ ) {
-	printf( "%02x ", (uint32_t)(uint8_t)buf[j] );
+	printf( "%02x", (uint32_t)(uint8_t)buf[j] );
       }
       break;      
     }
@@ -108,9 +116,44 @@ static void cmd_list( int argc, char **argv, int i ) {
   free( elist );  
 }
 
+static void cmd_get( char *path ) {
+  uint32_t flags;
+  char *buf;
+  int len, i, sts;
+    
+  sts = freg_get( 0, path, &flags, NULL, 0, &len );
+  if( sts ) usage( "Failed to get" );
+  buf = malloc( len );
+  sts = freg_get( 0, path, &flags, buf, len, NULL );
+  if( sts ) usage( "Failed to get data" );
+  switch( flags & FREG_TYPE_MASK ) {
+  case FREG_TYPE_UINT32:
+    printf( "%u %x\n", *(uint32_t *)buf, *(uint32_t *)buf );
+    break;
+  case FREG_TYPE_UINT64:
+    printf( "%"PRIu64" %"PRIx64"\n", *(uint64_t *)buf, *(uint64_t *)buf );
+    break;
+  case FREG_TYPE_KEY:
+    printf( "%"PRIx64"\n", *(uint64_t *)buf );
+    break;
+  case FREG_TYPE_STRING:
+    printf( "%s\n", buf );
+    break;
+  case FREG_TYPE_OPAQUE:
+    for( i = 0; i < len; i++ ) {
+      if( i && (i % 16 == 0) ) printf( "\n" );
+      printf( "%02x", (uint32_t)(uint8_t)buf[i] );
+    }
+    printf( "\n" );
+    break;
+  }
+  free( buf );
+}
+
 int main( int argc, char **argv ) {
-  int sts, i;
+  int sts, i, j;
   uint64_t id;
+  char tmpstr[32];
   
   sts = freg_open();
   if( sts ) usage( "Failed to open" );
@@ -124,40 +167,9 @@ int main( int argc, char **argv ) {
     i++;
     cmd_list( argc, argv, i );
   } else if( strcmp( argv[i], "get" ) == 0 ) {
-    uint32_t flags;
-    char *buf;
-    int len;
-    
     i++;
     if( i >= argc ) usage( NULL );
-    sts = freg_get( 0, argv[i], &flags, NULL, 0, &len );
-    if( sts ) usage( "Failed to get" );
-    buf = malloc( len );
-    sts = freg_get( 0, argv[i], &flags, buf, len, NULL );
-    if( sts ) usage( "Failed to get data" );
-    switch( flags & FREG_TYPE_MASK ) {
-    case FREG_TYPE_UINT32:
-      printf( "%u\n", *(uint32_t *)buf );
-      break;
-    case FREG_TYPE_UINT64:
-      printf( "%"PRIu64" (%"PRIx64")\n", *(uint64_t *)buf, *(uint64_t *)buf );
-      break;
-    case FREG_TYPE_KEY:
-      printf( "%"PRIx64"\n", *(uint64_t *)buf );
-      break;
-    case FREG_TYPE_STRING:
-      printf( "%s\n", buf );
-      break;
-    case FREG_TYPE_OPAQUE:
-      for( i = 0; i < len; i++ ) {
-	if( i && (i % 16 == 0) ) printf( "\n" );
-	printf( "%02x ", (uint32_t)(uint8_t)buf[i] );
-      }
-      printf( "\n" );
-      break;
-    }
-    free( buf );
-    
+    cmd_get( argv[i] );
   } else if( strcmp( argv[i], "put" ) == 0 ) {
     char *path;
     uint32_t flags, u32;
@@ -230,9 +242,14 @@ int main( int argc, char **argv ) {
     case FREG_TYPE_OPAQUE:
       len = 0;
       buf = malloc( 4096 );
-      while( i < argc ) {
-	buf[len] = strtoul( argv[i], NULL, 16 );
-	len++;
+      while( i < argc ) {	
+	for( j = 0; j < strlen( argv[i] ) / 2; j++ ) {
+	  tmpstr[0] = argv[i][2*j];
+	  tmpstr[1] = argv[i][2*j + 1];
+	  tmpstr[2] = '\0';
+	  buf[len] = strtoul( tmpstr, NULL, 16 );
+	  len++;
+	}
 	i++;
       }
       break;

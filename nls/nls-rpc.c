@@ -385,7 +385,7 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   /* decode results */
   sts = xdr_decode_boolean( xdr, &b );
   if( sts || !b ) {
-    nls_log( LOG_LVL_ERROR, "error stauts" );
+    nls_log( LOG_LVL_ERROR, "error status sts=%d b=%d", sts, b );
     goto done;
   }
 

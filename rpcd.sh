@@ -1,6 +1,6 @@
 #!/bin/sh
 
-pidfile=/etc/rpcd.pid
+pidfile=/var/run/rpcd.pid
 udpport=8000
 
 cmd=$1

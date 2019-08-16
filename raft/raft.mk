@@ -10,7 +10,7 @@ ${LIBDIR}/librex.a: raft/rex.c include/fju/rex.h
 	${AR} rcs $@ rex.o 
 
 ${BINDIR}/raft: raft/raft-main.c ${LIBFJU}
-	${CC} -o $@ raft/raft-main.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto
+	${CC} -o $@ raft/raft-main.c ${CFLAGS} ${LFLAGS}
 
 LIBRARIES+=raft
 LIBRARIES+=rex

@@ -7,12 +7,12 @@ ${LIBDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c include/fju/rpc.h include/
 	${AR} rcs $@ rpc.o rpcd.o shauth.o 
 
 ${BINDIR}/rpcd: rpc/rpcd-main.c rpc/rpc-private.h ${LIBFJU}
-	${CC} -o $@ rpc/rpcd-main.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto
+	${CC} -o $@ rpc/rpcd-main.c ${CFLAGS} ${LFLAGS} 
 
 ${BINDIR}/rpcinfo: rpc/rpcinfo.c rpc/rpc-private.h ${LIBFJU}
-	${CC} -o $@ rpc/rpcinfo.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto
+	${CC} -o $@ rpc/rpcinfo.c ${CFLAGS} ${LFLAGS} 
 
 ${BINDIR}/rpclt: rpc/rpclt.c rpc/rpc-private.h ${LIBFJU}
-	${CC} -o $@ rpc/rpclt.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto 
+	${CC} -o $@ rpc/rpclt.c ${CFLAGS} ${LFLAGS} 
 
 LIBRARIES+=rpc

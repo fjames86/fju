@@ -6,6 +6,6 @@ ${LIBDIR}/liblht.a: lht/lht.c include/fju/lht.h
 	${AR} rcs $@ lht.o
 
 ${BINDIR}/lht: lht/lht-main.c ${LIBFJU}
-	${CC} -o $@ lht/lht-main.c ${CFLAGS} ${LFLAGS} -lfju
+	${CC} -o $@ lht/lht-main.c ${CFLAGS} ${LFLAGS} 
 
 LIBRARIES+=lht

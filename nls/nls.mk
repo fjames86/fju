@@ -6,6 +6,6 @@ ${LIBDIR}/libnls.a: nls/nls.c nls/nls-rpc.c include/fju/nls.h
 	${AR} rcs $@ nls.o nls-rpc.o 
 
 ${BINDIR}/nls: nls/nls-main.c ${LIBFJU}
-	${CC} -o $@ nls/nls-main.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto
+	${CC} -o $@ nls/nls-main.c ${CFLAGS} ${LFLAGS} 
 
 LIBRARIES+=nls

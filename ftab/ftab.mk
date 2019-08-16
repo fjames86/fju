@@ -14,13 +14,13 @@ ${LIBDIR}/libfreg.a: ftab/freg.c include/fju/freg.h
 	${AR} rcs $@ freg.o
 
 ${BINDIR}/ftab: ftab/ftab-main.c ${LIBFJU}
-	${CC} -o $@ ftab/ftab-main.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto 
+	${CC} -o $@ ftab/ftab-main.c ${CFLAGS} ${LFLAGS}
 
 ${BINDIR}/fdtab: ftab/fdtab-main.c ${LIBFJU}
-	${CC} -o $@ ftab/fdtab-main.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto 
+	${CC} -o $@ ftab/fdtab-main.c ${CFLAGS} ${LFLAGS}
 
 ${BINDIR}/freg: ftab/freg-main.c ${LIBFJU}
-	${CC} -o $@ ftab/freg-main.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto
+	${CC} -o $@ ftab/freg-main.c ${CFLAGS} ${LFLAGS}
 
 
 LIBRARIES+=ftab

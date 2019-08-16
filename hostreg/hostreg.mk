@@ -15,7 +15,7 @@ hostreg_deps += ${LIBDIR}/libsec.a
 hostreg_deps += ${LIBDIR}/libhostreg.a
 
 ${BINDIR}/hostreg: hostreg/hostreg-main.c ${LIBFJU}
-	${CC} -o $@ hostreg/hostreg-main.c ${CFLAGS} ${LFLAGS} -lfju
+	${CC} -o $@ hostreg/hostreg-main.c ${CFLAGS} ${LFLAGS} 
 
 
 LIBRARIES+=hostreg

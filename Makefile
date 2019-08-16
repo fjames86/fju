@@ -16,7 +16,7 @@ LIBRARIES=
 BINDIR=bin
 LIBDIR=lib
 CFLAGS=-Iinclude -Wall -fPIC
-LFLAGS += -L${LIBDIR}
+LFLAGS += -L${LIBDIR} -lfju -lcrypto 
 
 
 LIBFJU=${LIBDIR}/libfju.so

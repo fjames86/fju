@@ -6,6 +6,6 @@ ${LIBDIR}/libhlc.a: hlc/hlc.c include/fju/hlc.h
 	${AR} rcs $@ hlc.o 
 
 ${BINDIR}/hlc: hlc/hlc-main.c ${LIBFJU}
-	${CC} -o $@ hlc/hlc-main.c ${CFLAGS} ${LFLAGS} -lfju -lcrypto
+	${CC} -o $@ hlc/hlc-main.c ${CFLAGS} ${LFLAGS}
 
 LIBRARIES+=hlc

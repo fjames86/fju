@@ -15,7 +15,7 @@ LIBRARIES=
 
 BINDIR=bin
 LIBDIR=lib
-CFLAGS=-Iinclude -g -Wall -fPIC
+CFLAGS=-Iinclude -Wall -fPIC
 LFLAGS += -L${LIBDIR}
 
 
@@ -25,6 +25,7 @@ LIBFJU=${LIBDIR}/libfju.so
 
 all: ${PROJECTS} ${LIBFJU}
 	rm -f *.o
+	strip -s ${LIBFJU} bin/*
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 

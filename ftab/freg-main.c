@@ -118,6 +118,8 @@ int main( int argc, char **argv ) {
   i = 1;
   if( i >= argc ) {
     cmd_list( argc, argv, i );
+  } else if( (strcmp( argv[i], "-h" ) == 0) || (strcmp( argv[i], "--help" ) == 0) || (strcmp( argv[i], "help") == 0) ) {
+    usage( NULL );
   } else if( strcmp( argv[i], "list" ) == 0 ) {
     i++;
     cmd_list( argc, argv, i );

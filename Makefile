@@ -15,23 +15,25 @@ LIBRARIES=
 
 BINDIR=bin
 LIBDIR=lib
-CFLAGS=-Iinclude -Wall -fPIC
+CFLAGS=-Iinclude -Wall -fPIC -g 
 LFLAGS += -L${LIBDIR} -lfju -lcrypto 
 
 
 LIBFJU=${LIBDIR}/libfju.so
 
-.PHONY: all clean tar install ${PROJECTS}
+.PHONY: all strip clean tar install strip ${PROJECTS}
 
 all: ${PROJECTS} ${LIBFJU}
 	rm -f *.o
-	strip -s ${LIBFJU} bin/*
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
 
 tar:
 	tar -czvf fju.tar.gz rpcd.sh ${BINDIR}/*
+
+strip:
+	strip -s ${LIBFJU} bin/*
 
 .for proj in ${PROJECTS}
 .include "${proj}/${proj}.mk"

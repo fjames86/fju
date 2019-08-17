@@ -325,6 +325,17 @@ int main( int argc, char **argv ) {
     memset( cookie, 0, sizeof(cookie) );
     ftab_set_cookie( &ftab, cookie );
     ftab_close( &ftab );
+  } else if( strcmp( argv[i], "time" ) == 0 ) {
+      uint64_t start, end;
+      int j;
+      i++;
+      if( i >= argc ) usage( NULL );
+      start = rpc_now();
+      for( j = 0; j < 1000; j++ ) {
+	  cmd_get( argv[i] );
+      }
+      end = rpc_now();
+      printf( "%dms\n", (int)(end - start) );
   } else cmd_list( argc, argv, i );
   
   freg_close();
@@ -452,3 +463,5 @@ static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count 
   }
   
 }
+
+    

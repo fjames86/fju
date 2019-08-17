@@ -367,7 +367,7 @@ int freg_rem( uint64_t parentid, char *name ) {
     nentry = fdtab_size( &glob.fdt, e.datap ) / sizeof(e);    
     offset = 0;
     for( i = 0; i < nentry; i++ ) {
-      sts = fdtab_read( &glob.fdt, e.datap, (char *)&e2, sizeof(e2), offset );
+      sts = fdtab_read( &glob.fdt, e.datap, (char *)&e2, sizeof(e2), 0 );
       freg_rem( e.datap, e2.name );
       offset += sizeof(e2);
     }

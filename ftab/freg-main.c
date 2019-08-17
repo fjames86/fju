@@ -319,8 +319,11 @@ int main( int argc, char **argv ) {
     }
   } else if( strcmp( argv[i], "reset" ) == 0 ) {
     struct ftab_s ftab;
+    char cookie[FTAB_MAX_COOKIE];
     ftab_open( "/opt/fju/freg.dat", NULL, &ftab );
     ftab_reset( &ftab );
+    memset( cookie, 0, sizeof(cookie) );
+    ftab_set_cookie( &ftab, cookie );
     ftab_close( &ftab );
   } else cmd_list( argc, argv, i );
   

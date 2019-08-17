@@ -2,8 +2,8 @@
 
 BINDIR=bin
 LIBDIR=lib
-CFLAGS += -Iinclude -g -Wall -DWIN32 -DMSYS
-LFLAGS += -L${LIBDIR} -luuid -luser32 -lws2_32 -lole32 -liphlpapi -ladvapi32 -luuid -lole32 -lbcrypt
+CFLAGS += -Iinclude -Wall -DWIN32 -DMSYS -O2 #-g
+#LFLAGS += -L${LIBDIR} -luuid -luser32 -lws2_32 -lole32 -liphlpapi -ladvapi32 -luuid -lole32 -lbcrypt
 
 
 libs += ${LIBDIR}/libmmf.a
@@ -27,11 +27,12 @@ progs += ${BINDIR}/rpclt.exe
 progs += ${BINDIR}/rpcd.exe
 progs += ${BINDIR}/fjlogui.exe
 progs += ${BINDIR}/ftab.exe
+progs += ${BINDIR}/fdtab.exe
 progs += ${BINDIR}/freg.exe
 
-.PHONY: all clean 
+.PHONY: all clean strip 
 
-all: ${libs} ${progs}
+all: ${libs} ${progs} ${LIBDIR}/libfju.dll
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
@@ -84,27 +85,62 @@ ${LIBDIR}/libfreg.a: ftab/freg.c
 	gcc -c ${CFLAGS} ftab/freg.c
 	ar rcs ${LIBDIR}/libfreg.a freg.o
 
-${BINDIR}/fjlog.exe: log/fjlog.c
-	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -llog -lmmf -lole32 -luuid 
+${BINDIR}/fjlog.exe: log/fjlog.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -lfju 
 
-${BINDIR}/hostreg.exe: hostreg/hostreg-main.c
-	gcc -o ${BINDIR}/hostreg.exe ${CFLAGS} hostreg/hostreg-main.c -L${LIBDIR} -lhostreg -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi
+${BINDIR}/hostreg.exe: hostreg/hostreg-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/hostreg.exe ${CFLAGS} hostreg/hostreg-main.c -L${LIBDIR} -lfju -lws2_32 
 
-${BINDIR}/raft.exe: raft/raft-main.c
-	gcc -o ${BINDIR}/raft.exe ${CFLAGS} raft/raft-main.c -L${LIBDIR} -lraft -lhostreg -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi
+${BINDIR}/raft.exe: raft/raft-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/raft.exe ${CFLAGS} raft/raft-main.c -L${LIBDIR} -lfju -lws2_32 
 
-${BINDIR}/rpclt.exe: rpc/rpclt.c 
-	gcc -o ${BINDIR}/rpclt.exe ${CFLAGS} rpc/rpclt.c -L${LIBDIR} -lrpc -lraft -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32
+${BINDIR}/rpclt.exe: rpc/rpclt.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/rpclt.exe ${CFLAGS} rpc/rpclt.c -L${LIBDIR} -lfju -lws2_32 
 
-${BINDIR}/rpcd.exe: rpc/rpcd-main.c 
-	gcc -o ${BINDIR}/rpcd.exe ${CFLAGS} rpc/rpcd-main.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls
+${BINDIR}/rpcd.exe: rpc/rpcd-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/rpcd.exe ${CFLAGS} rpc/rpcd-main.c -L${LIBDIR} -lfju -lws2_32 
 
-${BINDIR}/fjlogui.exe: win32/fjlogui/main.c win32/fjlogui/bitmaps.c
-	gcc -o ${BINDIR}/fjlogui.exe ${CFLAGS} win32/fjlogui/main.c win32/fjlogui/bitmaps.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls -lgdi32 -lcomdlg32 -lcomctl32 
+${BINDIR}/fjlogui.exe: win32/fjlogui/main.c win32/fjlogui/bitmaps.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/fjlogui.exe ${CFLAGS} win32/fjlogui/main.c win32/fjlogui/bitmaps.c -L${LIBDIR} -lfju -lgdi32 -lcomdlg32 -lcomctl32 -lws2_32 
 
-${BINDIR}/ftab.exe: ftab/ftab-main.c ${LIBDIR}/libftab.a 
-	gcc -o ${BINDIR}/ftab.exe ${CFLAGS} ftab/ftab-main.c -L${LIBDIR} -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls -lftab -lmmf -luuid -lole32 -lsec -lbcrypt
+${BINDIR}/ftab.exe: ftab/ftab-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/ftab.exe ${CFLAGS} ftab/ftab-main.c -L${LIBDIR} -lfju
 
-${BINDIR}/freg.exe: ftab/freg-main.c ${LIBDIR}/libfreg.a 
-	gcc -o ${BINDIR}/freg.exe ${CFLAGS} ftab/freg-main.c -L${LIBDIR} -lfreg -lftab -lfdtab -lrpc -lraft -lrex -lhostreg -lhrauth -llog -lmmf -lole32 -luuid -lsec -lbcrypt -lws2_32 -liphlpapi -lrpc -lws2_32 -lnls -lftab -lmmf -luuid -lole32 -lsec -lbcrypt  -lftab 
+${BINDIR}/fdtab.exe: ftab/fdtab-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/fdtab.exe ${CFLAGS} ftab/fdtab-main.c -L${LIBDIR} -lfju
 
+${BINDIR}/freg.exe: ftab/freg-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/freg.exe ${CFLAGS} ftab/freg-main.c -L${LIBDIR} -lfju
+
+FJU_DEPS += ${LIBDIR}/libmmf.a
+FJU_LIBS += -lmmf
+FJU_DEPS += ${LIBDIR}/liblog.a
+FJU_LIBS += -llog
+FJU_DEPS += ${LIBDIR}/libhostreg.a
+FJU_LIBS += -lhostreg
+FJU_DEPS += ${LIBDIR}/libhrauth.a
+FJU_LIBS += -lhrauth
+FJU_DEPS += ${LIBDIR}/librpc.a
+FJU_LIBS += -lrpc
+FJU_DEPS += ${LIBDIR}/libraft.a
+FJU_LIBS += -lraft
+FJU_DEPS += ${LIBDIR}/librex.a
+FJU_LIBS += -lrex
+FJU_DEPS += ${LIBDIR}/libsec.a
+FJU_LIBS += -lsec
+FJU_DEPS += ${LIBDIR}/libnls.a
+FJU_LIBS += -lnls
+FJU_DEPS += ${LIBDIR}/libftab.a
+FJU_LIBS += -lftab
+FJU_DEPS += ${LIBDIR}/libfdtab.a
+FJU_LIBS += -lfdtab
+FJU_DEPS += ${LIBDIR}/libfreg.a
+FJU_LIBS += -lfreg
+
+${LIBDIR}/libfju.dll: ${FJU_DEPS}
+	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive -luuid -lole32 -lbcrypt -lws2_32 -liphlpapi
+	cp ${LIBDIR}/libfju.dll ${BINDIR}/libfju.dll 
+
+strip:
+	strip -s bin/*
+	

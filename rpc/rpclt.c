@@ -45,6 +45,7 @@
 #include <fju/raft.h>
 #include <fju/rex.h>
 #include <fju/nls.h>
+#include <fju/freg.h>
 
 struct clt_info {
     uint32_t prog;
@@ -73,6 +74,8 @@ static void nls_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void nls_read_results( struct xdr_s *xdr );
 static void nls_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void nls_write_results( struct xdr_s *xdr );
+static void freg_list_results( struct xdr_s *xdr );
+static void freg_list_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
@@ -90,6 +93,8 @@ static struct clt_info clt_procs[] = {
     { NLS_RPC_PROG, NLS_RPC_VERS, 1, NULL, nls_list_results, "nls.list", NULL },
     { NLS_RPC_PROG, NLS_RPC_VERS, 3, nls_read_args, nls_read_results, "nls.read", "hshare=HSHARE [id=ID]" },
     { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 0, NULL, NULL, "freg.null", NULL },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -581,7 +586,7 @@ static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     
 }
 static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    uint64_t clid;
+    uint64_t clid = 0;
     char argname[64], *argval;
     while( i < argc ) {
 	argval_split( argv[i], argname, &argval );
@@ -779,3 +784,64 @@ static void nls_write_results( struct xdr_s *xdr ) {
   printf( "%s\n", b ? "Success" : "Failure" );  
 }
 
+static void freg_list_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint64_t parentid = 0;
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "parentid" ) == 0 ) {
+	    parentid = strtoull( argval, NULL, 16 );
+	} else usage( "Unknown arg \"%s\"", argname );
+	i++;
+    }
+    xdr_encode_uint64( xdr, parentid );
+}
+
+static void freg_list_results( struct xdr_s *xdr ) {
+    int sts, b;
+    uint32_t u32;
+    uint64_t u64;
+    char *bufp;
+    int lenp, i;
+    char name[FREG_MAX_NAME];
+    char str[512];
+    uint32_t flags;
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    while( b ) {
+	xdr_decode_string( xdr, name, sizeof(name) );
+	xdr_decode_uint32( xdr, &flags );
+	printf( "%-32s ", name );
+	switch( flags & FREG_TYPE_MASK ) {
+	case FREG_TYPE_UINT32:
+	    xdr_decode_uint32( xdr, &u32 );
+	    printf( "u32 %u\n", u32 );
+	    break;
+	case FREG_TYPE_UINT64:
+	    xdr_decode_uint64( xdr, &u64 );
+	    printf( "u64 %"PRIu64"\n", u64 );
+	    break;
+	case FREG_TYPE_KEY:
+	    xdr_decode_uint64( xdr, &u64 );
+	    printf( "key %"PRIx64"\n", u64 );
+	    break;
+	case FREG_TYPE_STRING:
+	    xdr_decode_string( xdr, str, sizeof(str) );
+	    printf( "str %s\n", str );
+	    break;
+	case FREG_TYPE_OPAQUE:
+	    xdr_decode_opaque_ref( xdr, &bufp, &lenp );
+	    printf( "opaque " );
+	    for( i = 0; i < lenp; i++ ) {
+		printf( "%02x", (uint32_t)(uint8_t)bufp[i] );
+	    }
+	    printf( "\n" );
+	    break;
+	}
+	
+	xdr_decode_boolean( xdr, &b );
+    }
+    
+   
+}

@@ -81,9 +81,9 @@ ${LIBDIR}/libfdtab.a: ftab/fdtab.c
 	gcc -c ${CFLAGS} ftab/fdtab.c 
 	ar rcs ${LIBDIR}/libfdtab.a fdtab.o 
 
-${LIBDIR}/libfreg.a: ftab/freg.c
-	gcc -c ${CFLAGS} ftab/freg.c
-	ar rcs ${LIBDIR}/libfreg.a freg.o
+${LIBDIR}/libfreg.a: ftab/freg.c ftab/freg-rpc.c 
+	gcc -c ${CFLAGS} ftab/freg.c ftab/freg-rpc.c
+	ar rcs ${LIBDIR}/libfreg.a freg.o freg-rpc.o 
 
 ${BINDIR}/fjlog.exe: log/fjlog.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -lfju 

@@ -54,5 +54,9 @@ int freg_rem( uint64_t parentid, char *name );
 #define FREG_CREATE 0x0001 
 int freg_subkey( uint64_t parentid, char *name, uint32_t flags, uint64_t *id );
 
+#define FREG_RPC_PROG 0x27E1FB10
+#define FREG_RPC_VERS 1
+void freg_register( void );
+
 #endif
 

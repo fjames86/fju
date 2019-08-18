@@ -203,6 +203,7 @@ int fdtab_read( struct fdtab_s *fdt, uint64_t id, char *buf, int n, uint32_t off
   nbytes = n;
   foff = nblks * fdt->lbasize;
   if( nbytes > (fdt->lbasize - offset) ) nbytes = fdt->lbasize - offset;
+  if( nbytes > (size - offset) ) nbytes = size - offset;
   sts = ftab_read( &fdt->ftab, id, buf, nbytes, FDT_HEADER_SIZE + offset );
   if( sts < 0 ) return sts;
   buf += nbytes;

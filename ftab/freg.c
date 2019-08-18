@@ -36,7 +36,6 @@
 
 struct freg_s {
   char name[FREG_MAX_NAME];
-  uint64_t datap;
   uint32_t flags;
   uint32_t spare;
 };
@@ -48,16 +47,23 @@ static struct {
   uint64_t rootid;
 } glob;
 
+#define FREG_LBASIZE 128
+static int get_subentry( uint64_t parentid, char *path, uint64_t *id, char *name );
+
 int freg_open( void ) {
   int sts;
   struct ftab_prop prop;
+  struct ftab_opts opts;
   
   if( glob.ocount > 0 ) {
     glob.ocount++;
     return 0;
   }
 
-  sts = fdtab_open( mmf_default_path( "freg.dat", NULL ), NULL, &glob.fdt );
+  memset( &opts, 0, sizeof(opts) );
+  opts.mask = FTAB_OPT_LBASIZE;
+  opts.lbasize = FREG_LBASIZE;
+  sts = fdtab_open( mmf_default_path( "freg.dat", NULL ), &opts, &glob.fdt );
   if( sts ) return sts;
 
   /* read cookie */
@@ -66,9 +72,14 @@ int freg_open( void ) {
   
   /* if entry table not allocated, do it now */
   if( glob.rootid == 0 ) {
-    sts = fdtab_alloc( &glob.fdt, 0, &glob.rootid );
-    memcpy( prop.cookie, &glob.rootid, sizeof(glob.rootid) );
-    ftab_set_cookie( &glob.fdt.ftab, prop.cookie );
+      struct freg_s e;
+      sts = fdtab_alloc( &glob.fdt, 0, &glob.rootid );
+      memset( &e, 0, sizeof(e) );
+      e.flags = FREG_TYPE_KEY;
+      fdtab_write( &glob.fdt, glob.rootid, (char *)&e, sizeof(e), 0 );
+      
+      memcpy( prop.cookie, &glob.rootid, sizeof(glob.rootid) );
+      ftab_set_cookie( &glob.fdt.ftab, prop.cookie );
   } else {
     sts = fdtab_read( &glob.fdt, glob.rootid, NULL, 0, 0 );
     if( sts < 0 ) {
@@ -91,83 +102,294 @@ int freg_close( void ) {
   return 0;
 }
 
-int freg_list( uint64_t parentid, struct freg_entry *entry, int n ) {
-  int sts, nentry, i;
-  struct freg_s *e;
-  char *buf;
+int freg_entry_by_id( uint64_t id, struct freg_entry *entry ) {
+    int sts;
+    struct freg_s e;
+    
+    entry->id = id;
+    sts = fdtab_read( &glob.fdt, id, (char *)&e, sizeof(e), 0 );
+    if( sts < 0 ) return sts;
+    strncpy( entry->name, e.name, FREG_MAX_NAME - 1 );
+    entry->len = fdtab_size( &glob.fdt, id ) - sizeof(e);
+    entry->flags = e.flags;
 
-  if( !glob.ocount ) return -1;
-  if( !parentid ) parentid = glob.rootid;
-  
-  nentry = fdtab_size( &glob.fdt, parentid ) / sizeof(*e);
-  if( nentry < 0 ) return -1;  
-  if( !nentry ) return 0;  
-  buf = malloc( sizeof(*e) * nentry );
-  sts = fdtab_read( &glob.fdt, parentid, buf, nentry*sizeof(*e), 0 );
-  if( sts < 0 ) {
-    nentry = -1;
-    goto done;
-  }
-		  
-  e = (struct freg_s *)buf;
-  for( i = 0; i < nentry; i++ ) {
-    if( i < n ) {
-      /* copy out */
-      strncpy( entry[i].name, e[i].name, FREG_MAX_NAME - 1 );
-      entry[i].flags = e[i].flags;
-      switch( e[i].flags & FREG_TYPE_MASK ) {
-      case FREG_TYPE_UINT32:
-	entry[i].len = sizeof(uint32_t);
-	break;
-      case FREG_TYPE_UINT64:
-      case FREG_TYPE_KEY:
-	entry[i].len = sizeof(uint64_t);
-	break;
-      case FREG_TYPE_STRING:
-      case FREG_TYPE_OPAQUE:
-	entry[i].len = fdtab_size( &glob.fdt, e[i].datap );
-	break;
-      default:
-	entry[i].len = 0;
-	break;
-      }
-    }
-  }
-
- done:
-  free( buf );
-  return nentry;
+    return 0;
 }
 
-static int get_entry( uint64_t parentid, char *name, struct freg_s *e, int *idx ) {
-  int sts, nentry;
-  int offset, i;
-  
-  nentry = fdtab_size( &glob.fdt, parentid ) / sizeof(*e);
-  if( nentry < 0 ) return -1;  
-  if( !nentry ) return -1;
+int freg_list( uint64_t parentid, struct freg_entry *entry, int n ) {
+    int sts, nentry, i, j, idx, nn;
+    uint64_t id;
+    uint64_t buf[FREG_LBASIZE/sizeof(uint64_t)];
+    struct freg_entry etry;
+    struct freg_s e;
+    
+    if( !glob.ocount ) return -1;
+    if( !parentid ) parentid = glob.rootid;
 
-  offset = 0;
-  for( i = 0; i < nentry; i++ ) {
-    sts = fdtab_read( &glob.fdt, parentid, (char *)e, sizeof(*e), offset );
+    sts = freg_entry_by_id( parentid, &etry );
+    if( sts ) return sts;
+    if( (etry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
+    
+    nentry = etry.len / sizeof(uint64_t);
+    if( nentry < 0 ) return -1;  
+    if( !nentry ) return 0;
+    
+    i = 0;
+    idx = 0;
+    do {
+	sts = fdtab_read( &glob.fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
+	if( sts < 0 ) break;
+
+	nn = sts / sizeof(uint64_t);
+	for( j = 0; j < nn; j++ ) {
+	    if( idx < n ) {
+		sts = freg_entry_by_id( buf[j], &entry[idx] );
+		if( sts ) return sts;
+		idx++;
+	    }
+	    i++;
+	}
+    } while( i < nentry );
+    
+    return nentry;
+}
+
+int freg_entry_by_name( uint64_t parentid, char *name, struct freg_entry *entry, uint64_t *parentidp ) {
+    int sts, nentry, i, j, n;
+    struct freg_entry etry;
+    char tmpname[FREG_MAX_NAME];
+    uint64_t buf[32];
+    struct freg_s e;
+    
+    if( !glob.ocount ) return -1;
+    if( !parentid ) parentid = glob.rootid;
+
+    sts = get_subentry( parentid, name, &parentid, tmpname );
+    if( sts ) return sts;
+
+    sts = freg_entry_by_id( parentid, &etry );
+    if( sts ) return sts;
+    if( (etry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
+    
+    nentry = etry.len / sizeof(uint64_t);
+    if( nentry < 0 ) return -1;  
+    if( !nentry ) return -1;
+    
+    i = 0;
+    do {
+	sts = fdtab_read( &glob.fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
+	if( sts < 0 ) break;
+
+	n = sts / sizeof(uint64_t);
+	for( j = 0; j < n; j++ ) {
+	    sts = freg_entry_by_id( buf[j], &etry );
+	    if( (sts == 0) && (strcmp( etry.name, tmpname ) == 0) ) {
+		if( entry ) *entry = etry;
+		if( parentidp ) *parentidp = parentid;
+		return 0;
+	    }
+	    i++;
+	}
+    } while( i < nentry );
+    
+    return -1;
+}
+
+int freg_get( uint64_t id, uint32_t *flags, char *buf, int len, int *lenp ) {
+    int sts, nbytes, size;
+    struct freg_s e;
+
+    sts = fdtab_read( &glob.fdt, id, (char *)&e, sizeof(e), 0 );
+    if( sts < sizeof(e) ) return sts;
+    
+    if( flags ) *flags = e.flags;
+
+    nbytes = len;
+    size = fdtab_size( &glob.fdt, id ) - sizeof(e);
+    if( nbytes < size ) nbytes = size;
+    sts = fdtab_read( &glob.fdt, id, buf, nbytes, sizeof(e) );
     if( sts < 0 ) return sts;
-    if( strcmp( e->name, name ) == 0 ) {
-      if( idx ) *idx = i;
-      return 0;
-    }
-    offset += sizeof(*e);
-  }
+    if( lenp ) *lenp = size;
 
-  return -1;
+    return 0;
+}
+
+int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len, uint64_t *id ) {
+    int sts, nentry, i, j, n;
+    struct freg_entry entry;
+    struct freg_s e;
+    char tmpname[FREG_MAX_NAME];
+    uint64_t tmpbuf[32];
+    uint64_t tid;
+	
+    if( !glob.ocount ) return -1;
+    if( !parentid ) parentid = glob.rootid;
+
+    switch( flags & FREG_TYPE_MASK ) {
+    case FREG_TYPE_UINT32:
+	if( len != sizeof(uint32_t) ) return -1;
+	break;
+    case FREG_TYPE_UINT64:
+	if( len != sizeof(uint64_t) ) return -1;	
+	break;
+    case FREG_TYPE_KEY:
+	/* forbid calling with type key, keys are added using freg_subkey */
+	return -1;
+    }
+
+    sts = get_subentry( parentid, name, &parentid, tmpname );
+    if( sts ) return sts;
+    
+    sts = freg_entry_by_id( parentid, &entry );
+    if( sts ) return sts;
+    if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
+    
+    nentry = entry.len / sizeof(uint64_t);
+    i = 0;
+    do {
+	sts = fdtab_read( &glob.fdt, parentid, (char *)tmpbuf, sizeof(tmpbuf), sizeof(e) + (sizeof(uint64_t) * i) );
+	if( sts < 0 ) break;
+
+	n = sts / sizeof(uint64_t);
+	for( j = 0; j < n; j++ ) {
+	    sts = freg_entry_by_id( tmpbuf[j], &entry );
+	    if( (sts == 0) && (strcmp( entry.name, tmpname ) == 0) ) {
+		/* check type match */
+		if( (flags & FREG_TYPE_MASK) != (entry.flags & FREG_TYPE_MASK) ) return -1;
+		
+		/* update existing data*/
+		if( flags != entry.flags ) {
+		    memset( &e, 0, sizeof(e) );
+		    strcpy( e.name, entry.name );
+		    e.flags = flags;
+		    fdtab_write( &glob.fdt, entry.id, (char *)&e, sizeof(e), 0 );
+		}
+		fdtab_write( &glob.fdt, entry.id, buf, len, sizeof(e) );
+		fdtab_truncate( &glob.fdt, entry.id, sizeof(e) + len );
+
+		if( id ) *id = entry.id;
+		return 0;
+	    }
+
+	    i++;
+	}
+    } while( i < nentry );
+
+    /* add new entry */
+    memset( &e, 0, sizeof(e) );
+    strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
+    e.flags = flags;
+    sts = fdtab_alloc( &glob.fdt, sizeof(e) + len, &tid );
+    if( sts ) return sts;
+    sts = fdtab_write( &glob.fdt, tid, (char *)&e, sizeof(e), 0 );
+    if( sts < 0 ) return sts;
+    sts = fdtab_write( &glob.fdt, tid, buf, len, sizeof(e) );
+    if( sts < 0 ) return sts;
+    
+    /* append id to parent */
+    sts = fdtab_write( &glob.fdt, parentid, (char *)&tid, sizeof(uint64_t), sizeof(e) + (nentry*sizeof(uint64_t)) );
+    if( sts < 0 ) return sts;
+    
+    if( id ) *id = tid;
+    
+    return 0;
+}
+
+int freg_set( uint64_t id, char *name, uint32_t *flags, char *buf, int len ) {
+    int sts;
+    struct freg_s e;
+
+    if( flags && len ) {
+	switch( (*flags) & FREG_TYPE_MASK ) {
+	case FREG_TYPE_UINT32:
+	    if( len != sizeof(uint32_t) ) return -1;
+	    break;
+	case FREG_TYPE_UINT64:
+	    if( len != sizeof(uint64_t) ) return -1;
+	    break;
+	case FREG_TYPE_KEY:
+	    return -1;
+	}
+    }
+
+    sts = fdtab_read( &glob.fdt, id, (char *)&e, sizeof(e), 0 );
+    if( sts < 0 ) return sts;
+
+    if( flags ) {
+	if( ((*flags) & FREG_TYPE_MASK) != (e.flags & FREG_TYPE_MASK) ) return -1;
+	e.flags = *flags;
+    }
+    if( name ) strncpy( e.name, name, FREG_MAX_NAME - 1 );
+    if( buf ) {
+	fdtab_write( &glob.fdt, id, buf, len, sizeof(e) );
+	fdtab_truncate( &glob.fdt, id, sizeof(e) + len );
+    }
+    if( flags || name || buf ) {
+	fdtab_write( &glob.fdt, id, (char *)&e, sizeof(e), 0 );
+    }
+    
+    return 0;
+}
+
+int freg_rem( uint64_t parentid, uint64_t id ) {
+    int sts, nentry, i, j, n;
+    struct freg_entry entry;
+    uint64_t buf[32];
+    struct freg_s e;
+    
+    if( !glob.ocount ) return -1;
+    if( !parentid ) parentid = glob.rootid;
+
+    sts = freg_entry_by_id( parentid, &entry );
+    if( sts ) return sts;
+    if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
+    
+    nentry = entry.len / sizeof(uint64_t);
+    if( !nentry ) return -1;
+    
+    i = 0;
+    do {
+	sts = fdtab_read( &glob.fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
+	if( sts < 0 ) break;
+
+	n = sts / sizeof(uint64_t);
+	for( j = 0; j < n; j++ ) {
+	    if( buf[j] == id ) {
+		/* free entry */
+		sts = freg_entry_by_id( buf[j], &e );
+		if( sts == 0 ) {
+		    if( (e.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+			/* this is a key so free all its child items */
+			freg_rem( id, buf[j] );
+		    }
+		    
+		    /* free item itself */
+		    fdtab_free( &glob.fdt, buf[j] );
+		}
+		    
+		/* copy final item over top of this item */
+		if( i != (nentry - 1) ) {
+		    fdtab_read( &glob.fdt, parentid, &id, sizeof(id), sizeof(e) + (sizeof(id) * (nentry - 1)) );
+		    fdtab_write( &glob.fdt, parentid, &id, sizeof(id), sizeof(e) + (sizeof(id) * i) );
+		}
+		fdtab_truncate( &glob.fdt, parentid, sizeof(e) + (sizeof(id) * (nentry - 1)) );
+		return 0;
+	    }
+
+	    i++;
+	}
+    } while( i < nentry );
+
+    return -1;
 }
 
 static int get_subentry( uint64_t parentid, char *path, uint64_t *id, char *name ) {
   int sts;
   char *p, *q;
   char tmpname[FREG_MAX_NAME];
-  uint32_t tmpflags;
   uint64_t tmpid;
   int idx;
+  struct freg_entry e;
   
   p = path;
   if( *p == '/' ) p++;  
@@ -187,208 +409,18 @@ static int get_subentry( uint64_t parentid, char *path, uint64_t *id, char *name
     if( strcmp( tmpname, "" ) == 0 ) return -1;
     if( *p == '\0' ) break;
     
-    sts = freg_get( parentid, tmpname, &tmpflags, (char *)&tmpid, sizeof(tmpid), NULL );
+    sts = freg_entry_by_name( parentid, tmpname, &e, NULL );
     if( sts ) return sts;
-    else if( (tmpflags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
+    else if( (e.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
       return -1;
     }
 
     /* continue to next level */
-    parentid = tmpid;
+    parentid = e.id;
   }
 
   if( name ) strncpy( name, tmpname, FREG_MAX_NAME - 1 );
   if( id ) *id = parentid;
-
-  return 0;
-}
-
-
-int freg_get( uint64_t parentid, char *name, uint32_t *flags, char *buf, int len, int *lenp ) {
-  /* read entries until we find one with a matching name */
-  int sts, nbytes, type, size;
-  struct freg_s e;
-  char tmpname[FREG_MAX_NAME];
-  
-  if( !glob.ocount ) return -1;
-  if( !parentid ) parentid = glob.rootid;
-  if( strcmp( name, "" ) == 0 ) return -1;
-
-  sts = get_subentry( parentid, name, &parentid, tmpname );
-  if( sts ) return sts;
-  
-  sts = get_entry( parentid, tmpname, &e, NULL );
-  if( sts < 0 ) return sts;
-  if( flags ) *flags = e.flags;
-  
-  type = e.flags & FREG_TYPE_MASK;
-  switch( type ) {
-  case FREG_TYPE_UINT32:
-    size = sizeof(uint32_t);
-    if( lenp ) *lenp = size;
-    
-    if( len >= sizeof(uint32_t) ) {
-      memcpy( buf, &e.datap, sizeof(uint32_t) );
-    }
-    break;
-  case FREG_TYPE_UINT64:
-  case FREG_TYPE_KEY:
-    size = sizeof(uint64_t);
-    if( lenp ) *lenp = size;
-
-    if( len >= sizeof(uint64_t) ) {
-      memcpy( buf, &e.datap, sizeof(uint64_t) );
-    }
-    break;
-  case FREG_TYPE_OPAQUE:
-  case FREG_TYPE_STRING:
-    nbytes = len;
-    size = fdtab_size( &glob.fdt, e.datap );
-    if( size < 0 ) return -1;
-    if( nbytes > size ) nbytes = size;    
-    fdtab_read( &glob.fdt, e.datap, buf, nbytes, 0 );
-
-    if( lenp ) *lenp = size;
-
-    break;
-  default:
-    return -1;
-  }
-  
-  return 0;
-}
-
-int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len ) {
-  /* read entries until we find one with a matching name. if we do then write to its data block otherwise add a new entry */
-  int sts, idx, size;
-  struct freg_s e;
-  uint32_t type;
-  uint64_t datap;
-  char tmpname[FREG_MAX_NAME];
-  
-  if( !glob.ocount ) return -1;
-  if( !parentid ) parentid = glob.rootid;
-  if( strcmp( name, "" ) == 0 ) return -1;
-
-  sts = get_subentry( parentid, name, &parentid, tmpname );
-  if( sts ) return sts;
-  
-  type = flags & FREG_TYPE_MASK;
-  datap = 0;
-  switch( type ) {
-  case FREG_TYPE_UINT32:
-    if( len != sizeof(uint32_t) ) return -1;
-    datap = *((uint32_t *)buf);
-    break;
-  case FREG_TYPE_UINT64:
-  case FREG_TYPE_KEY:
-    if( len != sizeof(uint64_t) ) return -1;
-    datap = *((uint64_t *)buf);
-    break;
-  case FREG_TYPE_STRING:
-  case FREG_TYPE_OPAQUE:
-    break;
-  default:
-    return -1;
-  }
-
-  sts = get_entry( parentid, tmpname, &e, &idx );
-  if( sts == 0 ) {
-    /* write existing */
-
-    /* check type - disallow type mismatch */
-    if( (e.flags & FREG_TYPE_MASK) != type ) return -1;
-    
-    e.flags = flags;
-    switch( type ) {
-    case FREG_TYPE_UINT32:
-    case FREG_TYPE_UINT64:
-    case FREG_TYPE_KEY:
-      e.datap = datap;
-      fdtab_write( &glob.fdt, parentid, (char *)&e, sizeof(e), sizeof(e) * idx );
-      break;
-    case FREG_TYPE_OPAQUE:
-    case FREG_TYPE_STRING:
-      fdtab_write( &glob.fdt, parentid, (char *)&e, sizeof(e), sizeof(e) * idx );
-      fdtab_truncate( &glob.fdt, e.datap, 0 );
-      fdtab_write( &glob.fdt, e.datap, buf, len, 0 );
-      break;
-    }
-    
-  } else {
-    /* add new */
-    memset( &e, 0, sizeof(e) );
-    strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
-    e.flags = flags;
-    switch( type ) {
-    case FREG_TYPE_OPAQUE:
-    case FREG_TYPE_STRING:
-      sts = fdtab_alloc( &glob.fdt, len, &e.datap );
-      if( sts ) return sts;
-      sts = fdtab_write( &glob.fdt, e.datap, buf, len, 0 );
-      break;
-    case FREG_TYPE_UINT32:
-    case FREG_TYPE_UINT64:
-    case FREG_TYPE_KEY:
-      e.datap = datap;
-      break;
-    }
-
-    /* append new entry */
-    size = fdtab_size( &glob.fdt, parentid );
-    sts = fdtab_write( &glob.fdt, parentid, (char *)&e, sizeof(e), size );
-    if( sts < 0 ) return sts;
-  }
-
-  return 0;    
-}
-
-int freg_rem( uint64_t parentid, char *name ) {  
-  int sts, idx, size, type;
-  struct freg_s e, tmpe, e2;
-  char tmpname[FREG_MAX_NAME];
-  
-  if( !glob.ocount ) return -1;
-  if( !parentid ) parentid = glob.rootid;
-  if( strcmp( name, "" ) == 0 ) return -1;
-
-  sts = get_subentry( parentid, name, &parentid, tmpname );
-  if( sts ) return sts;
-  
-  sts = get_entry( parentid, tmpname, &e, &idx );
-  if( sts < 0 ) return sts;
-
-  /* if this is a subkey entry, recursively free all its children */
-  type = e.flags & FREG_TYPE_MASK;
-  if( type == FREG_TYPE_KEY ) {
-    int nentry;
-    int offset, i;
-    
-    nentry = fdtab_size( &glob.fdt, e.datap ) / sizeof(e);    
-    offset = 0;
-    for( i = 0; i < nentry; i++ ) {
-      sts = fdtab_read( &glob.fdt, e.datap, (char *)&e2, sizeof(e2), 0 );
-      freg_rem( e.datap, e2.name );
-      offset += sizeof(e2);
-    }
-  }
-  
-  /* free data block */
-  switch( type ) {
-  case FREG_TYPE_OPAQUE:
-  case FREG_TYPE_STRING:
-  case FREG_TYPE_KEY:
-    fdtab_free( &glob.fdt, e.datap );
-    break;
-  }
-  
-  /* copy final entry over top */
-  size = fdtab_size( &glob.fdt, parentid );
-  if( idx != ((size / sizeof(e)) - 1) ) {
-    fdtab_read( &glob.fdt, parentid, (char *)&tmpe, sizeof(tmpe), size - sizeof(tmpe) );
-    fdtab_write( &glob.fdt, parentid, (char *)&tmpe, sizeof(tmpe), sizeof(tmpe)*idx );
-  }
-  fdtab_truncate( &glob.fdt, parentid, size - sizeof(tmpe) );
 
   return 0;
 }
@@ -399,7 +431,8 @@ int freg_subkey( uint64_t parentid, char *name, uint32_t flags, uint64_t *id ) {
   char tmpname[FREG_MAX_NAME];
   char *p, *q;
   int idx;
-  uint32_t tmpflags;
+  struct freg_entry entry;
+  struct freg_s e;
   
   if( !glob.ocount ) return -1;
   if( !parentid ) parentid = glob.rootid;
@@ -421,23 +454,30 @@ int freg_subkey( uint64_t parentid, char *name, uint32_t flags, uint64_t *id ) {
     if( *p == '/' ) p++;
     if( strcmp( tmpname, "" ) == 0 ) return -1;
     
-    sts = freg_get( parentid, tmpname, &tmpflags, (char *)&tmpid, sizeof(tmpid), NULL );
+    sts = freg_entry_by_name( parentid, tmpname, &entry, NULL );
     if( sts ) {
-      if( !(flags & FREG_CREATE) ) return -1;
-      
-      sts = fdtab_alloc( &glob.fdt, 0, &tmpid );
-      if( sts ) return sts;
-      sts = freg_put( parentid, tmpname, FREG_TYPE_KEY, (char *)&tmpid, sizeof(tmpid) );
-      if( sts ) {
-	fdtab_free( &glob.fdt, tmpid );
-	return sts;
-      }
-    } else if( (tmpflags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
-      return -1;
-    }
+	/* subkey didn't exist so create it */
+	if( !(flags & FREG_CREATE) ) return -1;
 
-    /* continue to next level */
-    parentid = tmpid;
+	/* create new key entry */
+	sts = fdtab_alloc( &glob.fdt, 0, &tmpid );
+	if( sts ) return sts;
+	memset( &e, 0, sizeof(e) );
+	strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
+	e.flags = FREG_TYPE_KEY;
+	fdtab_write( &glob.fdt, tmpid, (char *)&e, sizeof(e), 0 );
+
+	/* append id to parent */
+	freg_entry_by_id( parentid, &entry );
+	fdtab_write( &glob.fdt, parentid, (char *)&tmpid, sizeof(tmpid), sizeof(e) + entry.len );
+
+	parentid = tmpid;
+    } else if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
+	return -1;
+    } else {    
+	/* continue to next level */
+	parentid = entry.id;
+    }
   }
 
   if( id ) *id = parentid;

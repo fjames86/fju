@@ -32,27 +32,28 @@ static int freg_proc_list( struct rpc_inc *inc ) {
 
     for( i = 0; i < n; i++ ) {
 	xdr_encode_boolean( &inc->xdr, 1 );
+	xdr_encode_uint64( &inc->xdr, elist[i].id );
 	xdr_encode_string( &inc->xdr, elist[i].name );
 	xdr_encode_uint32( &inc->xdr, elist[i].flags );
 	switch( elist[i].flags & FREG_TYPE_MASK ) {
 	case FREG_TYPE_UINT32:
-	    sts = freg_get( parentid, elist[i].name, NULL, (char *)&u32, sizeof(u32), NULL );
+	    sts = freg_get( elist[i].id, NULL, (char *)&u32, sizeof(u32), NULL );
 	    xdr_encode_uint32( &inc->xdr, u32 );
 	    break;
 	case FREG_TYPE_UINT64:
 	case FREG_TYPE_KEY:
-	    sts = freg_get( parentid, elist[i].name, NULL, (char *)&u64, sizeof(u64), NULL );
+	    sts = freg_get( elist[i].id, NULL, (char *)&u64, sizeof(u64), NULL );
 	    xdr_encode_uint64( &inc->xdr, u64 );	    
 	    break;
 	case FREG_TYPE_STRING:
 	    str = malloc( elist[i].len + 1 );
-	    sts = freg_get( parentid, elist[i].name, NULL, (char *)str, elist[i].len + 1, NULL );
+	    sts = freg_get( elist[i].id, NULL, (char *)str, elist[i].len + 1, NULL );
 	    xdr_encode_string( &inc->xdr, str );
 	    free( str );
 	    break;
 	case FREG_TYPE_OPAQUE:
 	    str = malloc( elist[i].len );
-	    sts = freg_get( parentid, elist[i].name, NULL, (char *)str, elist[i].len, NULL );
+	    sts = freg_get( elist[i].id, NULL, (char *)str, elist[i].len, NULL );
 	    xdr_encode_opaque( &inc->xdr, str, elist[i].len );
 	    free( str );
 	    break;

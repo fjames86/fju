@@ -208,6 +208,7 @@ int ftab_alloc( struct ftab_s *ftab, uint64_t *id ) {
   }
   if( e ) {
       e->seq++;
+      if( e->seq == 0 ) e->seq = 1;
       e->flags |= FTAB_ACTIVE;
       f->header.seq++;
       f->header.count++;
@@ -231,6 +232,7 @@ int ftab_free( struct ftab_s *ftab, uint64_t id ) {
   if( e ) {
       e->flags &= ~FTAB_ACTIVE;
       e->seq++;
+      if( e->seq == 0 ) e->seq = 1;
       sts = 0;
       f->header.count--;
       f->header.seq++;

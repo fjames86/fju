@@ -136,14 +136,14 @@ static void cmd_list( int argc, char **argv, int i ) {
   elist = malloc( sizeof(*elist) * sts );
   n = freg_list( glob.freg, id, elist, sts );
   if( n < sts ) n = sts;
-  printf( "%-16s %-8s %-32s %-8s\n", "ID", "Type", "Name", "Len" );
+  printf( "%-16s %-8s %-24s %-4s %-8s\n", "ID", "Type", "Name", "Flags", "Len" );
   printkey = 1;
  again:
   for( i = 0; i < n; i++ ) {
     if( printkey && ((elist[i].flags & FREG_TYPE_MASK) != FREG_TYPE_KEY) ) continue;
     else if( !printkey && ((elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) ) continue;
     
-    printf( "%-16"PRIx64" %-8s %-32s %-8u ",
+    printf( "%016"PRIx64" %-8s %-24s %-4x %-8u ",
 	    elist[i].id,
 	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ? "u32" :
 	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_UINT64 ? "u64" :
@@ -152,6 +152,7 @@ static void cmd_list( int argc, char **argv, int i ) {
 	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ? "key" :
 	    "unknown",
 	    elist[i].name,
+	    elist[i].flags & ~FREG_TYPE_MASK,
 	    elist[i].len );
     switch( elist[i].flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
@@ -239,9 +240,9 @@ static void cmd_get( int argc, char **argv, int ii ) {
 }
 
 int main( int argc, char **argv ) {
-  int sts, i, j;
+  int sts, i;
   uint64_t id;
-  char tmpstr[32];
+
   
   i = 1;
   while( i < argc ) {
@@ -277,12 +278,17 @@ int main( int argc, char **argv ) {
   } else if( strcmp( argv[i], "rem" ) == 0 ) {
       struct freg_entry e;
       uint64_t parentid;
+      
       i++;
-      if( i >= argc ) usage( NULL );
-      sts = freg_entry_by_name( glob.freg, 0, argv[i], &e, &parentid );
-      if( sts ) usage( "Failed to find entry" );
-      sts = freg_rem( glob.freg, parentid, e.id );
-      if( sts ) usage( "Failed to remove value" );
+      while( i < argc ) {
+	  sts = freg_entry_by_name( glob.freg, 0, argv[i], &e, &parentid );
+	  if( sts ) printf( "Failed to find entry \"%s\"", argv[i] );
+	  if( !sts ) {
+	      sts = freg_rem( glob.freg, parentid, e.id );
+	      if( sts ) printf( "Failed to remove value" );
+	  }
+	  i++;
+      }
   } else if( strcmp( argv[i], "dump" ) == 0 ) {
     uint64_t parentid = 0;
     char *path = "";

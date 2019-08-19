@@ -367,8 +367,7 @@ int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, cha
     if( sts < 0 ) return sts;
 
     if( flags ) {
-	if( ((*flags) & FREG_TYPE_MASK) != (e.flags & FREG_TYPE_MASK) ) return -1;
-	e.flags = *flags;
+	e.flags = ((*flags) & ~FREG_TYPE_MASK) | (e.flags & FREG_TYPE_MASK);
     }
     if( name ) strncpy( e.name, name, FREG_MAX_NAME - 1 );
     if( buf ) {

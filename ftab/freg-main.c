@@ -56,15 +56,17 @@ static struct {
 } glob;
 
 static void usage( char *fmt, ... ) {
-  fprintf( stderr, "Usage: CMD args...\n"
+  fprintf( stderr, "Usage: [-p path] CMD args...\n"
 	    "Where CMD:\n"
 	    "               [list] [path]\n"
 	    "               [get] path\n"
 	    "               put path u32|u64|string|opaque|key [value]\n"
+	    "               set path [name=NAME] [flags=FLAGS] [value=VALUE]\n" 
 	    "               rem path\n"
 	    "               dump [path]\n"
 	    "               populate [count]\n"
-	    "               reset\n" 
+	    "               reset\n"
+	    "               prop\n" 
 	    "\n"
     );
 
@@ -77,6 +79,22 @@ static void usage( char *fmt, ... ) {
         fprintf( stderr, "\n" );
     }
     exit( 1 );
+}
+
+static void argval_split( char *instr, char *argname, char **argval ) {
+    char *p;
+
+    p = strchr( instr, '=' );
+    if( p ) *argval = p + 1;
+    else *argval = "";
+
+    p = instr;
+    while( *p != '0' && *p != '=' ) {
+        *argname = *p;
+        p++;
+        argname++;
+    }
+    *argname = '\0';
 }
 
 static void cmd_get( char *path );
@@ -383,9 +401,38 @@ int main( int argc, char **argv ) {
 	    (prop.lbasize*prop.count) / 1024,
 	    (prop.lbasize*prop.max) / 1024,
 	    *((uint64_t *)prop.cookie) );
+  } else if( strcmp( argv[i], "set" ) == 0 ) {
+    char *namep = NULL;
+    char *term;
+    uint32_t flags, *flagsp = NULL;
+    char argname[64], *argval;
+    
+    i++;
+    if( i >= argc ) usage( NULL );
+    id = strtoull( argv[i], &term, 16 );
+    if( *term ) {
+      struct freg_entry entry;
+      sts = freg_entry_by_name( glob.freg, 0, argv[i], &entry, NULL );
+      if( sts ) usage( "Failed to find entry" );
+      id = entry.id;
+    }
+    i++;
+    while( i < argc ) {
+      argval_split( argv[i], argname, &argval );
+      if( strcmp( argname, "name" ) == 0 ) {
+	namep = argval;
+      } else if( strcmp( argname, "flags" ) == 0 ) {
+	flags = strtoul( argval, NULL, 16 );
+	flagsp = &flags;
+      } else usage( NULL );
+      i++;
+    }
+    
+    sts = freg_set( glob.freg, id, namep, flagsp, NULL, 0 );
+    if( sts ) usage( "Failed to set" );
   } else cmd_list( argc, argv, i );
   
-  freg_close( NULL );
+  freg_close( glob.freg );
 
   return 0;
 }

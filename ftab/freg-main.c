@@ -354,7 +354,7 @@ int main( int argc, char **argv ) {
 	  cmd_get( argv[i] );
       }
       end = rpc_now();
-      printf( "%dms\n", (int)(end - start) );
+      printf( "1000 cmd_get %dms %.3fms per call\n", (int)(end - start), (float)(end - start)/1000.0 );
   } else cmd_list( argc, argv, i );
   
   freg_close();
@@ -445,8 +445,6 @@ static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count 
   uint64_t id;
   int sts, i;
 
-  printf( "populate %"PRIx64"\n", parentid );
-  
   for( i = 0; i < depth; i++ ) {
     if( !(*count) ) return;
     u32 = sec_rand_uint32();

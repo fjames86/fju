@@ -143,7 +143,7 @@ int freg_list( uint64_t parentid, struct freg_entry *entry, int n ) {
       for( j = 0; j < nn; j++ ) {
 	sts = freg_entry_by_id( buf[j], &etry );
 	if( sts ) {
-	  printf( "invalid item\n" );
+	  /* invalid entry? */
 	} else {
 	  if( idx < n ) {
 	    entry[idx] = etry;
@@ -158,8 +158,6 @@ int freg_list( uint64_t parentid, struct freg_entry *entry, int n ) {
 
     if( ncnt != nentry ) {
       /* corruption? */
-      printf( "entry count mismatch?\n" );
-      //fdtab_truncate( &glob.fdt, parentid, sizeof(struct freg_s) + ncnt*sizeof(uint64_t) );
     }
     
     return ncnt;
@@ -195,7 +193,7 @@ int freg_entry_by_name( uint64_t parentid, char *name, struct freg_entry *entry,
       for( j = 0; j < n; j++ ) {
 	sts = freg_entry_by_id( buf[j], &etry );
 	if( sts ) {
-	  printf( "invalid item?\n" );
+	  /* invalid item? */
 	} else if( strcmp( etry.name, tmpname ) == 0 ) {
 	  if( entry ) *entry = etry;
 	  if( parentidp ) *parentidp = parentid;
@@ -209,7 +207,7 @@ int freg_entry_by_name( uint64_t parentid, char *name, struct freg_entry *entry,
     }
 
     if( ncnt != nentry ) {
-      printf( "entry count mismatch?\n" );
+      /* invalid population count? */
     }
     
     return -1;
@@ -273,7 +271,7 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len,
 	for( j = 0; j < n; j++ ) {
 	  sts = freg_entry_by_id( tmpbuf[j], &entry );
 	  if( sts ) {
-	    printf( "invalid entry?\n" );
+	    /* invalid item? */
 	  } else if( strcmp( entry.name, tmpname ) == 0 ) {
 	    /* check type match */
 	    if( (flags & FREG_TYPE_MASK) != (entry.flags & FREG_TYPE_MASK) ) return -1;
@@ -286,7 +284,6 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len,
 	      sts = fdtab_write( &glob.fdt, entry.id, (char *)&e, sizeof(e), 0 );
 	    }
 	    sts = fdtab_truncate( &glob.fdt, entry.id, sizeof(e) );
-	    if( sts < 0 ) printf( "xx xtuncate failed\n" );
 	    sts = fdtab_write( &glob.fdt, entry.id, buf, len, sizeof(e) );
 	    
 	    if( id ) *id = entry.id;
@@ -344,7 +341,6 @@ int freg_set( uint64_t id, char *name, uint32_t *flags, char *buf, int len ) {
     if( name ) strncpy( e.name, name, FREG_MAX_NAME - 1 );
     if( buf ) {
       sts = fdtab_truncate( &glob.fdt, id, sizeof(e) );
-      if( sts < 0 ) printf( "sxxx truncate failedd\n" );
       sts = fdtab_write( &glob.fdt, id, buf, len, sizeof(e) );
     }
     if( flags || name || buf ) {
@@ -405,7 +401,6 @@ int freg_rem( uint64_t parentid, uint64_t id ) {
 		  sts = fdtab_write( &glob.fdt, parentid, (char *)&id, sizeof(id), sizeof(e) + (sizeof(id) * i) );
 		}
 		sts = fdtab_truncate( &glob.fdt, parentid, sizeof(e) + (sizeof(uint64_t) * (nentry - 1)) );
-		if( sts < 0 ) printf( "xxx truncate failed\n" );
 		return 0;
 	    }
 

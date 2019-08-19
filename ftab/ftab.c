@@ -98,10 +98,6 @@ int ftab_open( char *path, struct ftab_opts *opts, struct ftab_s *ftab ) {
     }
   } else if( f->header.version != FTAB_VERSION ) {
     goto bad;
-  } else if( opts && (opts->mask & FTAB_OPT_LBASIZE) && (opts->lbasize != f->header.lbasize) ) {
-      goto bad;
-  } else if( opts && (opts->mask & FTAB_OPT_LBACOUNT) && (opts->lbacount != f->header.max) ) {
-      goto bad;      
   } else {
       sts = mmf_remap( &ftab->mmf, sizeof(f->header) + sizeof(struct ftab_entry) * f->header.max + (f->header.lbasize * f->header.max) );
       if( sts ) goto bad;

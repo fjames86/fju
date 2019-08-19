@@ -40,6 +40,7 @@ static struct {
   uint64_t id;
   uint32_t lbasize;
   uint32_t lbacount;
+  uint32_t totalsize;
   uint32_t offset;
   uint32_t npop;
   char cookie[FTAB_MAX_COOKIE];

@@ -9,9 +9,9 @@ ${LIBDIR}/libfdtab.a: ftab/fdtab.c include/fju/fdtab.h
 	${CC} -c ${CFLAGS} ftab/fdtab.c 
 	${AR} rcs $@ fdtab.o
 
-${LIBDIR}/libfreg.a: ftab/freg.c include/fju/freg.h 
-	${CC} -c ${CFLAGS} ftab/freg.c 
-	${AR} rcs $@ freg.o
+${LIBDIR}/libfreg.a: ftab/freg.c include/fju/freg.h ftab/freg-rpc.c 
+	${CC} -c ${CFLAGS} ftab/freg.c ftab/freg-rpc.c 
+	${AR} rcs $@ freg.o freg-rpc.o 
 
 ${BINDIR}/ftab: ftab/ftab-main.c ${LIBFJU}
 	${CC} -o $@ ftab/ftab-main.c ${CFLAGS} ${LFLAGS}

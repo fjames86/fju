@@ -42,6 +42,7 @@
 #include <fju/freg.h>
 #include <fju/sec.h>
 #include <fju/ftab.h>
+#include <fju/rpc.h>
 
 #ifdef WIN32
 #define PRIu64 "llu"
@@ -355,13 +356,13 @@ int main( int argc, char **argv ) {
 static void cmd_get2( uint64_t parentid, char *path, char *name ) {
   uint32_t flags;
   char *buf;
-  int len, i, sts;
+  int i, sts;
   struct freg_entry e;
-			 
+
   sts = freg_entry_by_name( parentid, name, &e, NULL );
   if( sts ) return;
   buf = malloc( e.len );
-  sts = freg_get( e.id, &flags, buf, len, NULL );
+  sts = freg_get( e.id, &flags, buf, e.len, NULL );
   if( sts ) goto done;
   switch( flags & FREG_TYPE_MASK ) {
   case FREG_TYPE_UINT32:
@@ -378,7 +379,7 @@ static void cmd_get2( uint64_t parentid, char *path, char *name ) {
     break;
   case FREG_TYPE_OPAQUE:
     printf( "%s/%s opaque ", path, name );
-    for( i = 0; i < len; i++ ) {
+    for( i = 0; i < e.len; i++ ) {
       printf( "%02x", (uint32_t)(uint8_t)buf[i] );
     }
     printf( "\n" );

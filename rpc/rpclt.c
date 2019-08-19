@@ -833,7 +833,7 @@ static void freg_list_results( struct xdr_s *xdr ) {
 	    printf( "str %s\n", str );
 	    break;
 	case FREG_TYPE_OPAQUE:
-	    xdr_decode_opaque_ref( xdr, &bufp, &lenp );
+	  xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
 	    printf( "opaque " );
 	    for( i = 0; i < lenp; i++ ) {
 		printf( "%02x", (uint32_t)(uint8_t)bufp[i] );

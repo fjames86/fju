@@ -54,7 +54,7 @@ static int freg_proc_list( struct rpc_inc *inc ) {
 	case FREG_TYPE_OPAQUE:
 	    str = malloc( elist[i].len );
 	    sts = freg_get( elist[i].id, NULL, (char *)str, elist[i].len, NULL );
-	    xdr_encode_opaque( &inc->xdr, str, elist[i].len );
+	    xdr_encode_opaque( &inc->xdr, (uint8_t *)str, elist[i].len );
 	    free( str );
 	    break;
 	}

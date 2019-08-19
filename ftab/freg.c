@@ -118,7 +118,6 @@ int freg_entry_by_id( uint64_t id, struct freg_entry *entry ) {
 
 int freg_list( uint64_t parentid, struct freg_entry *entry, int n ) {
     int sts, nentry, i, j, idx, nn;
-    uint64_t id;
     uint64_t buf[FREG_LBASIZE/sizeof(uint64_t)];
     struct freg_entry etry;
     struct freg_s e;
@@ -356,7 +355,7 @@ int freg_rem( uint64_t parentid, uint64_t id ) {
 	for( j = 0; j < n; j++ ) {
 	    if( buf[j] == id ) {
 		/* free entry */
-		sts = freg_entry_by_id( buf[j], &e );
+		sts = freg_entry_by_id( buf[j], &entry );
 		if( sts == 0 ) {
 		    if( (e.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
 			/* this is a key so free all its child items */
@@ -369,8 +368,8 @@ int freg_rem( uint64_t parentid, uint64_t id ) {
 		    
 		/* copy final item over top of this item */
 		if( i != (nentry - 1) ) {
-		    fdtab_read( &glob.fdt, parentid, &id, sizeof(id), sizeof(e) + (sizeof(id) * (nentry - 1)) );
-		    fdtab_write( &glob.fdt, parentid, &id, sizeof(id), sizeof(e) + (sizeof(id) * i) );
+		  fdtab_read( &glob.fdt, parentid, (char *)&id, sizeof(id), sizeof(e) + (sizeof(id) * (nentry - 1)) );
+		  fdtab_write( &glob.fdt, parentid, (char *)&id, sizeof(id), sizeof(e) + (sizeof(id) * i) );
 		}
 		fdtab_truncate( &glob.fdt, parentid, sizeof(e) + (sizeof(id) * (nentry - 1)) );
 		return 0;
@@ -387,7 +386,6 @@ static int get_subentry( uint64_t parentid, char *path, uint64_t *id, char *name
   int sts;
   char *p, *q;
   char tmpname[FREG_MAX_NAME];
-  uint64_t tmpid;
   int idx;
   struct freg_entry e;
   

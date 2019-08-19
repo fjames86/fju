@@ -209,9 +209,12 @@ int main( int argc, char **argv ) {
 
     hostreg_open();
     raft_open();
-    
-    glob.port = 8000;
-    glob.timeout = 1000;
+    freg_open( NULL, NULL );
+
+    sts = freg_get_by_name( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(uint32_t), NULL );
+    sts = freg_get_by_name( NULL, 0, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(uint32_t), NULL );
+    if( !glob.port ) glob.port = 8000;
+    if( !glob.timeout ) glob.timeout = 1000;
 
     i = 1;
     while( i < argc ) {

@@ -549,3 +549,13 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
   
   return 0;
 }
+
+int freg_get_by_name( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, char *buf, int len, int *lenp ) {
+  int sts;
+  struct freg_entry entry;
+
+  sts = freg_entry_by_name( freg, parentid, name, &entry, NULL );
+  if( sts ) return sts;
+  if( (entry.flags & FREG_TYPE_MASK) != (flags & FREG_TYPE_MASK) ) return -1;
+  return freg_get( freg, entry.id, NULL, buf, len, lenp );
+}

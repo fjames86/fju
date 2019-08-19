@@ -97,7 +97,7 @@ static void argval_split( char *instr, char *argname, char **argval ) {
     *argname = '\0';
 }
 
-static void cmd_get( char *path );
+static void cmd_get( int argc, char **argv, int i );
 static void cmd_dump( uint64_t parentid, char *path );
 static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count );
 
@@ -117,7 +117,7 @@ static void cmd_list( int argc, char **argv, int i ) {
       if( sts ) {
 	sts = freg_entry_by_name( glob.freg, 0, argv[i], NULL, NULL );
 	  if( sts ) usage( "Unknown path \"%s\"", argv[i] );
-	  cmd_get( argv[i] );
+	  cmd_get( argc, argv, i );
 	  return;
       }
   }
@@ -172,7 +172,7 @@ static void cmd_list( int argc, char **argv, int i ) {
   free( elist );  
 }
 
-static void cmd_get( char *path ) {
+static void cmd_get( int argc, char **argv, int ii ) {
   uint32_t flags;
   char *buf;
   int len, i, sts;
@@ -180,9 +180,9 @@ static void cmd_get( char *path ) {
   uint64_t id;
   char *term;
   
-  id = strtoull( path, &term, 16 );
+  id = strtoull( argv[ii], &term, 16 );
   if( *term ) {  
-    sts = freg_entry_by_name( glob.freg, 0, path, &e, NULL );
+    sts = freg_entry_by_name( glob.freg, 0, argv[ii], &e, NULL );
     if( sts ) usage( "Failed to get entry" );
   } else {
     sts = freg_entry_by_id( glob.freg, id, &e );
@@ -249,7 +249,7 @@ int main( int argc, char **argv ) {
   } else if( strcmp( argv[i], "get" ) == 0 ) {
     i++;
     if( i >= argc ) usage( NULL );
-    cmd_get( argv[i] );
+    cmd_get( argc, argv, i );
   } else if( strcmp( argv[i], "put" ) == 0 ) {
     char *path;
     uint32_t flags, u32;
@@ -405,7 +405,7 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       start = rpc_now();
       for( j = 0; j < 1000; j++ ) {
-	  cmd_get( argv[i] );
+	cmd_get( argc, argv, i );
       }
       end = rpc_now();
       printf( "1000 cmd_get %dms %.3fms per call\n", (int)(end - start), (float)(end - start)/1000.0 );

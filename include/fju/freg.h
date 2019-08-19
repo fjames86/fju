@@ -58,6 +58,7 @@ int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, stru
 int freg_entry_by_id( struct freg_s *freg, uint64_t id, struct freg_entry *entry );
 
 int freg_get( struct freg_s *freg, uint64_t id, uint32_t *flags, char *buf, int len, int *lenp );
+int freg_get_by_name( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, char *buf, int len, int *lenp );
 int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, char *buf, int len, uint64_t *id );
 int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, char *buf, int len );
 int freg_rem( struct freg_s *freg, uint64_t parentid, uint64_t id );

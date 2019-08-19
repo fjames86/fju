@@ -12,6 +12,7 @@ freg_subkey
 freg_entry_by_id
 freg_entry_by_name
 freg_register
+freg_set
 fdtab_open
 fdtab_close
 fdtab_alloc

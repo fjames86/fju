@@ -93,6 +93,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libfju", "libfju\libfju.vcx
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "freg", "freg\freg.vcxproj", "{F9388C2F-E422-4913-B2F5-5F484F9B4F93}"
+	ProjectSection(ProjectDependencies) = postProject
+		{7207AEFE-743F-45AF-A0AD-F5AF608A2DCF} = {7207AEFE-743F-45AF-A0AD-F5AF608A2DCF}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

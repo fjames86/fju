@@ -107,6 +107,7 @@ static void argval_split( char *instr, char *argname, char **argval ) {
 static void cmd_get( int argc, char **argv, int i );
 static void cmd_dump( uint64_t parentid, char *path );
 static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count );
+static void cmd_put( int argc, char **argv, int i );
 
 static void cmd_list( int argc, char **argv, int i ) {
   struct freg_entry *elist;
@@ -193,46 +194,46 @@ static void cmd_get( int argc, char **argv, int ii ) {
   uint32_t flags;
   char *buf;
   int len, i, sts;
-  struct freg_entry e;
   uint64_t id;
   char *term;
   
   id = strtoull( argv[ii], &term, 16 );
-  if( *term ) {  
-    sts = freg_entry_by_name( glob.freg, 0, argv[ii], &e, NULL );
-    if( sts ) usage( "Failed to get entry" );
-  } else {
-    sts = freg_entry_by_id( glob.freg, id, &e );
+  if( *term ) {
+      struct freg_entry e;
+      sts = freg_entry_by_name( glob.freg, 0, argv[ii], &e, NULL );
+      if( sts ) usage( "Failed to get entry" );
+      id = e.id;
   }
-  if( sts ) usage( "Failed to get entry" );
   
-  sts = freg_get( glob.freg, e.id, &flags, NULL, 0, &len );
+  sts = freg_get( glob.freg, id, &flags, NULL, 0, &len );
   if( sts ) usage( "Failed to get" );
   buf = malloc( len );
-  sts = freg_get( glob.freg, e.id, &flags, buf, len, NULL );
+  sts = freg_get( glob.freg, id, &flags, buf, len, NULL );
   if( sts ) usage( "Failed to get data" );
-  switch( flags & FREG_TYPE_MASK ) {
-  case FREG_TYPE_UINT32:
-    printf( "%u %x\n", *(uint32_t *)buf, *(uint32_t *)buf );
-    break;
-  case FREG_TYPE_UINT64:
-    printf( "%"PRIu64" %"PRIx64"\n", *(uint64_t *)buf, *(uint64_t *)buf );
-    break;
-  case FREG_TYPE_KEY:
-    for( i = 0; i < e.len / sizeof(uint64_t); i++ ) {
-      uint64_t id = ((uint64_t *)buf)[i];
-      printf( "%"PRIx64" ", id );
-    }
-    break;
-  case FREG_TYPE_STRING:
-    printf( "%s\n", buf );
-    break;
-  case FREG_TYPE_OPAQUE:
-    for( i = 0; i < len; i++ ) {
-      printf( "%02x", (uint32_t)(uint8_t)buf[i] );
-    }
-    printf( "\n" );
-    break;
+  if( !glob.quiet ) {
+      switch( flags & FREG_TYPE_MASK ) {
+      case FREG_TYPE_UINT32:
+	  printf( "%u %x\n", *(uint32_t *)buf, *(uint32_t *)buf );
+	  break;
+      case FREG_TYPE_UINT64:
+	  printf( "%"PRIu64" %"PRIx64"\n", *(uint64_t *)buf, *(uint64_t *)buf );
+	  break;
+      case FREG_TYPE_KEY:
+	  for( i = 0; i < len / sizeof(uint64_t); i++ ) {
+	      uint64_t id = ((uint64_t *)buf)[i];
+	      printf( "%"PRIx64" ", id );
+	  }
+	  break;
+      case FREG_TYPE_STRING:
+	  printf( "%s\n", buf );
+	  break;
+      case FREG_TYPE_OPAQUE:
+	  for( i = 0; i < len; i++ ) {
+	      printf( "%02x", (uint32_t)(uint8_t)buf[i] );
+	  }
+	  printf( "\n" );
+	  break;
+      }
   }
   free( buf );
 }
@@ -270,117 +271,9 @@ int main( int argc, char **argv ) {
     if( i >= argc ) usage( NULL );
     cmd_get( argc, argv, i );
   } else if( strcmp( argv[i], "put" ) == 0 ) {
-    char *path;
-    uint32_t flags, u32;
-    uint64_t u64;
-    char *buf;
-    int len;
-    
-    i++;
-    if( i >= argc ) usage( NULL );
-    path = argv[i];
-    i++;
-
-    flags = FREG_TYPE_KEY;
-    if( i < argc ) {
-      if( strcmp( argv[i], "u32" ) == 0 ) {
-	flags = FREG_TYPE_UINT32;
-      } else if( strcmp( argv[i], "u64" ) == 0 ) {
-	flags = FREG_TYPE_UINT64;
-      } else if( (strcmp( argv[i], "string" ) == 0) || (strcmp( argv[i], "str" ) == 0) ) {
-	flags = FREG_TYPE_STRING;
-      } else if( (strcmp( argv[i], "opaque" ) == 0) ) {
-	flags = FREG_TYPE_OPAQUE;
-      } else if( strcmp( argv[i], "key" ) == 0 ) {
-	flags = FREG_TYPE_KEY;
-      } else usage( NULL );    
-      
       i++;
-    }
-    
-    buf = NULL;
-    len = 0;
-    u32 = 0;
-    u64 = 0;
-    switch( flags & FREG_TYPE_MASK ) {
-    case FREG_TYPE_KEY:
-      sts = freg_subkey( glob.freg, 0, path, FREG_CREATE, &id );
-      if( sts ) usage( "Failed to create subkey" );      
-      break;
-    case FREG_TYPE_UINT32:
-      if( i < argc ) {
-	char *term;
-	u32 = strtoul( argv[i], &term, 10 );
-	if( *term ) {
-	  u32 = strtoul( argv[i], &term, 16 );
-	  if( *term ) usage( "Failed to parse u32" );
-	}
-      }
-      buf = (char *)&u32;
-      len = sizeof(u32);
-      break;
-    case FREG_TYPE_UINT64:
-      if( i < argc ) {
-	char *term;
-	u64 = strtoull( argv[i], &term, 10 );
-	if( *term ) {
-	  u64 = strtoull( argv[i], &term, 16 );
-	  if( *term ) usage( "Failed to parse u64 \"%s\"", argv[i] );
-	}
-      }
-      buf = (char *)&u64;
-      len = sizeof(u64);
-      break;
-    case FREG_TYPE_STRING:
-      if( i < argc ) {
-	buf = NULL;
-	while( i < argc ) {
-	  if( buf ) buf = realloc( buf, len + strlen( argv[i] ) );
-	  else buf = malloc( strlen( argv[i] ) );
-	  memcpy( buf + len, argv[i], strlen( argv[i] ) );
-	  len += strlen( argv[i] );
-
-	  i++;
-	  if( i < argc ) {
-	    buf = realloc( buf, len + 1 );
-	    memcpy( buf + len, " ", 1 );
-	    len += 1;
-	  } else {
-	    buf = realloc( buf, len + 1 );
-	    memcpy( buf + len, "", 1 );
-	    len += 1;
-	  }
-	}	
-      } else {
-	buf = NULL;
-	len = 0;
-      }
-      break;
-    case FREG_TYPE_OPAQUE:
-      len = 0;
-      buf = malloc( 4096 );
-      while( i < argc ) {	
-	for( j = 0; j < strlen( argv[i] ) / 2; j++ ) {
-	  tmpstr[0] = argv[i][2*j];
-	  tmpstr[1] = argv[i][2*j + 1];
-	  tmpstr[2] = '\0';
-	  buf[len] = strtoul( tmpstr, NULL, 16 );
-	  len++;
-	}
-	i++;
-      }
-      break;
-    default:
-      usage( NULL );
-      break;
-    }
-
-    if( (flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
-      sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
-      if( sts ) usage( "Failed to put" );
-    }
-
-    if( ((flags & FREG_TYPE_MASK) == FREG_TYPE_STRING) && buf ) free( buf );
+      if( i >= argc ) usage( NULL );
+      cmd_put( argc, argv, i );
   } else if( strcmp( argv[i], "rem" ) == 0 ) {
       struct freg_entry e;
       uint64_t parentid;
@@ -419,15 +312,25 @@ int main( int argc, char **argv ) {
     ftab_close( &ftab );
   } else if( strcmp( argv[i], "time" ) == 0 ) {
       uint64_t start, end;
-      int j;
+      int j, niter;
       i++;
       if( i >= argc ) usage( NULL );
+
+      niter = 100000;
+      
       start = rpc_now();
-      for( j = 0; j < 1000; j++ ) {
+      for( j = 0; j < niter; j++ ) {
 	cmd_get( argc, argv, i );
       }
       end = rpc_now();
-      printf( "1000 cmd_get %dms %.3fms per call\n", (int)(end - start), (float)(end - start)/1000.0 );
+      printf( "%d cmd_get %dms %.3fms per call\n", niter, (int)(end - start), (float)(end - start)/(float)niter );
+      
+      start = rpc_now();
+      for( j = 0; j < niter; j++ ) {
+	  cmd_put( argc, argv, i );
+      }
+      end = rpc_now();
+      printf( "%d cmd_put %dms %.3fms per call\n", niter, (int)(end - start), (float)(end - start)/(float)niter );
   } else if( strcmp( argv[i], "prop" ) == 0 ) {
     struct ftab_s ftab;
     struct ftab_prop prop;
@@ -593,5 +496,118 @@ static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count 
     (*count)--;
   }
   
+}
+
+static void cmd_put( int argc, char **argv, int i ) {
+    char *path;
+    uint32_t flags, u32;
+    uint64_t u64, id;
+    char *buf;
+    int len, sts, j;
+    char tmpstr[32];
+
+    path = argv[i];
+    i++;
+
+    flags = FREG_TYPE_KEY;
+    if( i < argc ) {
+      if( strcmp( argv[i], "u32" ) == 0 ) {
+	flags = FREG_TYPE_UINT32;
+      } else if( strcmp( argv[i], "u64" ) == 0 ) {
+	flags = FREG_TYPE_UINT64;
+      } else if( (strcmp( argv[i], "string" ) == 0) || (strcmp( argv[i], "str" ) == 0) ) {
+	flags = FREG_TYPE_STRING;
+      } else if( (strcmp( argv[i], "opaque" ) == 0) ) {
+	flags = FREG_TYPE_OPAQUE;
+      } else if( strcmp( argv[i], "key" ) == 0 ) {
+	flags = FREG_TYPE_KEY;
+      } else usage( NULL );    
+      
+      i++;
+    }
+    
+    buf = NULL;
+    len = 0;
+    u32 = 0;
+    u64 = 0;
+    switch( flags & FREG_TYPE_MASK ) {
+    case FREG_TYPE_KEY:
+      sts = freg_subkey( glob.freg, 0, path, FREG_CREATE, &id );
+      if( sts ) usage( "Failed to create subkey" );      
+      break;
+    case FREG_TYPE_UINT32:
+      if( i < argc ) {
+	char *term;
+	u32 = strtoul( argv[i], &term, 10 );
+	if( *term ) {
+	  u32 = strtoul( argv[i], &term, 16 );
+	  if( *term ) usage( "Failed to parse u32" );
+	}
+      }
+      buf = (char *)&u32;
+      len = sizeof(u32);
+      break;
+    case FREG_TYPE_UINT64:
+      if( i < argc ) {
+	char *term;
+	u64 = strtoull( argv[i], &term, 10 );
+	if( *term ) {
+	  u64 = strtoull( argv[i], &term, 16 );
+	  if( *term ) usage( "Failed to parse u64 \"%s\"", argv[i] );
+	}
+      }
+      buf = (char *)&u64;
+      len = sizeof(u64);
+      break;
+    case FREG_TYPE_STRING:
+      if( i < argc ) {
+	buf = NULL;
+	while( i < argc ) {
+	  if( buf ) buf = realloc( buf, len + strlen( argv[i] ) );
+	  else buf = malloc( strlen( argv[i] ) );
+	  memcpy( buf + len, argv[i], strlen( argv[i] ) );
+	  len += strlen( argv[i] );
+
+	  i++;
+	  if( i < argc ) {
+	    buf = realloc( buf, len + 1 );
+	    memcpy( buf + len, " ", 1 );
+	    len += 1;
+	  } else {
+	    buf = realloc( buf, len + 1 );
+	    memcpy( buf + len, "", 1 );
+	    len += 1;
+	  }
+	}	
+      } else {
+	buf = NULL;
+	len = 0;
+      }
+      break;
+    case FREG_TYPE_OPAQUE:
+      len = 0;
+      buf = malloc( 4096 );
+      while( i < argc ) {	
+	for( j = 0; j < strlen( argv[i] ) / 2; j++ ) {
+	  tmpstr[0] = argv[i][2*j];
+	  tmpstr[1] = argv[i][2*j + 1];
+	  tmpstr[2] = '\0';
+	  buf[len] = strtoul( tmpstr, NULL, 16 );
+	  len++;
+	}
+	i++;
+      }
+      break;
+    default:
+      usage( NULL );
+      break;
+    }
+
+    if( (flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
+      sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
+      if( sts ) usage( "Failed to put" );
+    }
+
+    if( ((flags & FREG_TYPE_MASK) == FREG_TYPE_STRING) && buf ) free( buf );
 }
 

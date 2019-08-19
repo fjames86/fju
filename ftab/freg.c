@@ -310,11 +310,11 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
 	      e.flags = flags;
 	      sts = fdtab_write( &freg->fdt, entry.id, (char *)&e, sizeof(e), 0 );
 	    }
-	    sts = fdtab_truncate( &freg->fdt, entry.id, sizeof(e) );
+	    if( len < entry.len ) sts = fdtab_truncate( &freg->fdt, entry.id, sizeof(e) + len );
 	    sts = fdtab_write( &freg->fdt, entry.id, buf, len, sizeof(e) );
 	    
 	    if( id ) *id = entry.id;
-	    return 0;	    
+	    return 0;
 	  }
 	}
 	
@@ -372,8 +372,8 @@ int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, cha
     }
     if( name ) strncpy( e.name, name, FREG_MAX_NAME - 1 );
     if( buf ) {
-      sts = fdtab_truncate( &freg->fdt, id, sizeof(e) );
-      sts = fdtab_write( &freg->fdt, id, buf, len, sizeof(e) );
+	if( len < (fdtab_size( &freg->fdt, id ) - sizeof(e)) ) sts = fdtab_truncate( &freg->fdt, id, sizeof(e) + len );
+	sts = fdtab_write( &freg->fdt, id, buf, len, sizeof(e) );
     }
     if( flags || name || buf ) {
       sts = fdtab_write( &freg->fdt, id, (char *)&e, sizeof(e), 0 );

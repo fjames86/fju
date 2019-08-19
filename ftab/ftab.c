@@ -252,19 +252,19 @@ static int ftab_read_block( struct ftab_s *ftab, uint32_t idx, char *buf, int n,
     off = sizeof(struct ftab_header) + (sizeof(struct ftab_entry) * f->header.max) + (idx * f->header.lbasize) + offset;
     nbytes = n;
     if( nbytes > (f->header.lbasize - offset) ) nbytes = f->header.lbasize - offset;
-    mmf_read( &ftab->mmf, buf, nbytes, off );
+    memcpy( buf, ((char *)f) + off, nbytes );
     return nbytes;
 }
 
 static int ftab_write_block( struct ftab_s *ftab, uint32_t idx, char *buf, int n, uint32_t offset ) {
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-    int nbytes, sts;
+    int nbytes;
     uint64_t off;
   
     off = sizeof(struct ftab_header) + (sizeof(struct ftab_entry) * f->header.max) + (idx * f->header.lbasize) + offset;
     nbytes = n;
     if( nbytes > (f->header.lbasize - offset) ) nbytes = f->header.lbasize - offset;
-    sts = mmf_write( &ftab->mmf, buf, nbytes, off );
+    memcpy( ((char *)f) + off, buf, nbytes );
     return nbytes;
 }
 
@@ -287,8 +287,6 @@ int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offs
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
     struct ftab_entry *e;
     
-    ftab_lock( ftab );
-
     e = ftab_get_entry( ftab, id );
     if( e ) {
 	if( offset > f->header.lbasize ) offset = f->header.lbasize;
@@ -299,7 +297,6 @@ int ftab_read( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t offs
 	nbytes = -1;
     }
 
-    ftab_unlock( ftab );
     return nbytes;
 }
 
@@ -307,8 +304,6 @@ int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t off
     uint32_t nbytes;
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
     struct ftab_entry *e;
-    
-    ftab_lock( ftab );
 
     e = ftab_get_entry( ftab, id );
     if( e ) {
@@ -320,7 +315,6 @@ int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t off
 	nbytes = -1;
     }
 
-    ftab_unlock( ftab );
     return nbytes;
 }
 

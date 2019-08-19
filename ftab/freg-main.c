@@ -49,6 +49,12 @@
 #define PRIx64 "llx"
 #endif
 
+static struct {
+  char *path;
+  struct freg_s *freg;  
+  struct freg_s fregs;
+} glob;
+
 static void usage( char *fmt, ... ) {
   fprintf( stderr, "Usage: CMD args...\n"
 	    "Where CMD:\n"
@@ -89,19 +95,19 @@ static void cmd_list( int argc, char **argv, int i ) {
   id = 0;
 
   if( i < argc ) {
-      sts = freg_subkey( 0, argv[i], 0, &id );
+    sts = freg_subkey( glob.freg, 0, argv[i], 0, &id );
       if( sts ) {
-	  sts = freg_entry_by_name( 0, argv[i], NULL, NULL );
+	sts = freg_entry_by_name( glob.freg, 0, argv[i], NULL, NULL );
 	  if( sts ) usage( "Unknown path \"%s\"", argv[i] );
 	  cmd_get( argv[i] );
 	  return;
       }
   }
     
-  sts = freg_list( id, NULL, 0 );
+  sts = freg_list( glob.freg, id, NULL, 0 );
   if( sts < 0 ) usage( "Failed to list" );
   elist = malloc( sizeof(*elist) * sts );
-  n = freg_list( id, elist, sts );
+  n = freg_list( glob.freg, id, elist, sts );
   if( n < sts ) n = sts;
   printf( "%-16s %-8s %-32s %-8s\n", "ID", "Type", "Name", "Len" );
   for( i = 0; i < n; i++ ) {
@@ -117,25 +123,25 @@ static void cmd_list( int argc, char **argv, int i ) {
 	    elist[i].len );
     switch( elist[i].flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
-      sts = freg_get( elist[i].id, NULL, (char *)&u32, sizeof(u32), NULL );
+      sts = freg_get( glob.freg, elist[i].id, NULL, (char *)&u32, sizeof(u32), NULL );
       printf( "%u (%x)", u32, u32 );
       break;
     case FREG_TYPE_UINT64:
-      sts = freg_get( elist[i].id, NULL, (char *)&u64, sizeof(u64), NULL );
+      sts = freg_get( glob.freg, elist[i].id, NULL, (char *)&u64, sizeof(u64), NULL );
       printf( "%"PRIu64" (%"PRIx64")", u64, u64 );
       break;
     case FREG_TYPE_KEY:
       break;
     case FREG_TYPE_STRING:
-      sts = freg_get( elist[i].id, NULL, NULL, 0, &len );
+      sts = freg_get( glob.freg, elist[i].id, NULL, NULL, 0, &len );
       buf = malloc( len );
-      sts = freg_get( elist[i].id, NULL, buf, len, NULL );
+      sts = freg_get( glob.freg, elist[i].id, NULL, buf, len, NULL );
       printf( "%s", buf );
       break;
     case FREG_TYPE_OPAQUE:
-      sts = freg_get( elist[i].id, NULL, NULL, 0, &len );
+      sts = freg_get( glob.freg, elist[i].id, NULL, NULL, 0, &len );
       buf = malloc( len );
-      sts = freg_get( elist[i].id, NULL, buf, len, NULL );
+      sts = freg_get( glob.freg, elist[i].id, NULL, buf, len, NULL );
       for( j = 0; j < len; j++ ) {
 	printf( "%02x", (uint32_t)(uint8_t)buf[j] );
       }
@@ -158,17 +164,17 @@ static void cmd_get( char *path ) {
   
   id = strtoull( path, &term, 16 );
   if( *term ) {  
-    sts = freg_entry_by_name( 0, path, &e, NULL );
+    sts = freg_entry_by_name( glob.freg, 0, path, &e, NULL );
     if( sts ) usage( "Failed to get entry" );
   } else {
-    sts = freg_entry_by_id( id, &e );
+    sts = freg_entry_by_id( glob.freg, id, &e );
   }
   if( sts ) usage( "Failed to get entry" );
   
-  sts = freg_get( e.id, &flags, NULL, 0, &len );
+  sts = freg_get( glob.freg, e.id, &flags, NULL, 0, &len );
   if( sts ) usage( "Failed to get" );
   buf = malloc( len );
-  sts = freg_get( e.id, &flags, buf, len, NULL );
+  sts = freg_get( glob.freg, e.id, &flags, buf, len, NULL );
   if( sts ) usage( "Failed to get data" );
   switch( flags & FREG_TYPE_MASK ) {
   case FREG_TYPE_UINT32:
@@ -201,10 +207,20 @@ int main( int argc, char **argv ) {
   uint64_t id;
   char tmpstr[32];
   
-  sts = freg_open();
-  if( sts ) usage( "Failed to open" );
-
   i = 1;
+  while( i < argc ) {
+    if( strcmp( argv[i], "-p" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.path = argv[i];
+      glob.freg = &glob.fregs;
+    } else break;
+    i++;
+  }
+
+  sts = freg_open( glob.path, glob.freg );
+  if( sts ) usage( "Failed to open" );
+    
   if( i >= argc ) {
     cmd_list( argc, argv, i );
   } else if( (strcmp( argv[i], "-h" ) == 0) || (strcmp( argv[i], "--help" ) == 0) || (strcmp( argv[i], "help") == 0) ) {
@@ -249,7 +265,7 @@ int main( int argc, char **argv ) {
     u64 = 0;
     switch( flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_KEY:
-      sts = freg_subkey( 0, path, FREG_CREATE, &id );
+      sts = freg_subkey( glob.freg, 0, path, FREG_CREATE, &id );
       if( sts ) usage( "Failed to create subkey" );      
       break;
     case FREG_TYPE_UINT32:
@@ -305,7 +321,7 @@ int main( int argc, char **argv ) {
     }
 
     if( (flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
-	sts = freg_put( 0, path, flags, buf, len, NULL );
+      sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
       if( sts ) usage( "Failed to put" );
     }
   } else if( strcmp( argv[i], "rem" ) == 0 ) {
@@ -313,9 +329,9 @@ int main( int argc, char **argv ) {
       uint64_t parentid;
       i++;
       if( i >= argc ) usage( NULL );
-      sts = freg_entry_by_name( 0, argv[i], &e, &parentid );
+      sts = freg_entry_by_name( glob.freg, 0, argv[i], &e, &parentid );
       if( sts ) usage( "Failed to find entry" );
-      sts = freg_rem( parentid, e.id );
+      sts = freg_rem( glob.freg, parentid, e.id );
       if( sts ) usage( "Failed to remove value" );
   } else if( strcmp( argv[i], "dump" ) == 0 ) {
     uint64_t parentid = 0;
@@ -323,7 +339,7 @@ int main( int argc, char **argv ) {
     
     i++;
     if( i < argc ) {
-      sts = freg_subkey( 0, argv[i], 0, &parentid );
+      sts = freg_subkey( glob.freg, 0, argv[i], 0, &parentid );
       if( sts ) usage( "Unknown key \"%s\"", argv[i] );
     }
     cmd_dump( parentid, path );
@@ -339,7 +355,7 @@ int main( int argc, char **argv ) {
   } else if( strcmp( argv[i], "reset" ) == 0 ) {
     struct ftab_s ftab;
     char cookie[FTAB_MAX_COOKIE];
-    ftab_open( "/opt/fju/freg.dat", NULL, &ftab );
+    ftab_open( glob.path ? glob.path : mmf_default_path( "freg.dat", NULL ), NULL, &ftab );
     ftab_reset( &ftab );
     memset( cookie, 0, sizeof(cookie) );
     ftab_set_cookie( &ftab, cookie );
@@ -355,9 +371,21 @@ int main( int argc, char **argv ) {
       }
       end = rpc_now();
       printf( "1000 cmd_get %dms %.3fms per call\n", (int)(end - start), (float)(end - start)/1000.0 );
+  } else if( strcmp( argv[i], "prop" ) == 0 ) {
+    struct ftab_s ftab;
+    struct ftab_prop prop;
+    ftab_open( glob.path ? glob.path : mmf_default_path(  "freg.dat", NULL ), NULL, &ftab );
+    ftab_prop( &ftab, &prop );
+    ftab_close( &ftab );
+
+    printf( "Inodes %u/%u (%u%%) Data %ukb/%ukb Root %"PRIx64"\n",
+	    prop.count, prop.max, (100*prop.count)/prop.max,
+	    (prop.lbasize*prop.count) / 1024,
+	    (prop.lbasize*prop.max) / 1024,
+	    *((uint64_t *)prop.cookie) );
   } else cmd_list( argc, argv, i );
   
-  freg_close();
+  freg_close( NULL );
 
   return 0;
 }
@@ -368,10 +396,10 @@ static void cmd_get2( uint64_t parentid, char *path, char *name ) {
   int i, sts;
   struct freg_entry e;
 
-  sts = freg_entry_by_name( parentid, name, &e, NULL );
+  sts = freg_entry_by_name( glob.freg, parentid, name, &e, NULL );
   if( sts ) return;
   buf = malloc( e.len );
-  sts = freg_get( e.id, &flags, buf, e.len, NULL );
+  sts = freg_get( glob.freg, e.id, &flags, buf, e.len, NULL );
   if( sts ) goto done;
   switch( flags & FREG_TYPE_MASK ) {
   case FREG_TYPE_UINT32:
@@ -404,10 +432,10 @@ static void cmd_dump( uint64_t parentid, char *path ) {
   int nelist, n;
   char *ppath;
 
-  nelist = freg_list( parentid, NULL, 0 );
+  nelist = freg_list( glob.freg, parentid, NULL, 0 );
   if( nelist <= 0 ) return;
   elist = malloc( sizeof(*elist) * nelist );
-  n = freg_list( parentid, elist, nelist );
+  n = freg_list( glob.freg, parentid, elist, nelist );
   if( n < nelist ) nelist = n;
   
   /* print data first */
@@ -449,7 +477,7 @@ static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count 
     if( !(*count) ) return;
     u32 = sec_rand_uint32();
     sprintf( name, "%u", u32 );    
-    sts = freg_subkey( parentid, name, FREG_CREATE, &id );
+    sts = freg_subkey( glob.freg, parentid, name, FREG_CREATE, &id );
     if( sts ) {
       *count = 0;
       return;
@@ -463,13 +491,13 @@ static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count 
     u32 = sec_rand_uint32();
     sprintf( name, "%u", u32 );    
     if( u32 % 2 ) {
-	sts = freg_put( parentid, name, FREG_TYPE_UINT32, (char *)&u32, sizeof(u32), NULL );
+      sts = freg_put( glob.freg, parentid, name, FREG_TYPE_UINT32, (char *)&u32, sizeof(u32), NULL );
       if( sts ) {
 	*count = 0;
 	return;
       }
     } else {
-	sts = freg_put( parentid, name, FREG_TYPE_STRING, name, strlen( name ) + 1, NULL );
+      sts = freg_put( glob.freg, parentid, name, FREG_TYPE_STRING, name, strlen( name ) + 1, NULL );
       if( sts ) {
 	*count = 0;
 	return;

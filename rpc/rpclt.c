@@ -825,8 +825,8 @@ static void freg_list_results( struct xdr_s *xdr ) {
 	    printf( "u64 %"PRIu64"\n", u64 );
 	    break;
 	case FREG_TYPE_KEY:
-	    xdr_decode_uint64( xdr, &u64 );
-	    printf( "key %"PRIx64"\n", u64 );
+	  //	    xdr_decode_uint64( xdr, &u64 );
+	  printf( "key\n" ); // %"PRIx64"\n", u64 );
 	    break;
 	case FREG_TYPE_STRING:
 	    xdr_decode_string( xdr, str, sizeof(str) );

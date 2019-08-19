@@ -28,6 +28,7 @@
 #define FREG_H
 
 #include <stdint.h>
+#include <fju/fdtab.h>
 
 #define FREG_MAX_NAME 64
 
@@ -44,26 +45,25 @@ struct freg_entry {
     uint32_t len;
 };
 
-int freg_open( void );
-int freg_close( void );
+struct freg_s {
+  struct fdtab_s fdt;
+  uint64_t rootid;  
+};
 
-int freg_list( uint64_t parentid, struct freg_entry *entry, int n );
-int freg_entry_by_name( uint64_t parentid, char *name, struct freg_entry *entry, uint64_t *parentidp );
-int freg_entry_by_id( uint64_t id, struct freg_entry *entry );
+int freg_open( char *path, struct freg_s *freg );
+int freg_close( struct freg_s *freg );
 
+int freg_list( struct freg_s *freg, uint64_t parentid, struct freg_entry *entry, int n );
+int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, struct freg_entry *entry, uint64_t *parentidp );
+int freg_entry_by_id( struct freg_s *freg, uint64_t id, struct freg_entry *entry );
 
-int freg_get( uint64_t id, uint32_t *flags, char *buf, int len, int *lenp );
-int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len, uint64_t *id );
-int freg_set( uint64_t id, char *name, uint32_t *flags, char *buf, int len );
-int freg_rem( uint64_t parentid, uint64_t id );
+int freg_get( struct freg_s *freg, uint64_t id, uint32_t *flags, char *buf, int len, int *lenp );
+int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, char *buf, int len, uint64_t *id );
+int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, char *buf, int len );
+int freg_rem( struct freg_s *freg, uint64_t parentid, uint64_t id );
 
 #define FREG_CREATE 0x0001 
-int freg_subkey( uint64_t parentid, char *name, uint32_t flags, uint64_t *id );
-
-
-
-
-
+int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, uint64_t *id );
 
 #define FREG_RPC_PROG 0x27E1FB10
 #define FREG_RPC_VERS 1

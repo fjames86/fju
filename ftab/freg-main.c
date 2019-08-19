@@ -261,21 +261,23 @@ int main( int argc, char **argv ) {
     if( i >= argc ) usage( NULL );
     path = argv[i];
     i++;
-    if( i >= argc ) usage( NULL );
-    flags = 0;
-    if( strcmp( argv[i], "u32" ) == 0 ) {
-      flags = FREG_TYPE_UINT32;
-    } else if( strcmp( argv[i], "u64" ) == 0 ) {
-      flags = FREG_TYPE_UINT64;
-    } else if( (strcmp( argv[i], "string" ) == 0) || (strcmp( argv[i], "str" ) == 0) ) {
-      flags = FREG_TYPE_STRING;
-    } else if( (strcmp( argv[i], "opaque" ) == 0) ) {
-      flags = FREG_TYPE_OPAQUE;
-    } else if( strcmp( argv[i], "key" ) == 0 ) {
-      flags = FREG_TYPE_KEY;
-    } else usage( NULL );    
 
-    i++;
+    flags = FREG_TYPE_KEY;
+    if( i < argc ) {
+      if( strcmp( argv[i], "u32" ) == 0 ) {
+	flags = FREG_TYPE_UINT32;
+      } else if( strcmp( argv[i], "u64" ) == 0 ) {
+	flags = FREG_TYPE_UINT64;
+      } else if( (strcmp( argv[i], "string" ) == 0) || (strcmp( argv[i], "str" ) == 0) ) {
+	flags = FREG_TYPE_STRING;
+      } else if( (strcmp( argv[i], "opaque" ) == 0) ) {
+	flags = FREG_TYPE_OPAQUE;
+      } else if( strcmp( argv[i], "key" ) == 0 ) {
+	flags = FREG_TYPE_KEY;
+      } else usage( NULL );    
+      
+      i++;
+    }
     
     buf = NULL;
     len = 0;
@@ -312,8 +314,24 @@ int main( int argc, char **argv ) {
       break;
     case FREG_TYPE_STRING:
       if( i < argc ) {
-	buf = argv[i];
-	len = strlen( argv[i] ) + 1;
+	buf = NULL;
+	while( i < argc ) {
+	  if( buf ) buf = realloc( buf, len + strlen( argv[i] ) );
+	  else buf = malloc( strlen( argv[i] ) );
+	  memcpy( buf + len, argv[i], strlen( argv[i] ) );
+	  len += strlen( argv[i] );
+
+	  i++;
+	  if( i < argc ) {
+	    buf = realloc( buf, len + 1 );
+	    memcpy( buf + len, " ", 1 );
+	    len += 1;
+	  } else {
+	    buf = realloc( buf, len + 1 );
+	    memcpy( buf + len, "", 1 );
+	    len += 1;
+	  }
+	}	
       } else {
 	buf = NULL;
 	len = 0;
@@ -342,6 +360,8 @@ int main( int argc, char **argv ) {
       sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
       if( sts ) usage( "Failed to put" );
     }
+
+    if( ((flags & FREG_TYPE_MASK) == FREG_TYPE_STRING) && buf ) free( buf );
   } else if( strcmp( argv[i], "rem" ) == 0 ) {
       struct freg_entry e;
       uint64_t parentid;

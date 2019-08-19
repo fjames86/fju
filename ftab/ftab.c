@@ -258,13 +258,13 @@ static int ftab_read_block( struct ftab_s *ftab, uint32_t idx, char *buf, int n,
 
 static int ftab_write_block( struct ftab_s *ftab, uint32_t idx, char *buf, int n, uint32_t offset ) {
     struct ftab_file *f = (struct ftab_file *)ftab->mmf.file;
-    int nbytes;
+    int nbytes, sts;
     uint64_t off;
   
     off = sizeof(struct ftab_header) + (sizeof(struct ftab_entry) * f->header.max) + (idx * f->header.lbasize) + offset;
     nbytes = n;
     if( nbytes > (f->header.lbasize - offset) ) nbytes = f->header.lbasize - offset;
-    mmf_write( &ftab->mmf, buf, nbytes, off );
+    sts = mmf_write( &ftab->mmf, buf, nbytes, off );
     return nbytes;
 }
 

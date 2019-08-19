@@ -73,10 +73,10 @@ int freg_open( void ) {
   /* if entry table not allocated, do it now */
   if( glob.rootid == 0 ) {
       struct freg_s e;
-      sts = fdtab_alloc( &glob.fdt, 0, &glob.rootid );
+      sts = fdtab_alloc( &glob.fdt, sizeof(e), &glob.rootid );
       memset( &e, 0, sizeof(e) );
       e.flags = FREG_TYPE_KEY;
-      fdtab_write( &glob.fdt, glob.rootid, (char *)&e, sizeof(e), 0 );
+      sts = fdtab_write( &glob.fdt, glob.rootid, (char *)&e, sizeof(e), 0 );
       
       memcpy( prop.cookie, &glob.rootid, sizeof(glob.rootid) );
       ftab_set_cookie( &glob.fdt.ftab, prop.cookie );
@@ -117,8 +117,8 @@ int freg_entry_by_id( uint64_t id, struct freg_entry *entry ) {
 }
 
 int freg_list( uint64_t parentid, struct freg_entry *entry, int n ) {
-    int sts, nentry, i, j, idx, nn;
-    uint64_t buf[FREG_LBASIZE/sizeof(uint64_t)];
+  int sts, nentry, i, j, idx, nn, ncnt;
+    uint64_t buf[32];
     struct freg_entry etry;
     struct freg_s e;
     
@@ -133,28 +133,40 @@ int freg_list( uint64_t parentid, struct freg_entry *entry, int n ) {
     if( nentry < 0 ) return -1;  
     if( !nentry ) return 0;
     
-    i = 0;
     idx = 0;
-    do {
-	sts = fdtab_read( &glob.fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
-	if( sts < 0 ) break;
+    ncnt = 0;
+    for( i = 0; i < nentry; i += 32 ) {
+      sts = fdtab_read( &glob.fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
+      if( sts < 0 ) break;
 
-	nn = sts / sizeof(uint64_t);
-	for( j = 0; j < nn; j++ ) {
-	    if( idx < n ) {
-		sts = freg_entry_by_id( buf[j], &entry[idx] );
-		if( sts ) return sts;
-		idx++;
-	    }
-	    i++;
+      nn = sts / sizeof(uint64_t);
+      for( j = 0; j < nn; j++ ) {
+	sts = freg_entry_by_id( buf[j], &etry );
+	if( sts ) {
+	  printf( "invalid item\n" );
+	} else {
+	  if( idx < n ) {
+	    entry[idx] = etry;
+	    idx++;
+	  }
+	  ncnt++;
 	}
-    } while( i < nentry );
+      }
+
+      if( nn < 32 ) break;
+    }
+
+    if( ncnt != nentry ) {
+      /* corruption? */
+      printf( "entry count mismatch?\n" );
+      //fdtab_truncate( &glob.fdt, parentid, sizeof(struct freg_s) + ncnt*sizeof(uint64_t) );
+    }
     
-    return nentry;
+    return ncnt;
 }
 
 int freg_entry_by_name( uint64_t parentid, char *name, struct freg_entry *entry, uint64_t *parentidp ) {
-    int sts, nentry, i, j, n;
+  int sts, nentry, i, j, n, ncnt;
     struct freg_entry etry;
     char tmpname[FREG_MAX_NAME];
     uint64_t buf[32];
@@ -173,23 +185,32 @@ int freg_entry_by_name( uint64_t parentid, char *name, struct freg_entry *entry,
     nentry = etry.len / sizeof(uint64_t);
     if( nentry < 0 ) return -1;  
     if( !nentry ) return -1;
-    
-    i = 0;
-    do {
-	sts = fdtab_read( &glob.fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
-	if( sts < 0 ) break;
 
-	n = sts / sizeof(uint64_t);
-	for( j = 0; j < n; j++ ) {
-	    sts = freg_entry_by_id( buf[j], &etry );
-	    if( (sts == 0) && (strcmp( etry.name, tmpname ) == 0) ) {
-		if( entry ) *entry = etry;
-		if( parentidp ) *parentidp = parentid;
-		return 0;
-	    }
-	    i++;
+    ncnt = 0;
+    for( i = 0; i < nentry; i += 32 ) {
+      sts = fdtab_read( &glob.fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
+      if( sts < 0 ) break;      
+      n = sts / sizeof(uint64_t);
+      
+      for( j = 0; j < n; j++ ) {
+	sts = freg_entry_by_id( buf[j], &etry );
+	if( sts ) {
+	  printf( "invalid item?\n" );
+	} else if( strcmp( etry.name, tmpname ) == 0 ) {
+	  if( entry ) *entry = etry;
+	  if( parentidp ) *parentidp = parentid;
+	  return 0;
+	} else {
+	  ncnt++;
 	}
-    } while( i < nentry );
+      }
+	
+      if( n < 32 ) break;
+    }
+
+    if( ncnt != nentry ) {
+      printf( "entry count mismatch?\n" );
+    }
     
     return -1;
 }
@@ -205,7 +226,7 @@ int freg_get( uint64_t id, uint32_t *flags, char *buf, int len, int *lenp ) {
 
     nbytes = len;
     size = fdtab_size( &glob.fdt, id ) - sizeof(e);
-    if( nbytes < size ) nbytes = size;
+    if( size < nbytes ) nbytes = size;
     sts = fdtab_read( &glob.fdt, id, buf, nbytes, sizeof(e) );
     if( sts < 0 ) return sts;
     if( lenp ) *lenp = size;
@@ -244,36 +265,38 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len,
     if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
     
     nentry = entry.len / sizeof(uint64_t);
-    i = 0;
-    do {
+    for( i = 0; i < nentry; i += 32 ) {
 	sts = fdtab_read( &glob.fdt, parentid, (char *)tmpbuf, sizeof(tmpbuf), sizeof(e) + (sizeof(uint64_t) * i) );
 	if( sts < 0 ) break;
-
 	n = sts / sizeof(uint64_t);
+
 	for( j = 0; j < n; j++ ) {
-	    sts = freg_entry_by_id( tmpbuf[j], &entry );
-	    if( (sts == 0) && (strcmp( entry.name, tmpname ) == 0) ) {
-		/* check type match */
-		if( (flags & FREG_TYPE_MASK) != (entry.flags & FREG_TYPE_MASK) ) return -1;
-		
-		/* update existing data*/
-		if( flags != entry.flags ) {
-		    memset( &e, 0, sizeof(e) );
-		    strcpy( e.name, entry.name );
-		    e.flags = flags;
-		    fdtab_write( &glob.fdt, entry.id, (char *)&e, sizeof(e), 0 );
-		}
-		fdtab_write( &glob.fdt, entry.id, buf, len, sizeof(e) );
-		fdtab_truncate( &glob.fdt, entry.id, sizeof(e) + len );
+	  sts = freg_entry_by_id( tmpbuf[j], &entry );
+	  if( sts ) {
+	    printf( "invalid entry?\n" );
+	  } else if( strcmp( entry.name, tmpname ) == 0 ) {
+	    /* check type match */
+	    if( (flags & FREG_TYPE_MASK) != (entry.flags & FREG_TYPE_MASK) ) return -1;
 
-		if( id ) *id = entry.id;
-		return 0;
+	    /* update existing data*/
+	    if( flags != entry.flags ) {
+	      memset( &e, 0, sizeof(e) );
+	      strcpy( e.name, entry.name );
+	      e.flags = flags;
+	      sts = fdtab_write( &glob.fdt, entry.id, (char *)&e, sizeof(e), 0 );
 	    }
-
-	    i++;
+	    sts = fdtab_truncate( &glob.fdt, entry.id, sizeof(e) );
+	    if( sts < 0 ) printf( "xx xtuncate failed\n" );
+	    sts = fdtab_write( &glob.fdt, entry.id, buf, len, sizeof(e) );
+	    
+	    if( id ) *id = entry.id;
+	    return 0;	    
+	  }
 	}
-    } while( i < nentry );
-
+	
+	if( n < 32 ) break;
+    }
+    
     /* add new entry */
     memset( &e, 0, sizeof(e) );
     strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
@@ -286,7 +309,7 @@ int freg_put( uint64_t parentid, char *name, uint32_t flags, char *buf, int len,
     if( sts < 0 ) return sts;
     
     /* append id to parent */
-    sts = fdtab_write( &glob.fdt, parentid, (char *)&tid, sizeof(uint64_t), sizeof(e) + (nentry*sizeof(uint64_t)) );
+    sts = fdtab_write( &glob.fdt, parentid, (char *)&tid, sizeof(uint64_t), sizeof(e) + (nentry * sizeof(uint64_t)) );
     if( sts < 0 ) return sts;
     
     if( id ) *id = tid;
@@ -320,11 +343,12 @@ int freg_set( uint64_t id, char *name, uint32_t *flags, char *buf, int len ) {
     }
     if( name ) strncpy( e.name, name, FREG_MAX_NAME - 1 );
     if( buf ) {
-	fdtab_write( &glob.fdt, id, buf, len, sizeof(e) );
-	fdtab_truncate( &glob.fdt, id, sizeof(e) + len );
+      sts = fdtab_truncate( &glob.fdt, id, sizeof(e) );
+      if( sts < 0 ) printf( "sxxx truncate failedd\n" );
+      sts = fdtab_write( &glob.fdt, id, buf, len, sizeof(e) );
     }
     if( flags || name || buf ) {
-	fdtab_write( &glob.fdt, id, (char *)&e, sizeof(e), 0 );
+      sts = fdtab_write( &glob.fdt, id, (char *)&e, sizeof(e), 0 );
     }
     
     return 0;
@@ -332,20 +356,41 @@ int freg_set( uint64_t id, char *name, uint32_t *flags, char *buf, int len ) {
 
 int freg_rem( uint64_t parentid, uint64_t id ) {
     int sts, nentry, i, j, n;
-    struct freg_entry entry;
+    struct freg_entry parent, entry;
     uint64_t buf[32];
     struct freg_s e;
+    uint64_t tmpid;
     
     if( !glob.ocount ) return -1;
     if( !parentid ) parentid = glob.rootid;
 
-    sts = freg_entry_by_id( parentid, &entry );
+    sts = freg_entry_by_id( parentid, &parent );
     if( sts ) return sts;
-    if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
-    
-    nentry = entry.len / sizeof(uint64_t);
+    if( (parent.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
+    nentry = parent.len / sizeof(uint64_t);
     if( !nentry ) return -1;
     
+    sts = freg_entry_by_id( id, &entry );
+    if( sts ) return sts;
+
+    if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+      /* recursively delete all child items first */
+      while( entry.len > 0 ) {
+	if( entry.len < sizeof(uint64_t) ) break;
+	
+	sts = fdtab_read( &glob.fdt, id, (char *)&tmpid, sizeof(tmpid), sizeof(e) );
+	if( sts < sizeof(tmpid) ) break;
+	freg_rem( id, tmpid );
+	
+	sts = freg_entry_by_id( id, &entry );
+	if( sts < 0 ) break;
+      }
+    }
+
+    /* free data block */
+    fdtab_free( &glob.fdt, id );
+
+    /* delete from parent list */
     i = 0;
     do {
 	sts = fdtab_read( &glob.fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
@@ -354,24 +399,13 @@ int freg_rem( uint64_t parentid, uint64_t id ) {
 	n = sts / sizeof(uint64_t);
 	for( j = 0; j < n; j++ ) {
 	    if( buf[j] == id ) {
-		/* free entry */
-		sts = freg_entry_by_id( buf[j], &entry );
-		if( sts == 0 ) {
-		    if( (e.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
-			/* this is a key so free all its child items */
-			freg_rem( id, buf[j] );
-		    }
-		    
-		    /* free item itself */
-		    fdtab_free( &glob.fdt, buf[j] );
-		}
-		    
 		/* copy final item over top of this item */
 		if( i != (nentry - 1) ) {
-		  fdtab_read( &glob.fdt, parentid, (char *)&id, sizeof(id), sizeof(e) + (sizeof(id) * (nentry - 1)) );
-		  fdtab_write( &glob.fdt, parentid, (char *)&id, sizeof(id), sizeof(e) + (sizeof(id) * i) );
+		  sts = fdtab_read( &glob.fdt, parentid, (char *)&id, sizeof(id), sizeof(e) + (sizeof(id) * (nentry - 1)) );
+		  sts = fdtab_write( &glob.fdt, parentid, (char *)&id, sizeof(id), sizeof(e) + (sizeof(id) * i) );
 		}
-		fdtab_truncate( &glob.fdt, parentid, sizeof(e) + (sizeof(id) * (nentry - 1)) );
+		sts = fdtab_truncate( &glob.fdt, parentid, sizeof(e) + (sizeof(uint64_t) * (nentry - 1)) );
+		if( sts < 0 ) printf( "xxx truncate failed\n" );
 		return 0;
 	    }
 
@@ -463,11 +497,11 @@ int freg_subkey( uint64_t parentid, char *name, uint32_t flags, uint64_t *id ) {
 	memset( &e, 0, sizeof(e) );
 	strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
 	e.flags = FREG_TYPE_KEY;
-	fdtab_write( &glob.fdt, tmpid, (char *)&e, sizeof(e), 0 );
+	sts = fdtab_write( &glob.fdt, tmpid, (char *)&e, sizeof(e), 0 );
 
 	/* append id to parent */
-	freg_entry_by_id( parentid, &entry );
-	fdtab_write( &glob.fdt, parentid, (char *)&tmpid, sizeof(tmpid), sizeof(e) + entry.len );
+	sts = freg_entry_by_id( parentid, &entry );
+	sts = fdtab_write( &glob.fdt, parentid, (char *)&tmpid, sizeof(tmpid), sizeof(e) + entry.len );
 
 	parentid = tmpid;
     } else if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {

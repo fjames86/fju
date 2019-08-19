@@ -225,7 +225,8 @@ static void cmd_read( void ) {
   
   sts = fdtab_read( &glob.ftab, glob.id, buf, size, 0 );
   if( sts < 0 ) usage( "Failed to read" );
-
+  if( sts < size ) printf( "WARNING: short read. Corruption detected?\n" );
+  
   if( glob.binary ) {
 #ifdef WIN32
     WriteFile( GetStdHandle( STD_OUTPUT_HANDLE ), buf, size, NULL, NULL );

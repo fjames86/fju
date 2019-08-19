@@ -125,8 +125,6 @@ static void cmd_list( int argc, char **argv, int i ) {
       printf( "%"PRIu64" (%"PRIx64")", u64, u64 );
       break;
     case FREG_TYPE_KEY:
-      sts = freg_get( elist[i].id, NULL, (char *)&u64, sizeof(u64), NULL );
-      printf( "%"PRIx64"", u64 );      
       break;
     case FREG_TYPE_STRING:
       sts = freg_get( elist[i].id, NULL, NULL, 0, &len );
@@ -155,8 +153,16 @@ static void cmd_get( char *path ) {
   char *buf;
   int len, i, sts;
   struct freg_entry e;
+  uint64_t id;
+  char *term;
   
-  sts = freg_entry_by_name( 0, path, &e, NULL );
+  id = strtoull( path, &term, 16 );
+  if( *term ) {  
+    sts = freg_entry_by_name( 0, path, &e, NULL );
+    if( sts ) usage( "Failed to get entry" );
+  } else {
+    sts = freg_entry_by_id( id, &e );
+  }
   if( sts ) usage( "Failed to get entry" );
   
   sts = freg_get( e.id, &flags, NULL, 0, &len );
@@ -172,7 +178,10 @@ static void cmd_get( char *path ) {
     printf( "%"PRIu64" %"PRIx64"\n", *(uint64_t *)buf, *(uint64_t *)buf );
     break;
   case FREG_TYPE_KEY:
-    printf( "%"PRIx64"\n", *(uint64_t *)buf );
+    for( i = 0; i < e.len / sizeof(uint64_t); i++ ) {
+      uint64_t id = ((uint64_t *)buf)[i];
+      printf( "%"PRIx64" ", id );
+    }
     break;
   case FREG_TYPE_STRING:
     printf( "%s\n", buf );
@@ -391,11 +400,10 @@ static void cmd_get2( uint64_t parentid, char *path, char *name ) {
 
 static void cmd_dump( uint64_t parentid, char *path ) {
   int i;
-  uint64_t u64;
   struct freg_entry *elist;
   int nelist, n;
   char *ppath;
-  
+
   nelist = freg_list( parentid, NULL, 0 );
   if( nelist <= 0 ) return;
   elist = malloc( sizeof(*elist) * nelist );
@@ -417,12 +425,10 @@ static void cmd_dump( uint64_t parentid, char *path ) {
     switch( elist[i].flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_KEY:
       /* recurse */
-      freg_get( elist[i].id, NULL, (char *)&u64, sizeof(u64), NULL );
-      
       ppath = malloc( strlen( path ) + strlen( elist[i].name ) + 2 );
       sprintf( ppath, "%s/%s", path, elist[i].name );
       printf( "%s key\n", ppath );
-      cmd_dump( u64, ppath );
+      cmd_dump( elist[i].id, ppath );
       free( ppath );
       break;
     default:
@@ -439,6 +445,8 @@ static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count 
   uint64_t id;
   int sts, i;
 
+  printf( "populate %"PRIx64"\n", parentid );
+  
   for( i = 0; i < depth; i++ ) {
     if( !(*count) ) return;
     u32 = sec_rand_uint32();

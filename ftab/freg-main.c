@@ -61,7 +61,7 @@ static void usage( char *fmt, ... ) {
 	    "               [list] [path]\n"
 	    "               [get] path\n"
 	    "               put path u32|u64|string|opaque|key [value]\n"
-	    "               set path [name=NAME] [flags=FLAGS] [value=VALUE]\n" 
+	    "               set path [name=NAME] [flags=FLAGS]\n" 
 	    "               rem path\n"
 	    "               dump [path]\n"
 	    "               populate [count]\n"

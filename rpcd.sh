@@ -1,9 +1,13 @@
 #!/bin/sh
 
 pidfile=/var/run/rpcd.pid
-udpport=8000
+udpport=$(echo $(bin/freg -q get /fju/rpc/port || echo 8000) | awk '{print $1}')
 
 cmd=$1
+if [ ! $cmd ]; then
+    cmd="status"
+fi
+
 if [ $cmd = "start" ]; then
     if [ -e $pidfile ] && $(kill -0 $(cat $pidfile)); then
 	echo "$pidfile exists and pid $(cat $pidfile) exists - restarting"

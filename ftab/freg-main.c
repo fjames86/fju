@@ -53,32 +53,39 @@ static struct {
   char *path;
   struct freg_s *freg;  
   struct freg_s fregs;
+  int quiet;
 } glob;
 
 static void usage( char *fmt, ... ) {
-  fprintf( stderr, "Usage: [-p path] CMD args...\n"
-	    "Where CMD:\n"
-	    "               [list] [path]\n"
-	    "               [get] path\n"
-	    "               put path u32|u64|string|opaque|key [value]\n"
-	    "               set path [name=NAME] [flags=FLAGS]\n" 
-	    "               rem path\n"
-	    "               dump [path]\n"
-	    "               populate [count]\n"
-	    "               reset\n"
-	    "               prop\n" 
-	    "\n"
-    );
-
+  if( !glob.quiet ) {
+    fprintf( stderr, "Usage: [-p path] [-q] CMD args...\n"
+	     "Where options:\n"
+	     "     -p path   Set path to database file\n"
+	     "     -q        Quiet mode, don't print to stderr on failure\n"
+	     "\n" 
+	     "Where CMD:\n"
+	     "               [list] [path]\n"
+	     "               [get] path\n"
+	     "               put path u32|u64|string|opaque|key [value]\n"
+	     "               set path [name=NAME] [flags=FLAGS]\n" 
+	     "               rem path\n"
+	     "               dump [path]\n"
+	     "               populate [count]\n"
+	     "               reset\n"
+	     "               prop\n" 
+	     "\n"
+	     );
+    
     if( fmt ) {
-        va_list args;
-        fprintf( stderr, "Error: " );
-        va_start( args, fmt );
-        vfprintf( stderr, fmt, args );
-        va_end( args );
-        fprintf( stderr, "\n" );
+      va_list args;
+      fprintf( stderr, "Error: " );
+      va_start( args, fmt );
+      vfprintf( stderr, fmt, args );
+      va_end( args );
+      fprintf( stderr, "\n" );
     }
-    exit( 1 );
+  }
+  exit( 1 );
 }
 
 static void argval_split( char *instr, char *argname, char **argval ) {
@@ -232,6 +239,8 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       glob.path = argv[i];
       glob.freg = &glob.fregs;
+    } else if( strcmp( argv[i], "-q" ) == 0 ) {
+      glob.quiet = 1;
     } else break;
     i++;
   }

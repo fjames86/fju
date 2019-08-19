@@ -9,6 +9,9 @@ freg_get
 freg_put
 freg_rem
 freg_subkey
+freg_entry_by_id
+freg_entry_by_name
+freg_register
 fdtab_open
 fdtab_close
 fdtab_alloc

@@ -137,6 +137,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\ftab\fdtab.c" />
+    <ClCompile Include="..\..\ftab\freg-rpc.c" />
     <ClCompile Include="..\..\ftab\freg.c" />
     <ClCompile Include="..\..\ftab\ftab.c" />
   </ItemGroup>

@@ -195,5 +195,5 @@ static struct rpc_program freg_prog = {
 
 void freg_register( void ) {
   freg_open( NULL, NULL );
-    rpc_program_register( &freg_prog );
+  rpc_program_register( &freg_prog );
 }

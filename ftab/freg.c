@@ -517,6 +517,7 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
     *q = '\0';
     if( *p == '/' ) p++;
     if( strcmp( tmpname, "" ) == 0 ) return -1;
+    if( (flags & FREG_VALUEPATH) && (*p == '\0') ) break;
     
     sts = freg_entry_by_name( freg, parentid, tmpname, &entry, NULL );
     if( sts ) {
@@ -558,3 +559,25 @@ int freg_get_by_name( struct freg_s *freg, uint64_t parentid, char *name, uint32
   if( (entry.flags & FREG_TYPE_MASK) != (flags & FREG_TYPE_MASK) ) return -1;
   return freg_get( freg, entry.id, NULL, buf, len, lenp );
 }
+
+int freg_ensure( struct freg_s *freg, char *path, uint32_t flags, char *buf, int len, uint64_t *id ) {
+  int sts;
+  struct freg_entry entry;
+  uint64_t parentid;
+  
+  sts = freg_entry_by_name( freg, 0, path, &entry, &parentid );
+  if( sts ) {    
+    sts = freg_subkey( freg, 0, path, FREG_CREATE|FREG_VALUEPATH, NULL );
+    if( sts ) return sts;
+    sts = freg_put( freg, 0, path, flags, buf, len, id );
+    if( sts ) return sts;
+  } else if( (entry.flags & FREG_TYPE_MASK) != (flags & FREG_TYPE_MASK) ) {
+    sts = freg_rem( freg, parentid, entry.id );
+    if( sts ) return sts;
+    sts = freg_put( freg, 0, path, flags, buf, len, id );
+    if( sts ) return sts;
+  }
+
+  return 0;
+}
+

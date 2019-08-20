@@ -203,7 +203,7 @@ static void cmd_get( int argc, char **argv, int ii ) {
   if( *term ) {
       struct freg_entry e;
       sts = freg_entry_by_name( glob.freg, 0, argv[ii], &e, NULL );
-      if( sts ) usage( "Failed to get entry" );
+      if( sts ) usage( "Failed to get entry \"%s\"", argv[ii] );
       id = e.id;
   }
   

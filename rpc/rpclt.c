@@ -220,16 +220,10 @@ int main( int argc, char **argv ) {
     raft_open();
     freg_open( NULL, NULL );
 
-    sts = freg_get_by_name( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(uint32_t), NULL );
-    if( sts ) {
-	glob.port = 8000;
-	freg_put( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(uint32_t), NULL );
-    }
-    sts = freg_get_by_name( NULL, 0, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(uint32_t), NULL );
-    if( sts ) {
-	glob.timeout = 1000;
-	freg_put( NULL, 0, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(uint32_t), NULL );
-    }
+    glob.port = 8000;
+    sts = freg_ensure( NULL, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
+    glob.timeout = 1000;
+    sts = freg_ensure( NULL, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(glob.timeout), NULL );
 
     i = 1;
     while( i < argc ) {

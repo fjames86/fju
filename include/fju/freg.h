@@ -63,8 +63,11 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
 int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, char *buf, int len );
 int freg_rem( struct freg_s *freg, uint64_t parentid, uint64_t id );
 
-#define FREG_CREATE 0x0001 
+#define FREG_CREATE    0x0001        /* create all keys in the path */
+#define FREG_VALUEPATH 0x0002        /* final name represents a value not a key */
 int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, uint64_t *id );
+
+int freg_ensure( struct freg_s *freg, char *path, uint32_t flags, char *buf, int len, uint64_t *id );
 
 #define FREG_RPC_PROG 0x27E1FB10
 #define FREG_RPC_VERS 1

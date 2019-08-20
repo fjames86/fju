@@ -221,9 +221,9 @@ int main( int argc, char **argv ) {
     freg_open( NULL, NULL );
 
     glob.port = 8000;
-    sts = freg_ensure( NULL, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
+    sts = freg_ensure( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
     glob.timeout = 1000;
-    sts = freg_ensure( NULL, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(glob.timeout), NULL );
+    sts = freg_ensure( NULL, 0, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(glob.timeout), NULL );
 
     i = 1;
     while( i < argc ) {

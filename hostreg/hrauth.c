@@ -95,7 +95,7 @@ int hrauth_init( struct hrauth_context *cxt, uint64_t remoteid ) {
 
   if( !default_window ) {
     default_window = 500;
-    sts = freg_ensure( NULL, "/fju/hrauth/window", FREG_TYPE_UINT32, (char *)&default_window, sizeof(default_window), NULL );
+    sts = freg_ensure( NULL, 0, "/fju/hrauth/window", FREG_TYPE_UINT32, (char *)&default_window, sizeof(default_window), NULL );
   }
   
   memset( cxt, 0, sizeof(*cxt) );

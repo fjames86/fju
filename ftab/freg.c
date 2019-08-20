@@ -179,6 +179,54 @@ int freg_list( struct freg_s *freg, uint64_t parentid, struct freg_entry *entry,
     return ncnt;
 }
 
+int freg_next( struct freg_s *freg, uint64_t parentid, uint64_t id, struct freg_entry *entry ) {
+  int sts, nentry, i, j, idx, nn;
+    uint64_t buf[32];
+    struct freg_entry etry;
+    struct entry_s e;
+    int getnext;
+    
+    if( !freg ) {
+      if( !glob.ocount ) return -1;
+      freg = &glob.freg;
+    }
+    if( !parentid ) parentid = freg->rootid;
+
+    sts = freg_entry_by_id( freg, parentid, &etry );
+    if( sts ) return sts;
+    if( (etry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
+    
+    nentry = etry.len / sizeof(uint64_t);
+    if( nentry < 0 ) return -1;  
+    if( !nentry ) return 0;
+    
+    idx = 0;
+    getnext = id ? 0 : 1;    
+    for( i = 0; i < nentry; i += 32 ) {
+      sts = fdtab_read( &freg->fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
+      if( sts < 0 ) break;
+
+      nn = sts / sizeof(uint64_t);
+      for( j = 0; j < nn; j++ ) {
+	sts = freg_entry_by_id( freg, buf[j], &etry );
+	if( sts ) continue;
+	
+	if( getnext ) {
+	  *entry = etry;
+	  return 0;
+	}
+	
+	if( buf[j] == id ) {
+	  getnext = 1;
+	}
+      }
+
+      if( nn < 32 ) break;
+    }
+
+    return -1;
+}
+
 int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, struct freg_entry *entry, uint64_t *parentidp ) {
   int sts, nentry, i, j, n, ncnt;
     struct freg_entry etry;

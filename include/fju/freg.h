@@ -54,6 +54,7 @@ int freg_open( char *path, struct freg_s *freg );
 int freg_close( struct freg_s *freg );
 
 int freg_list( struct freg_s *freg, uint64_t parentid, struct freg_entry *entry, int n );
+int freg_next( struct freg_s *freg, uint64_t parentid, uint64_t id, struct freg_entry *entry );
 int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, struct freg_entry *entry, uint64_t *parentidp );
 int freg_entry_by_id( struct freg_s *freg, uint64_t id, struct freg_entry *entry );
 

@@ -134,7 +134,7 @@ int main( int argc, char **argv ) {
 	i++;
 	while( i < argc ) {
 	    argval_split( argv[i], argname, &argval );
-	    if( strcmp( argname, "ID" ) == 0 ) {
+	    if( (strcmp( argname, "ID" ) == 0) || (strcmp( argname, "id" ) == 0) ) {
 		if( argval ) entry.id = strtoull( argval, NULL, 16 );
 	    } else if( strcmp( argname, "name" ) == 0 ) {
 		if( argval ) strncpy( entry.name, argval, sizeof(entry.name) );
@@ -253,8 +253,6 @@ static void cmd_prop( void ) {
      struct hostreg_host host;
 
      hostreg_prop( &prop );
-     printf( "seq=%"PRIu64"\n", prop.seq );
-     printf( "host=%d/%d\n", prop.host_count, prop.host_max );
      bn2hex( (char *)prop.privkey, hex, prop.privlen );
      printf( "privkey=%s\n", hex );
 

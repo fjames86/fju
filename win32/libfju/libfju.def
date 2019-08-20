@@ -13,7 +13,8 @@ freg_entry_by_id
 freg_entry_by_name
 freg_register
 freg_set
-freg_get_by_name 
+freg_get_by_name
+freg_ensure
 fdtab_open
 fdtab_close
 fdtab_alloc

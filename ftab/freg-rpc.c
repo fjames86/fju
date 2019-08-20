@@ -1,6 +1,7 @@
 
 #include <fju/freg.h>
 #include <fju/rpc.h>
+#include <fju/hrauth.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -38,8 +39,8 @@ static int freg_proc_list( struct rpc_inc *inc ) {
 	switch( elist[i].flags & FREG_TYPE_MASK ) {
 	case FREG_TYPE_UINT32:
 	  sts = freg_get( NULL, elist[i].id, NULL, (char *)&u32, sizeof(u32), NULL );
-	    xdr_encode_uint32( &inc->xdr, u32 );
-	    break;
+	  xdr_encode_uint32( &inc->xdr, u32 );
+	  break;
 	case FREG_TYPE_UINT64:
 	  sts = freg_get( NULL, elist[i].id, NULL, (char *)&u64, sizeof(u64), NULL );
 	  xdr_encode_uint64( &inc->xdr, u64 );	    
@@ -68,10 +69,119 @@ static int freg_proc_list( struct rpc_inc *inc ) {
     return 0;
 }
 
+static int freg_proc_get( struct rpc_inc *inc ) {
+  int sts, handle, len, i;
+  uint32_t flags;
+  uint64_t id;
+  char *buf = NULL;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &id );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  sts = freg_get( NULL, id, &flags, NULL, 0, &len );
+  if( sts ) {
+    xdr_encode_boolean( &inc->xdr, 0 );
+    goto done;
+  }
+
+  buf = malloc( len );
+  sts = freg_get( NULL, id, &flags, buf, len, NULL );
+  if( sts ) {
+    xdr_encode_boolean( &inc->xdr, 0 );
+    goto done;
+  }
+
+  xdr_encode_boolean( &inc->xdr, 1 );
+  xdr_encode_uint64( &inc->xdr, id );
+  xdr_encode_uint32( &inc->xdr, flags );
+  switch( flags & FREG_TYPE_MASK ) {
+  case FREG_TYPE_UINT32:
+    xdr_encode_uint32( &inc->xdr, *(uint32_t *)buf );
+    break;
+  case FREG_TYPE_UINT64:
+    xdr_encode_uint64( &inc->xdr, *(uint64_t *)buf ); 
+    break;
+  case FREG_TYPE_KEY:
+    xdr_encode_uint32( &inc->xdr, len / sizeof(uint64_t) );
+    for( i = 0; i < (len / sizeof(uint64_t)); i++ ) {
+      xdr_encode_uint64( &inc->xdr, ((uint64_t *)buf)[i] );
+    }
+    break;
+  case FREG_TYPE_STRING:
+    xdr_encode_string( &inc->xdr, buf );
+    break;
+  case FREG_TYPE_OPAQUE:
+    xdr_encode_opaque( &inc->xdr, (uint8_t *)buf, len );
+    break;
+  }
+
+ done:
+  if( buf ) free( buf );
+  
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
+static int freg_proc_put( struct rpc_inc *inc ) {
+  int sts, handle, len;
+  uint32_t flags;
+  uint64_t parentid, id;
+  char *buf = NULL;
+  char name[FREG_MAX_NAME];
+
+  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
+    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  }
+
+  sts = xdr_decode_uint64( &inc->xdr, &parentid );
+  if( !sts ) sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&buf, &len );  
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  sts = freg_put( NULL, parentid, name, flags, buf, len, &id );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  if( sts ) {
+    xdr_encode_boolean( &inc->xdr, 0 );
+  } else {
+    xdr_encode_boolean( &inc->xdr, 1 );
+    xdr_encode_uint64( &inc->xdr, id );
+  }  
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int freg_proc_rem( struct rpc_inc *inc ) {
+  int sts, handle;
+  uint64_t parentid, id;
+
+  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
+    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  }
+  
+  sts = xdr_decode_uint64( &inc->xdr, &parentid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &id );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  sts = freg_rem( NULL, parentid, id );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
 
 static struct rpc_proc freg_procs[] = {
   { 0, freg_proc_null },
   { 1, freg_proc_list },
+  { 2, freg_proc_get },
+  { 3, freg_proc_put },
+  { 4, freg_proc_rem },
   { 0, NULL }
 };
 

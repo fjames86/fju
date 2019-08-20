@@ -139,7 +139,8 @@ static int log_unlock( struct log_s *log ) {
 int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   int sts;
   struct _header *hdr;
-
+  struct log_prop prop;
+  
   if( !path ) path = mmf_default_path( "fju.log", NULL );
 
   memset( log, 0, sizeof(*log) );
@@ -179,6 +180,17 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   log->pid = getpid();
 #endif
 
+
+  log_prop( log, &prop );
+  if( prop.count > prop.lbacount ) {
+    log_reset( log );
+    log_writef( log, LOG_LVL_FATAL, "Log corruption detected - count=%d max=%d", prop.count, prop.lbacount );
+  }
+  if( prop.start >= prop.lbacount ) {
+    log_reset( log );
+    log_writef( log, LOG_LVL_FATAL, "Log corruption detected - start=%d max=%d", prop.start, prop.lbacount );
+  }
+  
   return 0;
 
  bad:

@@ -76,6 +76,12 @@ static void nls_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void nls_write_results( struct xdr_s *xdr );
 static void freg_list_results( struct xdr_s *xdr );
 static void freg_list_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void freg_get_results( struct xdr_s *xdr );
+static void freg_get_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void freg_put_results( struct xdr_s *xdr );
+static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void freg_rem_results( struct xdr_s *xdr );
+static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
@@ -95,6 +101,9 @@ static struct clt_info clt_procs[] = {
     { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 0, NULL, NULL, "freg.null", NULL },
     { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -855,4 +864,95 @@ static void freg_list_results( struct xdr_s *xdr ) {
     }
     
    
+}
+
+static void freg_get_results( struct xdr_s *xdr ) {
+  int sts, b, i;
+  uint32_t flags;
+  uint64_t id;
+  char *bufp;
+  int lenp;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  if( b ) usage( "Failed to get" );
+
+  sts = xdr_decode_uint64( xdr, &id );
+  sts = xdr_decode_uint32( xdr, &flags );
+  printf( "%"PRIx64" flags=%x", id, flags );
+  xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
+  for( i = 0; i < lenp; i++ ) {
+    printf( "%02x", (uint32_t)((uint8_t *)bufp)[i] );
+  }
+  printf( "\n" );
+  
+}
+
+static void freg_get_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint64_t id = 0;
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoull( argval, NULL, 16 );
+	} else usage( "Unknown arg \"%s\"", argname );
+	i++;
+    }
+    xdr_encode_uint64( xdr, id );  
+}
+
+static void freg_put_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint64_t parentid = 0;
+  char *name = NULL;
+  uint32_t flags;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "parentid" ) == 0 ) {
+      parentid = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "name" ) == 0 ) {
+      name = argval;
+    } else if( strcmp( argname, "flags" ) == 0 ) {
+      flags = strtoul( argval, NULL, 16 );      
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+  if( !name ) usage( "Need name" );
+  
+  xdr_encode_uint64( xdr, parentid );
+  xdr_encode_string( xdr, name );
+  xdr_encode_uint32( xdr, flags );
+  xdr_encode_opaque( xdr, NULL, 0 );
+}
+
+static void freg_rem_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  printf( "%s\n", b ? "Success" : "Failure" );  
+}
+
+
+static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint64_t id = 0, parentid = 0;
+    
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "id" ) == 0 ) {
+      id = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "parentid" ) == 0 ) {
+      parentid = strtoull( argval, NULL, 16 );
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+  xdr_encode_uint64( xdr, parentid );  
+  xdr_encode_uint64( xdr, id );  
 }

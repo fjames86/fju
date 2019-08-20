@@ -137,14 +137,14 @@ static void cmd_list( int argc, char **argv, int i ) {
   elist = malloc( sizeof(*elist) * sts );
   n = freg_list( glob.freg, id, elist, sts );
   if( n < sts ) n = sts;
-  printf( "%-16s %-8s %-24s %-4s %-8s\n", "ID", "Type", "Name", "Flags", "Len" );
+  printf( "%-16s %-8s %-24s %-6s %-8s\n", "ID", "Type", "Name", "Flags", "Len" );
   printkey = 1;
  again:
   for( i = 0; i < n; i++ ) {
     if( printkey && ((elist[i].flags & FREG_TYPE_MASK) != FREG_TYPE_KEY) ) continue;
     else if( !printkey && ((elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) ) continue;
     
-    printf( "%016"PRIx64" %-8s %-24s %-4x %-8u ",
+    printf( "%016"PRIx64" %-8s %-24s %-6x %-8u ",
 	    elist[i].id,
 	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ? "u32" :
 	    (elist[i].flags & FREG_TYPE_MASK) == FREG_TYPE_UINT64 ? "u64" :

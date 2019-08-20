@@ -30,10 +30,10 @@ clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
 
 tar:
-	tar -czvf fju.tar.gz rpcd.sh ${BINDIR}/*
+	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}
 
 strip:
-	strip -s ${LIBFJU} bin/*
+	strip -s ${LIBFJU} ${BINDIR}/*
 
 .for proj in ${PROJECTS}
 .include "${proj}/${proj}.mk"
@@ -41,8 +41,11 @@ strip:
 
 install:
 	mkdir -p /opt/fju/bin
-	cp bin/* /opt/fju/bin
-	cp rpcd.sh /opt/fju 
+	cp ${BINDIR}/* /opt/fju/bin
+	mkdir -p /opt/fju/lib
+	cp ${LIBFJU} /opt/fju/lib 
+	mkdir -p /opt/fju/scripts
+	cp rpcd.sh merge-freg.sh /opt/fju/scripts 
 
 FJU_DEPS=
 FJU_LIBS=

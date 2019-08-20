@@ -65,14 +65,15 @@ static void usage( char *fmt, ... ) {
 	     "\n" 
 	     "Where CMD:\n"
 	     "               [list] [path]\n"
-	     "               [get] path\n"
-	     "               put path u32|u64|string|opaque|key [value]\n"
-	     "               set path [name=NAME] [flags=FLAGS]\n" 
+	     "               [get] path|id\n"
+	     "               put path|id u32|u64|string|opaque|key [value]\n"
+	     "               set path|id [name=NAME] [flags=FLAGS]\n" 
 	     "               rem path\n"
 	     "               dump [path]\n"
 	     "               populate [count]\n"
 	     "               reset\n"
-	     "               prop\n" 
+	     "               prop\n"
+	     "               time path|id u32|u64|string|opaque\n"
 	     "\n"
 	     );
     
@@ -282,10 +283,10 @@ int main( int argc, char **argv ) {
       i++;
       while( i < argc ) {
 	  sts = freg_entry_by_name( glob.freg, 0, argv[i], &e, &parentid );
-	  if( sts ) printf( "Failed to find entry \"%s\"", argv[i] );
+	  if( sts ) printf( "Failed to find entry \"%s\"\n", argv[i] );
 	  if( !sts ) {
 	      sts = freg_rem( glob.freg, parentid, e.id );
-	      if( sts ) printf( "Failed to remove value" );
+	      if( sts ) printf( "Failed to remove value\n" );
 	  }
 	  i++;
       }
@@ -322,21 +323,21 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
 
-      niter = 100000;
+      niter = 1000000;
       
       start = rpc_now();
       for( j = 0; j < niter; j++ ) {
 	cmd_get( argc, argv, i );
       }
       end = rpc_now();
-      printf( "%d cmd_get %dms %.3fms per call\n", niter, (int)(end - start), (float)(end - start)/(float)niter );
+      printf( "%d cmd_get %dms %.3fus per call\n", niter, (int)(end - start), (float)(1000 * (end - start))/(float)niter );
       
       start = rpc_now();
       for( j = 0; j < niter; j++ ) {
-	  cmd_put( argc, argv, i );
+	cmd_put( argc, argv, i );
       }
       end = rpc_now();
-      printf( "%d cmd_put %dms %.3fms per call\n", niter, (int)(end - start), (float)(end - start)/(float)niter );
+      printf( "%d cmd_put %dms %.3fus per call\n", niter, (int)(end - start), (float)(1000 * (end - start))/(float)niter );
   } else if( strcmp( argv[i], "prop" ) == 0 ) {
     struct ftab_s ftab;
     struct ftab_prop prop;
@@ -344,11 +345,12 @@ int main( int argc, char **argv ) {
     ftab_prop( &ftab, &prop );
     ftab_close( &ftab );
 
-    printf( "Inodes %u/%u (%u%%) Data %ukb/%ukb Root %"PRIx64"\n",
+    printf( "Inodes %u/%u (%u%%) Data %ukb/%ukb Root %"PRIx64" LBASize %u\n",
 	    prop.count, prop.max, (100*prop.count)/prop.max,
 	    (prop.lbasize*prop.count) / 1024,
 	    (prop.lbasize*prop.max) / 1024,
-	    *((uint64_t *)prop.cookie) );
+	    *((uint64_t *)prop.cookie),
+	    prop.lbasize );
   } else if( strcmp( argv[i], "set" ) == 0 ) {
     char *namep = NULL;
     char *term;
@@ -507,12 +509,16 @@ static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count 
 static void cmd_put( int argc, char **argv, int i ) {
     char *path;
     uint32_t flags, u32;
-    uint64_t u64, id;
+    uint64_t u64, id, setid;
     char *buf;
     int len, sts, j;
     char tmpstr[32];
-
+    char *term;
+    
     path = argv[i];
+    setid = strtoull( path, &term, 16 );
+    if( *term ) setid = 0;
+    
     i++;
 
     flags = FREG_TYPE_KEY;
@@ -610,7 +616,8 @@ static void cmd_put( int argc, char **argv, int i ) {
     }
 
     if( (flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
-      sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
+      if( setid ) sts = freg_set( glob.freg, setid, NULL, NULL, buf, len );
+      else sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
       if( sts ) usage( "Failed to put" );
     }
 

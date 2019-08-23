@@ -73,11 +73,11 @@ int hostreg_open( void ) {
     sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/local", FREG_CREATE, &parentid );
     if( sts ) return sts;
 
-    sts = freg_entry_by_name( NULL, parentid, "hostid", &entry, NULL );
+    sts = freg_entry_by_name( NULL, parentid, "id", &entry, NULL );
     if( sts ) {
       uint64_t localid;
       sec_rand( &localid, sizeof(uint64_t) );
-      freg_put( NULL, parentid, "hostid", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
+      freg_put( NULL, parentid, "id", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
     }
 
     sts = freg_entry_by_name( NULL, parentid, "privkey", &entry, NULL );
@@ -119,7 +119,7 @@ int hostreg_reset( int full ) {
     if( sts ) return sts;
 
     sec_rand( &localid, sizeof(uint64_t) );
-    freg_put( NULL, parentid, "hostid", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
+    freg_put( NULL, parentid, "id", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
 
     priv.buf = (char *)privkey;
     priv.len = sizeof(privkey);
@@ -139,7 +139,7 @@ int hostreg_prop( struct hostreg_prop *prop ) {
   sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/local", 0, &parentid );
   if( sts ) return sts;
 
-  sts = freg_get_by_name( NULL, parentid, "hostid", FREG_TYPE_UINT64, (char *)&prop->localid, sizeof(prop->localid), NULL );
+  sts = freg_get_by_name( NULL, parentid, "id", FREG_TYPE_UINT64, (char *)&prop->localid, sizeof(prop->localid), NULL );
   if( !sts ) sts = freg_get_by_name( NULL, parentid, "pubkey", FREG_TYPE_OPAQUE, (char *)prop->pubkey, sizeof(prop->pubkey), (int *)&prop->publen );
   if( !sts ) sts = freg_get_by_name( NULL, parentid, "privkey", FREG_TYPE_OPAQUE, (char *)prop->privkey, sizeof(prop->privkey), (int *)&prop->privlen );
   if( sts ) return sts;
@@ -150,7 +150,7 @@ int hostreg_prop( struct hostreg_prop *prop ) {
 uint64_t hostreg_localid( void ) {
   int sts;
   uint64_t localid;
-  sts = freg_get_by_name( NULL, 0, HOSTREG_ROOTPATH "local/hostid", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
+  sts = freg_get_by_name( NULL, 0, HOSTREG_ROOTPATH "/local/id", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
   if( sts ) return sts;
   return localid;
 }

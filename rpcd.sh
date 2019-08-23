@@ -23,7 +23,7 @@ elif [ $cmd = "stop" ]; then
     fi
 elif [ $cmd = "status" ]; then
     if [ -e $pidfile ]; then
-	bin/rpcinfo -p $udpport
+	rpclt -p $udpport rpcbind.list
     else
 	echo "rpcd not running"
     fi

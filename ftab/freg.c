@@ -34,6 +34,9 @@
 #include <fju/freg.h>
 #include <fju/fdtab.h>
 
+/* set to use synchronous flushing, 0 uses async flushing */
+#define FREG_SYNC 1
+
 struct entry_s {
   char name[FREG_MAX_NAME];
   uint32_t flags;
@@ -385,6 +388,9 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
     if( sts < 0 ) return sts;
     
     if( id ) *id = tid;
+
+    /* schedule async flushing */
+    mmf_sync( &freg->fdt.ftab.mmf, FREG_SYNC );
     
     return 0;
 }
@@ -425,7 +431,10 @@ int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, cha
     if( flags || name || buf ) {
       sts = fdtab_write( &freg->fdt, id, (char *)&e, sizeof(e), 0 );
     }
-    
+
+    /* schedule async flushing */
+    mmf_sync( &freg->fdt.ftab.mmf, FREG_SYNC );
+
     return 0;
 }
 
@@ -483,6 +492,10 @@ int freg_rem( struct freg_s *freg, uint64_t parentid, uint64_t id ) {
 		  sts = fdtab_write( &freg->fdt, parentid, (char *)&id, sizeof(id), sizeof(e) + (sizeof(id) * i) );
 		}
 		sts = fdtab_truncate( &freg->fdt, parentid, sizeof(e) + (sizeof(uint64_t) * (nentry - 1)) );
+
+		/* schedule async flushing */
+		mmf_sync( &freg->fdt.ftab.mmf, FREG_SYNC );
+		
 		return 0;
 	    }
 
@@ -595,6 +608,9 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
 
   if( id ) *id = parentid;
   
+  /* schedule async flushing */
+  mmf_sync( &freg->fdt.ftab.mmf, FREG_SYNC );
+
   return 0;
 }
 

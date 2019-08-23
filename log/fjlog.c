@@ -37,6 +37,7 @@
 #include <inttypes.h>
 
 #include <fju/log.h>
+#include <fju/rpc.h>
 
 #ifdef WIN32
 #ifndef MSYS
@@ -44,15 +45,7 @@
 #endif
 #endif
 
-uint64_t rpc_now( void ) {
-#ifdef WIN32
-  return GetTickCount();
-#else
-  struct timespec tm;
-  clock_gettime( CLOCK_MONOTONIC, &tm );
-  return (uint64_t)((tm.tv_sec * 1000ULL) + (tm.tv_nsec / (1000ULL * 1000ULL)));
-#endif
-}
+
 static char *lvlstr( int lvl );
 
 static struct {
@@ -72,6 +65,7 @@ static struct {
   int print_quiet;
   uint32_t ltag;
   int lvlflags;
+  int logflags;
 } fju;
 
 static void usage( char *fmt, ... ) {
@@ -101,7 +95,8 @@ static void usage( char *fmt, ... ) {
 	  "     -T ltag                               Set log tag to filter or write messages\n"
 	  "     -b                                    Read/write binary.\n" 
 	  "     -i id                                 Read starting from msg ID\n" 
-	  "     -n nmsgs                              Read no more than nmsgs\n" 
+	  "     -n nmsgs                              Read no more than nmsgs\n"
+	  "     -S none|sync|async                    Set log sync mode: none, sync, async\n" 
 	  "\n" );
   exit( 0 );
 }
@@ -187,6 +182,17 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       fju.ltag = strtol( argv[i], NULL, 16 );
+    } else if( strcmp( argv[i], "-S" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      if( strcmp( argv[i], "none" ) == 0 ) {
+	fju.logflags |= LOG_VOLATILE;
+      } else if( strcmp( argv[i], "sync" ) == 0 ) {
+	fju.logflags = LOG_SYNC;
+      } else if( strcmp( argv[i], "async" ) == 0 ) {
+	fju.logflags = LOG_ASYNC;
+      }
+      
     } else {
       usage( NULL );
     }
@@ -200,6 +206,7 @@ int main( int argc, char **argv ) {
   sts = log_open( fju.filepath, &opts, &fju.log );
   if( sts ) usage( "Failed to open" );
   fju.log.ltag = fju.ltag;
+  fju.log.flags = fju.logflags;
   
   if( setlvlflags && (fju.cmd != CMD_WRITE) ) log_set_lvl( &fju.log, fju.lvlflags );
   
@@ -413,7 +420,7 @@ static void cmd_tail( void ) {
 
 static void cmd_test( void ) {
   uint64_t start_time, end_time;
-  int niters = 1000000;
+  int niters = 10000;
   struct log_entry en;
   struct log_iov iov[1];
   char tmpbuf[32];

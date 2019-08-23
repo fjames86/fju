@@ -82,9 +82,14 @@ int mmf_unlock( struct mmf_s *mmf ) {
 	//if( mmf->file ) FlushViewOfFile( mmf->file, mmf->msize );
 	return 0;
 }
-int mmf_sync( struct mmf_s *mmf ) {
-  if( mmf->file ) FlushViewOfFile( mmf->file, mmf->msize );
-  if( mmf->fd ) FlushFileBuffers( mmf->fd );
+int mmf_sync( struct mmf_s *mmf, int sync ) {  
+  if( sync ) {
+    if( mmf->file ) FlushViewOfFile( mmf->file, mmf->msize );
+    if( mmf->fd ) FlushFileBuffers( mmf->fd );
+  } else {
+    if( mmf->file ) FlushViewOfFile( mmf->file, mmf->msize );
+  }
+  
   return 0;
 }
 
@@ -218,9 +223,14 @@ int mmf_unlock( struct mmf_s *mmf ) {
 	//if( mmf->file ) msync( mmf->file, mmf->msize, MS_SYNC );
 	return 0;
 }
-int mmf_sync( struct mmf_s *mmf ) {
-  if( mmf->file ) msync( mmf->file, mmf->msize, MS_SYNC );
-  if( mmf->fd ) fsync( mmf->fd );
+int mmf_sync( struct mmf_s *mmf, int sync ) {
+  if( sync ) {
+    if( mmf->file ) msync( mmf->file, mmf->msize, MS_SYNC );
+    //if( mmf->fd ) fsync( mmf->fd );
+  } else {
+    if( mmf->file ) msync( mmf->file, mmf->msize, MS_ASYNC );
+  }
+  
   return 0;
 }
 

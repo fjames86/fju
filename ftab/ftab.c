@@ -316,3 +316,8 @@ int ftab_write( struct ftab_s *ftab, uint64_t id, char *buf, int n, uint32_t off
     return nbytes;
 }
 
+int ftab_sync( struct ftab_s *ftab ) {
+  mmf_sync( &ftab->mmf );
+  return 0;
+}
+

@@ -826,7 +826,7 @@ static void freg_list_results( struct xdr_s *xdr ) {
 	xdr_decode_uint64( xdr, &id );
 	xdr_decode_string( xdr, name, sizeof(name) );
 	xdr_decode_uint32( xdr, &flags );
-	printf( "%"PRIx64" %-32s ", id, name );
+	printf( "%016"PRIx64" %-32s ", id, name );
 	switch( flags & FREG_TYPE_MASK ) {
 	case FREG_TYPE_UINT32:
 	    xdr_decode_uint32( xdr, &u32 );

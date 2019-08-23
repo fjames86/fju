@@ -555,7 +555,8 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
   int idx;
   struct freg_entry entry;
   struct entry_s e;
-
+  int flush = 0;
+  
   if( !freg ) {
     if( !glob.ocount ) return -1;
     freg = &glob.freg;
@@ -586,6 +587,7 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
 	if( !(flags & FREG_CREATE) ) return -1;
 
 	/* create new key entry */
+	flush = 1;
 	sts = fdtab_alloc( &freg->fdt, 0, &tmpid );
 	if( sts ) return sts;
 	memset( &e, 0, sizeof(e) );
@@ -607,10 +609,12 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
   }
 
   if( id ) *id = parentid;
-  
-  /* schedule async flushing */
-  mmf_sync( &freg->fdt.ftab.mmf, FREG_SYNC );
 
+  /* schedule async flushing */
+  if( flush ) {
+    mmf_sync( &freg->fdt.ftab.mmf, FREG_SYNC );
+  }
+  
   return 0;
 }
 

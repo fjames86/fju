@@ -8,4 +8,5 @@ ${LIBDIR}/liblht.a: lht/lht.c include/fju/lht.h
 ${BINDIR}/lht: lht/lht-main.c ${LIBFJU}
 	${CC} -o $@ lht/lht-main.c ${CFLAGS} ${LFLAGS} 
 
+PROGRAMS+=lht
 LIBRARIES+=lht

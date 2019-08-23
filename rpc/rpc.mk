@@ -15,4 +15,6 @@ ${BINDIR}/rpcinfo: rpc/rpcinfo.c rpc/rpc-private.h ${LIBFJU}
 ${BINDIR}/rpclt: rpc/rpclt.c rpc/rpc-private.h ${LIBFJU}
 	${CC} -o $@ rpc/rpclt.c ${CFLAGS} ${LFLAGS} 
 
+PROGRAMS+=rpcd
+PROGRAMS+=rpclt
 LIBRARIES+=rpc

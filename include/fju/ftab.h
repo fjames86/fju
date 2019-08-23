@@ -60,7 +60,7 @@ int ftab_close( struct ftab_s *ftab );
 int ftab_prop( struct ftab_s *ftab, struct ftab_prop *prop );
 int ftab_reset( struct ftab_s *ftab );
 int ftab_set_cookie( struct ftab_s *ftab, char *cookie );
-int ftab_sync( struct ftab_s *ftab );
+int ftab_sync( struct ftab_s *ftab, int sync );
 
 int ftab_alloc( struct ftab_s *ftab, uint64_t *id );
 int ftab_free( struct ftab_s *ftab, uint64_t id );

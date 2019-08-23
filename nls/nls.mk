@@ -8,4 +8,5 @@ ${LIBDIR}/libnls.a: nls/nls.c nls/nls-rpc.c include/fju/nls.h
 ${BINDIR}/nls: nls/nls-main.c ${LIBFJU}
 	${CC} -o $@ nls/nls-main.c ${CFLAGS} ${LFLAGS} 
 
+PROGRAMS+=nls
 LIBRARIES+=nls

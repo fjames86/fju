@@ -11,6 +11,7 @@ PROJECTS += dh
 PROJECTS += lht 
 PROJECTS += ef
 PROJECTS += ftab
+PROGRAMS=
 LIBRARIES=
 
 BINDIR=bin
@@ -40,12 +41,13 @@ strip:
 .endfor
 
 install:
-	mkdir -p /opt/fju/bin
-	cp ${BINDIR}/* /opt/fju/bin
-	mkdir -p /opt/fju/lib
-	cp ${LIBFJU} /opt/fju/lib 
-	mkdir -p /opt/fju/scripts
-	cp rpcd.sh merge-freg.sh /opt/fju/scripts 
+	mkdir -p /opt/fju
+	cd bin && cp ${PROGRAMS} /usr/local/bin
+	cp ${LIBFJU} /usr/local/lib
+
+uninstall:
+	cd /usr/local/bin && rm ${PROGRAMS}
+	cd /usr/local/lib && rm libfju.so
 
 FJU_DEPS=
 FJU_LIBS=

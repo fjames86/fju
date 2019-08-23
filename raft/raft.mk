@@ -12,6 +12,7 @@ ${LIBDIR}/librex.a: raft/rex.c include/fju/rex.h
 ${BINDIR}/raft: raft/raft-main.c ${LIBFJU}
 	${CC} -o $@ raft/raft-main.c ${CFLAGS} ${LFLAGS}
 
+PROGRAMS+=raft 
 LIBRARIES+=raft
 LIBRARIES+=rex
 

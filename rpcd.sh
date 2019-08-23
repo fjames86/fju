@@ -1,7 +1,7 @@
 #!/bin/sh
 
 pidfile=/var/run/rpcd.pid
-udpport=$(echo $(bin/freg get /fju/rpc/port || echo 8000) | awk '{print $1}')
+udpport=$(echo $(freg get /fju/rpc/port || echo 8000) | awk '{print $1}')
 
 cmd=$1
 if [ ! $cmd ]; then
@@ -15,7 +15,7 @@ if [ $cmd = "start" ]; then
 	sleep 1 
     fi
     
-    bin/rpcd -u $udpport -p $pidfile
+    rpcd -u $udpport -p $pidfile
 elif [ $cmd = "stop" ]; then
     if [ -e $pidfile ]; then 
 	kill $(cat $pidfile)

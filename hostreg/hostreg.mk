@@ -17,6 +17,6 @@ hostreg_deps += ${LIBDIR}/libhostreg.a
 ${BINDIR}/hostreg: hostreg/hostreg-main.c ${LIBFJU}
 	${CC} -o $@ hostreg/hostreg-main.c ${CFLAGS} ${LFLAGS} 
 
-
+PROGRAMS+=hostreg 
 LIBRARIES+=hostreg
 LIBRARIES+=hrauth

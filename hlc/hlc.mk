@@ -8,4 +8,5 @@ ${LIBDIR}/libhlc.a: hlc/hlc.c include/fju/hlc.h
 ${BINDIR}/hlc: hlc/hlc-main.c ${LIBFJU}
 	${CC} -o $@ hlc/hlc-main.c ${CFLAGS} ${LFLAGS}
 
+PROGRAMS+=hlc
 LIBRARIES+=hlc

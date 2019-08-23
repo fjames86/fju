@@ -22,7 +22,9 @@ ${BINDIR}/fdtab: ftab/fdtab-main.c ${LIBFJU}
 ${BINDIR}/freg: ftab/freg-main.c ${LIBFJU}
 	${CC} -o $@ ftab/freg-main.c ${CFLAGS} ${LFLAGS}
 
-
+PROGRAMS+=ftab
+PROGRAMS+=fdtab
+PROGRAMS+=freg 
 LIBRARIES+=ftab
 LIBRARIES+=fdtab
 LIBRARIES+=freg

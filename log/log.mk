@@ -9,4 +9,5 @@ ${LIBDIR}/liblog.a: log/log.c include/fju/log.h
 ${BINDIR}/fjlog: log/fjlog.c ${LIBFJU}
 	${CC} -o $@ log/fjlog.c ${CFLAGS} ${LFLAGS} 
 
+PROGRAMS+=fjlog
 LIBRARIES+=log

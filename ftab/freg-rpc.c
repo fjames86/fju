@@ -21,7 +21,11 @@ static int freg_proc_list( struct rpc_inc *inc ) {
     uint32_t u32;
     uint64_t u64;
     struct freg_entry *elist;
-    
+
+    if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
+      return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+    }
+
     sts = xdr_decode_uint64( &inc->xdr, &parentid );
     if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
     
@@ -74,7 +78,11 @@ static int freg_proc_get( struct rpc_inc *inc ) {
   uint32_t flags;
   uint64_t id;
   char *buf = NULL;
-  
+
+  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
+    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  }
+
   sts = xdr_decode_uint64( &inc->xdr, &id );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
   

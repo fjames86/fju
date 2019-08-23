@@ -22,7 +22,7 @@ LFLAGS += -L${LIBDIR} -lfju -lcrypto
 
 LIBFJU=${LIBDIR}/libfju.so
 
-.PHONY: all strip clean tar install strip ${PROJECTS}
+.PHONY: all strip clean tar install uninstall strip ${PROJECTS}
 
 all: ${PROJECTS} ${LIBFJU}
 	rm -f *.o
@@ -40,7 +40,7 @@ strip:
 .include "${proj}/${proj}.mk"
 .endfor
 
-install:
+install: all strip
 	mkdir -p /opt/fju
 	cd bin && cp ${PROGRAMS} /usr/local/bin
 	cp ${LIBFJU} /usr/local/lib

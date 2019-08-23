@@ -1,7 +1,7 @@
 #!/bin/sh
 
 pidfile=/var/run/rpcd.pid
-udpport=$(echo $(freg get /fju/rpc/port || echo 8000) | awk '{print $1}')
+udpport=$(freg get /fju/rpc/port || echo 8000)
 
 cmd=$1
 if [ ! $cmd ]; then

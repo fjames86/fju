@@ -54,6 +54,7 @@ static struct {
   struct freg_s *freg;  
   struct freg_s fregs;
   int quiet;
+  int hexmode;
 } glob;
 
 static void usage( char *fmt, ... ) {
@@ -62,6 +63,7 @@ static void usage( char *fmt, ... ) {
 	     "Where options:\n"
 	     "     -p path   Set path to database file\n"
 	     "     -q        Quiet mode, don't print to stderr on failure\n"
+	     "     -x        Hex mode, read and print all numbers in hex rather than decimal\n"
 	     "\n" 
 	     "Where CMD:\n"
 	     "               [list] [path]\n"
@@ -158,11 +160,13 @@ static void cmd_list( int argc, char **argv, int i ) {
     switch( elist[i].flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
       sts = freg_get( glob.freg, elist[i].id, NULL, (char *)&u32, sizeof(u32), NULL );
-      printf( "%u (%x)", u32, u32 );
+      if( glob.hexmode ) printf( "%x", u32 );
+      else printf( "%u", u32 );
       break;
     case FREG_TYPE_UINT64:
       sts = freg_get( glob.freg, elist[i].id, NULL, (char *)&u64, sizeof(u64), NULL );
-      printf( "%"PRIu64" (%"PRIx64")", u64, u64 );
+      if( glob.hexmode ) printf( "%"PRIx64"", u64 );
+      else printf( "%"PRIu64"", u64 );
       break;
     case FREG_TYPE_KEY:
       break;
@@ -215,10 +219,12 @@ static void cmd_get( int argc, char **argv, int ii ) {
   if( !glob.quiet ) {
       switch( flags & FREG_TYPE_MASK ) {
       case FREG_TYPE_UINT32:
-	  printf( "%u %x\n", *(uint32_t *)buf, *(uint32_t *)buf );
+	  if( glob.hexmode ) printf( "%x\n", *(uint32_t *)buf );
+	  else printf( "%u\n", *(uint32_t *)buf );
 	  break;
       case FREG_TYPE_UINT64:
-	  printf( "%"PRIu64" %"PRIx64"\n", *(uint64_t *)buf, *(uint64_t *)buf );
+	  if( glob.hexmode ) printf( "%"PRIx64"\n", *(uint64_t *)buf );
+	  else printf( "%"PRIu64"\n", *(uint64_t *)buf );
 	  break;
       case FREG_TYPE_KEY:
 	  for( i = 0; i < len / sizeof(uint64_t); i++ ) {
@@ -254,6 +260,8 @@ int main( int argc, char **argv ) {
       glob.freg = &glob.fregs;
     } else if( strcmp( argv[i], "-q" ) == 0 ) {
       glob.quiet = 1;
+    } else if( strcmp( argv[i], "-x" ) == 0 ) {
+      glob.hexmode = 1;
     } else break;
     i++;
   }
@@ -400,10 +408,12 @@ static void cmd_get2( uint64_t parentid, char *path, char *name ) {
   if( sts ) goto done;
   switch( flags & FREG_TYPE_MASK ) {
   case FREG_TYPE_UINT32:
-    printf( "%s/%s u32 %u\n", path, name, *(uint32_t *)buf );
+    if( glob.hexmode ) printf( "%s/%s u32 %x\n", path, name, *(uint32_t *)buf );
+    else printf( "%s/%s u32 %u\n", path, name, *(uint32_t *)buf );
     break;
   case FREG_TYPE_UINT64:
-    printf( "%s/%s u64 %"PRIu64"\n", path, name, *(uint64_t *)buf );
+    if( glob.hexmode ) printf( "%s/%s u64 %"PRIx64"\n", path, name, *(uint64_t *)buf );
+    else printf( "%s/%s u64 %"PRIu64"\n", path, name, *(uint64_t *)buf );
     break;
   case FREG_TYPE_KEY:
     printf( "%s/%s key\n", path, name );
@@ -550,11 +560,8 @@ static void cmd_put( int argc, char **argv, int i ) {
     case FREG_TYPE_UINT32:
       if( i < argc ) {
 	char *term;
-	u32 = strtoul( argv[i], &term, 10 );
-	if( *term ) {
-	  u32 = strtoul( argv[i], &term, 16 );
-	  if( *term ) usage( "Failed to parse u32" );
-	}
+	u32 = strtoul( argv[i], &term, glob.hexmode ? 16 : 10 );
+	if( *term ) usage( "Failed to parse u32" );
       }
       buf = (char *)&u32;
       len = sizeof(u32);
@@ -562,11 +569,8 @@ static void cmd_put( int argc, char **argv, int i ) {
     case FREG_TYPE_UINT64:
       if( i < argc ) {
 	char *term;
-	u64 = strtoull( argv[i], &term, 10 );
-	if( *term ) {
-	  u64 = strtoull( argv[i], &term, 16 );
-	  if( *term ) usage( "Failed to parse u64 \"%s\"", argv[i] );
-	}
+	u64 = strtoull( argv[i], &term, glob.hexmode ? 16 : 10 );
+	if( *term ) usage( "Failed to parse u64 \"%s\"", argv[i] );
       }
       buf = (char *)&u64;
       len = sizeof(u64);

@@ -1199,7 +1199,7 @@ static void rpcd_load_services( void ) {
   char path[256], mainfn[64];
   uint32_t vers;
 
-  fred_open( NULL, NULL );
+  freg_open( NULL, NULL );
   
   rpc_log( RPC_LOG_DEBUG, "loading services" );
   

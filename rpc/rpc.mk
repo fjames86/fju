@@ -1,6 +1,6 @@
 
 
-rpc: ${BINDIR}/rpcd ${BINDIR}/rpcinfo ${LIBDIR}/librpc.a ${BINDIR}/rpclt
+rpc: ${BINDIR}/rpcd ${BINDIR}/rpcinfo ${LIBDIR}/librpc.a ${BINDIR}/rpclt ${LIBDIR}/libsvctest.so
 
 ${LIBDIR}/librpc.a: rpc/rpc.c rpc/rpcd.c rpc/shauth.c include/fju/rpc.h include/fju/rpcd.h include/fju/shauth.h rpc/rpc-private.h 
 	${CC} -c rpc/rpc.c rpc/rpcd.c rpc/shauth.c ${CFLAGS} 
@@ -14,6 +14,9 @@ ${BINDIR}/rpcinfo: rpc/rpcinfo.c rpc/rpc-private.h ${LIBFJU}
 
 ${BINDIR}/rpclt: rpc/rpclt.c rpc/rpc-private.h ${LIBFJU}
 	${CC} -o $@ rpc/rpclt.c ${CFLAGS} ${LFLAGS} 
+
+${LIBDIR}/libsvctest.so: rpc/svctest.c ${LIBFJU}
+	cc -shared -o $@ ${CFLAGS} rpc/svctest.c -L${LIBDIR} -lfju
 
 PROGRAMS+=rpcd
 PROGRAMS+=rpclt

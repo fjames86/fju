@@ -139,7 +139,8 @@ static int log_unlock( struct log_s *log ) {
 int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   int sts;
   struct _header *hdr;
-
+  struct log_prop prop;
+  
   if( !path ) path = mmf_default_path( "fju.log", NULL );
 
   memset( log, 0, sizeof(*log) );
@@ -179,6 +180,17 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   log->pid = getpid();
 #endif
 
+
+  log_prop( log, &prop );
+  if( prop.count > prop.lbacount ) {
+    log_reset( log );
+    log_writef( log, LOG_LVL_FATAL, "Log corruption detected - count=%d max=%d", prop.count, prop.lbacount );
+  }
+  if( prop.start >= prop.lbacount ) {
+    log_reset( log );
+    log_writef( log, LOG_LVL_FATAL, "Log corruption detected - start=%d max=%d", prop.start, prop.lbacount );
+  }
+  
   return 0;
 
  bad:
@@ -523,6 +535,8 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   hdr->seq++;
 
  done:
+  if( log->flags & (LOG_SYNC|LOG_ASYNC) ) log_sync( log, log->flags & LOG_SYNC ? 1 : 0 );
+  
   log_unlock( log );
   return 0;
 }
@@ -574,5 +588,10 @@ int log_set_lvl( struct log_s *log, int lvl ) {
   log_lock( log );
   hdr->flags = (hdr->flags & ~LOG_FLAG_LVLMASK) | ((lvl & LOG_LVL_MASK) << 4);
   log_unlock( log );
+  return 0;
+}
+
+int log_sync( struct log_s *log, int sync ) {
+  mmf_sync( &log->mmf, sync );
   return 0;
 }

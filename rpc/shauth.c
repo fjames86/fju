@@ -48,8 +48,11 @@
 #include <stdint.h>
 #include <fju/rpc.h>
 #include <fju/shauth.h>
+#include <fju/freg.h>
 
 #include "rpc-private.h"
+
+static uint8_t *shauth_shared_key( void );
 
 #ifdef WIN32
 
@@ -283,8 +286,6 @@ static void shauth_rand( void *buf, int n ) {
 
 
 
-
-static uint8_t shauth_shared_key[32];
 
 void shauth_init( struct shauth_context *cxt, uint8_t *key ) {
   memset( cxt, 0, sizeof(*cxt) );
@@ -546,8 +547,8 @@ static int shauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* allocate new context */
     sa = shauth_context_alloc();
     sa->cipher = auth.u.full.cipher;
-    xdr_init( &tmpx, auth.u.full.ecred, 64 );
-    shauth_decrypt( tmpx.buf, tmpx.count, shauth_shared_key, sa->cipher );
+    xdr_init( &tmpx, auth.u.full.ecred, 64 );    
+    shauth_decrypt( tmpx.buf, tmpx.count, shauth_shared_key(), sa->cipher );
     shauth_decode_cred( &tmpx, &cred );
     memcpy( sa->session_key, cred.session_key, 32 );
     sa->service = cred.service;
@@ -728,10 +729,18 @@ struct rpc_provider *shauth_provider( void ) {
 }
 
 void shauth_set_shared( uint8_t *key ) {
-  memcpy( shauth_shared_key, key, 32 );
+  freg_ensure( NULL, 0, "/fju/shauth/key", FREG_TYPE_OPAQUE, (char *)key, 32, NULL );
 }
 
+static uint8_t *shauth_shared_key( void ) {
+  static uint8_t key[32];
+  memset( key, 0, sizeof(key) );
+  freg_ensure( NULL, 0, "/fju/shauth/key", FREG_TYPE_OPAQUE, (char *)key, sizeof(key), NULL );
+  return key;
+}
+  
 void shauth_register( uint8_t *key ) {
+  freg_open( NULL, NULL );
   if( key ) shauth_set_shared( key );
   rpc_provider_register( shauth_provider() );
 }

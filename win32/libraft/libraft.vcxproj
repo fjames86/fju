@@ -141,7 +141,8 @@
     <ClCompile Include="..\..\raft\rex.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\raft.h" />
+    <ClInclude Include="..\..\include\fju\raft.h" />
+    <ClInclude Include="..\..\include\fju\rex.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

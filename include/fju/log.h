@@ -38,6 +38,14 @@ struct log_s {
   struct mmf_s mmf;
   uint32_t pid;
   uint32_t ltag;
+  uint32_t flags;                  /* handle options, must be set after log_open */
+#define LOG_VOLATILE     0x0000    /* writes are not guaranteed to flush until log_close or log_sync (unsafe but fastest) */
+#define LOG_SYNC         0x0001    /* all writes are synchronously written (safest but slow) */
+#define LOG_ASYNC        0x0002    /* all writes are asynchronously written (safeish but fast) */
+  /*
+   * typical time per write : volatile==1u, async==10us, sync==500us.
+   */
+    
 };
 
 struct log_opts {
@@ -45,11 +53,11 @@ struct log_opts {
 #define LOG_OPT_LBACOUNT 0x0001
 #define LOG_OPT_FLAGS    0x0002 
   uint32_t lbacount;               /* if creating log (opening for first time), use this many blocks */
-  uint32_t flags;
+  uint32_t flags;                  /* log flags - persistent properties of the log itself */
 #define LOG_FLAG_CIRCULAR 0x0000   /* default - circular log */
 #define LOG_FLAG_FIXED    0x0001   /* opposite of circular - only append entries at end */
 #define LOG_FLAG_GROW     0x0002   /* dynamically grow, requires LOG_FLAG_FIXED */
-#define LOG_FLAG_LVLMASK  0x00f0
+#define LOG_FLAG_LVLMASK  0x00f0   /* only log messages with at least this level */
 };
 
 struct log_prop {
@@ -102,6 +110,8 @@ int log_reset( struct log_s *log );
 
 /* get log properties */
 int log_prop( struct log_s *log, struct log_prop *prop );
+
+int log_sync( struct log_s *log, int sync );
 
 /* 
  * read msgs starting from beginning (id==0) or from a given msg (id!=0). 

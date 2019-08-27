@@ -51,6 +51,7 @@
 #include <fju/sec.h>
 #include <fju/rpcd.h>
 #include <fju/log.h>
+#include <fju/freg.h>
 
 static void hrauth_log( int lvl, char *fmt, ... ) {
   static struct log_s log;
@@ -89,7 +90,13 @@ static int hrauth_common( uint64_t remoteid, uint8_t *common ) {
 }
 
 int hrauth_init( struct hrauth_context *cxt, uint64_t remoteid ) {
+  static uint32_t default_window;
   int sts;
+
+  if( !default_window ) {
+    default_window = 500;
+    sts = freg_ensure( NULL, 0, "/fju/hrauth/window", FREG_TYPE_UINT32, (char *)&default_window, sizeof(default_window), NULL );
+  }
   
   memset( cxt, 0, sizeof(*cxt) );
 
@@ -98,7 +105,7 @@ int hrauth_init( struct hrauth_context *cxt, uint64_t remoteid ) {
   if( sts ) return sts;
   
   cxt->cipher = HRAUTH_CIPHER_AES128|HRAUTH_DIGEST_SHA1;
-  cxt->window = 500;
+  cxt->window = default_window;
   cxt->service = HRAUTH_SERVICE_NONE;
 
   return 0;

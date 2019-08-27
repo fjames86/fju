@@ -56,203 +56,226 @@
 #include <fju/hostreg.h>
 #include <fju/mmf.h>
 #include <fju/sec.h>
+#include <fju/freg.h>
 
-#define HOSTREG_MAX_HOST 32
-
-struct hostreg_header {
-    uint32_t magic;
-#define HOSTREG_MAGIC 0xD091BB5C
-    uint32_t version;
-    uint64_t seq;
-
-    /* entry counts */
-    uint32_t host_max;
-    uint32_t host_count;
-
-    /* header fields */
-    uint64_t localid;
-    uint32_t publen;
-    uint8_t pubkey[HOSTREG_MAX_PUBKEY];
-    uint32_t privlen;
-    uint8_t privkey[HOSTREG_MAX_PRIVKEY];
-
-    uint32_t spare[32];
-};
-
-
-struct hostreg_file {
-    struct hostreg_header header;
-    struct hostreg_host host[HOSTREG_MAX_HOST];
-};
-
-static struct {
-    struct mmf_s mmf;
-    int ocount;
-    struct hostreg_file *file;
-} glob;
-
-static void hostreg_lock( void ) {
-    mmf_lock( &glob.mmf );
-}
-static void hostreg_unlock( void ) {
-    mmf_unlock( &glob.mmf );
-}
+#define HOSTREG_ROOTPATH "/fju/hostreg"
 
 int hostreg_open( void ) {
     int sts;
     struct sec_buf priv, pub;
+    struct freg_entry entry;
+    uint8_t pubkey[HOSTREG_MAX_PUBKEY];
+    uint8_t privkey[HOSTREG_MAX_PRIVKEY];
+    uint64_t parentid;
+			
+    freg_open( NULL, NULL );
 
-    if( glob.ocount < 0 ) return -1;
-    if( glob.ocount > 0 ) {
-        glob.ocount++;
-        return 0;
-    }
-
-    sts = mmf_open( mmf_default_path( "hostreg.dat", NULL ), &glob.mmf );
+    sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/local", FREG_CREATE, &parentid );
     if( sts ) return sts;
-    
-    sts = mmf_remap( &glob.mmf, sizeof(*glob.file) );
-    if( sts ) goto bad;
-    glob.file = (struct hostreg_file *)glob.mmf.file;
-    
-    hostreg_lock();
-    if( glob.file->header.magic != HOSTREG_MAGIC ) {
-        glob.file->header.magic = HOSTREG_MAGIC;
-        glob.file->header.version = HOSTREG_VERSION;
-        glob.file->header.seq = 1;
-        glob.file->header.host_max = HOSTREG_MAX_HOST;
-        glob.file->header.host_count = 0;
 
-	sec_rand( &glob.file->header.localid, sizeof(uint64_t) );
-	priv.buf = (char *)glob.file->header.privkey;
-	priv.len = sizeof(glob.file->header.privkey);
-	pub.buf = (char *)glob.file->header.pubkey;
-	pub.len = sizeof(glob.file->header.pubkey);
-	ecdh_generate( &priv, &pub );
-	glob.file->header.privlen = priv.len;
-	glob.file->header.publen = pub.len;
-    } else if( glob.file->header.version != HOSTREG_VERSION ) {
-        hostreg_unlock();
-        goto bad;
+    sts = freg_entry_by_name( NULL, parentid, "id", &entry, NULL );
+    if( sts ) {
+      uint64_t localid;
+      sec_rand( &localid, sizeof(uint64_t) );
+      freg_put( NULL, parentid, "id", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
     }
-    hostreg_unlock();
-    
-    glob.ocount = 1;
+
+    sts = freg_entry_by_name( NULL, parentid, "privkey", &entry, NULL );
+    if( !sts ) sts = freg_entry_by_name( NULL, parentid, "pubkey", &entry, NULL );
+    if( sts ) {
+	priv.buf = (char *)privkey;
+	priv.len = sizeof(privkey);
+	pub.buf = (char *)pubkey;
+	pub.len = sizeof(pubkey);
+	ecdh_generate( &priv, &pub );
+
+	freg_put( NULL, parentid, "privkey", FREG_TYPE_OPAQUE, (char *)priv.buf, priv.len, NULL );
+	freg_put( NULL, parentid, "pubkey", FREG_TYPE_OPAQUE, (char *)pub.buf, pub.len, NULL );
+    }
+
     return 0;
- bad:
-    mmf_close( &glob.mmf );
-    return -1;
 }
 
 int hostreg_close( void ) {
-    if( glob.ocount <= 0 ) return -1;
-    glob.ocount--;
-    if( glob.ocount > 0 ) return 0;
-    mmf_close( &glob.mmf );
+    freg_close( NULL );
     return 0;
 }
 
 int hostreg_reset( int full ) {
     struct sec_buf priv, pub;
-  
-    if( glob.ocount <= 0 ) return -1;
-    hostreg_lock();
-    glob.file->header.magic = HOSTREG_MAGIC;
-    glob.file->header.version = HOSTREG_VERSION;
-    glob.file->header.seq = 1;
-    glob.file->header.host_max = HOSTREG_MAX_HOST;
-    glob.file->header.host_count = 0;
-    if( full ) {
-        sec_rand( &glob.file->header.localid, sizeof(uint64_t) );
-	priv.buf = (char *)glob.file->header.privkey;
-	priv.len = sizeof(glob.file->header.privkey);
-	pub.buf = (char *)glob.file->header.pubkey;
-	pub.len = sizeof(glob.file->header.pubkey);
-	ecdh_generate( &priv, &pub );
-	glob.file->header.privlen = priv.len;
-	glob.file->header.publen = pub.len;
+    uint64_t parentid, id;
+    uint64_t localid;
+    uint8_t pubkey[HOSTREG_MAX_PUBKEY];
+    uint8_t privkey[HOSTREG_MAX_PRIVKEY];
+    int sts;
+
+    sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH, 0, &parentid );
+    if( !sts ) {
+      sts = freg_subkey( NULL, parentid, "hosts", 0, &id );
+      if( !sts ) freg_rem( NULL, parentid, id );
     }
-    hostreg_unlock();
+   
+    sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/local", FREG_CREATE, &parentid );
+    if( sts ) return sts;
+
+    sec_rand( &localid, sizeof(uint64_t) );
+    freg_put( NULL, parentid, "id", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
+
+    priv.buf = (char *)privkey;
+    priv.len = sizeof(privkey);
+    pub.buf = (char *)pubkey;
+    pub.len = sizeof(pubkey);
+    ecdh_generate( &priv, &pub );    
+    freg_put( NULL, parentid, "privkey", FREG_TYPE_OPAQUE, (char *)priv.buf, priv.len, NULL );
+    freg_put( NULL, parentid, "pubkey", FREG_TYPE_OPAQUE, (char *)pub.buf, pub.len, NULL );
+
     return 0;
 }
 
 int hostreg_prop( struct hostreg_prop *prop ) {
-    if( glob.ocount <= 0 ) return -1;
-    hostreg_lock();
-    prop->version = glob.file->header.version;
-    prop->seq = glob.file->header.seq;
-    prop->host_max = glob.file->header.host_max;
-    prop->host_count = glob.file->header.host_count;
-    prop->localid = glob.file->header.localid;
-    prop->publen = glob.file->header.publen;
-    memcpy( prop->pubkey, glob.file->header.pubkey, glob.file->header.publen );
-    prop->privlen = glob.file->header.privlen;
-    memcpy( prop->privkey, glob.file->header.privkey, glob.file->header.privlen );
-    hostreg_unlock();
-    return 0;
+  int sts;
+  uint64_t parentid;
+  
+  sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/local", 0, &parentid );
+  if( sts ) return sts;
+
+  sts = freg_get_by_name( NULL, parentid, "id", FREG_TYPE_UINT64, (char *)&prop->localid, sizeof(prop->localid), NULL );
+  if( !sts ) sts = freg_get_by_name( NULL, parentid, "pubkey", FREG_TYPE_OPAQUE, (char *)prop->pubkey, sizeof(prop->pubkey), (int *)&prop->publen );
+  if( !sts ) sts = freg_get_by_name( NULL, parentid, "privkey", FREG_TYPE_OPAQUE, (char *)prop->privkey, sizeof(prop->privkey), (int *)&prop->privlen );
+  if( sts ) return sts;
+  
+  return 0;
 }
 
 uint64_t hostreg_localid( void ) {
-    uint64_t localid = 0;
-    if( glob.ocount <= 0 ) return 0;
-    hostreg_lock();
-    localid = glob.file->header.localid;
-    hostreg_unlock();
-    return localid;
+  int sts;
+  uint64_t localid;
+  sts = freg_get_by_name( NULL, 0, HOSTREG_ROOTPATH "/local/id", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
+  if( sts ) return sts;
+  return localid;
 }
 
 /* ------------ host commands ----------- */
 
+static int get_host( uint64_t hkey, struct hostreg_host *host ) {
+  int sts;
+  sts = freg_get_by_name( NULL, hkey, "id", FREG_TYPE_UINT64, (char *)&host->id, sizeof(host->id), NULL );
+  if( !sts ) sts = freg_get_by_name( NULL, hkey, "name", FREG_TYPE_STRING, (char *)host->name, sizeof(host->name), NULL );
+  if( !sts ) sts = freg_get_by_name( NULL, hkey, "pubkey", FREG_TYPE_OPAQUE, (char *)host->pubkey, sizeof(host->pubkey), (int *)&host->publen );
+  if( !sts ) sts = freg_get_by_name( NULL, hkey, "addr", FREG_TYPE_OPAQUE, (char *)host->addr, sizeof(host->addr), (int *)&host->naddr );
+  host->naddr /= sizeof(uint32_t);
+  return sts;    
+}
+
+static int put_host( struct hostreg_host *host ) {
+  int sts;
+  uint64_t parentid;
+  char name[FREG_MAX_NAME];
+  
+  sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/hosts", FREG_CREATE, &parentid );
+  if( sts ) return sts;
+
+  sprintf( name, "%"PRIx64"", host->id );
+  sts = freg_subkey( NULL, parentid, name, FREG_CREATE, &parentid );
+  if( sts ) return sts;
+  
+  sts = freg_put( NULL, parentid, "id", FREG_TYPE_UINT64, (char *)&host->id, sizeof(host->id), NULL );
+  sts = freg_put( NULL, parentid, "name", FREG_TYPE_STRING, (char *)host->name, sizeof(host->name), NULL );
+  sts = freg_put( NULL, parentid, "pubkey", FREG_TYPE_OPAQUE, (char *)host->pubkey, host->publen, NULL );
+  sts = freg_put( NULL, parentid, "addr", FREG_TYPE_OPAQUE, (char *)host->addr, sizeof(host->addr[0]) * host->naddr, NULL );
+  
+  return sts;    
+}
+
 int hostreg_host_list( struct hostreg_host *hostlist, int n ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    hostreg_lock();
-    for( i = 0; i < glob.file->header.host_count; i++ ) {
-         if( i < n ) {
-             hostlist[i] = glob.file->host[i];
-         }
+  int sts, i, idx;
+  uint64_t parentid, id;
+  struct hostreg_host host;
+  struct freg_entry entry;
+  
+  sts = freg_subkey( NULL, 0, "/fju/hostreg/hosts", 0, &parentid );
+  if( sts ) return sts;
+
+  id = 0;
+  idx = 0;
+  i = 0;
+  do {
+    sts = freg_next( NULL, parentid, id, &entry );    
+    if( sts ) break;
+    if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+      sts = get_host( entry.id, &host );
+      if( !sts ) {
+	i++;
+	if( idx < n ) {
+	  hostlist[idx] = host;
+	  idx++;
+	}
+      }
     }
-    sts = glob.file->header.host_count;
-    hostreg_unlock();
-    return sts;
+    id = entry.id;
+  } while( 1 );
+
+  return i;
 }
 
 int hostreg_host_by_id( uint64_t id, struct hostreg_host *host ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    hostreg_lock();
-    sts = -1;
-    for( i = 0; i < glob.file->header.host_count; i++ ) {
-        if( glob.file->host[i].id == id ) {
-            if( host ) *host = glob.file->host[i];
-            sts = 0;
-            break;
-        }
+  int sts;
+  uint64_t parentid, tid;
+  struct hostreg_host thost;
+  struct freg_entry entry;
+  
+  sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/hosts", 0, &parentid );
+  if( sts ) return sts;
+
+  tid = 0;
+  do {
+    sts = freg_next( NULL, parentid, tid, &entry );    
+    if( sts ) break;
+    if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+      sts = get_host( entry.id, &thost );
+      if( !sts ) {
+	if( thost.id == id ) {
+	  if( host ) *host = thost;
+	  return 0;
+	}
+      }
     }
-    hostreg_unlock();
-    return sts;
+    tid = entry.id;
+  } while( 1 );
+
+  return -1;
 }
 
 int hostreg_host_by_name( char *name, struct hostreg_host *host ) {
-    int sts, i;
-    uint64_t id;
-    char *term;
+  int sts;
+  uint64_t parentid, tid, id;
+  struct hostreg_host thost;
+  char *term;
+  struct freg_entry entry;
+			    
+  tid = strtoull( name, &term, 16 );
+  if( *term ) tid = 0;
+  
+  sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/hosts", 0, &parentid );
+  if( sts ) return sts;
 
-    id = strtoull( name, &term, 16 );
-    if( *term ) id = 0;
-    
-    if( glob.ocount <= 0 ) return -1;
-    hostreg_lock();
-    sts = -1;
-    for( i = 0; i < glob.file->header.host_count; i++ ) {
-        if( (strcasecmp( glob.file->host[i].name, name ) == 0) || (glob.file->host[i].id == id) ) {
-            if( host ) *host = glob.file->host[i];
-            sts = 0;
-            break;
-        }
+  id = 0;
+  do {
+    sts = freg_next( NULL, parentid, id, &entry );    
+    if( sts ) break;
+    if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+      sts = get_host( entry.id, &thost );
+      if( !sts ) {
+	if( (strcasecmp( thost.name, name ) == 0) || (thost.id == tid) ) {
+	  if( host ) *host = thost;
+	  return 0;
+	}
+      }
     }
-    hostreg_unlock();
-    return sts;
+    id = entry.id;
+  } while( 1 );
+
+  return -1;
 }
 
 uint64_t hostreg_hostid_by_name( char *name ) {
@@ -271,56 +294,26 @@ char *hostreg_name_by_hostid( uint64_t hostid, char *str ) {
   strncpy( str, host.name, sizeof(host.name) - 1 );
   return str;
 }
-  
+
 
 int hostreg_host_put( struct hostreg_host *host ) {
-    int sts, i, idx;
-    
-    if( !host->id ) return -1;
-    if( glob.ocount <= 0 ) return -1;
-    hostreg_lock();
-    
-    sts = -1;
-    idx = -1;
-    for( i = 0; i < glob.file->header.host_count; i++ ) {
-	if( glob.file->host[i].id == host->id ) {
-	    idx = i;
-	    break;
-	}
-    }
-    if( idx == -1 ) {    
-	if( glob.file->header.host_count < glob.file->header.host_max ) {
-	    idx = glob.file->header.host_count;
-	    glob.file->header.host_count++;
-	}
-    }
-
-    if( idx != -1 ) {
-	glob.file->host[idx] = *host;
-        glob.file->header.seq++;
-        sts = 0;
-    }
-    
-    hostreg_unlock();
-    return sts;
+  return put_host( host );
 }
 
 int hostreg_host_rem( uint64_t id ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    hostreg_lock();
-    sts = -1;
-    for( i = 0; i < glob.file->header.host_count; i++ ) {
-        if( glob.file->host[i].id == id ) {
-            if( i != (glob.file->header.host_count - 1) ) glob.file->host[i] = glob.file->host[glob.file->header.host_count - 1];
-            glob.file->header.host_count--;
-            glob.file->header.seq++;
-            sts = 0;
-            break;
-        }
-    }
-    hostreg_unlock();
-    return sts;
+  int sts;
+  char name[FREG_MAX_NAME];
+  uint64_t parentid;
+  
+  sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/hosts", 0, &parentid );
+  if( sts ) return sts;
+
+  sprintf( name, "%"PRIx64"", id );
+  sts = freg_subkey( NULL, parentid, name, 0, &id );
+  if( sts ) return sts;
+
+  sts = freg_rem( NULL, parentid, id );
+  return sts;
 }
 
 int hostreg_host_local( struct hostreg_host *host ) {
@@ -398,7 +391,7 @@ int hostreg_host_common( uint64_t hostid, char *common, int *size ) {
   sec_buf_init( &buf[1], (char *)host.pubkey, prop.publen );
   memset( common, 0, *size );
   sec_buf_init( &buf[2], common, *size );
-  ecdh_common( &buf[0], &buf[1], &buf[2] );
+  sts = ecdh_common( &buf[0], &buf[1], &buf[2] );  
   *size = buf[2].len;
   
   return 0;

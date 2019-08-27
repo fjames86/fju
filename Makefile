@@ -11,30 +11,49 @@ PROJECTS += dh
 PROJECTS += lht 
 PROJECTS += ef
 PROJECTS += ftab
+PROGRAMS=
+LIBRARIES=
 
 BINDIR=bin
 LIBDIR=lib
-CFLAGS += -Iinclude -g -Wall
-LFLAGS += -L${LIBDIR}
+CFLAGS=-Iinclude -Wall -fPIC -g 
+LFLAGS += -L${LIBDIR} -lfju -lcrypto 
 
 
-.PHONY: all clean tar install ${PROJECTS}
+LIBFJU=${LIBDIR}/libfju.so
 
-all: ${PROJECTS}
+.PHONY: all strip clean tar install uninstall strip ${PROJECTS}
+
+all: ${PROJECTS} ${LIBFJU}
 	rm -f *.o
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
 
 tar:
-	tar -czvf fju.tar.gz rpcd.sh ${BINDIR}/*
+	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}
+
+strip:
+	strip -s ${LIBFJU} ${BINDIR}/*
 
 .for proj in ${PROJECTS}
 .include "${proj}/${proj}.mk"
 .endfor
 
-install:
-	mkdir -p /opt/fju/bin
-	cp bin/* /opt/fju/bin
-	cp rpcd.sh /opt/fju 
+install: all strip
+	mkdir -p /opt/fju
+	cd bin && cp ${PROGRAMS} /usr/local/bin
+	cp ${LIBFJU} /usr/local/lib
 
+uninstall:
+	cd /usr/local/bin && rm ${PROGRAMS}
+	cd /usr/local/lib && rm libfju.so
+
+FJU_DEPS=
+FJU_LIBS=
+.for lib in ${LIBRARIES}
+FJU_DEPS+=${LIBDIR}/lib${lib}.a
+FJU_LIBS+=-l${lib}
+.endfor
+${LIBFJU}: ${FJU_DEPS}
+	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive 

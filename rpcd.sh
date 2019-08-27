@@ -1,9 +1,13 @@
 #!/bin/sh
 
-pidfile=/etc/rpcd.pid
-udpport=8000
+pidfile=/var/run/rpcd.pid
+udpport=$(freg get /fju/rpc/port || echo 8000)
 
 cmd=$1
+if [ ! $cmd ]; then
+    cmd="status"
+fi
+
 if [ $cmd = "start" ]; then
     if [ -e $pidfile ] && $(kill -0 $(cat $pidfile)); then
 	echo "$pidfile exists and pid $(cat $pidfile) exists - restarting"
@@ -11,7 +15,7 @@ if [ $cmd = "start" ]; then
 	sleep 1 
     fi
     
-    bin/rpcd -u $udpport -p $pidfile
+    rpcd -u $udpport -p $pidfile
 elif [ $cmd = "stop" ]; then
     if [ -e $pidfile ]; then 
 	kill $(cat $pidfile)
@@ -19,7 +23,7 @@ elif [ $cmd = "stop" ]; then
     fi
 elif [ $cmd = "status" ]; then
     if [ -e $pidfile ]; then
-	bin/rpcinfo -p $udpport
+	rpclt -p $udpport rpcbind.list
     else
 	echo "rpcd not running"
     fi

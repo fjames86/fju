@@ -14,6 +14,9 @@ hostreg_deps += ${LIBDIR}/librpc.a
 hostreg_deps += ${LIBDIR}/libsec.a
 hostreg_deps += ${LIBDIR}/libhostreg.a
 
-${BINDIR}/hostreg: hostreg/hostreg-main.c ${hostreg_deps}
-	${CC} -o $@ hostreg/hostreg-main.c ${CFLAGS} ${LFLAGS} -lmmf -lrpc -lcrypto -lhostreg -lsec 
+${BINDIR}/hostreg: hostreg/hostreg-main.c ${LIBFJU}
+	${CC} -o $@ hostreg/hostreg-main.c ${CFLAGS} ${LFLAGS} 
 
+PROGRAMS+=hostreg 
+LIBRARIES+=hostreg
+LIBRARIES+=hrauth

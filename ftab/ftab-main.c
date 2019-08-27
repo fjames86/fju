@@ -16,6 +16,8 @@
 #include <fju/mmf.h>
 #include <fju/ftab.h>
 
+#include "ftab-private.h"
+
 #ifdef WIN32
 #define PRIu64 "llu"
 #define PRIx64 "llx"
@@ -30,14 +32,18 @@ static struct {
 #define CMD_READ 4
 #define CMD_WRITE 5
 #define CMD_SET 6
-#define CMD_RESET 7 
+#define CMD_RESET 7
+#define CMD_COOKIE 8 
   char *path;
   struct ftab_s ftab;
   int binary;
   uint64_t id;
   uint32_t lbasize;
   uint32_t lbacount;
+  uint32_t totalsize;
   uint32_t offset;
+  uint32_t npop;
+  char cookie[FTAB_MAX_COOKIE];
 } glob;
 
 static void usage( char *fmt, ... ) {
@@ -46,10 +52,11 @@ static void usage( char *fmt, ... ) {
 	    "               list\n"
 	    "               prop\n"
 	    "               reset\n" 
-	    "               alloc\n"
+	    "               alloc [count=COUNT]\n"
 	    "               free ID\n"
 	    "               read ID\n"
 	    "               write ID [offset=OFFSET]\n"
+	    "               cookie ...\n" 
 	    "\n"
     );
 
@@ -86,7 +93,7 @@ static void cmd_read( void );
 static void cmd_write( void );
 
 int main( int argc, char **argv ) {
-  int sts, i;
+  int sts, i, j;
   struct ftab_opts opts;
   char argname[64], *argval;
       
@@ -117,8 +124,12 @@ int main( int argc, char **argv ) {
   } else if( strcmp( argv[i], "alloc" ) == 0 ) {
     glob.cmd = CMD_ALLOC;
     i++;
-    if( i < argc ) {
-	glob.id = strtoull( argv[i], NULL, 16 );
+    while( i < argc ) {
+      argval_split( argv[i], argname, &argval );
+      if( strcmp( argname, "count" ) == 0 ) {
+	glob.npop = strtoul( argval, NULL, 10 );
+      } else usage( NULL );
+      i++;
     }
   } else if( strcmp( argv[i], "free" ) == 0 ) {
     glob.cmd = CMD_FREE;
@@ -152,9 +163,15 @@ int main( int argc, char **argv ) {
     }
   } else if( strcmp( argv[i], "reset" ) == 0 ) {
       glob.cmd = CMD_RESET;
+  } else if( strcmp( argv[i], "cookie" ) == 0 ) {
+    glob.cmd = CMD_COOKIE;
+    i++;
+    for( j = 0; j < FTAB_MAX_COOKIE; j++ ) {
+      if( i >= argc ) break;
+      glob.cookie[j] = strtoul( argv[i], NULL, 16 );
+      i++;
+    }
   } else usage( NULL );
-
-  if( !glob.path ) glob.path = "ftab.dat";
 
   memset( &opts, 0, sizeof(opts) );
   if( glob.lbasize ) {
@@ -167,7 +184,7 @@ int main( int argc, char **argv ) {
   }
   
   sts = ftab_open( glob.path, &opts, &glob.ftab );
-  if( sts ) usage( "Failed to open \"%s\"", glob.path );
+  if( sts ) usage( "Failed to open \"%s\"", glob.path ? glob.path : "default" );
   
   switch( glob.cmd ) {
   case CMD_LIST:
@@ -177,14 +194,13 @@ int main( int argc, char **argv ) {
     cmd_prop();
     break;
   case CMD_ALLOC:
-      if( glob.id ) {
-	  sts = ftab_acquire( &glob.ftab, glob.id );
-      } else {
-	  sts = ftab_alloc( &glob.ftab, NULL, 0, &glob.id );
-      }
+    if( !glob.npop ) glob.npop = 1;
+    for( i = 0; i < glob.npop; i++ ) {
+      sts = ftab_alloc( &glob.ftab, &glob.id );
       if( sts ) usage( "Alloc failed" );
       printf( "%"PRIx64"\n", glob.id );
-      break;
+    }
+    break;
   case CMD_FREE:
     sts = ftab_free( &glob.ftab, glob.id );
     if( sts ) usage( "Failed to free" );
@@ -198,6 +214,9 @@ int main( int argc, char **argv ) {
   case CMD_RESET:
       ftab_reset( &glob.ftab );
       break;
+  case CMD_COOKIE:
+      ftab_set_cookie( &glob.ftab, glob.cookie );
+      break;
   default:
       break;
   }
@@ -208,29 +227,33 @@ int main( int argc, char **argv ) {
 }
 
 static void cmd_list( void ) {
-    int i, n, m, j;
-  struct ftab_entry *e;
-
+  int i, n, m;
+  uint64_t *id;
+    
   n = ftab_list( &glob.ftab, NULL, 0 );
-  e = malloc( sizeof(*e) * n );
-  m = ftab_list( &glob.ftab, e, n );
+  id = malloc( sizeof(*id) * n );
+  m = ftab_list( &glob.ftab, id, n );
   if( m < n ) n = m;
 
-  printf( "%-12s %-8s %-8s\n", "id", "blk", "seq" );
+  printf( "%-4s %-16s %-8s %-8s\n", "idx", "id", "blk", "seq" );
   for( i = 0; i < n; i++ ) {
-      printf( "%-12"PRIx64" %-8u %-8u  ", e[i].id, e[i].blkidx, e[i].seq );
-      for( j = 0; j < FTAB_MAX_PRIV; j++ ) printf( "%02x ", (uint32_t)e[i].priv[j] );
-      printf( "\n" );
+    printf( "%-4u %-16"PRIx64" %-8u %-8u\n", i, id[i], (uint32_t)(id[i] & 0xffffffff), (uint32_t)(id[i] >> 32) );
   }
 
-  free( e );  
+  free( id );
 }
 
 static void cmd_prop( void ) {
   struct ftab_prop prop;
+  int i;
   ftab_prop( &glob.ftab, &prop );
-  printf( "Version %u Seq %"PRIu64" count %u/%u lbasize %u\n",
-	  prop.version, prop.seq, prop.count, prop.max, prop.lbasize );
+  printf( "Version %u Seq %"PRIu64" count %u/%u (%u%%) lbasize %u usage %ukb/%ukb\n",
+	  prop.version, prop.seq, prop.count, prop.max, (100 * prop.count) / prop.max, prop.lbasize, (prop.count * prop.lbasize) / 1024, (prop.max * prop.lbasize) / 1024 );
+  printf( "Cookie " );
+  for( i = 0; i < FTAB_MAX_COOKIE; i++ ) {
+    printf( "%02x ", (uint32_t)(uint8_t)prop.cookie[i] );
+  }
+  printf( "\n" );
 }
     
 
@@ -238,13 +261,13 @@ static void cmd_read( void ) {
   struct ftab_prop prop;
   char *buf;
   int sts, i;
-  
+
   ftab_prop( &glob.ftab, &prop );
   buf = malloc( prop.lbasize );
 
   sts = ftab_read( &glob.ftab, glob.id, buf, prop.lbasize, 0 );
   if( sts < 0 ) usage( "Failed to read" );
-  
+
   if( glob.binary ) {
 #ifdef WIN32
     WriteFile( GetStdHandle( STD_OUTPUT_HANDLE ), buf, prop.lbasize, NULL, NULL );
@@ -293,3 +316,4 @@ static void cmd_write( void ) {
   if( sts < 0 ) usage( "Failed to write" );
   free( buf );
 }
+

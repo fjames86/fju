@@ -30,50 +30,19 @@
 #include <fju/log.h>
 #include <fju/nls.h>
 #include <fju/rex.h>
+#include <fju/freg.h>
 
 #include "rpc-private.h"
 
-#define SHAUTH_SECRET "123abcd123"
-
 static void init_cb( void ) {
-  /* register rpc programs */
+  /* register programs and auth providers */
   rpcbind_register();
-  
-  /* register providers */
-  {
-    uint8_t key[32];
-    int i;
-    char *p, *terminator;
-    char tmp[4];
-    
-    memset( key, 0, sizeof(key) );
-    p = SHAUTH_SECRET;
-    for( i = 0; i < 32; i++ ) {
-      memset( tmp, 0, 4 );
-      if( *p ) {
-	tmp[0] = *p;
-	p++;
-      }
-      if( *p ) {
-	tmp[1] = *p;
-	p++;
-      }
-      
-      key[i] = (uint8_t)strtoul( tmp, &terminator, 16 );
-      if( *terminator ) break;
-      
-      if( !*p ) break;
-    }
-    shauth_register( key );
-  }
-
+  shauth_register( NULL );
   hrauth_register();
-
   raft_register();
-
   nls_register();
-
   rex_register();
+  freg_register();
 }
 
 static int logger_open = 0;

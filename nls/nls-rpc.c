@@ -205,18 +205,18 @@ static int nls_proc_read( struct rpc_inc *inc ) {
     goto done;
   }
 
-  /* encode current log properties */
-  xdr_encode_boolean( &inc->xdr, 1 );
-
-  log_prop( &log, &prop );
-  nls_encode_prop( &inc->xdr, &share, &prop );
-
   /* get a tmp buffer */
   tmpconn = rpc_conn_acquire();
   if( !tmpconn ) {
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }
+
+  /* encode current log properties */
+  xdr_encode_boolean( &inc->xdr, 1 );
+
+  log_prop( &log, &prop );
+  nls_encode_prop( &inc->xdr, &share, &prop );
 
   /* read and encode entries */
   xdrcount -= 4; /* reserve space for terminating bool */
@@ -385,7 +385,7 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   /* decode results */
   sts = xdr_decode_boolean( xdr, &b );
   if( sts || !b ) {
-    nls_log( LOG_LVL_ERROR, "error stauts" );
+    nls_log( LOG_LVL_ERROR, "error status sts=%d b=%d", sts, b );
     goto done;
   }
 

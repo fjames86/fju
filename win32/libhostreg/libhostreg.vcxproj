@@ -139,7 +139,7 @@
     <ClCompile Include="..\..\hostreg\hostreg.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\hostreg.h" />
+    <ClInclude Include="..\..\include\fju\hostreg.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

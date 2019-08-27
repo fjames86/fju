@@ -44,6 +44,8 @@
 #include <fju/hostreg.h>
 #include <fju/raft.h>
 #include <fju/rex.h>
+#include <fju/nls.h>
+#include <fju/freg.h>
 
 struct clt_info {
     uint32_t prog;
@@ -67,6 +69,19 @@ static void hrauth_local_results( struct xdr_s *xdr );
 static void clt_call( struct clt_info *info, int argc, char **argv, int i );
 static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i );
 static void raft_add_results( struct xdr_s *xdr );
+static void nls_list_results( struct xdr_s *xdr );
+static void nls_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void nls_read_results( struct xdr_s *xdr );
+static void nls_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void nls_write_results( struct xdr_s *xdr );
+static void freg_list_results( struct xdr_s *xdr );
+static void freg_list_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void freg_get_results( struct xdr_s *xdr );
+static void freg_get_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void freg_put_results( struct xdr_s *xdr );
+static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void freg_rem_results( struct xdr_s *xdr );
+static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
@@ -80,6 +95,15 @@ static struct clt_info clt_procs[] = {
     { REX_RPC_PROG, REX_RPC_VERS, 0, NULL, NULL, "rex.null", NULL },    
     { REX_RPC_PROG, REX_RPC_VERS, 1, rex_read_args, rex_read_results, "rex.read", "clid=CLID" },
     { REX_RPC_PROG, REX_RPC_VERS, 2, rex_write_args, rex_write_results, "rex.write", "clid=CLID data=DATA" },
+    { NLS_RPC_PROG, NLS_RPC_VERS, 0, NULL, NULL, "nls.null", NULL },
+    { NLS_RPC_PROG, NLS_RPC_VERS, 1, NULL, nls_list_results, "nls.list", NULL },
+    { NLS_RPC_PROG, NLS_RPC_VERS, 3, nls_read_args, nls_read_results, "nls.read", "hshare=HSHARE [id=ID]" },
+    { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 0, NULL, NULL, "freg.null", NULL },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -194,9 +218,12 @@ int main( int argc, char **argv ) {
 
     hostreg_open();
     raft_open();
-    
+    freg_open( NULL, NULL );
+
     glob.port = 8000;
+    sts = freg_ensure( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
     glob.timeout = 1000;
+    sts = freg_ensure( NULL, 0, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(glob.timeout), NULL );
 
     i = 1;
     while( i < argc ) {
@@ -571,7 +598,7 @@ static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     
 }
 static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    uint64_t clid;
+    uint64_t clid = 0;
     char argname[64], *argval;
     while( i < argc ) {
 	argval_split( argv[i], argname, &argval );
@@ -652,3 +679,274 @@ static void raft_add_results( struct xdr_s *xdr ) {
   usage( "XDR error" );
 }
 
+static int nls_decode_prop( struct xdr_s *xdr, uint64_t *hshare, struct log_prop *prop ) {
+  int sts;
+  sts = xdr_decode_uint64( xdr, hshare );
+  sts = xdr_decode_uint32( xdr, &prop->version );
+  sts = xdr_decode_uint64( xdr, &prop->seq );
+  sts = xdr_decode_uint32( xdr, &prop->lbacount );
+  sts = xdr_decode_uint32( xdr, &prop->start );
+  sts = xdr_decode_uint32( xdr, &prop->count );
+  sts = xdr_decode_uint64( xdr, &prop->last_id );
+  sts = xdr_decode_uint32( xdr, &prop->flags );
+  return sts;
+}
+  
+static void nls_list_results( struct xdr_s *xdr ) {
+  uint64_t hshare;
+  struct log_prop prop;
+  int sts, b;
+
+  sts = xdr_decode_boolean( xdr, &b );
+  while( !sts && b ) {
+    nls_decode_prop( xdr, &hshare, &prop );
+    printf( "%"PRIx64" %-8"PRIu64" %-4u %-4u %-4u %"PRIx64" %x\n",
+	    hshare, prop.seq, prop.lbacount, prop.start, prop.count, prop.last_id, prop.flags );
+
+    sts = xdr_decode_boolean( xdr, &b );
+  }
+}
+
+static void nls_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint64_t hshare, id;
+
+  hshare = 0;
+  id = 0;
+  while( i < argc ) {
+      argval_split( argv[i], argname, &argval );
+      if( strcmp( argname, "hshare" ) == 0 ) {
+	  hshare = strtoull( argval, NULL, 16 );
+      } else if( strcmp( argname, "id" ) == 0 ) {
+	id = strtoull( argval, NULL, 16 );
+      } else usage( "Unknown arg \"%s\"", argname );
+      i++;
+  }
+  if( !hshare ) usage( "Need hshare" );
+  
+  xdr_encode_uint64( xdr, hshare );
+  xdr_encode_uint64( xdr, id ); 
+  xdr_encode_uint32( xdr, 8*1024 ); // xdr count    
+}
+
+static void nls_read_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t hshare;
+  struct log_prop prop;
+  uint64_t id, prev_id, seq;
+  uint32_t flags;
+  char *bufp;
+  int lenp;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  if( !b ) usage( "Unknown share" );
+  sts = nls_decode_prop( xdr, &hshare, &prop );
+  if( sts ) usage( "XDR error" );
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%-16s %-8s %-8s\n", "ID", "Seq", "Flags" );
+  while( !sts && b ) {
+    sts = xdr_decode_uint64( xdr, &id );
+    sts = xdr_decode_uint64( xdr, &prev_id );
+    sts = xdr_decode_uint64( xdr, &seq );
+    sts = xdr_decode_uint32( xdr, &flags );
+    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
+    if( sts ) usage( "XDR error" );
+    printf( "%-16"PRIx64" %-8"PRIu64" %-8x %s\n",
+	    id, seq, flags, flags & LOG_BINARY ? "Binary" : bufp );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+  }
+  
+}
+
+static void nls_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint64_t hshare;
+  char *str;
+  uint32_t flags;
+  
+  hshare = 0;
+  str = "";
+  flags = 0;
+  while( i < argc ) {
+      argval_split( argv[i], argname, &argval );
+      if( strcmp( argname, "hshare" ) == 0 ) {
+	  hshare = strtoull( argval, NULL, 16 );
+      } else if( strcmp( argname, "str" ) == 0 ) {
+	str = argval;
+      } else if( strcmp( argname, "flags" ) == 0 ) {
+	flags = strtoul( argval, NULL, 16 );
+      } else usage( "Unknown arg \"%s\"", argname );
+      i++;
+  }
+  if( !hshare ) usage( "Need hshare" );
+  
+  xdr_encode_uint64( xdr, hshare );
+  xdr_encode_uint32( xdr, flags & ~LOG_BINARY ); 
+  xdr_encode_opaque( xdr, (uint8_t *)str, strlen( str ) );
+}
+
+static void nls_write_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );  
+}
+
+static void freg_list_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint64_t parentid = 0;
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "parentid" ) == 0 ) {
+	    parentid = strtoull( argval, NULL, 16 );
+	} else usage( "Unknown arg \"%s\"", argname );
+	i++;
+    }
+    xdr_encode_uint64( xdr, parentid );
+}
+
+static void freg_list_results( struct xdr_s *xdr ) {
+    int sts, b;
+    uint32_t u32;
+    uint64_t u64;
+    char *bufp;
+    int lenp, i;
+    char name[FREG_MAX_NAME];
+    char str[512];
+    uint32_t flags;
+    uint64_t id;
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    while( b ) {
+	xdr_decode_uint64( xdr, &id );
+	xdr_decode_string( xdr, name, sizeof(name) );
+	xdr_decode_uint32( xdr, &flags );
+	printf( "%016"PRIx64" %-32s ", id, name );
+	switch( flags & FREG_TYPE_MASK ) {
+	case FREG_TYPE_UINT32:
+	    xdr_decode_uint32( xdr, &u32 );
+	    printf( "u32 %u\n", u32 );
+	    break;
+	case FREG_TYPE_UINT64:
+	    xdr_decode_uint64( xdr, &u64 );
+	    printf( "u64 %"PRIu64"\n", u64 );
+	    break;
+	case FREG_TYPE_KEY:
+	  //	    xdr_decode_uint64( xdr, &u64 );
+	  printf( "key\n" ); // %"PRIx64"\n", u64 );
+	    break;
+	case FREG_TYPE_STRING:
+	    xdr_decode_string( xdr, str, sizeof(str) );
+	    printf( "str %s\n", str );
+	    break;
+	case FREG_TYPE_OPAQUE:
+	  xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
+	    printf( "opaque " );
+	    for( i = 0; i < lenp; i++ ) {
+		printf( "%02x", (uint32_t)(uint8_t)bufp[i] );
+	    }
+	    printf( "\n" );
+	    break;
+	}
+	
+	xdr_decode_boolean( xdr, &b );
+    }
+    
+   
+}
+
+static void freg_get_results( struct xdr_s *xdr ) {
+  int sts, b, i;
+  uint32_t flags;
+  uint64_t id;
+  char *bufp;
+  int lenp;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  if( b ) usage( "Failed to get" );
+
+  sts = xdr_decode_uint64( xdr, &id );
+  sts = xdr_decode_uint32( xdr, &flags );
+  printf( "%"PRIx64" flags=%x", id, flags );
+  xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
+  for( i = 0; i < lenp; i++ ) {
+    printf( "%02x", (uint32_t)((uint8_t *)bufp)[i] );
+  }
+  printf( "\n" );
+  
+}
+
+static void freg_get_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint64_t id = 0;
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoull( argval, NULL, 16 );
+	} else usage( "Unknown arg \"%s\"", argname );
+	i++;
+    }
+    xdr_encode_uint64( xdr, id );  
+}
+
+static void freg_put_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint64_t parentid = 0;
+  char *name = NULL;
+  uint32_t flags;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "parentid" ) == 0 ) {
+      parentid = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "name" ) == 0 ) {
+      name = argval;
+    } else if( strcmp( argname, "flags" ) == 0 ) {
+      flags = strtoul( argval, NULL, 16 );      
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+  if( !name ) usage( "Need name" );
+  
+  xdr_encode_uint64( xdr, parentid );
+  xdr_encode_string( xdr, name );
+  xdr_encode_uint32( xdr, flags );
+  xdr_encode_opaque( xdr, NULL, 0 );
+}
+
+static void freg_rem_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  printf( "%s\n", b ? "Success" : "Failure" );  
+}
+
+
+static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint64_t id = 0, parentid = 0;
+    
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "id" ) == 0 ) {
+      id = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "parentid" ) == 0 ) {
+      parentid = strtoull( argval, NULL, 16 );
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+  xdr_encode_uint64( xdr, parentid );  
+  xdr_encode_uint64( xdr, id );  
+}

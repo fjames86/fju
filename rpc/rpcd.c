@@ -38,10 +38,17 @@
 
 #include <fju/rpcd.h>
 #include "rpc-private.h"
+#include <fju/freg.h>
+
+#ifdef WIN32
+#else
+#include <dlfcn.h>
+#endif
 
 static struct {
 	int foreground;
 	int no_rpcregister;
+        int loadservices;
 	int quiet;
 	volatile int exiting;
 	char *pidfile;
@@ -77,6 +84,8 @@ static void rpcd_run( void );
 static void rpc_accept( struct rpc_listen *lis );
 static void rpc_close_connections( void );
 static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, char *ipstr );
+static void rpcd_load_service( char *path, char *mainfn, uint32_t vers );
+static void rpcd_load_services( void );
 
 #ifndef WIN32
 static void rpc_sig( int sig, siginfo_t *info, void *context ) {
@@ -102,7 +111,7 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            [-L path]\n"
 #endif
-		"            [-f] [-R] [-q]\n"
+		"            [-f] [-R] [-q] [-M]\n"
 		"\n"
 		"  Where:\n"
 		"            -f               Run in foreground\n"
@@ -116,6 +125,7 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            -p pidfile       Write a pidfile here\n"
 #endif
+		"            -M               Load services defined in /fju/rpc/services\n"
 		"\n" );
 
 
@@ -195,6 +205,8 @@ static void parse_args( int argc, char **argv ) {
 	    i++;
 	    if( i >= argc ) usage( NULL );
 	    rpc.pidfile = argv[i];
+	} else if( strcmp( argv[i], "-M" ) == 0 ) {
+	  rpc.loadservices = 1;
 	}
 	else usage( NULL );
 
@@ -919,6 +931,10 @@ static void rpcd_run( void ) {
 	/* register programs and initialize */
 	if( rpc.init_cb ) rpc.init_cb();
 
+	if( rpc.loadservices ) {
+	  rpcd_load_services();
+	}
+	
 	memset( &sin, 0, sizeof(sin) );
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons( 111 );
@@ -1151,4 +1167,76 @@ static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, cha
   }
   
   return ipstr;	     
+}
+
+static void rpcd_load_service( char *path, char *mainfn, uint32_t vers ) {
+  void *hdl;
+  rpcd_main_t pmain;
+
+#ifdef WIN32
+  hdl = LoadLibraryA( path );
+  if( !hdl ) return;
+  pmain = (rpcd_main_t)GetProcAddress( hdl, mainfn ? mainfn : "rpc_main" );
+#else
+  
+  hdl = dlopen( path, 0 );
+  if( !hdl ) {
+    rpc_log( RPC_LOG_ERROR, "Failed to load service from %s", path );
+    return;
+  }
+
+  /* casting pointer to function pointer is not allowed, but the dl api forces us to do so? */
+  pmain = (rpcd_main_t)dlsym( hdl, mainfn ? mainfn : "rpc_main" );
+#endif
+  
+  if( pmain ) pmain( vers );
+}
+
+static void rpcd_load_services( void ) {
+  int sts;
+  uint64_t hkey, id;
+  struct freg_entry entry;
+  char path[256], mainfn[64];
+  uint32_t vers;
+
+  freg_open( NULL, NULL );
+  
+  rpc_log( RPC_LOG_DEBUG, "loading services" );
+  
+  sts = freg_subkey( NULL, 0, "/fju/rpc/services", 0, &hkey );
+  if( sts ) return;
+
+  id = 0;
+  do {
+    sts = freg_next( NULL, hkey, id, &entry );
+    if( sts ) break;
+    
+    if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+      memset( path, 0, sizeof(path) );
+      memset( mainfn, 0, sizeof(mainfn) );
+      
+      sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path) - 1, NULL );
+      if( !sts ) {
+	sts = freg_get_by_name( NULL, entry.id, "vers", FREG_TYPE_UINT32, (char *)&vers, sizeof(vers), NULL );
+	if( sts ) {
+	  vers = 0;
+	  sts = 0;
+	}
+      }
+      if( !sts ) {
+	sts = freg_get_by_name( NULL, entry.id, "mainfn", FREG_TYPE_STRING, mainfn, sizeof(mainfn) - 1, NULL );
+	if( sts ) {
+	  strcpy( mainfn, "" );
+	  sts = 0;
+	}
+      }
+      if( !sts ) {
+	rpc_log( RPC_LOG_DEBUG, "loading service %s", entry.name );
+	rpcd_load_service( path, mainfn[0] ? mainfn : NULL, vers );
+      }
+    }
+    
+    id = entry.id;
+  } while( 1 );
+  
 }

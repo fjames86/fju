@@ -140,7 +140,7 @@
     <ClCompile Include="..\..\log\log.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\log.h" />
+    <ClInclude Include="..\..\include\fju\log.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

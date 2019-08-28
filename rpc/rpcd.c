@@ -1175,7 +1175,10 @@ static void rpcd_load_service( char *path, char *mainfn, uint32_t vers ) {
 
 #ifdef WIN32
   hdl = LoadLibraryA( path );
-  if( !hdl ) return;
+  if( !hdl ) {
+    rpc_log( RPC_LOG_ERROR, "Failed to load service from %s", path );
+    return;
+  }
   pmain = (rpcd_main_t)GetProcAddress( hdl, mainfn ? mainfn : "rpc_main" );
 #else
   
@@ -1201,7 +1204,7 @@ static void rpcd_load_services( void ) {
 
   freg_open( NULL, NULL );
   
-  rpc_log( RPC_LOG_DEBUG, "loading services" );
+  rpc_log( RPC_LOG_DEBUG, "loading dynamic services" );
   
   sts = freg_subkey( NULL, 0, "/fju/rpc/services", 0, &hkey );
   if( sts ) return;

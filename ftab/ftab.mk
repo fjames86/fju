@@ -1,13 +1,9 @@
 
-ftab: ${LIBDIR}/libftab.a ${BINDIR}/ftab ${LIBDIR}/libfdtab.a ${BINDIR}/fdtab
+ftab: ${LIBDIR}/libftab.a ${BINDIR}/ftab ${BINDIR}/fdtab
 
-${LIBDIR}/libftab.a: ftab/ftab.c include/fju/ftab.h 
-	${CC} -c ${CFLAGS} ftab/ftab.c 
-	${AR} rcs $@ ftab.o
-
-${LIBDIR}/libfdtab.a: ftab/fdtab.c include/fju/fdtab.h 
-	${CC} -c ${CFLAGS} ftab/fdtab.c 
-	${AR} rcs $@ fdtab.o
+${LIBDIR}/libftab.a: ftab/ftab.c include/fju/ftab.h ftab/fdtab.c include/fju/fdtab.h 
+	${CC} -c ${CFLAGS} ftab/ftab.c ftab/fdtab.c 
+	${AR} rcs $@ ftab.o fdtab.o
 
 ${BINDIR}/ftab: ftab/ftab-main.c ${LIBFJU}
 	${CC} -o $@ ftab/ftab-main.c ${CFLAGS} ${LFLAGS}
@@ -18,4 +14,4 @@ ${BINDIR}/fdtab: ftab/fdtab-main.c ${LIBFJU}
 PROGRAMS+=ftab
 PROGRAMS+=fdtab
 LIBRARIES+=ftab
-LIBRARIES+=fdtab
+

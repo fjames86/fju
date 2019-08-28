@@ -137,6 +137,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\hostreg\hostreg.c" />
+    <ClCompile Include="..\..\hostreg\hrauth.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\fju\hostreg.h" />

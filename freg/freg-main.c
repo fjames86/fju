@@ -306,6 +306,7 @@ int main( int argc, char **argv ) {
     if( i < argc ) {
       sts = freg_subkey( glob.freg, 0, argv[i], 0, &parentid );
       if( sts ) usage( "Unknown key \"%s\"", argv[i] );
+      path = argv[i];
     }
     cmd_dump( parentid, path );
   } else if( strcmp( argv[i], "populate" ) == 0 ) {

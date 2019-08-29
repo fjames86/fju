@@ -34,7 +34,7 @@
 #include "rpc-private.h"
 
 static void init_cb( void ) {
-  /* register programs and auth providers */
+  /* register programs and auth providers from libfju. Note that others can be dynamically loaded */
   rpcbind_register();
   shauth_register( NULL );
   hrauth_register();

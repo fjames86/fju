@@ -48,6 +48,8 @@
 
 #include "rpc-private.h"
 
+#include <fju/sec.h>
+
 void xdr_init( struct xdr_s *xdr, uint8_t *buf, int size ) {
   xdr->buf = buf;
   xdr->buf_size = size;
@@ -1325,12 +1327,8 @@ int rpc_iterator_timeout( int timeout ) {
 
 static void rpc_default_log( int lvl, char *fmt, va_list args ) {
   char timestr[64];
-  struct tm *tm;
-  time_t now;
-  
-  now = time( NULL );
-  tm = localtime( &now );
-  strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+
+  sec_timestr( time( NULL ), timestr );
   printf( "%s %d ", timestr, lvl );
   vprintf( fmt, args );  
   printf( "\n" );  

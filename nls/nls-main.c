@@ -39,6 +39,7 @@
 #include <time.h>
 #include <fju/nls.h>
 #include <fju/hostreg.h>
+#include <fju/sec.h>
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
@@ -49,7 +50,7 @@ static void usage( char *fmt, ... ) {
             "          rem share HSHARE\n"
 	    "\n" 
             "          add remote [hshare=HSHARE] [hostid=HOSTID] [remote_period=PERIOD]\n"
-            "          set remote HSHARE [hostid=HOSTID] [remote_period=PERIOD]\n"
+            "          set remote HSHARE [hostid=] [remote_period=] [seq=]\n"
             "          rem remote HSHARE\n"
 	    "\n"
             "          rem notify TAG\n"
@@ -259,8 +260,6 @@ static void cmd_list( void ) {
     {
         struct nls_remote *lst;
 	char timestr[64], lastcstr[64], namestr[HOSTREG_MAX_NAME];
-	struct tm *tm;
-  	time_t now;
 	
         n = nls_remote_list( NULL, 0 );
         lst = (struct nls_remote *)malloc( sizeof(*lst) * n );
@@ -268,17 +267,10 @@ static void cmd_list( void ) {
         if( m < n ) n = m;
         for( i = 0; i < n; i++ ) {
 	  if( lst[i].timestamp == 0 ) strcpy( timestr, "Never" );
-	  else {
-	    now = (time_t)lst[i].timestamp;
-	    tm = localtime( &now );
-	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
-	  }
+	  else sec_timestr( lst[i].timestamp, timestr );
+	  
 	  if( lst[i].last_contact == 0 ) strcpy( lastcstr, "Never" );
-	  else {
-	    now = (time_t)lst[i].last_contact;
-	    tm = localtime( &now );
-	    strftime( lastcstr, sizeof(lastcstr), "%Y-%m-%d %H:%M:%S", tm );
-	  }
+	  else sec_timestr( lst[i].last_contact, lastcstr );
 	    
 	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" (%s) seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s path=/opt/fju/nls/%"PRIx64"/%"PRIx64".log notify_period=%us last_contact=%s\n",
 		  "remote",
@@ -290,8 +282,6 @@ static void cmd_list( void ) {
     {
         struct nls_notify *lst;
 	char timestr[64], namestr[HOSTREG_MAX_NAME];
-	struct tm *tm;
-  	time_t now;
 
         n = nls_notify_list( NULL, 0 );
         lst = (struct nls_notify *)malloc( sizeof(*lst) * n );
@@ -299,11 +289,7 @@ static void cmd_list( void ) {
         if( m < n ) n = m;
         for( i = 0; i < n; i++ ) {
 	  if( lst[i].timestamp == 0 ) strcpy( timestr, "Never" );
-	  else {
-	    now = (time_t)lst[i].timestamp;
-	    tm = localtime( &now );
-	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
-	  }
+	  else sec_timestr( lst[i].timestamp, timestr );
 
 	  printf( "%-16s %-8"PRIx64" hostid=%"PRIx64" (%s) hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" timestamp=%s period=%u\n",
 		  "notify",

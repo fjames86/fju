@@ -38,6 +38,7 @@
 
 #include <fju/log.h>
 #include <fju/rpc.h>
+#include <fju/sec.h>
 
 #ifdef WIN32
 #ifndef MSYS
@@ -266,8 +267,6 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
   int sts, n;
   struct log_entry entry;
   char *msg;
-  time_t ut;
-  struct tm *tm;
   char timestr[128];
   int msglen, nmsgs;
   struct log_iov iov[1];
@@ -310,9 +309,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 #endif
 	  }
     } else {
-      ut = (time_t)entry.timestamp;
-      tm = localtime( (time_t *)&ut );
-      strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+      sec_timestr( entry.timestamp, timestr );
       
       if( entry.flags & LOG_BINARY ) {
 	int i;

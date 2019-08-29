@@ -52,4 +52,6 @@ void aes_decrypt( uint8_t *key, uint8_t *buf, int n );
 void sec_rand( void *buf, int n );
 uint32_t sec_rand_uint32( void );
 
+char *sec_timestr( uint64_t now, char *str );
+
 #endif

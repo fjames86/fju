@@ -408,3 +408,14 @@ uint32_t sec_rand_uint32( void ) {
     sec_rand( &u32, sizeof(u32) );
     return u32;
 }
+
+char *sec_timestr( uint64_t now, char *str ) {
+  struct tm *tm;
+  time_t t;
+
+  t = (time_t)now;
+  tm = localtime( &t );
+  strftime( str, 64, "%Y-%m-%d %H:%M:%S", tm );
+  return str;
+}
+

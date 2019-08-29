@@ -393,9 +393,7 @@ static void add_log_entry( struct log_entry *entry ) {
 	lvi.mask = LVIF_TEXT|LVIF_PARAM|LVIF_PARAM;
 	lvi.iItem = 0x7ffffffe;
 	lvi.iSubItem = 0;
-	now = (time_t)entry->timestamp;
-	tm = localtime( &now );
-	strftime( str, sizeof(str), "%Y-%m-%d %H:%M:%S", tm );
+	sec_timestr( entry->timestamp, str );
 	lvi.pszText = str;			
 	idx = (int)SendMessageA( glob.hwnd[HWND_ELIST], LVM_INSERTITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
 

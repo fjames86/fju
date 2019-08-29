@@ -46,6 +46,7 @@
 #include <fju/rex.h>
 #include <fju/nls.h>
 #include <fju/freg.h>
+#include <fju/sec.h>
 
 struct clt_info {
     uint32_t prog;
@@ -456,8 +457,6 @@ static void raft_list_results( struct xdr_s *xdr ) {
     struct raft_cluster cl;
     struct raft_member member;
     char timestr[64];
-    struct tm *tm;
-    time_t now;
     
     xdr_decode_uint32( xdr, (uint32_t *)&n );
     for( i = 0; i < n; i++ ) {
@@ -489,9 +488,7 @@ static void raft_list_results( struct xdr_s *xdr ) {
 	    xdr_decode_uint64( xdr, &member.stateseq );
 
 	    if( member.lastseen ) {
-	      now = (time_t)member.lastseen;
-	      tm = localtime( &now );
-	      strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+	      sec_timestr( member.lastseen, timestr );
 	    } else {
 	      strcpy( timestr, "Never" );
 	    }

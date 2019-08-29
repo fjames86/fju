@@ -122,7 +122,7 @@ void rpc_conn_release( struct rpc_conn *c );
 struct rpc_conn *rpc_conn_by_connid( uint64_t connid );
 void rpc_conn_close( struct rpc_conn *c );
 
-typedef void (*rpcd_main_t)( uint32_t vers );
+typedef void (*rpcd_main_t)( void );
 
 #endif
 

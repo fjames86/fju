@@ -84,7 +84,7 @@ static void rpcd_run( void );
 static void rpc_accept( struct rpc_listen *lis );
 static void rpc_close_connections( void );
 static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, char *ipstr );
-static void rpcd_load_service( char *path, char *mainfn, uint32_t vers );
+static void rpcd_load_service( char *svcname, char *path, char *mainfn );
 static void rpcd_load_services( void );
 
 #ifndef WIN32
@@ -1169,14 +1169,14 @@ static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, cha
   return ipstr;	     
 }
 
-static void rpcd_load_service( char *path, char *mainfn, uint32_t vers ) {
+static void rpcd_load_service( char *svcname, char *path, char *mainfn ) {
   void *hdl;
   rpcd_main_t pmain;
 
 #ifdef WIN32
   hdl = LoadLibraryA( path );
   if( !hdl ) {
-    rpc_log( RPC_LOG_ERROR, "Failed to load service from %s", path );
+    rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\"", svcname, path );
     return;
   }
   pmain = (rpcd_main_t)GetProcAddress( hdl, mainfn ? mainfn : "rpc_main" );
@@ -1184,7 +1184,7 @@ static void rpcd_load_service( char *path, char *mainfn, uint32_t vers ) {
   
   hdl = dlopen( path, 0 );
   if( !hdl ) {
-    rpc_log( RPC_LOG_ERROR, "Failed to load service from %s", path );
+    rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\"", svcname, path );
     return;
   }
 
@@ -1192,7 +1192,9 @@ static void rpcd_load_service( char *path, char *mainfn, uint32_t vers ) {
   pmain = (rpcd_main_t)dlsym( hdl, mainfn ? mainfn : "rpc_main" );
 #endif
   
-  if( pmain ) pmain( vers );
+  if( pmain ) pmain();
+  else rpc_log( RPC_LOG_ERROR, "Failed to load service %s entry point %s", svcname, mainfn );
+    
 }
 
 static void rpcd_load_services( void ) {
@@ -1200,11 +1202,10 @@ static void rpcd_load_services( void ) {
   uint64_t hkey, id;
   struct freg_entry entry;
   char path[256], mainfn[64];
-  uint32_t vers;
 
   freg_open( NULL, NULL );
   
-  rpc_log( RPC_LOG_DEBUG, "loading dynamic services" );
+  rpc_log( RPC_LOG_DEBUG, "Loading dynamic services" );
   
   sts = freg_subkey( NULL, 0, "/fju/rpc/services", 0, &hkey );
   if( sts ) return;
@@ -1220,13 +1221,6 @@ static void rpcd_load_services( void ) {
       
       sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path) - 1, NULL );
       if( !sts ) {
-	sts = freg_get_by_name( NULL, entry.id, "vers", FREG_TYPE_UINT32, (char *)&vers, sizeof(vers), NULL );
-	if( sts ) {
-	  vers = 0;
-	  sts = 0;
-	}
-      }
-      if( !sts ) {
 	sts = freg_get_by_name( NULL, entry.id, "mainfn", FREG_TYPE_STRING, mainfn, sizeof(mainfn) - 1, NULL );
 	if( sts ) {
 	  strcpy( mainfn, "" );
@@ -1234,8 +1228,8 @@ static void rpcd_load_services( void ) {
 	}
       }
       if( !sts ) {
-	rpc_log( RPC_LOG_DEBUG, "loading service %s", entry.name );
-	rpcd_load_service( path, mainfn[0] ? mainfn : NULL, vers );
+	rpc_log( RPC_LOG_DEBUG, "Loading service %s from \"%s\"", entry.name, path );
+	rpcd_load_service( entry.name, path, mainfn[0] ? mainfn : NULL );
       }
     }
     

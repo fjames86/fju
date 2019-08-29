@@ -29,7 +29,6 @@
 #include <fju/raft.h>
 #include <fju/log.h>
 #include <fju/nls.h>
-#include <fju/rex.h>
 #include <fju/freg.h>
 
 #include "rpc-private.h"
@@ -41,7 +40,6 @@ static void init_cb( void ) {
   hrauth_register();
   raft_register();
   nls_register();
-  rex_register();
   freg_register();
 }
 

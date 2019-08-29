@@ -221,6 +221,7 @@ int main( int argc, char **argv ) {
     raft_open();
     freg_open( NULL, NULL );
 
+    glob.hostid = hostreg_localid();
     glob.port = 8000;
     sts = freg_ensure( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
     glob.timeout = 1000;

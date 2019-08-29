@@ -100,6 +100,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "programs", "programs", "{37
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "gui", "gui", "{6E2F9AA7-19AA-4D94-9BA7-77CDD545D01C}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "librex", "librex\librex.vcxproj", "{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}"
+	ProjectSection(ProjectDependencies) = postProject
+		{7207AEFE-743F-45AF-A0AD-F5AF608A2DCF} = {7207AEFE-743F-45AF-A0AD-F5AF608A2DCF}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -374,6 +379,18 @@ Global
 		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|Win32.Build.0 = Release|Win32
 		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|x64.ActiveCfg = Release|x64
 		{F9388C2F-E422-4913-B2F5-5F484F9B4F93}.Release|x64.Build.0 = Release|x64
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Debug|Win32.Build.0 = Debug|Win32
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Debug|x64.ActiveCfg = Debug|x64
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Debug|x64.Build.0 = Debug|x64
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Release|Win32.ActiveCfg = Release|Win32
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Release|Win32.Build.0 = Release|Win32
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Release|x64.ActiveCfg = Release|x64
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -401,6 +418,7 @@ Global
 		{0E9CB8A9-C3C5-43AF-BEBF-B90D2686357B} = {A8BA8955-7F54-4DB7-AA24-11ACDE5F15B8}
 		{7207AEFE-743F-45AF-A0AD-F5AF608A2DCF} = {A8BA8955-7F54-4DB7-AA24-11ACDE5F15B8}
 		{F9388C2F-E422-4913-B2F5-5F484F9B4F93} = {37E2710F-4FA4-4E45-B8E4-50F434F93C49}
+		{0637E6BA-9A6A-45AE-9BE6-04A58FEDC9AD} = {A8BA8955-7F54-4DB7-AA24-11ACDE5F15B8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {AACC5E76-E767-4048-95E4-AC5DCB5DBC6E}

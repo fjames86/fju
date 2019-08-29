@@ -208,4 +208,3 @@ shauth_provider
 shauth_set_shared
 shauth_priv_header
 shauth_register
-rex_register

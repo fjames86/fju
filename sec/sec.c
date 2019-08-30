@@ -38,6 +38,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <time.h>
 
 #ifndef WIN32
 #include <openssl/evp.h>

@@ -724,9 +724,11 @@ static void nls_list_results( struct xdr_s *xdr ) {
   int sts, b;
 
   sts = xdr_decode_boolean( xdr, &b );
+  printf( "%-16s %-8s %-6s %-6s %-6s %-16s %-4s\n", "hshare", "seq", "lbac", "start", "count", "lastid", "flags" );
+  
   while( !sts && b ) {
     nls_decode_prop( xdr, &hshare, &prop );
-    printf( "%"PRIx64" %-8"PRIu64" %-4u %-4u %-4u %"PRIx64" %x\n",
+    printf( "%-16"PRIx64" %-8"PRIu64" %-6u %-6u %-6u %-16"PRIx64" %-4x\n",
 	    hshare, prop.seq, prop.lbacount, prop.start, prop.count, prop.last_id, prop.flags );
 
     sts = xdr_decode_boolean( xdr, &b );

@@ -60,6 +60,7 @@ static struct {
 	struct rpc_conn *flist;    /* free list */
 
 	void (*init_cb)( void );
+  	void (*close_cb)( void );
         struct rpc_logger loggers[1];
 
         
@@ -215,12 +216,13 @@ static void parse_args( int argc, char **argv ) {
     
 }
 
-int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
+int rpcd_main( int argc, char **argv, void (*init_cb)(void), void (*close_cb)(void) ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
 
 	rpc.init_cb = init_cb;
+	rpc.close_cb = close_cb;
 	rpc.no_rpcregister = 1;
 	
 	/* parse command line */
@@ -1019,6 +1021,10 @@ static void rpcd_run( void ) {
 		c = c->next;
 	}
 
+	/* run shutdown callback if required */
+	if( rpc.close_cb ) rpc.close_cb();
+
+	/* close listening sockets */
 	for( i = 0; i < rpc.nlisten; i++ ) {
 #ifdef WIN32
 		closesocket( rpc.listen[i].fd );

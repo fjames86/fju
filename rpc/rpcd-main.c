@@ -22,7 +22,14 @@
  * SOFTWARE.
  * 
 */
- 
+
+/*
+ * This is really an example program showing how to use the api to implement an rpc service.
+ * It should be simple to add other services if required. For now it is the only service host.
+ * 
+ */
+
+
 #include <fju/rpcd.h>
 #include <fju/shauth.h>
 #include <fju/hrauth.h>
@@ -33,19 +40,29 @@
 
 #include "rpc-private.h"
 
+
 static void init_cb( void ) {
-  /* register programs and auth providers from libfju. Note that others can be dynamically loaded */
+  /* 
+   * Register programs, auth providers and other initialization. 
+   * Note that other services can be dynamically loaded from .so/.dll after this routine.
+   */
   rpcbind_register();
   shauth_register( NULL );
   hrauth_register();
+  
+  /* 
+   * These could be moved out to separate modules and dynamically loaded but for now 
+   * they are included in libfju so can be called directly from here.
+   */     
   raft_register();
   nls_register();
   freg_register();
 }
 
+/* -------- Setup logging ---------------- */
+
 static int logger_open = 0;
 static struct log_s logger;
-
 static struct rpc_logger rpcd_loggers[1];
 
 static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
@@ -71,6 +88,14 @@ static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
   log_writev( &logger, loglvl, fmt, args );
 }
 
+static void close_cb( void ) {
+  rpc_log( RPC_LOG_INFO, "rpcd shutting down" );
+  
+  if( logger_open ) {
+    log_close( &logger );
+  }
+}
+
 int main( int argc, char **argv ) {
   int sts;
 
@@ -84,11 +109,9 @@ int main( int argc, char **argv ) {
     rpc_add_logger( &rpcd_loggers[0] );
   }
   
-  /* run daemon */
-  rpcd_main( argc, argv, init_cb );
-
-  if( logger_open ) log_close( &logger );
-  
+  /* run daemon. */
+  rpcd_main( argc, argv, init_cb, close_cb );
+ 
   return 0;
 }
 

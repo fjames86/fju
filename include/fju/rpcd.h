@@ -112,7 +112,7 @@ struct rpc_conn {
 };
 
 
-int rpcd_main( int argc, char **argv, void (*init_cb)(void) );
+int rpcd_main( int argc, char **argv, void (*init_cb)(void), void (*close_cb)(void) );
 struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type );
 
 int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *cxt, uint64_t *connid );

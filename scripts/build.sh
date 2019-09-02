@@ -1,6 +1,9 @@
 #!/bin/sh
 
 remoteip=$1
+if [ ! $remoteip ]; then
+    remoteip=$(freg get /remotehost)
+fi
 
 ## stop services and rebuild all 
 sh scripts/fjud.sh stop 

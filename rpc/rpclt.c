@@ -209,7 +209,8 @@ int main( int argc, char **argv ) {
   int i, sts, idx;
     struct clt_info *info;
     char *term;
-
+    char *procname;
+    
 #ifdef WIN32
     {
 	WSADATA wsadata;
@@ -262,46 +263,50 @@ int main( int argc, char **argv ) {
 	i++;
     }
 
-    if( i >= argc ) usage( NULL );
-    glob.hostid = strtoull( argv[i], &term, 16 );
-    if( *term ) {
-      struct hostreg_host host;
-      glob.hostid = 0;
-      if( strcmp( argv[i], "local" ) == 0 ) {
+    if( i >= argc ) glob.addr = htonl( INADDR_LOOPBACK );
+    else {
+      glob.hostid = strtoull( argv[i], &term, 16 );
+      if( *term ) {
+	struct hostreg_host host;
 	glob.hostid = 0;
-	glob.addr = htonl( INADDR_LOOPBACK );
-	i++;
-      } else if( strcmp( argv[i], "broadcast" ) == 0 ) {
-	glob.hostid = 0;
-	glob.broadcast = 1;
-	i++;
-	if( i >= argc ) usage( NULL );
-	sts = inet_pton( AF_INET, argv[i], &glob.addr );
-	//sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
-	if( sts != 1 ) usage( "Invalid IP address" );
-	i++;
-      } else {
-	sts = hostreg_host_by_name( argv[i], &host );
-	if( !sts ) {
-	  glob.hostid = host.id;
+	if( strcmp( argv[i], "local" ) == 0 ) {
+	  glob.hostid = 0;
+	  glob.addr = htonl( INADDR_LOOPBACK );
 	  i++;
-	} else {
+	} else if( strcmp( argv[i], "broadcast" ) == 0 ) {
+	  glob.hostid = 0;
+	  glob.broadcast = 1;
+	  i++;
+	  if( i >= argc ) usage( NULL );
 	  sts = inet_pton( AF_INET, argv[i], &glob.addr );
 	  //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
-	  if( sts == 1 ) {
+	  if( sts != 1 ) usage( "Invalid IP address" );
+	  i++;
+	} else {
+	  sts = hostreg_host_by_name( argv[i], &host );
+	  if( !sts ) {
+	    glob.hostid = host.id;
 	    i++;
 	  } else {
-	    glob.addr = htonl( INADDR_LOOPBACK );	    
+	    sts = inet_pton( AF_INET, argv[i], &glob.addr );
+	    //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	    if( sts == 1 ) {
+	      i++;
+	    } else {
+	      glob.addr = htonl( INADDR_LOOPBACK );	    
+	    }
 	  }
 	}
       }
     }
-    if( i >= argc ) usage( NULL );
+    
+    if( i >= argc ) procname = "rpcbind.list";
+    else procname = argv[i]; 
     
     idx = 0;
     while( clt_procs[idx].prog ) {
       info = &clt_procs[idx];
-      if( strcmp( argv[i], info->procname ) == 0 ) {
+      if( strcmp( procname, info->procname ) == 0 ) {
 	if( glob.broadcast ) {
 	  clt_broadcast( info, argc, argv, i );
 	} else {
@@ -424,6 +429,29 @@ static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i )
   free( tmpbuf );
 }
 
+static struct {
+  uint32_t prog;
+  char *name;
+} rpcbind_name_list[] = {
+			 { HRAUTH_RPC_PROG, "hrauth" },
+			 { RAFT_RPC_PROG, "raft" },
+			 { REX_RPC_PROG, "rex" },
+			 { NLS_RPC_PROG, "nls" },
+			 { FREG_RPC_PROG, "freg" },
+			 { 100000, "rpcbind" },
+			 { 0, NULL }
+};
+static char *rpcbind_name_by_prog( uint32_t prog ) {
+  int i;
+  i = 0;
+  while( 1 ) {
+    if( !rpcbind_name_list[i].name ) break;
+    if( rpcbind_name_list[i].prog == prog ) return rpcbind_name_list[i].name;
+    i++;
+  }
+  return "";
+}
+
 static void rpcbind_results( struct xdr_s *xdr ) {
   int sts, b;
   int i;
@@ -442,7 +470,7 @@ static void rpcbind_results( struct xdr_s *xdr ) {
       sts = xdr_decode_uint32( xdr, &port );
       if( sts ) goto bad;
 
-      printf( "%-12u %-8u %-8u %-8u\n", prog, vers, prot, port );
+      printf( "%-12u %-8u %-8u %-8u %s\n", prog, vers, prot, port, rpcbind_name_by_prog( prog ) );
       
       sts = xdr_decode_boolean( xdr, &b );
       if( sts ) goto bad;

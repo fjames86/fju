@@ -89,7 +89,7 @@ static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
 }
 
 static void close_cb( void ) {
-  rpc_log( RPC_LOG_INFO, "rpcd shutting down" );
+  rpc_log( RPC_LOG_INFO, "shutting down" );
   
   if( logger_open ) {
     log_close( &logger );
@@ -112,7 +112,7 @@ int main( int argc, char **argv ) {
 
   /* open log */
   sts = log_open( NULL, NULL, &logger );
-  if( sts ) printf( "Warning: rpcd failed to open default log file\n" );
+  if( sts ) printf( "Warning: failed to open default log file\n" );
   else { 
     logger_open = 1;
     logger.ltag = RPC_LOG_LTAG;

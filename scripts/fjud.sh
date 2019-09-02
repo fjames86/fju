@@ -1,6 +1,6 @@
 #!/bin/sh
 
-pidfile=/var/run/rpcd.pid
+pidfile=/var/run/fjud.pid
 udpport=$(freg get /fju/rpc/port || echo 8000)
 
 cmd=$1
@@ -15,7 +15,7 @@ if [ $cmd = "start" ]; then
 	sleep 1 
     fi
     
-    rpcd -u $udpport -p $pidfile
+    fjud -u $udpport -p $pidfile
 elif [ $cmd = "stop" ]; then
     if [ -e $pidfile ]; then 
 	kill $(cat $pidfile)
@@ -25,7 +25,7 @@ elif [ $cmd = "status" ]; then
     if [ -e $pidfile ]; then
 	rpclt -p $udpport rpcbind.list
     else
-	echo "rpcd not running"
+	echo "fjud not running"
     fi
 fi
 

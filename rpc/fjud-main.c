@@ -44,7 +44,6 @@
 static void init_cb( void ) {
   /* 
    * Register programs, auth providers and other initialization. 
-   * Note that other services can be dynamically loaded from .so/.dll after this routine.
    */
   rpcbind_register();
   shauth_register( NULL );
@@ -103,6 +102,8 @@ static void main_cb( rpcd_evt_t evt, void *arg, void *cxt ) {
     break;
   case RPCD_EVT_CLOSE:
     close_cb();
+    break;
+  default:
     break;
   }
 }

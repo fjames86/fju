@@ -112,8 +112,9 @@ struct rpc_conn {
 };
 
 typedef enum {
-	      RPCD_EVT_INIT = 0,
-	      RPCD_EVT_CLOSE = 1,
+	      RPCD_EVT_INIT = 0,      /* initialization callback */
+	      RPCD_EVT_CLOSE = 1,     /* close callback */
+	      RPCD_EVT_SIGNAL = 2,    /* daemon received a signal, arg=sig. unix only */
 } rpcd_evt_t;
 
 typedef void (*rpcd_main_t)( rpcd_evt_t evt, void *arg, void *cxt );

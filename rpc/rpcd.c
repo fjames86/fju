@@ -100,6 +100,11 @@ static void rpc_sig( int sig, siginfo_t *info, void *context ) {
 		break;
 	}
 
+	if( rpc.main_cb ) {
+	  int snum = sig;
+	  rpc.main_cb( RPCD_EVT_SIGNAL, (void *)&snum, rpc.main_cxt );
+	}
+
 }
 #endif
 

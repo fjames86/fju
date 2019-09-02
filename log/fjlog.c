@@ -91,7 +91,7 @@ static void usage( char *fmt, ... ) {
 	  "     -R                                    Read reverse.\n"
 	  "     -F                                    Create a fixed (non-circular) log.\n"
 	  "     -G                                    Create a growing (non-circular) log.\n"
-	  "     -s size                               Create with size\n"
+	  "     -s size                               Create a log of given size (default 2mb)\n"
 	  "     -L lvl                                Set log filter level: trace, debug, info, warn, error, fatal\n"
 	  "     -T ltag                               Set log tag to filter or write messages\n"
 	  "     -b                                    Read/write binary.\n" 

@@ -96,6 +96,17 @@ static void close_cb( void ) {
   }
 }
 
+static void main_cb( rpcd_evt_t evt, void *arg, void *cxt ) {
+  switch( evt ) {
+  case RPCD_EVT_INIT:
+    init_cb();
+    break;
+  case RPCD_EVT_CLOSE:
+    close_cb();
+    break;
+  }
+}
+
 int main( int argc, char **argv ) {
   int sts;
 
@@ -110,7 +121,7 @@ int main( int argc, char **argv ) {
   }
   
   /* run daemon. */
-  rpcd_main( argc, argv, init_cb, close_cb );
+  rpcd_main( argc, argv, main_cb, NULL );
  
   return 0;
 }

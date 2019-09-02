@@ -111,8 +111,13 @@ struct rpc_conn {
 	uint64_t timestamp;
 };
 
+typedef enum {
+	      RPCD_EVT_INIT = 0,
+	      RPCD_EVT_CLOSE = 1,
+} rpcd_evt_t;
 
-int rpcd_main( int argc, char **argv, void (*init_cb)(void), void (*close_cb)(void) );
+typedef void (*rpcd_main_t)( rpcd_evt_t evt, void *arg, void *cxt );
+int rpcd_main( int argc, char **argv, rpcd_main_t cb, void *cxt );
 struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type );
 
 int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *cxt, uint64_t *connid );
@@ -122,7 +127,8 @@ void rpc_conn_release( struct rpc_conn *c );
 struct rpc_conn *rpc_conn_by_connid( uint64_t connid );
 void rpc_conn_close( struct rpc_conn *c );
 
-typedef void (*rpcd_main_t)( void );
+/* dynamically loaded service entry point */
+typedef void (*rpcd_service_t)( void );
 
 #endif
 

@@ -15,7 +15,7 @@ if [ $cmd = "start" ]; then
 	sleep 1 
     fi
     
-    rpcd -u $udpport -p $pidfile -M
+    rpcd -u $udpport -p $pidfile
 elif [ $cmd = "stop" ]; then
     if [ -e $pidfile ]; then 
 	kill $(cat $pidfile)

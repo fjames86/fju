@@ -48,7 +48,6 @@
 static struct {
 	int foreground;
 	int no_rpcregister;
-        int loadservices;
 	int quiet;
 	volatile int exiting;
 	char *pidfile;
@@ -59,8 +58,8 @@ static struct {
 	struct rpc_conn *clist;    /* active connection list */
 	struct rpc_conn *flist;    /* free list */
 
-	void (*init_cb)( void );
-  	void (*close_cb)( void );
+        rpcd_main_t main_cb;
+        void *main_cxt;
         struct rpc_logger loggers[1];
 
         
@@ -112,7 +111,7 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            [-L path]\n"
 #endif
-		"            [-f] [-R] [-q] [-M]\n"
+		"            [-f] [-R] [-q]\n"
 		"\n"
 		"  Where:\n"
 		"            -f               Run in foreground\n"
@@ -126,7 +125,6 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            -p pidfile       Write a pidfile here\n"
 #endif
-		"            -M               Load services defined in /fju/rpc/services\n"
 		"\n" );
 
 
@@ -206,8 +204,6 @@ static void parse_args( int argc, char **argv ) {
 	    i++;
 	    if( i >= argc ) usage( NULL );
 	    rpc.pidfile = argv[i];
-	} else if( strcmp( argv[i], "-M" ) == 0 ) {
-	  rpc.loadservices = 1;
 	}
 	else usage( NULL );
 
@@ -216,13 +212,13 @@ static void parse_args( int argc, char **argv ) {
     
 }
 
-int rpcd_main( int argc, char **argv, void (*init_cb)(void), void (*close_cb)(void) ) {
+int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
 
-	rpc.init_cb = init_cb;
-	rpc.close_cb = close_cb;
+	rpc.main_cb = main_cb;
+	rpc.main_cxt = main_cxt;
 	rpc.no_rpcregister = 1;
 	
 	/* parse command line */
@@ -931,11 +927,10 @@ static void rpcd_run( void ) {
 #endif
 		
 	/* register programs and initialize */
-	if( rpc.init_cb ) rpc.init_cb();
+	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_INIT, NULL, rpc.main_cxt );
 
-	if( rpc.loadservices ) {
-	  rpcd_load_services();
-	}
+	/* dynamically load other services */
+	rpcd_load_services();
 	
 	memset( &sin, 0, sizeof(sin) );
 	sin.sin_family = AF_INET;
@@ -1022,7 +1017,7 @@ static void rpcd_run( void ) {
 	}
 
 	/* run shutdown callback if required */
-	if( rpc.close_cb ) rpc.close_cb();
+	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_CLOSE, NULL, rpc.main_cxt );
 
 	/* close listening sockets */
 	for( i = 0; i < rpc.nlisten; i++ ) {
@@ -1177,7 +1172,7 @@ static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, cha
 
 static void rpcd_load_service( char *svcname, char *path, char *mainfn ) {
   void *hdl;
-  rpcd_main_t pmain;
+  rpcd_service_t pmain;
 
 #ifdef WIN32
   hdl = LoadLibraryA( path );
@@ -1185,7 +1180,7 @@ static void rpcd_load_service( char *svcname, char *path, char *mainfn ) {
     rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\"", svcname, path );
     return;
   }
-  pmain = (rpcd_main_t)GetProcAddress( hdl, mainfn ? mainfn : "rpc_main" );
+  pmain = (rpcd_service_t)GetProcAddress( hdl, mainfn ? mainfn : "rpc_main" );
 #else
   
   hdl = dlopen( path, 0 );
@@ -1195,7 +1190,7 @@ static void rpcd_load_service( char *svcname, char *path, char *mainfn ) {
   }
 
   /* casting pointer to function pointer is not allowed, but the dl api forces us to do so? */
-  pmain = (rpcd_main_t)dlsym( hdl, mainfn ? mainfn : "rpc_main" );
+  pmain = (rpcd_service_t)dlsym( hdl, mainfn ? mainfn : "rpc_main" );
 #endif
   
   if( pmain ) pmain();

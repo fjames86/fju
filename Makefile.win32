@@ -24,7 +24,7 @@ progs += ${BINDIR}/hostreg.exe
 #progs += ${BINDIR}/nls.exe
 progs += ${BINDIR}/raft.exe
 progs += ${BINDIR}/rpclt.exe
-progs += ${BINDIR}/rpcd.exe
+progs += ${BINDIR}/fjud.exe
 progs += ${BINDIR}/fjlogui.exe
 progs += ${BINDIR}/ftab.exe
 progs += ${BINDIR}/fdtab.exe
@@ -81,8 +81,8 @@ ${LIBDIR}/libfdtab.a: ftab/fdtab.c
 	gcc -c ${CFLAGS} ftab/fdtab.c 
 	ar rcs ${LIBDIR}/libfdtab.a fdtab.o 
 
-${LIBDIR}/libfreg.a: ftab/freg.c ftab/freg-rpc.c 
-	gcc -c ${CFLAGS} ftab/freg.c ftab/freg-rpc.c
+${LIBDIR}/libfreg.a: freg/freg.c freg/freg-rpc.c 
+	gcc -c ${CFLAGS} freg/freg.c freg/freg-rpc.c
 	ar rcs ${LIBDIR}/libfreg.a freg.o freg-rpc.o 
 
 ${BINDIR}/fjlog.exe: log/fjlog.c ${LIBDIR}/libfju.dll
@@ -97,8 +97,8 @@ ${BINDIR}/raft.exe: raft/raft-main.c ${LIBDIR}/libfju.dll
 ${BINDIR}/rpclt.exe: rpc/rpclt.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/rpclt.exe ${CFLAGS} rpc/rpclt.c -L${LIBDIR} -lfju -lws2_32 
 
-${BINDIR}/rpcd.exe: rpc/rpcd-main.c ${LIBDIR}/libfju.dll
-	gcc -o ${BINDIR}/rpcd.exe ${CFLAGS} rpc/rpcd-main.c -L${LIBDIR} -lfju -lws2_32 
+${BINDIR}/fjud.exe: rpc/fjud-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/fjud.exe ${CFLAGS} rpc/fjud-main.c -L${LIBDIR} -lfju -lws2_32 
 
 ${BINDIR}/fjlogui.exe: win32/fjlogui/main.c win32/fjlogui/bitmaps.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/fjlogui.exe ${CFLAGS} win32/fjlogui/main.c win32/fjlogui/bitmaps.c -L${LIBDIR} -lfju -lgdi32 -lcomdlg32 -lcomctl32 -lws2_32 
@@ -109,8 +109,8 @@ ${BINDIR}/ftab.exe: ftab/ftab-main.c ${LIBDIR}/libfju.dll
 ${BINDIR}/fdtab.exe: ftab/fdtab-main.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/fdtab.exe ${CFLAGS} ftab/fdtab-main.c -L${LIBDIR} -lfju
 
-${BINDIR}/freg.exe: ftab/freg-main.c ${LIBDIR}/libfju.dll
-	gcc -o ${BINDIR}/freg.exe ${CFLAGS} ftab/freg-main.c -L${LIBDIR} -lfju
+${BINDIR}/freg.exe: freg/freg-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/freg.exe ${CFLAGS} freg/freg-main.c -L${LIBDIR} -lfju
 
 FJU_DEPS += ${LIBDIR}/libmmf.a
 FJU_LIBS += -lmmf

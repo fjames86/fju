@@ -221,7 +221,9 @@ int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
-
+	
+	freg_open( NULL, NULL );
+	
 	rpc.main_cb = main_cb;
 	rpc.main_cxt = main_cxt;
 	rpc.no_rpcregister = 1;
@@ -350,7 +352,21 @@ static void rpc_init_listen( void ) {
 	}
 
 	if( !rpc.nlisten ) {
-	  rpc_log( RPC_LOG_WARN, "Not listening on any ports" );
+	    uint32_t port;
+	    sts = freg_get_by_name( NULL, 0,
+				    "/fju/rpc/port", FREG_TYPE_UINT32,
+				    (char *)&port, sizeof(port), NULL );
+	    if( !sts ) {
+		rpc.listen[0].type = RPC_LISTEN_UDP;
+		rpc.listen[0].addr.sin.sin_family = AF_INET;
+		rpc.listen[0].addr.sin.sin_port = htons( port );
+		rpc.listen[1].type = RPC_LISTEN_TCP;
+		rpc.listen[1].addr.sin.sin_family = AF_INET;
+		rpc.listen[1].addr.sin.sin_port = htons( port );
+		rpc.nlisten = 2;
+	    } else {	    
+		rpc_log( RPC_LOG_WARN, "Not listening on any ports" );
+	    }
 	}
 
 	/* listen on ports */
@@ -1208,8 +1224,6 @@ static void rpcd_load_services( void ) {
   uint64_t hkey, id;
   struct freg_entry entry;
   char path[256], mainfn[64];
-
-  freg_open( NULL, NULL );
   
   rpc_log( RPC_LOG_DEBUG, "Loading dynamic services" );
   

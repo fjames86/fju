@@ -21,7 +21,7 @@ libs += ${LIBDIR}/libfreg.a
 
 progs += ${BINDIR}/fjlog.exe
 progs += ${BINDIR}/hostreg.exe
-#progs += ${BINDIR}/nls.exe
+progs += ${BINDIR}/nls.exe
 progs += ${BINDIR}/raft.exe
 progs += ${BINDIR}/rpclt.exe
 progs += ${BINDIR}/fjud.exe
@@ -32,7 +32,7 @@ progs += ${BINDIR}/freg.exe
 
 .PHONY: all clean strip 
 
-all: ${libs} ${progs} ${LIBDIR}/libfju.dll
+all: ${libs} ${progs} ${LIBDIR}/libfju.dll ${LIBDIR}/libsvctest.dll
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
@@ -111,6 +111,12 @@ ${BINDIR}/fdtab.exe: ftab/fdtab-main.c ${LIBDIR}/libfju.dll
 
 ${BINDIR}/freg.exe: freg/freg-main.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/freg.exe ${CFLAGS} freg/freg-main.c -L${LIBDIR} -lfju
+
+${BINDIR}/nls.exe: nls/nls-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/nls.exe ${CFLAGS} nls/nls-main.c -L${LIBDIR} -lfju
+
+${LIBDIR}/libsvctest.dll: rpc/svctest.c ${LIBFJU}
+	gcc -shared -o $@ ${CFLAGS} rpc/svctest.c -L${LIBDIR} -lfju
 
 FJU_DEPS += ${LIBDIR}/libmmf.a
 FJU_LIBS += -lmmf

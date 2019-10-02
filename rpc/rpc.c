@@ -1112,7 +1112,7 @@ int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *
   struct xdr_s tmpx;
   uint32_t len;
   struct rpc_inc inc;
-  
+
   /* prepare message */
   memset( &inc, 0, sizeof(inc) );
   inc.pvr = pars->pvr;
@@ -1165,7 +1165,7 @@ int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *
     sts = -1;
     goto done;
   }
-    
+
   xdr_reset( &inc.xdr );
 
   offset = 0;
@@ -1186,6 +1186,13 @@ int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *
   }
   inc.xdr.offset = 0;
   inc.xdr.count = len;
+
+  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
+  if( sts ) goto done;
+  
+  sts = rpc_process_reply( &inc );
+  if( sts ) goto done;
+
   if( res ) *res = inc.xdr;
   
   sts = 0;

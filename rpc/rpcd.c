@@ -505,7 +505,11 @@ static void rpc_poll( int timeout ) {
 	for( i = 0; i < RPC_MAX_LISTEN; i++ ) {
 		if( i < rpc.nlisten ) {
 #ifdef WIN32
-			WSAEventSelect( rpc.listen[i].fd, rpc.evt, FD_READ );
+			WSAEventSelect( rpc.listen[i].fd,
+					rpc.evt,
+					((rpc.listen[i].type == RPC_LISTEN_TCP) || (rpc.listen[i].type == RPC_LISTEN_TCP6)) ?
+					FD_ACCEPT :
+					FD_READ );
 #else
 			pfd[i].fd = rpc.listen[i].fd;
 			pfd[i].events = POLLIN;
@@ -526,15 +530,16 @@ static void rpc_poll( int timeout ) {
 #ifdef WIN32
 		switch( c->nstate ) {
 		case RPC_NSTATE_RECV:
-			WSAEventSelect( c->fd, rpc.evt, FD_READ );
+			WSAEventSelect( c->fd, rpc.evt, FD_READ|FD_CLOSE );
 			break;
 		case RPC_NSTATE_SEND:
-			WSAEventSelect( c->fd, rpc.evt, FD_WRITE );
+			WSAEventSelect( c->fd, rpc.evt, FD_WRITE|FD_CLOSE );
 			break;
 		case RPC_NSTATE_CONNECT:
-			WSAEventSelect( c->fd, rpc.evt, FD_CONNECT );
+			WSAEventSelect( c->fd, rpc.evt, FD_CONNECT|FD_CLOSE );
 			break;
 		default:
+		        WSAEventSelect( c->fd, rpc.evt, FD_READ|FD_CLOSE );
 			break;
 		}
 #else
@@ -564,8 +569,12 @@ static void rpc_poll( int timeout ) {
 
 #ifdef WIN32
 	sts = WSAWaitForMultipleEvents( 1, &rpc.evt, FALSE, timeout, FALSE );
-	if( sts == WSA_WAIT_TIMEOUT ) return;
-	if( sts != WSA_WAIT_EVENT_0 ) return;
+	if( sts == WSA_WAIT_TIMEOUT ) {
+	    return;
+	}
+	if( sts != WSA_WAIT_EVENT_0 ) {
+	    return;
+	}
 #else
 	sts = poll( pfd, npfd, timeout );
 	if( sts <= 0 ) return;
@@ -576,7 +585,27 @@ static void rpc_poll( int timeout ) {
 	for( i = 0; i < rpc.nlisten; i++ ) {
 		int j;
 
+		memset( &events, 0, sizeof(events) );
 		WSAEnumNetworkEvents( rpc.listen[i].fd, rpc.evt, &events );
+		if( events.lNetworkEvents & FD_READ ) revents[i] |= RPC_POLLIN;
+		if( events.lNetworkEvents & FD_WRITE ) revents[i] |= RPC_POLLOUT;
+		if( events.lNetworkEvents & FD_ACCEPT ) revents[i] |= RPC_POLLIN;
+		if( events.lNetworkEvents & FD_CONNECT ) revents[i] |= RPC_POLLOUT;
+		if( events.lNetworkEvents & FD_CLOSE ) revents[i] |= RPC_POLLHUP;
+		for( j = 0; j < 6; j++ ) {
+		    if( events.iErrorCode[j] ) {
+			revents[i] |= RPC_POLLERR;
+		    }
+		}
+
+	}
+	i = RPC_MAX_LISTEN;
+	c = rpc.clist;
+	while( c ) {
+    	        int j;
+
+		memset( &events, 0, sizeof(events) );
+		WSAEnumNetworkEvents( c->fd, rpc.evt, &events );
 		if( events.lNetworkEvents & FD_READ ) revents[i] |= RPC_POLLIN;
 		if( events.lNetworkEvents & FD_WRITE ) revents[i] |= RPC_POLLOUT;
 		if( events.lNetworkEvents & FD_ACCEPT ) revents[i] |= RPC_POLLIN;
@@ -585,12 +614,7 @@ static void rpc_poll( int timeout ) {
 		for( j = 0; j < 6; j++ ) {
 			if( events.iErrorCode[j] ) revents[i] |= RPC_POLLERR;
 		}
-	}
-	i = RPC_MAX_LISTEN;
-	c = rpc.clist;
-	while( c ) {
-		WSAEnumNetworkEvents( c->fd, rpc.evt, &events );
-		revents[i] = events.lNetworkEvents;
+
 		c = c->next;
 		i++;
 	}
@@ -658,7 +682,8 @@ static void rpc_poll( int timeout ) {
 					c->cstate = RPC_CSTATE_CLOSE;
 					break;
 				}
-
+				c->timestamp = rpc_now();
+				
 				c->cdata.offset += sts;
 				if( c->cdata.offset == c->cdata.count ) {
 					/* msg complete - process */
@@ -675,6 +700,7 @@ static void rpc_poll( int timeout ) {
 						/* optimistically send count */
 						xdr_init( &tmpx, tmpbuf, 4 );
 						xdr_encode_uint32( &tmpx, c->cdata.count | 0x80000000 );
+						c->timestamp = rpc_now();
 
 						sts = send( c->fd, tmpbuf, 4, 0 );
 						if( sts < 0 ) {
@@ -908,7 +934,8 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->cstate = RPC_CSTATE_RECVLEN;
       c->nstate = RPC_NSTATE_RECV;
       c->connid = ++rpc.connid;
-
+      c->timestamp = rpc_now();
+      
 #ifdef WIN32
 	  {
 		u_long nb = 1;
@@ -923,7 +950,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       rpc.clist = c;
 
       mynet_ntop( lis->type, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len, ipstr );
-      rpc_log( RPC_LOG_DEBUG, "Accept Incoming Connection %s", ipstr );
+      rpc_log( RPC_LOG_DEBUG, "Accept Incoming Connection %s fd=%d", ipstr, (int)c->connid );
     }
     break;
   }
@@ -1002,6 +1029,7 @@ static void rpcd_run( void ) {
 		now = rpc_now();
 		while( c ) {
 			if( now > (c->timestamp + RPC_CONNECTION_TIMEOUT) ) {
+			        rpc_log( RPC_LOG_INFO, "closing stale connection fd=%d", (int)c->connid );
 				c->cstate = RPC_CSTATE_CLOSE;
 			}
 

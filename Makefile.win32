@@ -29,6 +29,7 @@ progs += ${BINDIR}/fjlogui.exe
 progs += ${BINDIR}/ftab.exe
 progs += ${BINDIR}/fdtab.exe
 progs += ${BINDIR}/freg.exe
+progs += ${BINDIR}/ecdh.exe
 
 .PHONY: all clean strip 
 
@@ -120,6 +121,9 @@ ${LIBDIR}/libsvctest.dll: rpc/svctest.c ${LIBFJU}
 
 ${LIBDIR}/libcmdprog.dll: rpc/cmdprog.c ${LIBFJU}
 	gcc -shared -o $@ ${CFLAGS} rpc/cmdprog.c -L${LIBDIR} -lfju
+
+${BINDIR}/ecdh.exe: dh/ecdh.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/ecdh.exe ${CFLAGS} dh/ecdh.c -L${LIBDIR} -lfju
 
 FJU_DEPS += ${LIBDIR}/libmmf.a
 FJU_LIBS += -lmmf

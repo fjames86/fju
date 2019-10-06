@@ -114,7 +114,11 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   if( remote_public->len != (SEC_ECDH_KEYLEN*2) ) return -1;
 
   sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDH_P256_ALGORITHM, NULL, 0 );
-  
+  if( sts ) {
+      printf( "BCryptOpenAlgorithmProvider failed %u (%x)\n", sts, sts );
+      return -1;
+  }
+
   outlen = sizeof(*eccp) + 3*SEC_ECDH_KEYLEN;
   eccp = (BCRYPT_ECCKEY_BLOB *)pout;
   eccp->dwMagic = BCRYPT_ECDH_PRIVATE_P256_MAGIC;
@@ -122,6 +126,10 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   memcpy( pout + sizeof( *eccp ), remote_public->buf, 2 * SEC_ECDH_KEYLEN );
   memcpy( pout + sizeof(*eccp) + 2*SEC_ECDH_KEYLEN, local_priv->buf, SEC_ECDH_KEYLEN );
   sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPRIVATE_BLOB, &hkey, pout, outlen, 0 );
+  if( sts ) {
+      printf( "BCryptImportKeyPair priv failed %u (%x)\n", sts, sts );
+      return -1;
+  }
   
   outlen = sizeof(*eccp) + 2*SEC_ECDH_KEYLEN;
   eccp = (BCRYPT_ECCKEY_BLOB *)pout;
@@ -129,11 +137,24 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   eccp->cbKey = SEC_ECDH_KEYLEN;
   memcpy( pout + sizeof(*eccp), remote_public->buf, SEC_ECDH_MAX_PUBKEY );
   sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPUBLIC_BLOB, &hrkey, pout, outlen, 0 );
+  if( sts ) {
+      printf( "BCryptImportKeyPair pub failed %u (%x)\n", sts, sts );
+      return -1;
+  }
   
   /* derive common key */
   sts = BCryptSecretAgreement( hkey, hrkey, &skey, 0 );
-
-  sts = BCryptDeriveKey( skey, BCRYPT_KDF_HASH, NULL, common->buf, SEC_ECDH_MAX_COMMON, &nbytes, 0 );  
+  if( sts ) {
+      printf( "BCryptSecretAgreement failed %u (%x)\n", sts, sts );
+      return -1;
+  }
+  
+  sts = BCryptDeriveKey( skey, BCRYPT_KDF_HASH, NULL, common->buf, SEC_ECDH_MAX_COMMON, &nbytes, 0 );
+  if( sts ) {
+      printf( "BCryptDeriveKey failed %u (%x)\n", sts, sts );
+      return -1;
+  }
+  
   common->len = SEC_ECDH_MAX_COMMON;
   
   BCryptDestroyKey( hkey );

@@ -32,7 +32,7 @@ progs += ${BINDIR}/freg.exe
 
 .PHONY: all clean strip 
 
-all: ${libs} ${progs} ${LIBDIR}/libfju.dll ${LIBDIR}/libsvctest.dll
+all: ${libs} ${progs} ${LIBDIR}/libfju.dll ${LIBDIR}/libsvctest.dll ${LIBDIR}/libcmdprog.dll
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
@@ -117,6 +117,9 @@ ${BINDIR}/nls.exe: nls/nls-main.c ${LIBDIR}/libfju.dll
 
 ${LIBDIR}/libsvctest.dll: rpc/svctest.c ${LIBFJU}
 	gcc -shared -o $@ ${CFLAGS} rpc/svctest.c -L${LIBDIR} -lfju
+
+${LIBDIR}/libcmdprog.dll: rpc/cmdprog.c ${LIBFJU}
+	gcc -shared -o $@ ${CFLAGS} rpc/cmdprog.c -L${LIBDIR} -lfju
 
 FJU_DEPS += ${LIBDIR}/libmmf.a
 FJU_LIBS += -lmmf

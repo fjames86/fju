@@ -1286,3 +1286,6 @@ static void rpcd_load_services( void ) {
   
 }
 
+void rpcd_stop( void ) {
+    rpc.exiting = 1;
+}

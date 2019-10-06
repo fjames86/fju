@@ -87,24 +87,20 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static struct clt_info clt_procs[] = {
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
-    { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 0, NULL, NULL, "hrauth.null", NULL },    
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 0, NULL, NULL, "raft.null", NULL },    
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_list_results, "raft.list", NULL },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, raft_add_args, raft_add_results, "raft.add", "clid=CLID" },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, raft_rem_args, NULL, "raft.rem", "clid=CLID" },
-    { REX_RPC_PROG, REX_RPC_VERS, 0, NULL, NULL, "rex.null", NULL },    
     { REX_RPC_PROG, REX_RPC_VERS, 1, rex_read_args, rex_read_results, "rex.read", "clid=CLID" },
     { REX_RPC_PROG, REX_RPC_VERS, 2, rex_write_args, rex_write_results, "rex.write", "clid=CLID data=DATA" },
-    { NLS_RPC_PROG, NLS_RPC_VERS, 0, NULL, NULL, "nls.null", NULL },
     { NLS_RPC_PROG, NLS_RPC_VERS, 1, NULL, nls_list_results, "nls.list", NULL },
     { NLS_RPC_PROG, NLS_RPC_VERS, 3, nls_read_args, nls_read_results, "nls.read", "hshare=HSHARE [id=ID]" },
     { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
-    { FREG_RPC_PROG, FREG_RPC_VERS, 0, NULL, NULL, "freg.null", NULL },
     { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
+    { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 

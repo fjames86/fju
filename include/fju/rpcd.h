@@ -131,5 +131,8 @@ void rpc_conn_close( struct rpc_conn *c );
 /* dynamically loaded service entry point */
 typedef void (*rpcd_service_t)( void );
 
+/* stop the daemon and exit */
+void rpcd_stop( void );
+
 #endif
 

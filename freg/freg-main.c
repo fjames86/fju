@@ -354,10 +354,11 @@ int main( int argc, char **argv ) {
     ftab_prop( &ftab, &prop );
     ftab_close( &ftab );
 
-    printf( "Inodes %u/%u (%u%%) Data %ukb/%ukb Root %"PRIx64" LBASize %u\n",
+    printf( "Inodes %u/%u (%u%%) Data %ukb/%ukb (%u%%) Root %"PRIx64" LBASize %u\n",
 	    prop.count, prop.max, (100*prop.count)/prop.max,
 	    (prop.lbasize*prop.count) / 1024,
 	    (prop.lbasize*prop.max) / 1024,
+	    (100*prop.count)/prop.max,
 	    *((uint64_t *)prop.cookie),
 	    prop.lbasize );
   } else if( strcmp( argv[i], "set" ) == 0 ) {

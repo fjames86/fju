@@ -579,6 +579,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 			    &p, &v, &pc );
     if( sts ) {
       if( !p ) {
+	rpc_log( RPC_LOG_INFO, "Reply ProgUnavail" );
 	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROG_UNAVAIL, NULL, &handle );
 	return 0;
       }
@@ -593,11 +594,13 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 	  if( (mm.high == 0) || (v->vers > mm.high) ) mm.high = v->vers;
 	  v = v->next;
 	}
+	rpc_log( RPC_LOG_INFO, "Reply ProgMismatch" );
 	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROG_MISMATCH, &mm, &handle );
 	return 0;
       }
 
       if( !pc ) {
+	  rpc_log( RPC_LOG_INFO, "Reply ProcUnavail" );
 	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, &handle );
 	return 0;
       }
@@ -610,6 +613,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     if( inc->pvr ) {
       sts = inc->pvr->sauth( inc->pvr, &inc->msg, &inc->pcxt );
       if( sts ) {
+	  rpc_log( RPC_LOG_INFO, "sauth failed, Reply AuthTooWeak" );
 	rpc_init_reject_reply( inc, inc->msg.xid, sts < 0 ? RPC_AUTH_ERROR_TOOWEAK : sts );
 	return 0;
       }
@@ -620,6 +624,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     if( inc->pvr && inc->pvr->smargs ) {
       sts = inc->pvr->smargs( inc->pvr, &inc->xdr, start, inc->xdr.count, inc->pcxt );
       if( sts ) {
+	  rpc_log( RPC_LOG_INFO, "smargs failed, Reply AuthTooWeak" );
 	rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
 	return 0;
       }
@@ -628,6 +633,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     /* invoke handler function */
     sts = pc->fn( inc );
     if( sts < 0 ) {
+	rpc_log( RPC_LOG_INFO, "Reply SystemError" );
       rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SYSTEM_ERROR, NULL, &handle );
       return 0;
     } 

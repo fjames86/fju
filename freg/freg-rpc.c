@@ -20,9 +20,9 @@ static int freg_proc_list( struct rpc_inc *inc ) {
     char *str;
     uint32_t u32;
     uint64_t u64;
-    struct freg_entry *elist;
+    struct freg_entry *elist = NULL;
 
-    if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
+    if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {	
       return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
     }
 
@@ -31,10 +31,13 @@ static int freg_proc_list( struct rpc_inc *inc ) {
     
     rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
     n = freg_list( NULL, parentid, NULL, 0 );
-    elist = malloc( sizeof(*elist) * n );
-    m = freg_list( NULL, parentid, elist, n );
-    if( m < n ) n = m;
-
+    if( n < 0 ) n = 0;
+    else {
+	elist = malloc( sizeof(*elist) * n );
+	m = freg_list( NULL, parentid, elist, n );
+	if( m < n ) n = m;
+    }
+    
     for( i = 0; i < n; i++ ) {
 	xdr_encode_boolean( &inc->xdr, 1 );
 	xdr_encode_uint64( &inc->xdr, elist[i].id );
@@ -67,7 +70,7 @@ static int freg_proc_list( struct rpc_inc *inc ) {
     }
     xdr_encode_boolean( &inc->xdr, 0 );
 
-    free( elist );
+    if( elist ) free( elist );
     rpc_complete_accept_reply( inc, handle );
     
     return 0;

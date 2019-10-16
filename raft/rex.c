@@ -22,7 +22,19 @@
  * SOFTWARE.
  * 
 */
- 
+
+
+/* 
+ * This file defines a "raft example" program. It is intended to maintain a shared 
+ * buffer between host nodes. To use, define the following registry keys 
+
+/fju/rpc/services key
+/fju/rpc/services/rex key
+/fju/rpc/services/rex/path str /root/fju/lib/librex.so
+/fju/rpc/services/rex/mainfn str rex_register
+
+ */
+
 #include <fju/rex.h>
 
 #include <fju/rpc.h>

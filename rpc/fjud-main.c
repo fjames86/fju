@@ -22,32 +22,46 @@
  * SOFTWARE.
  * 
 */
- 
+
+/*
+ * This is really an example program showing how to use the api to implement an rpc service.
+ * It should be simple to add other services if required. For now it is the only service host.
+ * 
+ */
+
+
 #include <fju/rpcd.h>
 #include <fju/shauth.h>
 #include <fju/hrauth.h>
 #include <fju/raft.h>
 #include <fju/log.h>
 #include <fju/nls.h>
-#include <fju/rex.h>
 #include <fju/freg.h>
 
 #include "rpc-private.h"
 
+
 static void init_cb( void ) {
-  /* register programs and auth providers */
+  /* 
+   * Register programs, auth providers and other initialization. 
+   */
   rpcbind_register();
   shauth_register( NULL );
   hrauth_register();
+  
+  /* 
+   * These could be moved out to separate modules and dynamically loaded but for now 
+   * they are included in libfju so can be called directly from here.
+   */     
   raft_register();
   nls_register();
-  rex_register();
   freg_register();
 }
 
+/* -------- Setup logging ---------------- */
+
 static int logger_open = 0;
 static struct log_s logger;
-
 static struct rpc_logger rpcd_loggers[1];
 
 static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
@@ -73,12 +87,33 @@ static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
   log_writev( &logger, loglvl, fmt, args );
 }
 
+static void close_cb( void ) {
+  rpc_log( RPC_LOG_INFO, "shutting down" );
+  
+  if( logger_open ) {
+    log_close( &logger );
+  }
+}
+
+static void main_cb( rpcd_evt_t evt, void *arg, void *cxt ) {
+  switch( evt ) {
+  case RPCD_EVT_INIT:
+    init_cb();
+    break;
+  case RPCD_EVT_CLOSE:
+    close_cb();
+    break;
+  default:
+    break;
+  }
+}
+
 int main( int argc, char **argv ) {
   int sts;
 
   /* open log */
   sts = log_open( NULL, NULL, &logger );
-  if( sts ) printf( "Warning: rpcd failed to open default log file\n" );
+  if( sts ) printf( "Warning: failed to open default log file\n" );
   else { 
     logger_open = 1;
     logger.ltag = RPC_LOG_LTAG;
@@ -86,11 +121,9 @@ int main( int argc, char **argv ) {
     rpc_add_logger( &rpcd_loggers[0] );
   }
   
-  /* run daemon */
-  rpcd_main( argc, argv, init_cb );
-
-  if( logger_open ) log_close( &logger );
-  
+  /* run daemon. */
+  rpcd_main( argc, argv, main_cb, NULL );
+ 
   return 0;
 }
 

@@ -136,11 +136,27 @@ static int log_unlock( struct log_s *log ) {
 
 #endif
 
+
+static struct log_s *default_log( void ) {
+  static int initialized = 0;
+  static struct log_s log;
+  int sts;
+  
+  if( !initialized ) {
+    sts = log_open( NULL, NULL, &log );
+    if( sts ) return NULL;
+    
+    initialized = 1;
+  }
+  return &log;
+}
+
 int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   int sts;
   struct _header *hdr;
   struct log_prop prop;
-  
+
+  if( !log ) return -1;
   if( !path ) path = mmf_default_path( "fju.log", NULL );
 
   memset( log, 0, sizeof(*log) );
@@ -200,6 +216,8 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
 
 
 int log_close( struct log_s *log ) {
+  if( !log ) return -1;
+  
   mmf_close( &log->mmf );
   memset( log, 0, sizeof(*log) );
   return 0;
@@ -209,6 +227,9 @@ int log_reset( struct log_s *log ) {
   int sts;
   struct _header *hdr;
 
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+  
   hdr = (struct _header *)log->mmf.file;
   if( !hdr ) return -1;
   
@@ -229,6 +250,9 @@ int log_prop( struct log_s *log, struct log_prop *prop ) {
   struct _header *hdr;
   int sts;
 
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+  
   hdr = (struct _header *)log->mmf.file;
   if( !hdr ) return -1;
 
@@ -257,6 +281,9 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
   int i, j;
   int idx, nbytes, msgcnt, offset, blk_offset, ecount;
 
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+  
   if( nelist ) *nelist = 0;
   i = 0;
   hdr = (struct _header *)log->mmf.file;
@@ -367,6 +394,9 @@ int log_read_end( struct log_s *log, uint64_t id, struct log_entry *elist, int n
   int i, ne, sts;
   uint64_t the_id;
   int nel;
+
+  if( !log ) log = default_log();
+  if( !log ) return -1;
   
   the_id = id;  
   nel = 0;
@@ -405,6 +435,9 @@ int log_read_buf( struct log_s *log, uint64_t id, char *buf, int len, int *msgle
   struct log_entry entry;
   struct log_iov iov[1];
   int sts;
+
+  if( !log ) log = default_log();
+  if( !log ) return -1;
   
   memset( &entry, 0, sizeof(entry) );
   iov[0].buf = buf;
@@ -426,6 +459,9 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   int i, cnt, idx;
   int msglen, nbytes, offset, blk_offset, hdrlvl, ecount;
 
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+  
   msglen = 0;
   for( i = 0; i < entry->niov; i++ ) {
     msglen += entry->iov[i].len;
@@ -546,6 +582,9 @@ int log_writev( struct log_s *log, int lvl, char *fmt, va_list args ) {
   struct log_iov iov[1];
   char buf[1024];
 
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+  
   vsnprintf( buf, sizeof(buf) - 1, fmt, args );  
   memset( &entry, 0, sizeof(entry) );
   iov[0].buf = buf;
@@ -559,6 +598,10 @@ int log_writev( struct log_s *log, int lvl, char *fmt, va_list args ) {
 int log_writef( struct log_s *log, int lvl, char *fmt, ... ) {
   va_list args;
   int sts;
+
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+  
   va_start( args, fmt );
   sts = log_writev( log, lvl, fmt, args );
   va_end( args );
@@ -569,6 +612,9 @@ int log_write_buf( struct log_s *log, int lvl, char *buf, int len, uint64_t *id 
   struct log_entry entry;
   struct log_iov iov[1];
   int sts;
+
+  if( !log ) log = default_log();
+  if( !log ) return -1;
   
   memset( &entry, 0, sizeof(entry) );
   iov[0].buf = buf;
@@ -584,7 +630,13 @@ int log_write_buf( struct log_s *log, int lvl, char *buf, int len, uint64_t *id 
 }
 
 int log_set_lvl( struct log_s *log, int lvl ) {
-  struct _header *hdr = (struct _header *)log->mmf.file;
+  struct _header *hdr;
+  
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+  
+  hdr = (struct _header *)log->mmf.file;
+  
   log_lock( log );
   hdr->flags = (hdr->flags & ~LOG_FLAG_LVLMASK) | ((lvl & LOG_LVL_MASK) << 4);
   log_unlock( log );
@@ -592,6 +644,10 @@ int log_set_lvl( struct log_s *log, int lvl ) {
 }
 
 int log_sync( struct log_s *log, int sync ) {
+  
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+  
   mmf_sync( &log->mmf, sync );
   return 0;
 }

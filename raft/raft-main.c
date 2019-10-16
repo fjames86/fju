@@ -257,8 +257,6 @@ int main( int argc, char **argv ) {
 }
 
 static void print_cluster( struct raft_cluster *cluster, struct raft_member *member, int nmember ) {
-    struct tm *tm;
-  time_t now;
   char timestr[128], namestr[HOSTREG_MAX_NAME];
   int j;
   
@@ -274,9 +272,7 @@ static void print_cluster( struct raft_cluster *cluster, struct raft_member *mem
 	          
       for( j = 0; j < nmember; j++ ) {
 	  if( member[j].lastseen ) {
-	    now = (time_t)member[j].lastseen;
-	    tm = localtime( &now );
-	    strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+	    sec_timestr( member[j].lastseen, timestr );
 	  } else {
 	      strcpy( timestr, "Never" );
 	  }

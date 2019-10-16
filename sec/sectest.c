@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "sec.h"
+#include <fju/sec.h>
 
 static void bn2hex( char *bn, char *hex, int len ) {
   int i;

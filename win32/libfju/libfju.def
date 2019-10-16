@@ -203,9 +203,9 @@ aes_encrypt
 aes_decrypt
 sec_rand
 sec_rand_uint32
+sec_timestr
 shauth_init
 shauth_provider
 shauth_set_shared
 shauth_priv_header
 shauth_register
-rex_register

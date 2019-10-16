@@ -48,6 +48,8 @@
 
 #include "rpc-private.h"
 
+#include <fju/sec.h>
+
 void xdr_init( struct xdr_s *xdr, uint8_t *buf, int size ) {
   xdr->buf = buf;
   xdr->buf_size = size;
@@ -577,6 +579,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 			    &p, &v, &pc );
     if( sts ) {
       if( !p ) {
+	rpc_log( RPC_LOG_INFO, "Reply ProgUnavail" );
 	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROG_UNAVAIL, NULL, &handle );
 	return 0;
       }
@@ -591,11 +594,13 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 	  if( (mm.high == 0) || (v->vers > mm.high) ) mm.high = v->vers;
 	  v = v->next;
 	}
+	rpc_log( RPC_LOG_INFO, "Reply ProgMismatch" );
 	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROG_MISMATCH, &mm, &handle );
 	return 0;
       }
 
       if( !pc ) {
+	  rpc_log( RPC_LOG_INFO, "Reply ProcUnavail" );
 	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, &handle );
 	return 0;
       }
@@ -608,6 +613,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     if( inc->pvr ) {
       sts = inc->pvr->sauth( inc->pvr, &inc->msg, &inc->pcxt );
       if( sts ) {
+	  rpc_log( RPC_LOG_INFO, "sauth failed, Reply AuthTooWeak" );
 	rpc_init_reject_reply( inc, inc->msg.xid, sts < 0 ? RPC_AUTH_ERROR_TOOWEAK : sts );
 	return 0;
       }
@@ -618,6 +624,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     if( inc->pvr && inc->pvr->smargs ) {
       sts = inc->pvr->smargs( inc->pvr, &inc->xdr, start, inc->xdr.count, inc->pcxt );
       if( sts ) {
+	  rpc_log( RPC_LOG_INFO, "smargs failed, Reply AuthTooWeak" );
 	rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
 	return 0;
       }
@@ -626,6 +633,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     /* invoke handler function */
     sts = pc->fn( inc );
     if( sts < 0 ) {
+	rpc_log( RPC_LOG_INFO, "Reply SystemError" );
       rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SYSTEM_ERROR, NULL, &handle );
       return 0;
     } 
@@ -1110,7 +1118,7 @@ int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *
   struct xdr_s tmpx;
   uint32_t len;
   struct rpc_inc inc;
-  
+
   /* prepare message */
   memset( &inc, 0, sizeof(inc) );
   inc.pvr = pars->pvr;
@@ -1163,7 +1171,7 @@ int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *
     sts = -1;
     goto done;
   }
-    
+
   xdr_reset( &inc.xdr );
 
   offset = 0;
@@ -1184,6 +1192,13 @@ int rpc_call_tcp( struct rpc_call_pars *pars, struct xdr_s *args, struct xdr_s *
   }
   inc.xdr.offset = 0;
   inc.xdr.count = len;
+
+  sts = rpc_decode_msg( &inc.xdr, &inc.msg );
+  if( sts ) goto done;
+  
+  sts = rpc_process_reply( &inc );
+  if( sts ) goto done;
+
   if( res ) *res = inc.xdr;
   
   sts = 0;
@@ -1325,12 +1340,8 @@ int rpc_iterator_timeout( int timeout ) {
 
 static void rpc_default_log( int lvl, char *fmt, va_list args ) {
   char timestr[64];
-  struct tm *tm;
-  time_t now;
-  
-  now = time( NULL );
-  tm = localtime( &now );
-  strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+
+  sec_timestr( time( NULL ), timestr );
   printf( "%s %d ", timestr, lvl );
   vprintf( fmt, args );  
   printf( "\n" );  

@@ -35,13 +35,13 @@
 
 /* caller data */
 struct log_s {
-  struct mmf_s mmf;
-  uint32_t pid;
-  uint32_t ltag;
+  struct mmf_s mmf;                /* file handle */
+  uint32_t pid;                    /* current process id */
+  uint32_t ltag;                   /* log tag associated with all messages written */
   uint32_t flags;                  /* handle options, must be set after log_open */
 #define LOG_VOLATILE     0x0000    /* writes are not guaranteed to flush until log_close or log_sync (unsafe but fastest) */
 #define LOG_SYNC         0x0001    /* all writes are synchronously written (safest but slow) */
-#define LOG_ASYNC        0x0002    /* all writes are asynchronously written (safeish but fast) */
+#define LOG_ASYNC        0x0002    /* all writes are asynchronously written (safeish but fast). LOG_SYNC takes priority over LOG_ASYNC */
   /*
    * typical time per write : volatile==1u, async==10us, sync==500us.
    */

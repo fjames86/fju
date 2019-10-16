@@ -46,6 +46,7 @@
 #include <fju/rex.h>
 #include <fju/nls.h>
 #include <fju/freg.h>
+#include <fju/sec.h>
 
 struct clt_info {
     uint32_t prog;
@@ -86,24 +87,20 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static struct clt_info clt_procs[] = {
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
-    { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 0, NULL, NULL, "hrauth.null", NULL },    
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 0, NULL, NULL, "raft.null", NULL },    
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_list_results, "raft.list", NULL },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, raft_add_args, raft_add_results, "raft.add", "clid=CLID" },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, raft_rem_args, NULL, "raft.rem", "clid=CLID" },
-    { REX_RPC_PROG, REX_RPC_VERS, 0, NULL, NULL, "rex.null", NULL },    
     { REX_RPC_PROG, REX_RPC_VERS, 1, rex_read_args, rex_read_results, "rex.read", "clid=CLID" },
     { REX_RPC_PROG, REX_RPC_VERS, 2, rex_write_args, rex_write_results, "rex.write", "clid=CLID data=DATA" },
-    { NLS_RPC_PROG, NLS_RPC_VERS, 0, NULL, NULL, "nls.null", NULL },
     { NLS_RPC_PROG, NLS_RPC_VERS, 1, NULL, nls_list_results, "nls.list", NULL },
     { NLS_RPC_PROG, NLS_RPC_VERS, 3, nls_read_args, nls_read_results, "nls.read", "hshare=HSHARE [id=ID]" },
     { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
-    { FREG_RPC_PROG, FREG_RPC_VERS, 0, NULL, NULL, "freg.null", NULL },
     { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
+    { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -208,7 +205,8 @@ int main( int argc, char **argv ) {
   int i, sts, idx;
     struct clt_info *info;
     char *term;
-
+    char *procname;
+    
 #ifdef WIN32
     {
 	WSADATA wsadata;
@@ -220,6 +218,7 @@ int main( int argc, char **argv ) {
     raft_open();
     freg_open( NULL, NULL );
 
+    glob.hostid = hostreg_localid();
     glob.port = 8000;
     sts = freg_ensure( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
     glob.timeout = 1000;
@@ -260,46 +259,50 @@ int main( int argc, char **argv ) {
 	i++;
     }
 
-    if( i >= argc ) usage( NULL );
-    glob.hostid = strtoull( argv[i], &term, 16 );
-    if( *term ) {
-      struct hostreg_host host;
-      glob.hostid = 0;
-      if( strcmp( argv[i], "local" ) == 0 ) {
+    if( i >= argc ) glob.addr = htonl( INADDR_LOOPBACK );
+    else {
+      glob.hostid = strtoull( argv[i], &term, 16 );
+      if( *term ) {
+	struct hostreg_host host;
 	glob.hostid = 0;
-	glob.addr = htonl( INADDR_LOOPBACK );
-	i++;
-      } else if( strcmp( argv[i], "broadcast" ) == 0 ) {
-	glob.hostid = 0;
-	glob.broadcast = 1;
-	i++;
-	if( i >= argc ) usage( NULL );
-	sts = inet_pton( AF_INET, argv[i], &glob.addr );
-	//sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
-	if( sts != 1 ) usage( "Invalid IP address" );
-	i++;
-      } else {
-	sts = hostreg_host_by_name( argv[i], &host );
-	if( !sts ) {
-	  glob.hostid = host.id;
+	if( strcmp( argv[i], "local" ) == 0 ) {
+	  glob.hostid = 0;
+	  glob.addr = htonl( INADDR_LOOPBACK );
 	  i++;
-	} else {
+	} else if( strcmp( argv[i], "broadcast" ) == 0 ) {
+	  glob.hostid = 0;
+	  glob.broadcast = 1;
+	  i++;
+	  if( i >= argc ) usage( NULL );
 	  sts = inet_pton( AF_INET, argv[i], &glob.addr );
 	  //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
-	  if( sts == 1 ) {
+	  if( sts != 1 ) usage( "Invalid IP address" );
+	  i++;
+	} else {
+	  sts = hostreg_host_by_name( argv[i], &host );
+	  if( !sts ) {
+	    glob.hostid = host.id;
 	    i++;
 	  } else {
-	    glob.addr = htonl( INADDR_LOOPBACK );	    
+	    sts = inet_pton( AF_INET, argv[i], &glob.addr );
+	    //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
+	    if( sts == 1 ) {
+	      i++;
+	    } else {
+	      glob.addr = htonl( INADDR_LOOPBACK );	    
+	    }
 	  }
 	}
       }
     }
-    if( i >= argc ) usage( NULL );
+    
+    if( i >= argc ) procname = "rpcbind.list";
+    else procname = argv[i]; 
     
     idx = 0;
     while( clt_procs[idx].prog ) {
       info = &clt_procs[idx];
-      if( strcmp( argv[i], info->procname ) == 0 ) {
+      if( strcmp( procname, info->procname ) == 0 ) {
 	if( glob.broadcast ) {
 	  clt_broadcast( info, argc, argv, i );
 	} else {
@@ -422,6 +425,29 @@ static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i )
   free( tmpbuf );
 }
 
+static struct {
+  uint32_t prog;
+  char *name;
+} rpcbind_name_list[] = {
+			 { HRAUTH_RPC_PROG, "hrauth" },
+			 { RAFT_RPC_PROG, "raft" },
+			 { REX_RPC_PROG, "rex" },
+			 { NLS_RPC_PROG, "nls" },
+			 { FREG_RPC_PROG, "freg" },
+			 { 100000, "rpcbind" },
+			 { 0, NULL }
+};
+static char *rpcbind_name_by_prog( uint32_t prog ) {
+  int i;
+  i = 0;
+  while( 1 ) {
+    if( !rpcbind_name_list[i].name ) break;
+    if( rpcbind_name_list[i].prog == prog ) return rpcbind_name_list[i].name;
+    i++;
+  }
+  return "";
+}
+
 static void rpcbind_results( struct xdr_s *xdr ) {
   int sts, b;
   int i;
@@ -440,7 +466,7 @@ static void rpcbind_results( struct xdr_s *xdr ) {
       sts = xdr_decode_uint32( xdr, &port );
       if( sts ) goto bad;
 
-      printf( "%-12u %-8u %-8u %-8u\n", prog, vers, prot, port );
+      printf( "%-12u %-8u %-8u %-8u %s\n", prog, vers, prot, port, rpcbind_name_by_prog( prog ) );
       
       sts = xdr_decode_boolean( xdr, &b );
       if( sts ) goto bad;
@@ -456,8 +482,6 @@ static void raft_list_results( struct xdr_s *xdr ) {
     struct raft_cluster cl;
     struct raft_member member;
     char timestr[64];
-    struct tm *tm;
-    time_t now;
     
     xdr_decode_uint32( xdr, (uint32_t *)&n );
     for( i = 0; i < n; i++ ) {
@@ -489,9 +513,7 @@ static void raft_list_results( struct xdr_s *xdr ) {
 	    xdr_decode_uint64( xdr, &member.stateseq );
 
 	    if( member.lastseen ) {
-	      now = (time_t)member.lastseen;
-	      tm = localtime( &now );
-	      strftime( timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", tm );
+	      sec_timestr( member.lastseen, timestr );
 	    } else {
 	      strcpy( timestr, "Never" );
 	    }
@@ -533,7 +555,7 @@ static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "clid" ) == 0 ) {
-      clid = strtoul( argval, NULL, 16 );
+      clid = strtoull( argval, NULL, 16 );
     } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
@@ -698,9 +720,11 @@ static void nls_list_results( struct xdr_s *xdr ) {
   int sts, b;
 
   sts = xdr_decode_boolean( xdr, &b );
+  printf( "%-16s %-8s %-6s %-6s %-6s %-16s %-4s\n", "hshare", "seq", "lbac", "start", "count", "lastid", "flags" );
+  
   while( !sts && b ) {
     nls_decode_prop( xdr, &hshare, &prop );
-    printf( "%"PRIx64" %-8"PRIu64" %-4u %-4u %-4u %"PRIx64" %x\n",
+    printf( "%-16"PRIx64" %-8"PRIu64" %-6u %-6u %-6u %-16"PRIx64" %-4x\n",
 	    hshare, prop.seq, prop.lbacount, prop.start, prop.count, prop.last_id, prop.flags );
 
     sts = xdr_decode_boolean( xdr, &b );

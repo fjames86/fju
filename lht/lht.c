@@ -78,7 +78,8 @@ int lht_open( char *path, struct lht_s *lht ) {
   opts.flags = LOG_FLAG_FIXED;  
   sts = log_open( path ? path : "lht.dat", &opts, &lht->log );
   if( sts ) return sts;
-
+  lht->log.flags = LOG_ASYNC; /* set flushing mode */
+  
   /* setup buckets */
   lht->nbuckets = LHT_NBUCKETS;
   lht->buckets = lht_malloc( lht, sizeof(*lht->buckets) * lht->nbuckets );

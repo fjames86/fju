@@ -306,6 +306,7 @@ int main( int argc, char **argv ) {
     if( i < argc ) {
       sts = freg_subkey( glob.freg, 0, argv[i], 0, &parentid );
       if( sts ) usage( "Unknown key \"%s\"", argv[i] );
+      path = argv[i];
     }
     cmd_dump( parentid, path );
   } else if( strcmp( argv[i], "populate" ) == 0 ) {
@@ -353,10 +354,11 @@ int main( int argc, char **argv ) {
     ftab_prop( &ftab, &prop );
     ftab_close( &ftab );
 
-    printf( "Inodes %u/%u (%u%%) Data %ukb/%ukb Root %"PRIx64" LBASize %u\n",
+    printf( "Inodes %u/%u (%u%%) Data %ukb/%ukb (%u%%) Root %"PRIx64" LBASize %u\n",
 	    prop.count, prop.max, (100*prop.count)/prop.max,
 	    (prop.lbasize*prop.count) / 1024,
 	    (prop.lbasize*prop.max) / 1024,
+	    (100*prop.count)/prop.max,
 	    *((uint64_t *)prop.cookie),
 	    prop.lbasize );
   } else if( strcmp( argv[i], "set" ) == 0 ) {

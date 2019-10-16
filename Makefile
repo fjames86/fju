@@ -11,6 +11,7 @@ PROJECTS += dh
 PROJECTS += lht 
 PROJECTS += ef
 PROJECTS += ftab
+PROJECTS += freg
 PROGRAMS=
 LIBRARIES=
 

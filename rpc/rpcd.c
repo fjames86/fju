@@ -48,7 +48,6 @@
 static struct {
 	int foreground;
 	int no_rpcregister;
-        int loadservices;
 	int quiet;
 	volatile int exiting;
 	char *pidfile;
@@ -59,7 +58,8 @@ static struct {
 	struct rpc_conn *clist;    /* active connection list */
 	struct rpc_conn *flist;    /* free list */
 
-	void (*init_cb)( void );
+        rpcd_main_t main_cb;
+        void *main_cxt;
         struct rpc_logger loggers[1];
 
         
@@ -84,7 +84,7 @@ static void rpcd_run( void );
 static void rpc_accept( struct rpc_listen *lis );
 static void rpc_close_connections( void );
 static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, char *ipstr );
-static void rpcd_load_service( char *path, char *mainfn, uint32_t vers );
+static void rpcd_load_service( char *svcname, char *path, char *mainfn );
 static void rpcd_load_services( void );
 
 #ifndef WIN32
@@ -100,6 +100,11 @@ static void rpc_sig( int sig, siginfo_t *info, void *context ) {
 		break;
 	}
 
+	if( rpc.main_cb ) {
+	  int snum = sig;
+	  rpc.main_cb( RPCD_EVT_SIGNAL, (void *)&snum, rpc.main_cxt );
+	}
+
 }
 #endif
 
@@ -111,7 +116,7 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            [-L path]\n"
 #endif
-		"            [-f] [-R] [-q] [-M]\n"
+		"            [-f] [-R] [-q]\n"
 		"\n"
 		"  Where:\n"
 		"            -f               Run in foreground\n"
@@ -125,7 +130,6 @@ static void usage( char *fmt, ... ) {
 #ifndef WIN32
 		"            -p pidfile       Write a pidfile here\n"
 #endif
-		"            -M               Load services defined in /fju/rpc/services\n"
 		"\n" );
 
 
@@ -205,8 +209,6 @@ static void parse_args( int argc, char **argv ) {
 	    i++;
 	    if( i >= argc ) usage( NULL );
 	    rpc.pidfile = argv[i];
-	} else if( strcmp( argv[i], "-M" ) == 0 ) {
-	  rpc.loadservices = 1;
 	}
 	else usage( NULL );
 
@@ -215,12 +217,15 @@ static void parse_args( int argc, char **argv ) {
     
 }
 
-int rpcd_main( int argc, char **argv, void (*init_cb)(void) ) {
+int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
-
-	rpc.init_cb = init_cb;
+	
+	freg_open( NULL, NULL );
+	
+	rpc.main_cb = main_cb;
+	rpc.main_cxt = main_cxt;
 	rpc.no_rpcregister = 1;
 	
 	/* parse command line */
@@ -347,7 +352,21 @@ static void rpc_init_listen( void ) {
 	}
 
 	if( !rpc.nlisten ) {
-	  rpc_log( RPC_LOG_WARN, "Not listening on any ports" );
+	    uint32_t port;
+	    sts = freg_get_by_name( NULL, 0,
+				    "/fju/rpc/port", FREG_TYPE_UINT32,
+				    (char *)&port, sizeof(port), NULL );
+	    if( !sts ) {
+		rpc.listen[0].type = RPC_LISTEN_UDP;
+		rpc.listen[0].addr.sin.sin_family = AF_INET;
+		rpc.listen[0].addr.sin.sin_port = htons( port );
+		rpc.listen[1].type = RPC_LISTEN_TCP;
+		rpc.listen[1].addr.sin.sin_family = AF_INET;
+		rpc.listen[1].addr.sin.sin_port = htons( port );
+		rpc.nlisten = 2;
+	    } else {	    
+		rpc_log( RPC_LOG_WARN, "Not listening on any ports" );
+	    }
 	}
 
 	/* listen on ports */
@@ -486,7 +505,11 @@ static void rpc_poll( int timeout ) {
 	for( i = 0; i < RPC_MAX_LISTEN; i++ ) {
 		if( i < rpc.nlisten ) {
 #ifdef WIN32
-			WSAEventSelect( rpc.listen[i].fd, rpc.evt, FD_READ );
+			WSAEventSelect( rpc.listen[i].fd,
+					rpc.evt,
+					((rpc.listen[i].type == RPC_LISTEN_TCP) || (rpc.listen[i].type == RPC_LISTEN_TCP6)) ?
+					FD_ACCEPT :
+					FD_READ );
 #else
 			pfd[i].fd = rpc.listen[i].fd;
 			pfd[i].events = POLLIN;
@@ -507,15 +530,16 @@ static void rpc_poll( int timeout ) {
 #ifdef WIN32
 		switch( c->nstate ) {
 		case RPC_NSTATE_RECV:
-			WSAEventSelect( c->fd, rpc.evt, FD_READ );
+			WSAEventSelect( c->fd, rpc.evt, FD_READ|FD_CLOSE );
 			break;
 		case RPC_NSTATE_SEND:
-			WSAEventSelect( c->fd, rpc.evt, FD_WRITE );
+			WSAEventSelect( c->fd, rpc.evt, FD_WRITE|FD_CLOSE );
 			break;
 		case RPC_NSTATE_CONNECT:
-			WSAEventSelect( c->fd, rpc.evt, FD_CONNECT );
+			WSAEventSelect( c->fd, rpc.evt, FD_CONNECT|FD_CLOSE );
 			break;
 		default:
+		        WSAEventSelect( c->fd, rpc.evt, FD_READ|FD_CLOSE );
 			break;
 		}
 #else
@@ -545,8 +569,12 @@ static void rpc_poll( int timeout ) {
 
 #ifdef WIN32
 	sts = WSAWaitForMultipleEvents( 1, &rpc.evt, FALSE, timeout, FALSE );
-	if( sts == WSA_WAIT_TIMEOUT ) return;
-	if( sts != WSA_WAIT_EVENT_0 ) return;
+	if( sts == WSA_WAIT_TIMEOUT ) {
+	    return;
+	}
+	if( sts != WSA_WAIT_EVENT_0 ) {
+	    return;
+	}
 #else
 	sts = poll( pfd, npfd, timeout );
 	if( sts <= 0 ) return;
@@ -557,7 +585,27 @@ static void rpc_poll( int timeout ) {
 	for( i = 0; i < rpc.nlisten; i++ ) {
 		int j;
 
+		memset( &events, 0, sizeof(events) );
 		WSAEnumNetworkEvents( rpc.listen[i].fd, rpc.evt, &events );
+		if( events.lNetworkEvents & FD_READ ) revents[i] |= RPC_POLLIN;
+		if( events.lNetworkEvents & FD_WRITE ) revents[i] |= RPC_POLLOUT;
+		if( events.lNetworkEvents & FD_ACCEPT ) revents[i] |= RPC_POLLIN;
+		if( events.lNetworkEvents & FD_CONNECT ) revents[i] |= RPC_POLLOUT;
+		if( events.lNetworkEvents & FD_CLOSE ) revents[i] |= RPC_POLLHUP;
+		for( j = 0; j < 6; j++ ) {
+		    if( events.iErrorCode[j] ) {
+			revents[i] |= RPC_POLLERR;
+		    }
+		}
+
+	}
+	i = RPC_MAX_LISTEN;
+	c = rpc.clist;
+	while( c ) {
+    	        int j;
+
+		memset( &events, 0, sizeof(events) );
+		WSAEnumNetworkEvents( c->fd, rpc.evt, &events );
 		if( events.lNetworkEvents & FD_READ ) revents[i] |= RPC_POLLIN;
 		if( events.lNetworkEvents & FD_WRITE ) revents[i] |= RPC_POLLOUT;
 		if( events.lNetworkEvents & FD_ACCEPT ) revents[i] |= RPC_POLLIN;
@@ -566,12 +614,7 @@ static void rpc_poll( int timeout ) {
 		for( j = 0; j < 6; j++ ) {
 			if( events.iErrorCode[j] ) revents[i] |= RPC_POLLERR;
 		}
-	}
-	i = RPC_MAX_LISTEN;
-	c = rpc.clist;
-	while( c ) {
-		WSAEnumNetworkEvents( c->fd, rpc.evt, &events );
-		revents[i] = events.lNetworkEvents;
+
 		c = c->next;
 		i++;
 	}
@@ -639,7 +682,8 @@ static void rpc_poll( int timeout ) {
 					c->cstate = RPC_CSTATE_CLOSE;
 					break;
 				}
-
+				c->timestamp = rpc_now();
+				
 				c->cdata.offset += sts;
 				if( c->cdata.offset == c->cdata.count ) {
 					/* msg complete - process */
@@ -656,6 +700,7 @@ static void rpc_poll( int timeout ) {
 						/* optimistically send count */
 						xdr_init( &tmpx, tmpbuf, 4 );
 						xdr_encode_uint32( &tmpx, c->cdata.count | 0x80000000 );
+						c->timestamp = rpc_now();
 
 						sts = send( c->fd, tmpbuf, 4, 0 );
 						if( sts < 0 ) {
@@ -889,7 +934,8 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->cstate = RPC_CSTATE_RECVLEN;
       c->nstate = RPC_NSTATE_RECV;
       c->connid = ++rpc.connid;
-
+      c->timestamp = rpc_now();
+      
 #ifdef WIN32
 	  {
 		u_long nb = 1;
@@ -904,7 +950,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       rpc.clist = c;
 
       mynet_ntop( lis->type, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len, ipstr );
-      rpc_log( RPC_LOG_DEBUG, "Accept Incoming Connection %s", ipstr );
+      rpc_log( RPC_LOG_DEBUG, "Accept Incoming Connection %s fd=%d", ipstr, (int)c->connid );
     }
     break;
   }
@@ -929,11 +975,10 @@ static void rpcd_run( void ) {
 #endif
 		
 	/* register programs and initialize */
-	if( rpc.init_cb ) rpc.init_cb();
+	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_INIT, NULL, rpc.main_cxt );
 
-	if( rpc.loadservices ) {
-	  rpcd_load_services();
-	}
+	/* dynamically load other services */
+	rpcd_load_services();
 	
 	memset( &sin, 0, sizeof(sin) );
 	sin.sin_family = AF_INET;
@@ -984,6 +1029,7 @@ static void rpcd_run( void ) {
 		now = rpc_now();
 		while( c ) {
 			if( now > (c->timestamp + RPC_CONNECTION_TIMEOUT) ) {
+			        rpc_log( RPC_LOG_INFO, "closing stale connection fd=%d", (int)c->connid );
 				c->cstate = RPC_CSTATE_CLOSE;
 			}
 
@@ -1019,6 +1065,10 @@ static void rpcd_run( void ) {
 		c = c->next;
 	}
 
+	/* run shutdown callback if required */
+	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_CLOSE, NULL, rpc.main_cxt );
+
+	/* close listening sockets */
 	for( i = 0; i < rpc.nlisten; i++ ) {
 #ifdef WIN32
 		closesocket( rpc.listen[i].fd );
@@ -1169,27 +1219,32 @@ static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, cha
   return ipstr;	     
 }
 
-static void rpcd_load_service( char *path, char *mainfn, uint32_t vers ) {
+static void rpcd_load_service( char *svcname, char *path, char *mainfn ) {
   void *hdl;
-  rpcd_main_t pmain;
+  rpcd_service_t pmain;
 
 #ifdef WIN32
   hdl = LoadLibraryA( path );
-  if( !hdl ) return;
-  pmain = (rpcd_main_t)GetProcAddress( hdl, mainfn ? mainfn : "rpc_main" );
+  if( !hdl ) {
+    rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\"", svcname, path );
+    return;
+  }
+  pmain = (rpcd_service_t)GetProcAddress( hdl, mainfn ? mainfn : "rpc_main" );
 #else
   
   hdl = dlopen( path, 0 );
   if( !hdl ) {
-    rpc_log( RPC_LOG_ERROR, "Failed to load service from %s", path );
+    rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\"", svcname, path );
     return;
   }
 
   /* casting pointer to function pointer is not allowed, but the dl api forces us to do so? */
-  pmain = (rpcd_main_t)dlsym( hdl, mainfn ? mainfn : "rpc_main" );
+  pmain = (rpcd_service_t)dlsym( hdl, mainfn ? mainfn : "rpc_main" );
 #endif
   
-  if( pmain ) pmain( vers );
+  if( pmain ) pmain();
+  else rpc_log( RPC_LOG_ERROR, "Failed to load service %s entry point %s", svcname, mainfn );
+    
 }
 
 static void rpcd_load_services( void ) {
@@ -1197,11 +1252,8 @@ static void rpcd_load_services( void ) {
   uint64_t hkey, id;
   struct freg_entry entry;
   char path[256], mainfn[64];
-  uint32_t vers;
-
-  freg_open( NULL, NULL );
   
-  rpc_log( RPC_LOG_DEBUG, "loading services" );
+  rpc_log( RPC_LOG_DEBUG, "Loading dynamic services" );
   
   sts = freg_subkey( NULL, 0, "/fju/rpc/services", 0, &hkey );
   if( sts ) return;
@@ -1217,13 +1269,6 @@ static void rpcd_load_services( void ) {
       
       sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path) - 1, NULL );
       if( !sts ) {
-	sts = freg_get_by_name( NULL, entry.id, "vers", FREG_TYPE_UINT32, (char *)&vers, sizeof(vers), NULL );
-	if( sts ) {
-	  vers = 0;
-	  sts = 0;
-	}
-      }
-      if( !sts ) {
 	sts = freg_get_by_name( NULL, entry.id, "mainfn", FREG_TYPE_STRING, mainfn, sizeof(mainfn) - 1, NULL );
 	if( sts ) {
 	  strcpy( mainfn, "" );
@@ -1231,12 +1276,16 @@ static void rpcd_load_services( void ) {
 	}
       }
       if( !sts ) {
-	rpc_log( RPC_LOG_DEBUG, "loading service %s", entry.name );
-	rpcd_load_service( path, mainfn[0] ? mainfn : NULL, vers );
+	rpc_log( RPC_LOG_DEBUG, "Loading service %s from \"%s\"", entry.name, path );
+	rpcd_load_service( entry.name, path, mainfn[0] ? mainfn : NULL );
       }
     }
     
     id = entry.id;
   } while( 1 );
   
+}
+
+void rpcd_stop( void ) {
+    rpc.exiting = 1;
 }

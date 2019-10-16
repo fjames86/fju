@@ -1,0 +1,4 @@
+LIBRARY librex
+EXPORTS
+rex_register 
+

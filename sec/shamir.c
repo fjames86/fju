@@ -10,24 +10,26 @@
 #include <fju/sec.h>
 
 
-static char *arr_to_hex_str( uint8_t *arr, int arr_size ) {
-  char *out = malloc(2 * arr_size + 1);
-  for (int pos = 0; pos < arr_size; pos++) {
-    sprintf(out + 2*pos, "%02x", arr[pos]);
+static char *u8_to_hex( uint8_t *u8, int len, char *hex ) {
+  int i;
+  strcpy( hex, "" );
+  for( i = 0; i < len; i++ ) {
+    sprintf( hex + strlen( hex ), "%02x", u8[i] );
   }
-  out[2 * arr_size + 1] = 0x00;
-  return out;
+  return hex;
 }
 
-static uint8_t * hex_str_to_arr(const char *s) {
-  // / 2 ?
-  uint8_t *res = malloc(strlen(s) * sizeof(uint8_t));
-  char buff[3] = {0x00, 0x00, 0x00};
-  for (int pos = 0; pos < strlen(s); pos++) {
-    strncpy(buff, s + pos*2, 2);
-    res[pos] = strtoul(buff, NULL, 16);
+static uint8_t *hex_to_u8( char *hex, uint8_t *u8 ) {
+  char tmp[4];
+  int i, len;
+  len = strlen( hex ) / 2;
+  for( i = 0; i < len; i++ ) {
+    tmp[0] = hex[2*i];
+    tmp[1] = hex[2*i + 1];
+    tmp[2] = 0;
+    u8[i] = strtoul( tmp, NULL, 16 );
   }
-  return res;
+  return u8;
 }
 
 
@@ -72,6 +74,7 @@ int main(int argc, char *argv[]) {
     int secret_size, i, row;
     char *buf;
     struct sec_shamir_share *shares;
+    char *hex;
     
     argi++;
     if( argi >= argc ) usage( NULL );
@@ -85,32 +88,36 @@ int main(int argc, char *argv[]) {
       shares[i].sharebuf = malloc( secret_size + 1 );
     }
     sec_shamir_split( (uint8_t *)buf, secret_size, shares, n, k );
-    
+
+    hex = malloc( (secret_size + 1) * 2 + 1 );
     for( row = 0; row < n; row++ ) {
-      printf("%s\n", arr_to_hex_str(shares[row].sharebuf, secret_size + 1));
+      u8_to_hex( shares[row].sharebuf, secret_size + 1, hex );
+      printf("%s\n", hex );
       free( shares[row].sharebuf );
     }
     free( shares );
+    free( hex );
   } else if (strcmp(argv[argi], "join") == 0) {
-    int k, secret_size, i;
+    int k, secretlen, i;
     struct sec_shamir_share *shares;
-    uint8_t *reconstructed_secret;
+    uint8_t *secret;
 
     argi++;
     if( argi >= argc ) usage( NULL );
     k = argc - argi;
-    secret_size = strlen(argv[argi]) - 1;
-    shares = malloc(k * sizeof(*shares) );
+    secretlen = strlen(argv[argi]) - 1;
+    shares = malloc( k * sizeof(*shares) );
 
     for( i = 0; i < k; i++ ) {
-      shares[i].sharebuf = hex_str_to_arr(argv[argi]);
+      shares[i].sharebuf = malloc( strlen( argv[argi] ) / 2 );;
+      hex_to_u8( argv[argi], shares[i].sharebuf );
       argi++;
     }
 
-    reconstructed_secret = malloc( secret_size );
-    sec_shamir_join( reconstructed_secret, secret_size, shares, k );
+    secret = malloc( secretlen );
+    sec_shamir_join( secret, secretlen, shares, k );
 
-    printf("%s\n", (char *) reconstructed_secret);
+    printf( "%s\n", secret );
   } else usage( NULL );
 
   return 0;

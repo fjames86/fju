@@ -54,4 +54,14 @@ uint32_t sec_rand_uint32( void );
 
 char *sec_timestr( uint64_t now, char *str );
 
+struct sec_shamir_share {
+  uint32_t flags;
+#define SEC_SHAMIR_XVAL  0x0001 
+  uint8_t xval;
+  uint8_t spare[3];
+  uint8_t *sharebuf;
+};
+int sec_shamir_split( uint8_t *secret, int secretlen, struct sec_shamir_share *share, int nshares, int k );
+int sec_shamir_join( uint8_t *secret, int secretlen, struct sec_shamir_share *share, int nshares );
+
 #endif

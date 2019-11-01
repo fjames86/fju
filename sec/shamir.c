@@ -50,7 +50,7 @@ static void usage( char *fmt, ... ) {
 }
 
 
-int main(int argc, char *argv[]) {
+int main( int argc, char **argv ) {
   int argi;
   int n = 3, k = 2;
 
@@ -92,12 +92,12 @@ int main(int argc, char *argv[]) {
     hex = malloc( (secret_size + 1) * 2 + 1 );
     for( row = 0; row < n; row++ ) {
       u8_to_hex( shares[row].sharebuf, secret_size + 1, hex );
-      printf("%s\n", hex );
+      printf( "%s\n", hex );
       free( shares[row].sharebuf );
     }
     free( shares );
     free( hex );
-  } else if (strcmp(argv[argi], "join") == 0) {
+  } else if( strcmp( argv[argi], "join" ) == 0 ) {
     int k, secretlen, i;
     struct sec_shamir_share *shares;
     uint8_t *secret;

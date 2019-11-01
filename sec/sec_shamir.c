@@ -1,4 +1,8 @@
 
+/*
+ * Modified from original at https://github.com/rbaron/secret
+ */
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>

@@ -137,6 +137,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\sec\sec.c" />
+    <ClCompile Include="..\..\sec\sec_shamir.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\fju\sec.h" />

@@ -204,6 +204,8 @@ aes_decrypt
 sec_rand
 sec_rand_uint32
 sec_timestr
+sec_shamir_split 
+sec_shamir_join
 shauth_init
 shauth_provider
 shauth_set_shared

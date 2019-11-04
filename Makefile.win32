@@ -30,6 +30,7 @@ progs += ${BINDIR}/ftab.exe
 progs += ${BINDIR}/fdtab.exe
 progs += ${BINDIR}/freg.exe
 progs += ${BINDIR}/ecdh.exe
+progs += ${BINDIR}/shamir.exe 
 
 .PHONY: all clean strip 
 
@@ -42,9 +43,9 @@ ${LIBDIR}/libmmf.a: mmf/mmf.c
 	gcc -c ${CFLAGS} mmf/mmf.c
 	ar rcs ${LIBDIR}/libmmf.a mmf.o
 
-${LIBDIR}/libsec.a: sec/sec.c
-	gcc -c ${CFLAGS} sec/sec.c
-	ar rcs ${LIBDIR}/libsec.a sec.o
+${LIBDIR}/libsec.a: sec/sec.c sec/sec_shamir.c 
+	gcc -c ${CFLAGS} sec/sec.c sec/sec_shamir.c 
+	ar rcs ${LIBDIR}/libsec.a sec.o sec_shamir.o
 
 ${LIBDIR}/liblog.a: log/log.c
 	gcc -c ${CFLAGS} log/log.c
@@ -124,6 +125,9 @@ ${LIBDIR}/libcmdprog.dll: rpc/cmdprog.c ${LIBFJU}
 
 ${BINDIR}/ecdh.exe: dh/ecdh.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/ecdh.exe ${CFLAGS} dh/ecdh.c -L${LIBDIR} -lfju
+
+${BINDIR}/shamir.exe: sec/shamir.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/shamir.exe ${CFLAGS} sec/shamir.c -L${LIBDIR} -lfju
 
 FJU_DEPS += ${LIBDIR}/libmmf.a
 FJU_LIBS += -lmmf

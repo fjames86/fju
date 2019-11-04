@@ -71,7 +71,7 @@ int main( int argc, char **argv ) {
   if( argi >= argc ) usage( NULL );
 
   if( strcmp( argv[argi], "split") == 0 ) {
-    int secret_size, i, row;
+    int secretlen, i, row;
     char *buf;
     struct sec_shamir_share *shares;
     char *hex;
@@ -80,18 +80,18 @@ int main( int argc, char **argv ) {
     if( argi >= argc ) usage( NULL );
     buf = argv[argi];
     
-    secret_size = strlen( buf );
+    secretlen = strlen( buf );
     shares = malloc( sizeof(*shares) * n );
     for( i = 0; i < n; i++ ) {
       shares[i].flags = 0;
       shares[i].xval = 0;
-      shares[i].sharebuf = malloc( secret_size + 1 );
+      shares[i].sharebuf = malloc( secretlen + 1 );
     }
-    sec_shamir_split( (uint8_t *)buf, secret_size, shares, n, k );
+    sec_shamir_split( (uint8_t *)buf, secretlen, shares, n, k );
 
-    hex = malloc( (secret_size + 1) * 2 + 1 );
+    hex = malloc( (secretlen + 1) * 2 + 1 );
     for( row = 0; row < n; row++ ) {
-      u8_to_hex( shares[row].sharebuf, secret_size + 1, hex );
+      u8_to_hex( shares[row].sharebuf, secretlen + 1, hex );
       printf( "%s\n", hex );
       free( shares[row].sharebuf );
     }

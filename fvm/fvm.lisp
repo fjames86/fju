@@ -3,7 +3,22 @@
   (ql:quickload '("babel" "nibbles")))
 
 (defpackage #:fvm
-  (:use #:cl))
+  (:use #:cl)
+  (:export #:r0 #:r1 #:r2 #:r3 #:r4 #:r5 #:r6 #:r7 #:sp #:rp
+	   #:defword
+	   #:save-program
+	   #:begin #:until #:else #:then
+	   #:.blkw #:origin #:orig #:.string
+	   #:br #:br-p #:br-z #:br-n #:br-pn #:br-np #:br-pz #:br-zp 
+	   #:br-nz #:br-zn #:br-pnz #:br-pzn #:br-npz #:br-nzp #:br-zpn #:br-znp
+	   #:add #:ld #:st #:call #:nand #:ldr #:str #:push #:rpush #:pop #:rpop
+	   #:ldi #:sti #:jmp #:ret #:mul #:div #:mod #:cmp #:lea 
+	   #:! #:DUP2 #:AND #:DEFWORD #:2+ #:I #:TUCK #:1+
+	   #:XNOR #:NAND #:@ #:ROT #:NOR #:2- #:DROP #:FALSE
+	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
+	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-))
+	   
+   
 
 (in-package #:fvm)
 
@@ -266,7 +281,7 @@ assembled object code."
   (let ((ltab (first-pass instructions)))
     (second-pass instructions ltab)))
 
-(defun save-program (pathspec objs)
+(defun %save-program (pathspec objs)
   (let ((octets (make-array (* 2 64 1024) :element-type '(unsigned-byte 8))))
     ;; fill out program data from object definitions 
     (dolist (obj objs)
@@ -290,13 +305,16 @@ assembled object code."
   (cadr (wordp name)))
 (defun word-assembly (name)
   (caddr (wordp name)))
-
 (defun word-dependencies (body)
   (remove-duplicates
    (mapcan (lambda (wrd)
-	     (when (and (symbolp wrd) (wordp wrd))
+	     (when (and (symbolp wrd) (wordp wrd) (not (word-inline-p wrd)))
 	       (list wrd)))
 	   body)))
+(defun word-options (name)
+  (cadddr (wordp name)))
+(defun word-inline-p (name)
+  (getf (word-options name) :inline nil))
 
 (defun generate-word-assembly (body)
   (do ((body body (cdr body))
@@ -307,33 +325,53 @@ assembled object code."
 		 ((symbolp wrd)
 		  (cond
 		    ((wordp wrd)
-		     (list `(call ,wrd)))  ;; TODO: allow function inlining
+		     (if (word-inline-p wrd)
+			 (word-assembly wrd)
+			 (list `(call ,wrd))))
 		    ((eq wrd 'if) ;; if word [else word] then
 		     (setf body (cdr body))
-		     (let ((if-word (pop body))
-			   (else-word nil)
+		     (let ((if-words nil)
+			   (else-words nil)
 			   (else-label (gensym))
 			   (then-label (gensym)))
+		       ;; extract if-words 
+		       (do ()
+			   ((or (member (car body) '(else then))
+				(null body)))
+			 (push (car body) if-words)
+			 (setf body (cdr body)))
+		       (setf if-words (nreverse if-words))
+		       (when (null body) (error "IF expects THEN"))
 		       (when (eq (car body) 'else)
-			 (setf body (cdr body)
-			       else-word (car body)
-			       body (cdr body)))
+			 (setf body (cdr body))
+			 (do ()
+			     ((or (eq (car body) 'then)
+				  (null body)))
+			   (push (car body) else-words)
+			   (setf body (cdr body)))
+			 (setf else-words (nreverse else-words))
+			 (when (null body) (error "IF ELSE expects THEN")))
 		       (unless (eq (car body) 'then) (error "IF expects THEN"))
 		       `((pop r0)
 			 (add r0 r0 0) ;; test top of stack
 			 (br-pn ,else-label)
-			 (call ,if-word)
+			 ,@(generate-word-assembly if-words)
 			 (br-pnz ,then-label)
 			 ,else-label
-			 ,@(when else-word `((call ,else-word)))
+			 ,@(generate-word-assembly else-words)
 			 ,then-label)))
 		    ((eq wrd 'do) ;; 10 0 do body-word loop
 		     (setf body (cdr body))
 		     (let ((start-label (gensym))
 			   (end-label (gensym))
-			   (body-word (car body)))
-		       (setf body (cdr body))
-		       (unless (eq (car body) 'loop) (error "DO BODY LOOP expected"))
+			   (body-words nil))
+		       (do ()
+			   ((or (eq (car body) 'loop)
+				(null body)))
+			 (push (car body) body-words)
+			 (setf body (cdr body)))
+		       (setf body-words (nreverse body-words))
+		       (unless (eq (car body) 'loop) (error "DO expects LOOP"))
 		       `((pop r0) ;; start index 
 			 (pop r1) ;; max counter 
 			 (rpush r1) ;; push loop max onto return stack 
@@ -345,13 +383,28 @@ assembled object code."
 			 (br-pz ,end-label)
 			 (rpush r1) 
 			 (rpush r0) ;; restore loop index and max 
-			 (call ,body-word)
+			 ,@(generate-word-assembly body-words)
 			 ;; increment loop index
 			 (rpop r0)
 			 (add r0 r0 1)
 			 (rpush r0) ;; store updated loop index 
 			 (br-pnz ,start-label)
 			 ,end-label)))
+		    ((eq wrd 'begin)
+		     (let ((begin-words nil)
+			   (start-label (gensym)))
+		       (do ()
+			   ((or (eq (car body) 'until)
+				(null body)))
+			 (push (car body) begin-words)
+			 (setf body (cdr body)))
+		       (setf begin-words (nreverse begin-words))
+		       (unless (eq (car body) 'until) (error "BEGIN expects UNTIL"))
+		       `(,start-label
+			 ,@(generate-word-assembly begin-words)
+			 (pop r0)
+			 (add r0 r0 0)
+			 (br-pn ,start-label))))
 		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
 		  `((br-pnz 1) ;; skip immediate value and load it 
@@ -368,15 +421,17 @@ assembled object code."
 
 
 (defun define-word (name options body)
-  (declare (ignore options))
   (list name
 	(word-dependencies body)
-	(generate-word-assembly body)))
+	(generate-word-assembly body)
+	options))
 			   
 (defmacro defword (name options &rest body)
-  (declare (ignore options))
-  `(push (define-word ',name nil ',body)
-	 *words*))
+  `(progn
+     ,@(when (string-equal (package-name *package*) "FVM")
+	 (list `(export '(,name))))
+     (push (define-word ',name (list ,@options) ',body)
+	 *words*)))
 	    
 
 ;; define intrinsic words 
@@ -385,7 +440,7 @@ assembled object code."
   (pop r1)
   (push r0)
   (push r1))
-(defword drop ()
+(defword drop (:inline t)
   (pop r0))
 (defword dup ()
   (pop r0)
@@ -509,7 +564,17 @@ assembled object code."
 (defword xnor ()
   dup2 nand swap or nand)
 (defword halt ()
-  zero #xfffe !)  ;; write 0 zero address fffe 
+  zero #xfffe !)  ;; write 0 zero address fffe
+(defword i ()
+  (ldr r0 rp 0)
+  (push r0))
+(defword dumpchr ()
+  #xfe06 !)
+(defword true (:inline t)
+  (nand r0 r0 0) ;; -1 
+  (push r0))
+(defword false (:inline t)
+  zero)
 
 (defparameter *variables* nil)
 (defun define-variable (name size &optional initial-contents)
@@ -565,16 +630,22 @@ assembled object code."
 			variables)))))
 
 
-			      
-(defword test-loop-body ()
-  1+)
+(defun save-program (pathspec entry-word &key variables print-assembly)
+  (let ((asm (generate-assembly entry-word :variables variables)))
+    (when print-assembly 
+      (dolist (x asm)
+	(format t ";; ~S~%" x)))
+    (%save-program pathspec (assemble-instructions asm))))
+
+;; ------------------------------------------------------------
+
+(defpackage #:fvm-test
+  (:use #:cl #:fvm))
+
+(in-package #:fvm-test)
 
 (defword test ()
-  0 10 0 do test-loop-body loop halt)
+  true if 65 dumpchr else 66 dumpchr then halt)
 
 (defun test ()
-  (let ((asm (generate-assembly 'test :variables '(8words))))
-    (dolist (x asm)
-      (format t ";; ~S~%" x))
-    (save-program "test.obj" (assemble-instructions asm))))
-
+  (save-program "test.obj" 'test :print-assembly t ))

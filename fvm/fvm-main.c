@@ -25,6 +25,7 @@ static void usage( char *fmt, ... ) {
 static struct {
   struct fvm_state fvm;
   int verbose;
+  int nsteps;
 } glob;
 
 int main( int argc, char **argv ) {
@@ -41,6 +42,10 @@ int main( int argc, char **argv ) {
       path = argv[i];
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
       glob.verbose = 1;
+    } else if( strcmp( argv[i], "-n" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );      
+      glob.nsteps = strtoul( argv[i], NULL, 10 );
     } else usage( NULL );
     i++;
   }
@@ -54,7 +59,8 @@ int main( int argc, char **argv ) {
   if( glob.verbose ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
   mmf_close( &mmf );
 
-  fvm_run( &glob.fvm );
+  if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
+  else fvm_run( &glob.fvm );
 
   if( glob.verbose ) {
     printf( ";; R0 %x R1 %x R2 %x R3 %x R4 %x R5 %x R6 %x R7 %x PC %x\n",

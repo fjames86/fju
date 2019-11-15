@@ -4,8 +4,10 @@
 #include <stdint.h>
 
 #include <fju/fvm.h>
+#include <fju/rpc.h>
 
 /*
+ * Loosely modelled on the LC3 processor. 
  * Layout:
  * 0x0000 - 0x2fff return stack
  * 0x3000 - 0xfdff user program code + working memory
@@ -229,6 +231,7 @@ static void fvm_inst_push( struct fvm_state *state, uint16_t opcode ) {
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPOP R%x = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, read_mem( state, state->reg[sp] + 1 ) );
     state->reg[sp]++;
     state->reg[reg] = read_mem( state, state->reg[sp] );
+    update_flags( state, state->reg[reg] );
   } else {
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPUSH R%x = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, state->reg[reg] );
     write_mem( state, state->reg[sp], state->reg[reg] );
@@ -282,7 +285,7 @@ static void fvm_inst_jmp( struct fvm_state *state, uint16_t opcode ) {
 
 }
 
-/* mul/div/mod */
+/* mul/div/mod/cmp */
 static void fvm_inst_mul( struct fvm_state *state, uint16_t opcode ) {
   uint16_t dr, sr1, sr2, flags;
   dr = (opcode >> 9) & 0x7;
@@ -377,6 +380,25 @@ int fvm_run( struct fvm_state *state ) {
   return 0;
 }
 
+int fvm_run_nsteps( struct fvm_state *state, int nsteps ) {
+  int i = 0;
+  while( (state->flags & FVM_FLAG_RUNNING) && (i < nsteps) ) {
+    fvm_step( state );
+    i++;
+  }
+  return 0;
+}
+
+int fvm_run_timeout( struct fvm_state *state, int timeout ) {
+  uint64_t end;
+  end = rpc_now() + timeout;  
+  while( state->flags & FVM_FLAG_RUNNING ) {
+    fvm_run_nsteps( state, 100 );
+    if( rpc_now() >= end ) break;
+  }
+  return 0;
+}
+
 int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
   int i;
 
@@ -397,6 +419,7 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
   state->reg[FVM_REG_SP] = 0xfdff;
   state->reg[FVM_REG_RP] = 0x2fff;
   state->reg[FVM_REG_PSR] = FVM_PSR_ZERO;
+  state->flags |= FVM_FLAG_RUNNING;
   
   return 0;
 }

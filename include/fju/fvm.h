@@ -59,7 +59,8 @@ struct fvm_state {
 
 int fvm_load( struct fvm_state *state, uint16_t *program, int proglen );
 int fvm_run( struct fvm_state *state );
-
+int fvm_run_nsteps( struct fvm_state *state, int nsteps );
+int fvm_run_timeout( struct fvm_state *state, int timeout );
 
 
 #endif

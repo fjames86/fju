@@ -1,3 +1,32 @@
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
+
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,8 +38,10 @@
 /*
  * Loosely modelled on the LC3 processor. 
  * Layout:
- * 0x0000 - 0x2fff return stack
- * 0x3000 - 0xfdff user program code + working memory
+ * 0x0000 - 0x07ff word jump table 
+ * 0x0800 - 0x0fff unused 
+ * 0x1000 - 0x2fff return stack 
+ * 0x3000 - 0xfdff user program code + data stack 
  * 0xfe00 - 0xffff device registers 
  */
 static uint16_t sign_extend( uint16_t x, int bit_count ) {
@@ -400,14 +431,22 @@ int fvm_run_timeout( struct fvm_state *state, int timeout ) {
 }
 
 int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
-  int i;
+  int i, j;
+  uint16_t offset, count;
 
-  /* check program length */
-  if( proglen > 0xfe00 ) proglen = 0xfe00;
-
-  /* copy program into ram starting at correcct offset */
-  for( i = 0; i < proglen; i++ ) {
-    state->mem[i] = program[i];
+  memset( state->mem, 0, sizeof(state->mem) );
+  i = 0;
+  while( i < proglen ) {
+      if( (i + 1) >= proglen ) return -1;
+      offset = program[i];
+      count = program[i+1];
+      i += 2;
+      
+      for( j = 0; j < count; j++ ) {
+	  if( i >= proglen ) return -1;
+	  state->mem[offset + j] = program[i];
+	  i++;
+      }
   }
 
   /* clear registers */

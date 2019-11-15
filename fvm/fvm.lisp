@@ -1,3 +1,11 @@
+;;;; Copyright Frank James 2019
+
+;;;
+;;; This file defines a very naive assembler and forth compiler for the 
+;;; fvm virtual machine defined in fvm.c
+;;; It is not expected to be particularly clever or efficient.
+;;; The main aim is to get something that works and is sufficiently
+;;; complete that it can actually be used to write programs for fvm.
 
 (eval-when (:load-toplevel :compile-toplevel :execute)
   (ql:quickload '("babel" "nibbles")))
@@ -5,10 +13,10 @@
 (defpackage #:fvm
   (:use #:cl)
   (:export #:r0 #:r1 #:r2 #:r3 #:r4 #:r5 #:r6 #:r7 #:sp #:rp
-	   #:defword
+	   #:defword #:defvariable
 	   #:save-program
 	   #:begin #:until #:else #:then
-	   #:.blkw #:origin #:orig #:.string
+	   #:.blkw #:.origin #:.orig #:.string
 	   #:br #:br-p #:br-z #:br-n #:br-pn #:br-np #:br-pz #:br-zp 
 	   #:br-nz #:br-zn #:br-pnz #:br-pzn #:br-npz #:br-nzp #:br-zpn #:br-znp
 	   #:add #:ld #:st #:call #:nand #:ldr #:str #:push #:rpush #:pop #:rpop
@@ -16,7 +24,8 @@
 	   #:! #:DUP2 #:AND #:DEFWORD #:2+ #:I #:TUCK #:1+
 	   #:XNOR #:NAND #:@ #:ROT #:NOR #:2- #:DROP #:FALSE
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
-	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-))
+	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
+	   #:dumpstr #:variable))
 	   
    
 
@@ -54,7 +63,7 @@
 	     ((.ORIG .ORIGIN) ;; (:ORIGIN 232) set PC
 	      (setf offset (label-offset (cadr inst) ltab 0 #xffff)))
 	     (.STRING ;; (:STRING "hello")
-	      (incf offset (length (cdr inst))))
+	      (incf offset (1+ (length (cdr inst)))))
 	     (.BLKW ;; (.BLKW 123 ...)
 	      (incf offset (length (cdr inst))))
 	     (otherwise
@@ -282,19 +291,37 @@ assembled object code."
     (second-pass instructions ltab)))
 
 (defun %save-program (pathspec objs)
-  (let ((octets (make-array (* 2 64 1024) :element-type '(unsigned-byte 8))))
-    ;; fill out program data from object definitions 
+  (with-open-file (f pathspec :direction :output
+		     :if-exists :supersede
+		     :element-type '(unsigned-byte 8))
     (dolist (obj objs)
       (destructuring-bind (offset data) obj
-	(dotimes (i (length data))
-	  (setf (nibbles:ub16ref/le octets (* 2 (+ offset i)))
-		(nth i data)))))
-    ;; save to file 
-    (with-open-file (f pathspec :direction :output
-		       :if-exists :supersede
-		       :element-type '(unsigned-byte 8))
-      (write-sequence octets f)))
-  nil)
+	;; write object header (just offset and count)
+	(let ((tmp (make-array 4 :element-type '(unsigned-byte 8))))
+	  (setf (nibbles:ub16ref/le tmp 0) offset
+		(nibbles:ub16ref/le tmp 2) (length data))
+	  (write-sequence tmp f))
+	;; write object data 
+	(let ((octets (make-array (* 2 (length data))
+				  :element-type '(unsigned-byte 8))))
+	  (dotimes (i (length data))
+	    (setf (nibbles:ub16ref/le octets (* 2 i)) (nth i data)))
+	  (write-sequence octets f))))))
+
+  
+  ;; (let ((octets (make-array (* 2 64 1024) :element-type '(unsigned-byte 8))))
+  ;;   ;; fill out program data from object definitions 
+  ;;   (dolist (obj objs)
+  ;;     (destructuring-bind (offset data) obj
+  ;; 	(dotimes (i (length data))
+  ;; 	  (setf (nibbles:ub16ref/le octets (* 2 (+ offset i)))
+  ;; 		(nth i data)))))
+  ;;   ;; save to file 
+  ;;   (with-open-file (f pathspec :direction :output
+  ;; 		       :if-exists :supersede
+  ;; 		       :element-type '(unsigned-byte 8))
+  ;;     (write-sequence octets f)))
+  ;; nil)
 
 ;; ---------------
 
@@ -391,6 +418,7 @@ assembled object code."
 			 (br-pnz ,start-label)
 			 ,end-label)))
 		    ((eq wrd 'begin)
+		     (setf body (cdr body))
 		     (let ((begin-words nil)
 			   (start-label (gensym)))
 		       (do ()
@@ -405,6 +433,13 @@ assembled object code."
 			 (pop r0)
 			 (add r0 r0 0)
 			 (br-pn ,start-label))))
+		    ((eq wrd 'variable)
+		     (setf body (cdr body))
+		     (let ((var-name (car body)))
+		       `((br-pnz 1)
+			 (.blkw ,var-name)
+			 (ld r0 -2)
+			 (push r0))))
 		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
 		  `((br-pnz 1) ;; skip immediate value and load it 
@@ -430,7 +465,17 @@ assembled object code."
   `(progn
      ,@(when (string-equal (package-name *package*) "FVM")
 	 (list `(export '(,name))))
-     (push (define-word ',name (list ,@options) ',body)
+     (push (define-word ',name (list ,@options)
+	     (list
+	      ,@(mapcar
+		 (lambda (wrd)
+		   (cond
+		     ((symbolp wrd) `',wrd)
+		     ((integerp wrd) wrd)
+		     ((not (listp wrd)) (error "Unexpected form ~S" wrd))
+		     (t 
+		      `',wrd)))
+		 body)))
 	 *words*)))
 	    
 
@@ -443,30 +488,27 @@ assembled object code."
 (defword drop (:inline t)
   (pop r0))
 (defword dup ()
-  (pop r0)
-  (push r0)
+  (ldr r0 sp 1)
   (push r0))
-(defword dup2 ()
-  (pop r0)
-  (pop r1)
-  (push r1)
+(defword dup2 () ;; (a b -- a b a b)
+  (ldr r0 sp 1)
+  (ldr r1 sp 2)
   (push r0)
-  (push r1)
-  (push r0))
-(defword rot ()
+  (push r1))
+(defword rot () ;; (a b c -- c a b)
   (pop r0)
   (pop r1)
   (pop r2)
   (push r0)
   (push r1)
   (push r2))
-(defword over ()
+(defword over () ;; (a b -- a b a)
   (pop r0)
   (pop r1)
   (push r1)
   (push r0)
   (push r1))
-(defword tuck ()
+(defword tuck () ;; (a b -- b a b)
   (pop r0)
   (pop r1)
   (push r0)
@@ -507,7 +549,7 @@ assembled object code."
   (pop r1)
   (mod r0 r0 r1)
   (push r0))
-(defword zero ()
+(defword zero (:inline t)
   (nand r0 r0 0)
   (nand r0 r0 r0)
   (push r0))
@@ -565,8 +607,8 @@ assembled object code."
   dup2 nand swap or nand)
 (defword halt ()
   zero #xfffe !)  ;; write 0 zero address fffe
-(defword i ()
-  (ldr r0 rp 0)
+(defword i (:inline t)
+  (ldr r0 rp 1) ;; r0=[rp+1]
   (push r0))
 (defword dumpchr ()
   #xfe06 !)
@@ -575,6 +617,11 @@ assembled object code."
   (push r0))
 (defword false (:inline t)
   zero)
+(defword dumpstr () ;; (addr -- )
+  begin
+    dup 1+ swap @ dup dumpchr 
+  until
+  drop)
 
 (defparameter *variables* nil)
 (defun define-variable (name size &optional initial-contents)
@@ -582,7 +629,7 @@ assembled object code."
 (defmacro defvariable (name size &optional initial-contents)
   `(define-variable ',name ,size ,initial-contents))
 
-(defvariable 8words 8 '(1 2 3 4 5 6 7 8))
+;;(defvariable 8words 8 '(1 2 3 4 5 6 7 8))
 
 ;; layout:
 ;; #x0000 - #x07ff  word definition table, 2048 addresses of word definitions
@@ -647,5 +694,15 @@ assembled object code."
 (defword test ()
   true if 65 dumpchr else 66 dumpchr then halt)
 
+(defword test-count ()
+  10 0 do 65 i + dumpchr loop halt)
+
+(defvariable *mystring* "Hello, world!")
+(defword hello-world ()
+  variable *mystring* dumpstr halt)
+
 (defun test ()
-  (save-program "test.obj" 'test :print-assembly t ))
+  (save-program "test.obj" 'hello-world
+		:print-assembly t
+		:variables '(*mystring*)))
+

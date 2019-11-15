@@ -210,7 +210,7 @@ void freg_register( void ) {
     rpc_program_register( &freg_prog );
 
     /* load authentication configuration from registry */
-    sts = freg_get_by_name( NULL, 0, "/fju/freg/checkauth", FREG_TYPE_UINT32, &b, sizeof(b), NULL );
+    sts = freg_get_by_name( NULL, 0, "/fju/freg/checkauth", FREG_TYPE_UINT32, (char *)&b, sizeof(b), NULL );
     if( !sts && !b ) {
 	log_writef( NULL, LOG_LVL_INFO, "freg-rpc: disabling authentication" );
 	freg_check_auth = 0;

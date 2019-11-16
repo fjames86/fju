@@ -619,7 +619,7 @@ assembled object code."
 (defparameter *variables* nil)
 (defun define-variable (name size &optional initial-contents)
   (push (list name size initial-contents) *variables*))
-(defmacro defvariable (name size &optional initial-contents)
+(defmacro defvariable (name initial-contents &optional size)
   `(define-variable ',name ,size ,initial-contents))
 
 ;; layout:
@@ -655,13 +655,15 @@ assembled object code."
 		words)
       ;; put variables immediately after word definitions 
       ,@(mapcan (lambda (var)
-		  (destructuring-bind (name size &optional initial-contents) var 
-		    (list name ;; label
-			  (etypecase size
-			    (integer 
-			     `(.BLKW ,@(loop :for i :below size :collect (or (nth i initial-contents) 0))))
+		  (destructuring-bind (name size initial-contents) var 
+		    (list name ;; label for variable 
+			  (etypecase initial-contents 
+			    (integer
+			     (if size 
+				 `(.BLKW ,@(loop :for i :below size :collect initial-contents))
+				 `(.BLKW ,initial-contents)))
 			    (string
-			     `(.STRING ,size))))))
+			     `(.STRING ,initial-contents))))))
 		(mapcan (lambda (varname)
 			  (let ((v (assoc varname *variables*)))
 			    (when v (list v))))
@@ -692,16 +694,18 @@ assembled object code."
 (in-package #:fvm-test)
 
 (defword test-count ()
-  10 0 do 65 i + dumpchr loop)
+  26 0 do 65 i + dumpchr loop)
 
 (defvariable *mystring* "Hello, world!")
 (defword hello-world ()
   variable *mystring* dumpstr)
 
+(defword cr ()
+  10 dumpchr)
+
 (defword test ()
-  hello-world
-  10 dumpchr
-  test-count
+  hello-world cr
+  test-count cr 
   halt)
 
 (defun test ()

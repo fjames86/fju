@@ -15,8 +15,8 @@ typedef enum {
 	      FVM_INST_STR = 7,     /* store register */
 	      FVM_INST_RES4 = 8,    /* reserved opcode 4 */
 	      FVM_INST_PUSH = 9,    /* stack push/pop */
-	      FVM_INST_LDI = 10,    /* load indirect */
-	      FVM_INST_STI = 11,    /* store indirect */
+	      FVM_INST_LDI = 10,    /* load immediate */
+	      FVM_INST_STI = 11,    /* store immediate */
 	      FVM_INST_JMP = 12,    /* unconditional jump / return */
 	      FVM_INST_MUL = 13,    /* mul/div/mod */
 	      FVM_INST_LEA = 14,    /* load effective address */

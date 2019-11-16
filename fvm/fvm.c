@@ -64,7 +64,7 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
     switch( offset ) {
     case 0xfffe:
       /* machine control register */
-      return 0x8000;
+      return 0x8000;      
     default:
       return 0;
     }
@@ -79,7 +79,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
     case 0xfffe:
       /* machine control register */
       if( !(val & 0x8000) ) {
-	printf( ";; Halt execution\n" );
+	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Halt execution\n" );
 	state->flags &= ~FVM_FLAG_RUNNING;
 	return;
       }
@@ -271,27 +271,27 @@ static void fvm_inst_push( struct fvm_state *state, uint16_t opcode ) {
   
 }
 
-/* load indirect */
+/* load immediate */
 static void fvm_inst_ldi( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t dr, pcoffset;
+  uint16_t dr, val;
 
   dr = (opcode >> 9) & 0x7;
-  pcoffset = sign_extend( opcode & 0x1ff, 9 );
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x LDI R%x [PC + 0x%x]\n", state->reg[FVM_REG_PC] - 1, dr, pcoffset );
+  val = sign_extend( opcode & 0x1ff, 9 );
+  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x LDI R%x %04x\n", state->reg[FVM_REG_PC] - 1, dr, val );
   
-  state->reg[dr] = read_mem( state, read_mem( state, state->reg[FVM_REG_PC] + pcoffset ) );
+  state->reg[dr] = val;
   update_flags( state, state->reg[dr] );
 }
 
-/* store indirect */
+/* store immediate */
 static void fvm_inst_sti( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t sr, pcoffset;
+  uint16_t sr, val;
 
   sr = (opcode >> 9) & 0x7;
-  pcoffset = sign_extend( opcode & 0x1ff, 9 );
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x STI [[PC + 0x%x]] R%x => [%04x] = %x\n", state->reg[FVM_REG_PC] - 1, pcoffset, sr, read_mem( state, state->reg[FVM_REG_PC] + pcoffset ), state->reg[sr] );
+  val = sign_extend( opcode & 0x1ff, 9 );
+  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x STI [R%x] R%x => [%04x] = %x\n", state->reg[FVM_REG_PC] - 1, sr, val, state->reg[sr], val );
   
-  write_mem( state, read_mem( state, state->reg[FVM_REG_PC] + pcoffset ), state->reg[sr] );
+  write_mem( state, state->reg[sr], val );
 }
 
 /* return/unconditional jump */
@@ -438,12 +438,15 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
   i = 0;
   while( i < proglen ) {
       if( (i + 1) >= proglen ) return -1;
+
       offset = program[i];
       count = program[i+1];
       i += 2;
+      if( ((uint32_t)offset + (uint32_t)count) >= 0xffff ) return -1;
       
       for( j = 0; j < count; j++ ) {
 	  if( i >= proglen ) return -1;
+	  
 	  state->mem[offset + j] = program[i];
 	  i++;
       }

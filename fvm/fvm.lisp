@@ -21,11 +21,11 @@
 	   #:br-nz #:br-zn #:br-pnz #:br-pzn #:br-npz #:br-nzp #:br-zpn #:br-znp
 	   #:add #:ld #:st #:call #:nand #:ldr #:str #:push #:rpush #:pop #:rpop
 	   #:ldi #:sti #:jmp #:ret #:mul #:div #:mod #:cmp #:lea 
-	   #:! #:DUP2 #:AND #:DEFWORD #:2+ #:I #:TUCK #:1+
+	   #:! #:DUP2 #:AND #:2+ #:I #:TUCK #:1+
 	   #:XNOR #:NAND #:@ #:ROT #:NOR #:2- #:DROP #:FALSE
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
-	   #:dumpstr #:variable))
+	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!))
 	   
    
 
@@ -190,15 +190,15 @@
 		 #x20
 		 #x10)))      
       (ldi
-       (destructuring-bind (dr pcoffset) params
+       (destructuring-bind (dr val) params
 	 (logior (ash 10 12)
 		 (ash (register-index dr) 9)
-		 (label-offset pcoffset ltab offset #xff))))
+		 (label-offset val ltab offset #xff))))
       (sti
-       (destructuring-bind (sr pcoffset) params
+       (destructuring-bind (sr val) params
 	 (logior (ash 11 12)
 		 (ash (register-index sr) 9)
-		 (logand (label-offset pcoffset ltab offset #xff) #x1ff))))
+		 (logand (label-offset val ltab offset #xff) #x1ff))))
       (jmp
        (destructuring-bind (reg) params
 	 (logior (ash 12 12)
@@ -227,7 +227,7 @@
 		 (ash (register-index sr1) 6)
 		 (ash (register-index sr2) 3)
 		 #x2)))
-      (cmp
+      ((cmp sub)
        (destructuring-bind (dr sr1 sr2) params
 	 (logior (ash 13 12)
 		 (ash (register-index dr) 9)
@@ -240,9 +240,8 @@
 		 (ash (register-index dr) 9)
 		 (label-offset pcoffset ltab offset #xff))))
       (res3
-       (destructuring-bind (trap-name) params
-	 (let ((trap-code (label-offset trap-name ltab 0 #xffff)))
-	   (logior (ash 15 12) trap-code)))))))
+       (destructuring-bind () params
+	 (logior (ash 15 12)))))))
 
 (defun second-pass (instructions ltab)
   "second pass replaces labels with offsets stored in label table. returns list of 
@@ -308,22 +307,8 @@ assembled object code."
 	    (setf (nibbles:ub16ref/le octets (* 2 i)) (nth i data)))
 	  (write-sequence octets f))))))
 
-  
-  ;; (let ((octets (make-array (* 2 64 1024) :element-type '(unsigned-byte 8))))
-  ;;   ;; fill out program data from object definitions 
-  ;;   (dolist (obj objs)
-  ;;     (destructuring-bind (offset data) obj
-  ;; 	(dotimes (i (length data))
-  ;; 	  (setf (nibbles:ub16ref/le octets (* 2 (+ offset i)))
-  ;; 		(nth i data)))))
-  ;;   ;; save to file 
-  ;;   (with-open-file (f pathspec :direction :output
-  ;; 		       :if-exists :supersede
-  ;; 		       :element-type '(unsigned-byte 8))
-  ;;     (write-sequence octets f)))
-  ;; nil)
 
-;; ---------------
+;; ----------------------------------------------------------
 
 (defparameter *words* nil)
 (defun wordp (name)
@@ -442,10 +427,17 @@ assembled object code."
 			 (push r0))))
 		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
-		  `((br-pnz 1) ;; skip immediate value and load it 
-		    (.blkw ,wrd)
-		    (ld r0 -2)
-		    (push r0)))
+		  (if (<= (abs wrd) #xff)
+		      `((ldi r0 ,wrd) ;; load 8 bit immediates directly 
+			(push r0))
+		      `((br-pnz 1) ;; skip immediate value and load it 
+			(.blkw ,wrd)
+			(ld r0 -2)
+			(push r0))))
+		 ((characterp wrd)
+		  (let ((code (char-code wrd)))
+		    `((ldi r0 ,(logand code #xff))
+		      (push r0))))
 		 ((listp wrd)
 		  ;; if wrd is a list it is assembly instruction
 		  (list wrd))
@@ -463,8 +455,6 @@ assembled object code."
 			   
 (defmacro defword (name options &rest body)
   `(progn
-     ,@(when (string-equal (package-name *package*) "FVM")
-	 (list `(export '(,name))))
      (push (define-word ',name (list ,@options)
 	     (list
 	      ,@(mapcar
@@ -530,9 +520,7 @@ assembled object code."
 (defword - ()
   (pop r0)
   (pop r1)
-  (nand r1 r1 r1) ;; bitwise not
-  (add r1 r1 1) ;; 1+ 
-  (add r0 r0 r1)
+  (sub r0 r1 r0)
   (push r0))
 (defword * ()
   (pop r0)
@@ -550,8 +538,7 @@ assembled object code."
   (mod r0 r0 r1)
   (push r0))
 (defword zero (:inline t)
-  (nand r0 r0 0)
-  (nand r0 r0 r0)
+  (ldi r0 0)
   (push r0))
 (defword 1+ ()
   (pop r0)
@@ -568,6 +555,15 @@ assembled object code."
 (defword 2- ()
   (pop r0)
   (add r0 r0 -2)
+  (push r0))
+(defword r> ()
+  (rpop r0)
+  (push r0))
+(defword r< ()
+  (pop r0)
+  (rpush r0))
+(defword r@ ()
+  (ldr r0 r6 1)
   (push r0))
 
 ;; NOT X ::= X NAND X
@@ -606,14 +602,16 @@ assembled object code."
 (defword xnor ()
   dup2 nand swap or nand)
 (defword halt ()
-  zero #xfffe !)  ;; write 0 zero address fffe
-(defword i (:inline t)
+  #xfffe                 ;; address of machine control register 
+  dup @ #x7fff and       ;; get contents of mcr and clear timer bit
+  swap !)                ;; store it 
+(defword i (:inline t)   ;; get current loop index 
   (ldr r0 rp 1) ;; r0=[rp+1]
   (push r0))
 (defword dumpchr ()
   #xfe06 !)
 (defword true (:inline t)
-  (nand r0 r0 0) ;; -1 
+  (ldi r0 -1)
   (push r0))
 (defword false (:inline t)
   zero)
@@ -622,14 +620,19 @@ assembled object code."
     dup 1+ swap @ dup dumpchr 
   until
   drop)
+(defword tos ()
+  (push r6))
+(defword bos ()
+  variable *bottom-of-stack*)
+(defword zero! () ;; (addr --)
+  (pop r0)
+  (sti r0 0))
 
 (defparameter *variables* nil)
 (defun define-variable (name size &optional initial-contents)
   (push (list name size initial-contents) *variables*))
 (defmacro defvariable (name size &optional initial-contents)
   `(define-variable ',name ,size ,initial-contents))
-
-;;(defvariable 8words 8 '(1 2 3 4 5 6 7 8))
 
 ;; layout:
 ;; #x0000 - #x07ff  word definition table, 2048 addresses of word definitions
@@ -674,7 +677,8 @@ assembled object code."
 		(mapcan (lambda (varname)
 			  (let ((v (assoc varname *variables*)))
 			    (when v (list v))))
-			variables)))))
+			variables))
+      *bottom-of-stack*)))
 
 
 (defun save-program (pathspec entry-word &key variables print-assembly)
@@ -682,7 +686,15 @@ assembled object code."
     (when print-assembly 
       (dolist (x asm)
 	(format t ";; ~S~%" x)))
-    (%save-program pathspec (assemble-instructions asm))))
+    (let ((objs (assemble-instructions asm)))
+      (when print-assembly
+	(format t "~%;; Objects: ~%")
+	(let ((count 0))
+	  (dolist (obj objs)
+	    (format t ";; ~4,'0X LENGTH ~A~%" (car obj) (length (cadr obj)))
+	    (incf count (length (cadr obj))))
+	  (format t ";; Total: ~A (~A bytes) ~A words~%" count (* 2 count) (length (required-words entry-word)))))
+      (%save-program pathspec objs))))
 
 ;; ------------------------------------------------------------
 
@@ -691,18 +703,21 @@ assembled object code."
 
 (in-package #:fvm-test)
 
-(defword test ()
-  true if 65 dumpchr else 66 dumpchr then halt)
-
 (defword test-count ()
-  10 0 do 65 i + dumpchr loop halt)
+  10 0 do 65 i + dumpchr loop)
 
 (defvariable *mystring* "Hello, world!")
 (defword hello-world ()
-  variable *mystring* dumpstr halt)
+  variable *mystring* dumpstr)
+
+(defword test ()
+  hello-world
+  10 dumpchr
+  test-count
+  halt)
 
 (defun test ()
-  (save-program "test.obj" 'hello-world
+  (save-program "test.obj" 'test
 		:print-assembly t
 		:variables '(*mystring*)))
 

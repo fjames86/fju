@@ -39,7 +39,7 @@
 static void usage( char *fmt, ... ) {
   va_list args;
   
-  printf( "fvm -p program [-v]\n" );
+  printf( "fvm -p program [-v] [-n n]\n" );
   if( fmt ) {
     va_start( args, fmt );
     printf( "Error: " );
@@ -84,7 +84,8 @@ int main( int argc, char **argv ) {
   if( sts ) usage( "Failed to open program" );
   sts = mmf_remap( &mmf, mmf.fsize );
   if( sts ) usage( "Failed to map program" );
-  fvm_load( &glob.fvm, mmf.file, mmf.fsize );
+  sts = fvm_load( &glob.fvm, mmf.file, mmf.fsize / 2 );
+  if( sts ) usage( "Failed to load program\n" );
   if( glob.verbose ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
   mmf_close( &mmf );
 

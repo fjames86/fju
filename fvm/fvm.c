@@ -89,6 +89,31 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       printf( "%c", val & 0xff );
       state->mem[offset] = val & 0xff;
       return;
+#if 0
+    case 0xfe00:
+	/* Input register */
+	addr = val;
+	count = state->reg[FVM_REG_R0];
+	memset( &entry, 0, sizeof(entry) );
+	entry.iov = iov;
+	entry.niov = 1;
+	entry.iov[0].buf = &state->mem[offset];
+	entry.iov[0].len = count;
+	log_read( &state->inlog, &entry );
+	state->reg[FVM_REG_R0] = entry.msglen;
+	break;
+    case 0xfe01:
+	/* output register */
+	addr = val;
+	count = state->reg[FVM_REG_R0];
+	memset( &entry, 0, sizeof(entry) );
+	entry.iov = iov;
+	entry.niov = 1;
+	entry.iov[0].buf = &state->mem[offset];
+	entry.iov[0].len = count;
+	log_write( &state->outlog, &entry );
+	break;
+#endif
     }
   } else {
     state->mem[offset] = val;

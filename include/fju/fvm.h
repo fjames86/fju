@@ -6,19 +6,19 @@
 
 typedef enum {
 	      FVM_INST_BR = 0,      /* conditional branch */
-	      FVM_INST_ADD = 1,     /* add/move */
+	      FVM_INST_ADD = 1,     /* add/move/test */
 	      FVM_INST_LD = 2,      /* load from offset relative to pc */
 	      FVM_INST_ST = 3,      /* store to offset relative to pc */
 	      FVM_INST_CALL = 4,    /* jump subroutine */
 	      FVM_INST_NAND = 5,    /* bitwise nand */ 
-	      FVM_INST_LDR = 6,     /* load register */
-	      FVM_INST_STR = 7,     /* store register */
+	      FVM_INST_LDR = 6,     /* load from register */
+	      FVM_INST_STR = 7,     /* store from register */
 	      FVM_INST_RES4 = 8,    /* reserved opcode 4 */
 	      FVM_INST_PUSH = 9,    /* stack push/pop */
 	      FVM_INST_LDI = 10,    /* load immediate */
 	      FVM_INST_STI = 11,    /* store immediate */
 	      FVM_INST_JMP = 12,    /* unconditional jump / return */
-	      FVM_INST_MUL = 13,    /* mul/div/mod */
+	      FVM_INST_MUL = 13,    /* mul/div/mod/cmp */
 	      FVM_INST_LEA = 14,    /* load effective address */
 	      FVM_INST_RES3 = 15,   /* reserved opcode 3 */
 } fvm_inst_t;

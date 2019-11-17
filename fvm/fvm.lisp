@@ -43,8 +43,8 @@
 
 
 (defconstant +device-registers+ #xfe00)
-(defconstant +machine-control-register+ #xfffe)
-(defconstant +console-data-register+ #xfe06)
+(defconstant +machine-control-register+ #xfe00)
+(defconstant +console-data-register+ #xfe01)
 (defconstant +random-number-generator+ #xfe02)
 
 

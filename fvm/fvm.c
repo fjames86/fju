@@ -60,9 +60,9 @@ static void update_flags( struct fvm_state *state, uint16_t x ) {
 }
 
 /* device registers */
+#define FVM_DEVICE_MCR 0xfe00   /* machine control register */
+#define FVM_DEVICE_CDR 0xfe01   /* console data register */
 #define FVM_DEVICE_RNG 0xfe02   /* random number generator */
-#define FVM_DEVICE_CDR 0xfe06   /* console data register */
-#define FVM_DEVICE_MCR 0xfffe   /* machine control register */
 
 static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
   if( offset >= 0xfe00 ) {
@@ -99,7 +99,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       state->mem[offset] = val & 0xff;
       return;
 #if 0
-    case 0xfe00:
+    case FVM_DEVICE_INPUT:
 	/* Input register */
 	addr = val;
 	count = state->reg[FVM_REG_R0];
@@ -111,7 +111,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	log_read( &state->inlog, &entry );
 	state->reg[FVM_REG_R0] = entry.msglen;
 	break;
-    case 0xfe01:
+    case FVM_DEVICE_OUTPUT:
 	/* output register */
 	addr = val;
 	count = state->reg[FVM_REG_R0];

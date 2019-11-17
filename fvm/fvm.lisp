@@ -80,7 +80,7 @@
 	     ((.ORIG .ORIGIN) ;; (:ORIGIN 232) set PC
 	      (setf offset (label-offset (cadr inst) ltab 0 #xffff)))
 	     (.STRING ;; (:STRING "hello")
-	      (incf offset (1+ (length (cdr inst)))))
+	      (incf offset (1+ (length (cadr inst)))))
 	     (.BLKW ;; (.BLKW 123 ...)
 	      (incf offset (length (cdr inst))))
 	     (otherwise
@@ -255,7 +255,7 @@
        (destructuring-bind (dr pcoffset) params
 	 (logior (ash 14 12)
 		 (ash (register-index dr) 9)
-		 (label-offset pcoffset ltab offset #xff))))
+		 (logand (label-offset pcoffset ltab offset #xff) #x1ff))))
       (res3
        (destructuring-bind () params
 	 (logior (ash 15 12)))))))
@@ -654,10 +654,21 @@ assembled object code."
 (defword default-isr ()
   halt)
 (defword illegal-opcode-isr ()
-  halt)
+  ;; do nothing
+  )
 (defisr illegal-opcode-isr #x00)
-(defword privilege-exception-isr ()
-  halt)
+
+(let ((str (gensym))
+      (lbl (gensym)))
+  (defword privilege-exception-isr ()
+    (lisp `((br-pnz ,lbl)))
+    (lisp str)
+    (.string "PrivilegeExceptionISR")
+    (lisp lbl)
+    (lisp `((lea r0 ,str)))
+    (push r0)
+    dumpstr cr
+    halt))
 (defisr privilege-exception-isr #x01)
 
 (defun find-isr (ivec)
@@ -676,15 +687,18 @@ assembled object code."
 		     (push d deps)
 		     (get-deps d))))))
       (get-deps entry-point)
-      (do ((ivec 0 (1+ ivec))
-	   (done nil))
-	  ((or (= ivec 256) done))
+      (dotimes (ivec 256)
 	(let ((isr (find-isr ivec)))
-	  (unless isr
-	    (push 'default-isr deps)
-	    (get-deps 'default-isr)
-	    (setf done t))))
-      (dolist (isr *isr*)
+	  (cond
+	    (isr
+	     (unless (member (first isr) deps)
+	       (push (first isr) deps)
+	       (get-deps (first isr))))
+	    (t
+	     (unless (member 'default-isr deps)
+	       (push 'default-isr deps)
+	       (get-deps 'default-isr))))))
+      #+nil(dolist (isr *isr*)
 	(push (first isr) deps)))
     (nreverse deps)))
 
@@ -726,11 +740,8 @@ assembled object code."
 (defun save-program (pathspec entry-word &key variables print-assembly)
   (let ((asm (generate-assembly entry-word :variables variables)))
     (when print-assembly
-      (let ((offset 0))
-	(dolist (x asm)
-	  (when (and (listp x) (member (car x) '(.ORIGIN .ORIG)))
-	    (setf offset (cadr x)))
-	  (format t ";; ~4,'0X ~S~%" offset x))))
+      (dolist (x asm)
+	(format t ";; ~S~%" x)))
     (let ((objs (assemble-instructions asm)))
       (when print-assembly
 	(format t "~%;; Objects: ~%")

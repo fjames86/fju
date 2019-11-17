@@ -35,7 +35,7 @@
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
 	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
-	   #:lisp))
+	   #:lisp #:rand))
 	   
    
 
@@ -45,6 +45,7 @@
 (defconstant +device-registers+ #xfe00)
 (defconstant +machine-control-register+ #xfffe)
 (defconstant +console-data-register+ #xfe06)
+(defconstant +random-number-generator+ #xfe02)
 
 
 (defun label-offset (label ltab offset max)
@@ -209,7 +210,7 @@
        (destructuring-bind (dr val) params
 	 (logior (ash 10 12)
 		 (ash (register-index dr) 9)
-		 (label-offset val ltab offset #xff))))
+		 (logand (label-offset val ltab offset #xff) #x1ff))))
       (sti
        (destructuring-bind (sr val) params
 	 (logior (ash 11 12)
@@ -465,7 +466,7 @@ assembled object code."
 		 (lambda (wrd)
 		   (cond
 		     ((symbolp wrd) `(list ',wrd))
-		     ((integerp wrd) `(list ,wrd))
+		     ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
 		     ((not (listp wrd)) (error "Unexpected form ~S" wrd))
 		     ((eq (car wrd) 'lisp) ;; a way of unquoting
 		      (let ((glist (gensym)))
@@ -540,10 +541,10 @@ assembled object code."
   (pop r1)
   (div r0 r0 r1)
   (push r0))
-(defword mod ()
+(defword mod () ;; (x n -- x%n)
   (pop r0)
   (pop r1)
-  (mod r0 r0 r1)
+  (mod r0 r1 r0)
   (push r0))
 (defword zero (:inline t)
   (ldi r0 0)
@@ -635,6 +636,8 @@ assembled object code."
 (defword zero! () ;; (addr --)
   (pop r0)
   (sti r0 0))
+(defword rand () ;; (-- rand)
+  (lisp +random-number-generator+) @)
 
 (defparameter *variables* nil)
 (defun define-variable (name size &optional initial-contents)
@@ -698,38 +701,4 @@ assembled object code."
 	  (format t ";; Total: ~A (~A bytes) ~A words~%" count (* 2 count) (length (required-words entry-word)))))
       (%save-program pathspec objs))))
 
-;; ------------------------------------------------------------
-
-(defpackage #:fvm-test
-  (:use #:cl #:fvm))
-
-(in-package #:fvm-test)
-
-(defword test-count ()
-  26 0 do 65 i + dumpchr loop)
-
-(defvariable *mystring* "Hello, world!")
-(defword hello-world ()
-  variable *mystring* dumpstr)
-
-(defword cr ()
-  10 dumpchr)
-
-(defword test ()
-  hello-world cr
-  test-count cr 
-  halt)
-
-(defun myfnbody (reg)
-  `((push ,reg)
-    (pop ,reg)))
-
-(defword testfnbody ()
-  123
-  (lisp (myfnbody 'r0)))
-
-(defun test ()
-  (save-program "test.obj" 'test
-		:print-assembly t
-		:variables '(*mystring*)))
 

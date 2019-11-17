@@ -34,6 +34,7 @@
 
 #include <fju/fvm.h>
 #include <fju/rpc.h>
+#include <fju/sec.h>
 
 /*
  * Loosely modelled on the LC3 processor. 
@@ -64,7 +65,10 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
     switch( offset ) {
     case 0xfffe:
       /* machine control register */
-      return 0x8000;      
+      return 0x8000;
+    case 0xfe02:
+	/* random number generator */
+	return sec_rand_uint32() & 0xffff;
     default:
       return 0;
     }
@@ -364,7 +368,7 @@ static void fvm_inst_mul( struct fvm_state *state, uint16_t opcode ) {
   } else if( flags == 2 ) {
     /* mod */
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x MOD R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
-    state->reg[dr] = state->reg[sr1] % state->reg[sr2];
+    state->reg[dr] = (state->reg[sr2] ? state->reg[sr1] % state->reg[sr2] : 0);
   } else if( flags == 3 ) {
     /* cmp */
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x CMP R%x R%x R%x = CMP %x %x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2, state->reg[sr1], state->reg[sr2] );

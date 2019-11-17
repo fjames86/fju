@@ -11,9 +11,6 @@
 (defword hello-world ()
   variable *mystring* dumpstr)
 
-(defword cr ()
-  10 dumpchr)
-
 (defword test ()
   hello-world cr
   test-count cr 

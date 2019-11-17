@@ -35,7 +35,7 @@
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
 	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
-	   #:lisp #:rand #:rti))
+	   #:lisp #:rand #:rti #:cr))
 	   
    
 
@@ -430,6 +430,18 @@ assembled object code."
 			 (.blkw ,var-name)
 			 (ld r0 -2)
 			 (push r0))))
+		    ((eq wrd 'string) ;; like forth's ."
+		     (setf body (cdr body))
+		     (let ((str (car body))
+			   (lbl (gensym))
+			   (strlbl (gensym)))
+		       (unless (stringp str) (error "~S not a string" str))
+		       `((br-pnz ,lbl)
+			 ,strlbl
+			 (.string ,str)
+			 ,lbl
+			 (lea r0 ,strlbl)
+			 (push r0))))
 		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
 		  (if (<= (abs wrd) #xff)
@@ -467,6 +479,7 @@ assembled object code."
 		   (cond
 		     ((symbolp wrd) `(list ',wrd))
 		     ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
+		     ((stringp wrd) `(list ,wrd)) 
 		     ((not (listp wrd)) (error "Unexpected form ~S" wrd))
 		     ((eq (car wrd) 'lisp) ;; a way of unquoting
 		      (let ((glist (gensym)))
@@ -629,6 +642,8 @@ assembled object code."
     dup 1+ swap @ dup dumpchr 
   until
   drop)
+(defword cr ()
+  10 dumpchr)
 (defword tos ()
   (push r6))
 (defword bos ()
@@ -669,6 +684,7 @@ assembled object code."
 
 (defword illegal-opcode-isr ()
   ;; do nothing
+  string "IllegalOpcodeISR" dumpstr cr 
   )
 (defisr illegal-opcode-isr #x01)
 

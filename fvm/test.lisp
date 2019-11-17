@@ -44,6 +44,7 @@
 
 (defword testint ()
   (fvm::res3)
+  hello-world cr 
   halt)
 
 (defun test ()

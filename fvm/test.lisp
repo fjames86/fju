@@ -37,11 +37,11 @@
     halt))
 
 (defword testrand ()
-  10 0 do
-    rand 26 mod #\A + dumpchr cr
-    loop)
+  10 0
+  do
+    rand 26 mod #\A + dumpchr
+  loop)
 
-  
 (defun test ()
   (save-program "test.obj" 'testrand
 		:print-assembly t

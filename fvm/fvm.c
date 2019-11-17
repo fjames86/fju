@@ -59,14 +59,19 @@ static void update_flags( struct fvm_state *state, uint16_t x ) {
   else state->reg[FVM_REG_PSR] |= FVM_PSR_POS;
 }
 
+/* device registers */
+#define FVM_DEVICE_RNG 0xfe02   /* random number generator */
+#define FVM_DEVICE_CDR 0xfe06   /* console data register */
+#define FVM_DEVICE_MCR 0xfffe   /* machine control register */
+
 static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
   if( offset >= 0xfe00 ) {
     /* memory mapped device registers */
     switch( offset ) {
-    case 0xfffe:
+    case FVM_DEVICE_MCR:
       /* machine control register */
       return 0x8000;
-    case 0xfe02:
+    case FVM_DEVICE_RNG:
 	/* random number generator */
 	return sec_rand_uint32() & 0xffff;
     default:
@@ -80,7 +85,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
   if( offset >= 0xfe00 ) {
     /* write to memory mapped device registers */
     switch( offset ) {
-    case 0xfffe:
+    case FVM_DEVICE_MCR:
       /* machine control register */
       if( !(val & 0x8000) ) {
 	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Halt execution\n" );
@@ -88,7 +93,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	return;
       }
       break;
-    case 0xfe06:
+    case FVM_DEVICE_CDR:
       /* display data register - write character */
       printf( "%c", val & 0xff );
       state->mem[offset] = val & 0xff;

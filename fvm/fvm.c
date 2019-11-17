@@ -36,6 +36,11 @@
 #include <fju/rpc.h>
 #include <fju/sec.h>
 
+#define FVM_INT_PME  0x00   /* privilege mode exception */
+#define FVM_INT_PME_PL 0    /* pme priority level */
+#define FVM_INT_IOC  0x01   /* illegal opcode exception */
+#define FVM_INT_IOC_PL 0    /* ioc priority level */
+
 /*
  * Loosely modelled on the LC3 processor. 
  * Layout:
@@ -280,10 +285,51 @@ static void fvm_inst_str( struct fvm_state *state, uint16_t opcode ) {
   write_mem( state, state->reg[baser] + offset, state->reg[sr] );
 }
 
-/* unused */
-static void fvm_inst_res4( struct fvm_state *state, uint16_t opcode ) {
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RES4\n", state->reg[FVM_REG_PC] - 1 );
-  state->flags &= ~FVM_FLAG_RUNNING;
+static int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
+    /* don't interrupt if current priority higher than this interrupts level */
+    if( !(priority & 0x800) &&
+	((state->reg[FVM_REG_PSR] & FVM_PSR_PL_MASK) >> 12) >= (priority & 0x7) ) return -1;
+    
+    /* save registers */
+    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R5] ); state->reg[FVM_REG_SP]--;
+    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R4] ); state->reg[FVM_REG_SP]--;
+    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R3] ); state->reg[FVM_REG_SP]--;
+    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R2] ); state->reg[FVM_REG_SP]--;
+    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R1] ); state->reg[FVM_REG_SP]--;
+    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R0] ); state->reg[FVM_REG_SP]--;
+    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_PSR] ); state->reg[FVM_REG_SP]--;
+    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_PC] ); state->reg[FVM_REG_SP]--;
+
+    /* set supervisor mode and priority */
+    state->reg[FVM_REG_PSR] &= ~FVM_PSR_USERMODE;
+    if( !(priority & 0x8000) ) {
+	state->reg[FVM_REG_PSR] &= ~FVM_PSR_PL_MASK;
+	state->reg[FVM_REG_PSR] |= ((priority & 0x07) << 12);
+    }
+
+    /* jump */
+    state->reg[FVM_REG_PC] = read_mem( state, 0x800 + ivec );
+    return 0;
+}
+
+/* return from interrupt */
+static void fvm_inst_rti( struct fvm_state *state, uint16_t opcode ) {
+  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RTI\n", state->reg[FVM_REG_PC] - 1 );
+
+  if( state->reg[FVM_REG_PSR] & FVM_PSR_USERMODE ) {
+      printf( ";; Prilege mode exception: Attempt to RTI from user mode\n" ); 
+      fvm_interrupt( state, FVM_INT_PME, FVM_INT_PME_PL );
+  } else {
+      /* restore pc and registers */
+      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_PC] = read_mem( state, state->reg[FVM_REG_SP] );
+      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_PSR] = read_mem( state, state->reg[FVM_REG_SP] );
+      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R0] = read_mem( state, state->reg[FVM_REG_SP] );
+      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R1] = read_mem( state, state->reg[FVM_REG_SP] );
+      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R2] = read_mem( state, state->reg[FVM_REG_SP] );
+      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R3] = read_mem( state, state->reg[FVM_REG_SP] );
+      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R4] = read_mem( state, state->reg[FVM_REG_SP] );
+      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R5] = read_mem( state, state->reg[FVM_REG_SP] );
+  }
 }
 
 /* stack push/pop */
@@ -411,7 +457,7 @@ static fvm_inst_handler_t inst_handlers[] = {
     fvm_inst_nand,
     fvm_inst_ldr,
     fvm_inst_str,
-    fvm_inst_res4,
+    fvm_inst_rti,
     fvm_inst_push,
     fvm_inst_ldi,
     fvm_inst_sti,

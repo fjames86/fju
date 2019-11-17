@@ -13,7 +13,7 @@ typedef enum {
 	      FVM_INST_NAND = 5,    /* bitwise nand */ 
 	      FVM_INST_LDR = 6,     /* load from register */
 	      FVM_INST_STR = 7,     /* store from register */
-	      FVM_INST_RES4 = 8,    /* reserved opcode 4 */
+	      FVM_INST_RTI = 8,     /* return from interrupt */
 	      FVM_INST_PUSH = 9,    /* stack push/pop */
 	      FVM_INST_LDI = 10,    /* load immediate */
 	      FVM_INST_STI = 11,    /* store immediate */
@@ -46,6 +46,8 @@ typedef enum {
 #define FVM_PSR_POS           0x0001    /* positive flag */
 #define FVM_PSR_ZERO          0x0002    /* zero flag */
 #define FVM_PSR_NEG           0x0004    /* negative flag */
+#define FVM_PSR_USERMODE      0x8000    /* if true, running in user mode, otherwise supervisor mode */
+#define FVM_PSR_PL_MASK       0x7000    /* priority level mask */
 
 #define FVM_MAX_MEM (64*1024)
 

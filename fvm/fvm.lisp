@@ -183,7 +183,7 @@
 		 (ash (register-index sr) 9)
 		 (ash (register-index baser) 6)
 		 (logand (label-offset baseoffset ltab offset #xf) #x1f))))
-      (res4
+      (rti ;; return from interrupt 
        (destructuring-bind () params
 	 (logior (ash 8 12))))
       (push
@@ -452,7 +452,7 @@ assembled object code."
 	  (push x asm))))))
 
 
-(defun define-word (name options body)
+(defun make-word (name options body)
   (list name
 	(word-dependencies body)
 	(generate-word-assembly body)
@@ -460,7 +460,7 @@ assembled object code."
 			   
 (defmacro defword (name options &rest body)
   `(progn
-     (push (define-word ',name (list ,@options)
+     (push (make-word ',name (list ,@options)
 	     (append 
 	      ,@(mapcar
 		 (lambda (wrd)
@@ -640,10 +640,22 @@ assembled object code."
   (lisp +random-number-generator+) @)
 
 (defparameter *variables* nil)
-(defun define-variable (name size &optional initial-contents)
-  (push (list name size initial-contents) *variables*))
+(defun make-variable (name size &optional initial-contents)
+  (list name size initial-contents))
 (defmacro defvariable (name initial-contents &optional size)
-  `(define-variable ',name ,size ,initial-contents))
+  `(push (make-variable ',name ,size ,initial-contents) *variables*))
+
+
+(defparameter *isr* nil)
+(defun make-isr (word ivec)
+  (list word ivec))
+(defmacro defisr (word ivec)
+  `(push (make-isr ',word ,ivec)) *isr*)
+(defword default-isr ()
+  halt)
+(defun find-isr (ivec)
+  (find ivec *isr* :key #'second :test #'=))
+
 
 (defun required-words (entry-point)
   (let ((deps (list entry-point)))
@@ -653,15 +665,29 @@ assembled object code."
 		   (unless (member d deps)
 		     (push d deps)
 		     (get-deps d))))))
-      (get-deps entry-point))
+      (get-deps entry-point)
+      (do ((ivec 0 (1+ ivec))
+	   (done nil))
+	  ((or (= ivec 256) done))
+	(let ((isr (find-isr ivec)))
+	  (unless isr
+	    (push 'default-isr deps)
+	    (get-deps 'default-isr)
+	    (setf done t))))
+      (dolist (isr *isr*)
+	(push (first isr) deps)))
     (nreverse deps)))
 
 (defun generate-assembly (entry-point &key variables)
   (let ((words (required-words entry-point)))
-    `((.ORIGIN 0)
+    `((.ORIGIN 0) ;; word jump table 
       ,@(mapcan (lambda (w)
 		  (list w `(.BLKW ,(intern (format nil "~A-DEF" (symbol-name w))))))
 		words)
+      (.ORIGIN #x800) ;; isr table
+      ,@(loop :for ivec :below 256 :collect
+	   (let ((isr (find-isr ivec)))
+	     `(.BLKW ,(if isr (first isr) 'default-isr))))
       (.ORIGIN #x3000)
       ,@(mapcan (lambda (word)
 		  (append (list (intern (format nil "~A-DEF" (symbol-name word))))

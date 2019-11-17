@@ -35,7 +35,7 @@
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
 	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
-	   #:lisp #:rand #:rti #:cr))
+	   #:lisp #:rand #:rti #:cr #:defisr))
 	   
    
 
@@ -471,6 +471,11 @@ assembled object code."
 	options))
 			   
 (defmacro defword (name options &rest body)
+  "Define word
+NAME ::= symbol naming word 
+OPTIONS ::= List of optioins, :inline 
+BODY ::= word definition. List of words or inline assembly.
+" 
   `(progn
      (push (make-word ',name (list ,@options)
 	     (append 
@@ -658,6 +663,10 @@ assembled object code."
 (defun make-variable (name size &optional initial-contents)
   (list name size initial-contents))
 (defmacro defvariable (name initial-contents &optional size)
+  "Define a global variable. 
+NAME ::= symbol naming global.
+INITIAL-CONTENTS ::= integer, list of integers or string
+" 
   `(push (make-variable ',name ,size ,initial-contents) *variables*))
 
 
@@ -665,27 +674,21 @@ assembled object code."
 (defun make-isr (word ivec)
   (list word ivec))
 (defmacro defisr (word ivec)
+  "Define an interrupt service routine.
+WORD ::= symbol naming word designated as handler. This word must NOT be used in regular program operation, only for the purposes of this ISR. 
+IVEC ::= integer >= 0 <= 255 specifying the interrupt.
+" 
   `(push (make-isr ',word ,ivec) *isr*))
 (defword default-isr ()
   halt)
 
-(let ((str (gensym))
-      (lbl (gensym)))
-  (defword privilege-exception-isr ()
-    (lisp `((br-pnz ,lbl)))
-    (lisp str)
-    (.string "PrivilegeExceptionISR")
-    (lisp lbl)
-    (lisp `((lea r0 ,str)))
-    (push r0)
-    dumpstr cr
-    halt))
+(defword privilege-exception-isr ()
+  string "PrivilegeException" dumpstr cr
+  halt)
 (defisr privilege-exception-isr #x00)
 
 (defword illegal-opcode-isr ()
-  ;; do nothing
-  string "IllegalOpcodeISR" dumpstr cr 
-  )
+  string "IllegalOpcode" dumpstr cr)
 (defisr illegal-opcode-isr #x01)
 
 
@@ -756,6 +759,12 @@ assembled object code."
 
 
 (defun save-program (pathspec entry-word &key variables print-assembly)
+  "Compile and save a program.
+PATHSPEC ::= where to save the program file.
+ENTRY-WORD ::= word designated as entry point.
+VARIABLES ::= list of global variables defined with DEFVARIABLE to use.
+PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
+" 
   (let ((asm (generate-assembly entry-word :variables variables)))
     (when print-assembly
       (dolist (x asm)

@@ -36,10 +36,11 @@
 #include <fju/rpc.h>
 #include <fju/sec.h>
 
-#define FVM_INT_PME  0x00   /* privilege mode exception */
-#define FVM_INT_PME_PL 0    /* pme priority level */
-#define FVM_INT_IOC  0x01   /* illegal opcode exception */
-#define FVM_INT_IOC_PL 0    /* ioc priority level */
+#define FVM_INT_EXCEPTION 0x8000 
+#define FVM_INT_PME       0x00    /* privilege mode exception */
+#define FVM_INT_PME_PL    0       /* pme priority level */
+#define FVM_INT_IOC       0x01    /* illegal opcode exception */
+#define FVM_INT_IOC_PL    0       /* ioc priority level */
 
 /*
  * Loosely modelled on the LC3 processor. 
@@ -287,8 +288,13 @@ static void fvm_inst_str( struct fvm_state *state, uint16_t opcode ) {
 
 static int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
     /* don't interrupt if current priority higher than this interrupts level */
-    if( !(priority & 0x800) &&
-	((state->reg[FVM_REG_PSR] & FVM_PSR_PL_MASK) >> 12) >= (priority & 0x7) ) return -1;
+    if( !(priority & 0x8000) &&
+	((state->reg[FVM_REG_PSR] & FVM_PSR_PL_MASK) >> 12) >= (priority & 0x7) ) {
+	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Decline interrupt PL %d >= %d\n", (state->reg[FVM_REG_PSR] & FVM_PSR_PL_MASK) >> 12, priority & 0x7 );
+	return -1;
+    }
+
+    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Interrupt %x PL %x\n", ivec, priority & 0x7 );
     
     /* save registers */
     write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R5] ); state->reg[FVM_REG_SP]--;
@@ -317,8 +323,8 @@ static void fvm_inst_rti( struct fvm_state *state, uint16_t opcode ) {
   if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RTI\n", state->reg[FVM_REG_PC] - 1 );
 
   if( state->reg[FVM_REG_PSR] & FVM_PSR_USERMODE ) {
-      printf( ";; Prilege mode exception: Attempt to RTI from user mode\n" ); 
-      fvm_interrupt( state, FVM_INT_PME, FVM_INT_PME_PL );
+      printf( ";; Privilege mode exception: Attempt to RTI from user mode\n" ); 
+      fvm_interrupt( state, FVM_INT_PME, FVM_INT_PME_PL|FVM_INT_EXCEPTION );
   } else {
       /* restore pc and registers */
       state->reg[FVM_REG_SP]++; state->reg[FVM_REG_PC] = read_mem( state, state->reg[FVM_REG_SP] );
@@ -443,7 +449,7 @@ static void fvm_inst_lea( struct fvm_state *state, uint16_t opcode ) {
 /* reserved opcode 3 */
 static void fvm_inst_res3( struct fvm_state *state, uint16_t opcode ) {
   if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RES3\n", state->reg[FVM_REG_PC] - 1 );
-  state->flags &= ~FVM_FLAG_RUNNING;
+  fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL|FVM_INT_EXCEPTION );
 }
 
 typedef void (*fvm_inst_handler_t)( struct fvm_state *state, uint16_t opcode );

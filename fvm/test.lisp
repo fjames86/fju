@@ -42,8 +42,12 @@
     rand 26 mod #\A + dumpchr
   loop)
 
+(defword testint ()
+  (fvm::res3)
+  halt)
+
 (defun test ()
-  (save-program "test.obj" 'testrand
+  (save-program "test.obj" 'testint
 		:print-assembly t
 		:variables '(*mystring*)))
 

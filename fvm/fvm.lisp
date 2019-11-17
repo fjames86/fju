@@ -35,7 +35,7 @@
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
 	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
-	   #:lisp #:rand))
+	   #:lisp #:rand #:rti))
 	   
    
 
@@ -650,11 +650,21 @@ assembled object code."
 (defun make-isr (word ivec)
   (list word ivec))
 (defmacro defisr (word ivec)
-  `(push (make-isr ',word ,ivec)) *isr*)
+  `(push (make-isr ',word ,ivec) *isr*))
 (defword default-isr ()
   halt)
+(defword illegal-opcode-isr ()
+  halt)
+(defisr illegal-opcode-isr #x00)
+(defword privilege-exception-isr ()
+  halt)
+(defisr privilege-exception-isr #x01)
+
 (defun find-isr (ivec)
-  (find ivec *isr* :key #'second :test #'=))
+  (etypecase ivec
+    (integer (find ivec *isr* :key #'second :test #'=))
+    (symbol (find ivec *isr* :key #'first :test #'eq))))
+  
 
 
 (defun required-words (entry-point)
@@ -687,12 +697,13 @@ assembled object code."
       (.ORIGIN #x800) ;; isr table
       ,@(loop :for ivec :below 256 :collect
 	   (let ((isr (find-isr ivec)))
-	     `(.BLKW ,(if isr (first isr) 'default-isr))))
+	     `(.BLKW ,(intern (format nil "~A-DEF"
+				      (if isr (first isr) 'default-isr))))))
       (.ORIGIN #x3000)
       ,@(mapcan (lambda (word)
 		  (append (list (intern (format nil "~A-DEF" (symbol-name word))))
 			  (word-assembly word)
-			  (list (list 'ret))))
+			  (list (list (if (find-isr word) 'rti 'ret)))))
 		words)
       ;; put variables immediately after word definitions 
       ,@(mapcan (lambda (var)
@@ -714,9 +725,12 @@ assembled object code."
 
 (defun save-program (pathspec entry-word &key variables print-assembly)
   (let ((asm (generate-assembly entry-word :variables variables)))
-    (when print-assembly 
-      (dolist (x asm)
-	(format t ";; ~S~%" x)))
+    (when print-assembly
+      (let ((offset 0))
+	(dolist (x asm)
+	  (when (and (listp x) (member (car x) '(.ORIGIN .ORIG)))
+	    (setf offset (cadr x)))
+	  (format t ";; ~4,'0X ~S~%" offset x))))
     (let ((objs (assemble-instructions asm)))
       (when print-assembly
 	(format t "~%;; Objects: ~%")
@@ -725,6 +739,8 @@ assembled object code."
 	    (format t ";; ~4,'0X LENGTH ~A~%" (car obj) (length (cadr obj)))
 	    (incf count (length (cadr obj))))
 	  (format t ";; Total: ~A (~A bytes) ~A words~%" count (* 2 count) (length (required-words entry-word)))))
+      (when print-assembly
+	(format t ";; ~A~%" (truename pathspec)))
       (%save-program pathspec objs))))
 
 

@@ -7,6 +7,15 @@
 ;;; The main aim is to get something that works and is sufficiently
 ;;; complete that it can actually be used to write programs for fvm.
 
+;; layout:
+;; #x0000 - #x07ff  word definition table, 2048 addresses of word definitions
+;; #x0800 - #x0fff  unused - interrupt table?
+;; #x1000 - #x2fff  return stack
+;; #x3000 -         word definitions, global variables 
+;; #xfdff           top of data sack
+;; #xfe00 - #xffff  device registers
+
+
 (eval-when (:load-toplevel :compile-toplevel :execute)
   (ql:quickload '("babel" "nibbles")))
 
@@ -25,11 +34,18 @@
 	   #:XNOR #:NAND #:@ #:ROT #:NOR #:2- #:DROP #:FALSE
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
-	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!))
+	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
+	   #:lisp))
 	   
    
 
 (in-package #:fvm)
+
+
+(defconstant +device-registers+ #xfe00)
+(defconstant +machine-control-register+ #xfffe)
+(defconstant +console-data-register+ #xfe06)
+
 
 (defun label-offset (label ltab offset max)
   (if (integerp label)
@@ -444,15 +460,19 @@ assembled object code."
 (defmacro defword (name options &rest body)
   `(progn
      (push (define-word ',name (list ,@options)
-	     (list
+	     (append 
 	      ,@(mapcar
 		 (lambda (wrd)
 		   (cond
-		     ((symbolp wrd) `',wrd)
-		     ((integerp wrd) wrd)
+		     ((symbolp wrd) `(list ',wrd))
+		     ((integerp wrd) `(list ,wrd))
 		     ((not (listp wrd)) (error "Unexpected form ~S" wrd))
+		     ((eq (car wrd) 'lisp) ;; a way of unquoting
+		      (let ((glist (gensym)))
+			`(let ((,glist ,(cadr wrd)))
+			   (if (listp ,glist) ,glist (list ,glist)))))
 		     (t 
-		      `',wrd)))
+		      `(list ',wrd))))
 		 body)))
 	 *words*)))
 	    
@@ -590,14 +610,14 @@ assembled object code."
 (defword xnor ()
   dup2 nand swap or nand)
 (defword halt ()
-  #xfffe                 ;; address of machine control register 
+  (lisp +machine-control-register+)    ;; address of machine control register 
   dup @ #x7fff and       ;; get contents of mcr and clear timer bit
   swap !)                ;; store it 
 (defword i (:inline t)   ;; get current loop index 
   (ldr r0 rp 1) ;; r0=[rp+1]
   (push r0))
 (defword dumpchr ()
-  #xfe06 !)
+  (lisp +console-data-register+) !)
 (defword true (:inline t)
   (ldi r0 -1)
   (push r0))
@@ -621,14 +641,6 @@ assembled object code."
   (push (list name size initial-contents) *variables*))
 (defmacro defvariable (name initial-contents &optional size)
   `(define-variable ',name ,size ,initial-contents))
-
-;; layout:
-;; #x0000 - #x07ff  word definition table, 2048 addresses of word definitions
-;; #x0800 - #x0fff  unused - interrupt table?
-;; #x1000 - #x2fff  return stack
-;; #x3000 -         word definitions, global variables 
-;; #xfdff           top of data sack
-;; #xfe00 - #xffff  device registers
 
 (defun required-words (entry-point)
   (let ((deps (list entry-point)))
@@ -707,6 +719,14 @@ assembled object code."
   hello-world cr
   test-count cr 
   halt)
+
+(defun myfnbody (reg)
+  `((push ,reg)
+    (pop ,reg)))
+
+(defword testfnbody ()
+  123
+  (lisp (myfnbody 'r0)))
 
 (defun test ()
   (save-program "test.obj" 'test

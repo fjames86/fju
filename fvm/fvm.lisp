@@ -653,10 +653,6 @@ assembled object code."
   `(push (make-isr ',word ,ivec) *isr*))
 (defword default-isr ()
   halt)
-(defword illegal-opcode-isr ()
-  ;; do nothing
-  )
-(defisr illegal-opcode-isr #x00)
 
 (let ((str (gensym))
       (lbl (gensym)))
@@ -669,7 +665,13 @@ assembled object code."
     (push r0)
     dumpstr cr
     halt))
-(defisr privilege-exception-isr #x01)
+(defisr privilege-exception-isr #x00)
+
+(defword illegal-opcode-isr ()
+  ;; do nothing
+  )
+(defisr illegal-opcode-isr #x01)
+
 
 (defun find-isr (ivec)
   (etypecase ivec

@@ -61,7 +61,7 @@
 
 (defword +looptest ()
   1000 0 do
-  i dumphex cr 
+  i dumphex cr
   rand 100 mod
   +loop
   halt)

@@ -268,14 +268,18 @@
   if -10 + #\A else #\0 then
   + dumpchr)
 
-(defword dumphex () ;; (x -- )
-  begin
-  dup dumphexchr ;; dup the value and print the lowest nibble
-  16 /           ;; shift right by 4 bits and loop until it is zero
-  dup
-  until
-  drop)
+(defword rshift () ;; (x n -- y)
+  0 do 2 / loop)
+(defword lshift () ;; (x n -- y)
+  0 do 2 * loop)
 
+(defword dumphex () ;; (x -- )
+  4 0 do
+    dup 
+    12 rshift dumphexchr   ;; dup and print the high 4 bits 
+    4 lshift               ;; shift it left by 4 bits 
+  loop
+  drop)
 
 ;; ------------------ Interrupts --------------------
 

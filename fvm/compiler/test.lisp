@@ -14,12 +14,6 @@
 (defword hello-world ()
   variable *mystring* dumpstr)
 
-;; try a few words 
-(defword test ()
-  hello-world cr
-  test-count cr 
-  halt)
-
 ;; test using lisp evaluation
 (defun myfnbody (reg)
   `((push ,reg)
@@ -66,8 +60,18 @@
   +loop
   halt)
 
+;; try a few words 
+(defword test ()
+  "hello-world: " dumpstr hello-world cr
+  "test-count: " dumpstr test-count cr
+  "testrand: " dumpstr testrand cr 
+  "testbreak: " dumpstr testbreak cr 
+  "+looptest: " dumpstr +looptest cr 
+  halt)
+
+
 (defun test ()
-  (save-program "test.obj" '+looptest
+  (save-program "test.obj" 'test
 		:print-assembly t
 		:variables '(*mystring*)))
 

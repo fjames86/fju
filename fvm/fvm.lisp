@@ -318,8 +318,10 @@ assembled object code."
 (defun word-dependencies (body)
   (remove-duplicates
    (mapcan (lambda (wrd)
-	     (when (and (symbolp wrd) (wordp wrd) (not (word-inline-p wrd)))
-	       (list wrd)))
+	     (when (and (symbolp wrd) (wordp wrd))
+	       (if (word-inline-p wrd)
+		   (word-deps wrd)
+		   (list wrd))))
 	   body)))
 (defun word-options (name)
   (cadddr (wordp name)))
@@ -357,7 +359,7 @@ assembled object code."
 		       (when (null body) (error "IF expects THEN"))
 		       (when (eq (car body) 'else)
 			 (setf body (cdr body)
-			       else-words (take-words 'then))
+			       else-words (take-words '(then)))
 			 (when (null body) (error "IF ELSE expects THEN")))
 		       (unless (eq (car body) 'then) (error "IF expects THEN"))
 		       `((pop r0) ;; sets flags automatically 
@@ -371,11 +373,17 @@ assembled object code."
 		     (setf body (cdr body))
 		     (let ((start-label (gensym))
 			   (end-label (gensym))
-			   (body-words nil))
-		       (setf body-words (take-words '(loop)))
-		       (unless (eq (car body) 'loop) (error "DO expects LOOP"))
+			   (body-words nil)
+			   (+loop-p nil))
+		       (setf body-words (take-words '(loop +loop)))
+		       (unless (member (car body) '(loop +loop)) (error "DO expects LOOP or +LOOP"))
+		       (when (eq (car body) '+loop) (setf +loop-p t))
 		       `((pop r0) ;; start index 
-			 (pop r1) ;; max counter 
+			 (pop r1) ;; max counter
+			 (br-pnz 1)
+			 (.blkw ,end-label)
+			 (ld r2 -2) ;; push end label address to return stack 
+			 (rpush r2)			 
 			 (rpush r1) ;; push loop max onto return stack 
 			 (rpush r0) ;; push loop counter onto return stack
 			 ,start-label
@@ -388,10 +396,15 @@ assembled object code."
 			 ,@(generate-word-assembly body-words)
 			 ;; increment loop index
 			 (rpop r0)
-			 (add r0 r0 1)
+			 ,@(if +loop-p
+			       `((pop r1)
+				 (add r0 r0 r1))
+			       `((add r0 r0 1)))
 			 (rpush r0) ;; store updated loop index 
 			 (br-pnz ,start-label)
-			 ,end-label)))
+			 ,end-label
+			 ;; drop end label address from stack 
+			 (rpop r0))))
 		    ((eq wrd 'begin)
 		     (setf body (cdr body))
 		     (let ((begin-words nil)

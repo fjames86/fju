@@ -276,7 +276,7 @@ static void fvm_inst_ldr( struct fvm_state *state, uint16_t opcode ) {
   baser = (opcode >> 6) & 0x7;
   offset = sign_extend( opcode & 0x1f, 5 );
   
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x LDR R%x [R%x + 0x%x]\n", state->reg[FVM_REG_PC] - 1, dr, baser, offset );
+  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x LDR R%x [R%x + 0x%x] = %x\n", state->reg[FVM_REG_PC] - 1, dr, baser, offset, read_mem( state, state->reg[baser] + offset ) );
   
   state->reg[dr] = read_mem( state, state->reg[baser] + offset );
   update_flags( state, state->reg[dr] );
@@ -407,7 +407,7 @@ static void fvm_inst_jmp( struct fvm_state *state, uint16_t opcode ) {
   } else {
     /* unconditional jump to address in register */
     baser = (opcode >> 6) & 0x7;
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x JMP R%x\n", state->reg[FVM_REG_PC] - 1, baser );
+    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x JMP R%x = %x\n", state->reg[FVM_REG_PC] - 1, baser, state->reg[baser] );
     set_pc( state, state->reg[baser] );
   }
   

@@ -64,14 +64,14 @@
   (pop r1)
   (mul r0 r0 r1)
   (push r0))
-(defword / ()
-  (pop r0)
-  (pop r1)
-  (div r0 r0 r1)
+(defword / () ;; (num div -- quot)
+  (pop r0)   ;; div 
+  (pop r1)   ;; num 
+  (div r0 r1 r0)
   (push r0))
 (defword mod () ;; (x n -- x%n)
-  (pop r0)
-  (pop r1)
+  (pop r0) ;; n
+  (pop r1) ;; x 
   (mod r0 r1 r0)
   (push r0))
 (defword zero (:inline t)
@@ -199,7 +199,7 @@
   (defword > () ;; (x y -- f)
     (pop r0)
     (pop r1)
-    (cmp r0 r0 r1)
+    (cmp r0 r1 r0)
     (lisp `((br-nz ,glbl-nz)))
     true
     (lisp `((br-pnz ,glbl-done)))
@@ -209,9 +209,9 @@
 (let ((glbl-n (gensym))
       (glbl-done (gensym)))
   (defword >= () ;; (x y -- f)
-    (pop r0)
-    (pop r1)
-    (cmp r0 r0 r1)
+    (pop r0)  ;; y 
+    (pop r1)  ;; x 
+    (cmp r0 r1 r0)
     (lisp `((br-n ,glbl-n)))
     true
     (lisp `((br-pnz ,glbl-done)))
@@ -223,7 +223,7 @@
   (defword < () ;; (x y -- f)
     (pop r0)
     (pop r1)
-    (cmp r0 r0 r1)
+    (cmp r0 r1 r0)
     (lisp `((br-pz ,glbl-pz)))
     true
     (lisp `((br-pnz ,glbl-done)))
@@ -235,7 +235,7 @@
   (defword <= () ;; (x y -- f)
     (pop r0)
     (pop r1)
-    (cmp r0 r0 r1)
+    (cmp r0 r1 r0)
     (lisp `((br-p ,glbl-p)))
     true
     (lisp `((br-pnz ,glbl-done)))
@@ -253,6 +253,29 @@
     (lisp glbl-pn)
     false
     (lisp glbl-done)))
+
+;; only to be used from within a do ... loop
+(defword break (:inline t)
+  (ldr r0 rp 3) ;; get end label address
+  ;; pop index and max then jump
+  (rpop r1)
+  (rpop r2)
+  (jmp r0))
+
+(defword dumphexchr (:inline t) ;; (x -- )
+  #x000f and ;; mask off low nibble
+  dup 10 >= ;; test for >= 10
+  if -10 + #\A else #\0 then
+  + dumpchr)
+
+(defword dumphex () ;; (x -- )
+  begin
+  dup dumphexchr ;; dup the value and print the lowest nibble
+  16 /           ;; shift right by 4 bits and loop until it is zero
+  dup
+  until
+  drop)
+
 
 ;; ------------------ Interrupts --------------------
 

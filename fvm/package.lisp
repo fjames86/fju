@@ -18,6 +18,6 @@
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
 	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
 	   #:lisp #:rand #:rti #:cr #:defisr #:compile-program
-	   #:zero? #:!=))
+	   #:zero? #:!= #:break #:+loop #:dumphex))
 	   
    

@@ -169,6 +169,91 @@
 (defword rand () ;; (-- rand)
   (lisp +random-number-generator+) @)
 
+(let ((glbl-pn (gensym))
+      (glbl-done (gensym)))
+  (defword = () ;; (x y -- f)
+    (pop r0)
+    (pop r1)
+    (cmp r0 r0 r1)
+    (lisp `((br-pn ,glbl-pn)))
+    true
+    (lisp `((br-pnz ,glbl-done)))
+    (lisp glbl-pn)
+    false
+    (lisp glbl-done)))
+(let ((glbl-z (gensym))
+      (glbl-done (gensym)))
+  (defword != () ;; (x y -- f)
+    (pop r0)
+    (pop r1)
+    (cmp r0 r0 r1)
+    (lisp `((br-z ,glbl-z)))
+    true
+    (lisp `((br-pnz ,glbl-done)))
+    (lisp glbl-z)
+    false
+    (lisp glbl-done)))
+
+(let ((glbl-nz (gensym))
+      (glbl-done (gensym)))
+  (defword > () ;; (x y -- f)
+    (pop r0)
+    (pop r1)
+    (cmp r0 r0 r1)
+    (lisp `((br-nz ,glbl-nz)))
+    true
+    (lisp `((br-pnz ,glbl-done)))
+    (lisp glbl-nz)
+    false
+    (lisp glbl-done)))
+(let ((glbl-n (gensym))
+      (glbl-done (gensym)))
+  (defword >= () ;; (x y -- f)
+    (pop r0)
+    (pop r1)
+    (cmp r0 r0 r1)
+    (lisp `((br-n ,glbl-n)))
+    true
+    (lisp `((br-pnz ,glbl-done)))
+    (lisp glbl-n)
+    false
+    (lisp glbl-done)))
+(let ((glbl-pz (gensym))
+      (glbl-done (gensym)))
+  (defword < () ;; (x y -- f)
+    (pop r0)
+    (pop r1)
+    (cmp r0 r0 r1)
+    (lisp `((br-pz ,glbl-pz)))
+    true
+    (lisp `((br-pnz ,glbl-done)))
+    (lisp glbl-pz)
+    false
+    (lisp glbl-done)))
+(let ((glbl-p (gensym))
+      (glbl-done (gensym)))
+  (defword <= () ;; (x y -- f)
+    (pop r0)
+    (pop r1)
+    (cmp r0 r0 r1)
+    (lisp `((br-p ,glbl-p)))
+    true
+    (lisp `((br-pnz ,glbl-done)))
+    (lisp glbl-p)
+    false
+    (lisp glbl-done)))
+
+(let ((glbl-pn (gensym))
+      (glbl-done (gensym)))
+  (defword zero? () ;; (x -- f)
+    (pop r0)
+    (lisp `((br-pn ,glbl-pn)))
+    true
+    (lisp `((br-pnz ,glbl-done)))
+    (lisp glbl-pn)
+    false
+    (lisp glbl-done)))
+
 ;; ------------------ Interrupts --------------------
 
 (defword default-isr ()

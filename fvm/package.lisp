@@ -17,6 +17,7 @@
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
 	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
-	   #:lisp #:rand #:rti #:cr #:defisr #:compile-program))
+	   #:lisp #:rand #:rti #:cr #:defisr #:compile-program
+	   #:zero? #:!=))
 	   
    

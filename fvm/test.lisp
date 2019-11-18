@@ -52,11 +52,19 @@
   hello-world cr 
   halt)
 
+(let ((glbl-done (gensym)))
+  (defword testbreak ()
+    1000 0 do
+    rand 16 mod zero? if (lisp `((rpop r0) (rpop r0) (br-pnz ,glbl-done))) then
+    #\A dumpchr cr 
+    loop
+    (lisp glbl-done)
+    halt))
 
 
 
 (defun test ()
-  (save-program "test.obj" 'testint
+  (save-program "test.obj" 'testbreak
 		:print-assembly t
 		:variables '(*mystring*)))
 

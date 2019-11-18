@@ -275,7 +275,9 @@ assembled object code."
 		  (push 0 (cadr currobj))
 		  (incf offset)))
 	       (otherwise
-		;; TODO: eliminate a push followed by pop
+		;; TODO: eliminate redundant instructions e.g.
+		;; push/pop followed by pop/push (push x) (pop x) or (pop x) (push x)
+		;; unconditional branch by offset 0 (br-pnz 0)
 		(let ((opcode (encode-opcode (car instrs) ltab (1+ offset))))
 		  (push (logand opcode #xffff) (cadr currobj))
 		  (incf offset)))))))))))
@@ -358,9 +360,8 @@ assembled object code."
 			       else-words (take-words 'then))
 			 (when (null body) (error "IF ELSE expects THEN")))
 		       (unless (eq (car body) 'then) (error "IF expects THEN"))
-		       `((pop r0)
-			 (add r0 r0 0) ;; test top of stack
-			 (br-pn ,else-label)
+		       `((pop r0) ;; sets flags automatically 
+			 (br-z ,else-label)
 			 ,@(generate-word-assembly if-words)
 			 (br-pnz ,then-label)
 			 ,else-label
@@ -399,8 +400,7 @@ assembled object code."
 		       (unless (eq (car body) 'until) (error "BEGIN expects UNTIL"))
 		       `(,start-label
 			 ,@(generate-word-assembly begin-words)
-			 (pop r0)
-			 (add r0 r0 0)
+			 (pop r0) ;; sets flags automatically 
 			 (br-pn ,start-label))))
 		    ((eq wrd 'variable)
 		     (setf body (cdr body))
@@ -538,7 +538,7 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
       ,@(mapcan (lambda (word)
 		  (append (list (intern (format nil "~A-DEF" (symbol-name word))))
 			  (word-assembly word)
-			  (list (list (if (find-isr word) 'rti 'ret)))))
+			  (list (list (if (or (eq word 'default-isr) (find-isr word)) 'rti 'ret)))))
 		words)
       ;; put variables immediately after word definitions 
       ,@(mapcan (lambda (var)

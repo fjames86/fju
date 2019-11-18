@@ -51,6 +51,10 @@
  * 0x3000 - 0xfdff user program code + data stack 
  * 0xfe00 - 0xffff device registers 
  */
+
+static int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
+
+
 static uint16_t sign_extend( uint16_t x, int bit_count ) {
   if( (x >> (bit_count - 1)) & 1 ) {
     x |= (0xFFFF << bit_count);
@@ -158,10 +162,15 @@ static void fvm_inst_br( struct fvm_state *state, uint16_t opcode ) {
 	    flags & FVM_PSR_ZERO ? "Z" : "",
 	    flags & FVM_PSR_NEG ? "N" : "",
 	    pcoffset );
-  
+
   if( ((flags & (FVM_PSR_POS|FVM_PSR_ZERO|FVM_PSR_NEG)) == (FVM_PSR_POS|FVM_PSR_ZERO|FVM_PSR_NEG)) ||
       (state->reg[FVM_REG_PSR] & flags) ) {
-    state->reg[FVM_REG_PC] += pcoffset;
+    if( pcoffset == 0xffff ) {
+      /* This will cause an infinite loop so it is an invalid instruction */
+      fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL|FVM_INT_EXCEPTION );
+    } else {
+      state->reg[FVM_REG_PC] += pcoffset;
+    }
   }
   
 }
@@ -215,23 +224,24 @@ static void fvm_inst_st( struct fvm_state *state, uint16_t opcode ) {
 
 /* jump to subroutine */
 static void fvm_inst_call( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t br, pcoffset;
+  uint16_t br, pcoffset, currpc;
 
   /* push pc to return stack */
-  write_mem( state, state->reg[FVM_REG_RP], state->reg[FVM_REG_PC] );
+  currpc = state->reg[FVM_REG_PC];
+  write_mem( state, state->reg[FVM_REG_RP], currpc );
   state->reg[FVM_REG_RP]--;
 
   if( opcode & 0x800 ) {
     /* jump to offset stored in word table */
     pcoffset = opcode & 0x7ff;
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x CALL 0x%x\n", state->reg[FVM_REG_PC] - 1, pcoffset );
+    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x CALL 0x%x CurrPC = %x RP = %x\n", state->reg[FVM_REG_PC] - 1, pcoffset, currpc, state->reg[FVM_REG_RP] );
     
     state->reg[FVM_REG_PC] = read_mem( state, pcoffset );
   } else {
     /* jump to offset stored in register */
     br = (opcode >> 6) & 0x7;
     if( state->flags & FVM_FLAG_VERBOSE ) {
-      printf( ";; %04x CALL R%x\n", state->reg[FVM_REG_PC] - 1, br );
+      printf( ";; %04x CALL R%x CurrPC = %x RP = %x\n", state->reg[FVM_REG_PC] - 1, br, currpc, state->reg[FVM_REG_RP] );
     }
     
     set_pc( state, state->reg[br] );
@@ -345,12 +355,12 @@ static void fvm_inst_push( struct fvm_state *state, uint16_t opcode ) {
   reg = (opcode >> 9) & 0x7;
   sp = (opcode & 0x10) ? FVM_REG_RP : FVM_REG_SP;
   if( opcode & 0x20 ) {
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPOP R%x = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, read_mem( state, state->reg[sp] + 1 ) );
+    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPOP R%x = %x %sP = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, read_mem( state, state->reg[sp] + 1 ), sp == FVM_REG_RP ? "R" : "S", state->reg[sp] + 1 );
     state->reg[sp]++;
     state->reg[reg] = read_mem( state, state->reg[sp] );
     update_flags( state, state->reg[reg] );
   } else {
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPUSH R%x = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, state->reg[reg] );
+    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPUSH R%x = %x %sP = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, state->reg[reg], sp == FVM_REG_RP ? "R" : "S", state->reg[sp] );
     write_mem( state, state->reg[sp], state->reg[reg] );
     state->reg[sp]--;
   }
@@ -389,9 +399,11 @@ static void fvm_inst_jmp( struct fvm_state *state, uint16_t opcode ) {
   
   if( ret ) {
     /* pop return address from return stack and jump */
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RET\n", state->reg[FVM_REG_PC] - 1 );
     state->reg[FVM_REG_RP]++;
-    set_pc( state, read_mem( state, state->reg[FVM_REG_RP] ) );
+    ret = read_mem( state, state->reg[FVM_REG_RP] );
+
+    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RET PC = %04x RP = %x\n", state->reg[FVM_REG_PC] - 1, ret, state->reg[FVM_REG_RP] );
+    set_pc( state, ret );
   } else {
     /* unconditional jump to address in register */
     baser = (opcode >> 6) & 0x7;

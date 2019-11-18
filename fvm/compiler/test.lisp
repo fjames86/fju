@@ -64,6 +64,26 @@
 (defword testtime ()
   time swap dumphex #\space dumpchr dumphex cr)
 
+(let ((octets (do ((bytes (coerce (babel:string-to-octets "hello world") 'list)
+			  (cddr bytes))
+		   (ret nil))
+		  ((null bytes) (nreverse ret))
+		(push (logior (ash (or (cadr bytes) 0) 8)
+			      (or (car bytes) 0))
+		      ret)))
+      (gstrbuf (gensym))
+      (glbl (gensym)))
+  (defword test-output ()
+    (lisp `((br-pnz ,glbl)
+	    ,gstrbuf 
+	    (.blkw ,@octets)
+	    ,glbl
+	    (lea r0 ,gstrbuf)
+	    (push r0)
+	    (ldi r0 ,(* 2 (length octets)))
+	    (push r0)))
+    write-output))
+
 ;; try a few words 
 (defword test ()
   "hello-world: " dumpstr hello-world cr
@@ -72,7 +92,8 @@
   "testbreak: " dumpstr testbreak cr 
   "+looptest: " dumpstr +looptest cr
   "ticktest: " dumpstr ticktest cr
-  "testtime: " dumpstr testtime cr 
+  "testtime: " dumpstr testtime cr
+  "test-output: " dumpstr test-output cr 
   halt)
 
 

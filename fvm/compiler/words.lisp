@@ -293,6 +293,24 @@
   (push r2)
   (push r1))
 
+(defword read-input () ;; (addr count -- msglen)
+  (pop r1) ;; r1=count
+  (pop r0) ;; r0=addr
+  0 #xfe06 !  ;; write 0 to inlog register
+  (push r0)) ;; r0 receives msglen 
+
+(defword reset-input () ;; ( -- )
+  1 #xfe06 !)
+
+(defword write-output () ;; (addr count -- )
+  (pop r1)
+  (pop r0)
+  (ldi r2 0)
+  (br-pnz 1)
+  (.blkw #xfe07)
+  (ld r3 -2)
+  (str r3 r2 0)) ;; write 0 to #xfe07
+
 ;; ------------------ Interrupts --------------------
 
 (defword default-isr ()

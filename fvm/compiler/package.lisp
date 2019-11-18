@@ -19,6 +19,6 @@
 	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
 	   #:lisp #:rand #:rti #:cr #:defisr #:compile-program
 	   #:zero? #:!= #:break #:+loop #:dumphex #:lshift #:rshift
-	   #:tick-count))
+	   #:tick-count #:read-input #:reset-input #:write-output))
 	   
    

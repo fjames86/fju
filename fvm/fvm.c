@@ -78,6 +78,8 @@ static void update_flags( struct fvm_state *state, uint16_t x ) {
 #define FVM_DEVICE_TICKCOUNT 0xfe03 /* tick counter */
 #define FVM_DEVICE_CLOCKLOW 0xfe04  /* unix time clock */
 #define FVM_DEVICE_CLOCKHIGH 0xfe05  /* unix time clock */
+#define FVM_DEVICE_INLOG 0xfe06     /* input log register */
+#define FVM_DEVICE_OUTLOG 0xfe07    /* output log register */
 
 static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
   if( offset >= 0xfe00 ) {
@@ -103,6 +105,12 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 }
 
 static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) {
+  char *addr;
+  uint32_t count;
+  int sts, ne;
+  struct log_entry entry;
+  struct log_iov iov[1];
+	
   if( offset >= 0xfe00 ) {
     /* write to memory mapped device registers */
     switch( offset ) {
@@ -116,34 +124,53 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       break;
     case FVM_DEVICE_CDR:
       /* display data register - write character */
-      printf( "%c", val & 0xff );
+      printf( "%c", val & 0x7f );
       state->mem[offset] = val & 0xff;
       return;
-#if 0
-    case FVM_DEVICE_INPUT:
+    case FVM_DEVICE_INLOG:
 	/* Input register */
-	addr = val;
-	count = state->reg[FVM_REG_R0];
-	memset( &entry, 0, sizeof(entry) );
-	entry.iov = iov;
-	entry.niov = 1;
-	entry.iov[0].buf = &state->mem[offset];
-	entry.iov[0].len = count;
-	log_read( &state->inlog, &entry );
-	state->reg[FVM_REG_R0] = entry.msglen;
+	/* TODO: use value written as a command, allow doing different things 
+	 * e.g. resetting read index 
+	 */
+	switch( val ) {
+        case 0:
+	    /* read nex message */
+	    addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
+	    count = state->reg[FVM_REG_R1];
+	    memset( &entry, 0, sizeof(entry) );
+	    iov[0].buf = addr;
+	    iov[0].len = count;
+	    entry.niov = 1;
+	    entry.iov = iov;
+	    entry.id = state->inlog_id;
+	    sts = log_read( &state->inlog, state->inlog_id, &entry, 1, &ne );
+	    if( sts || !ne ) {
+	        state->reg[FVM_REG_R0] = 0; /* R0 receives msglen */
+            } else {
+	        state->inlog_id = entry.id;
+		state->reg[FVM_REG_R0] = entry.msglen;
+            }
+	    break;
+        case 1:
+	    /* reset msg id */
+	    state->inlog_id = 0;
+	    break;
+	}
+	
 	break;
-    case FVM_DEVICE_OUTPUT:
+    case FVM_DEVICE_OUTLOG:
 	/* output register */
-	addr = val;
-	count = state->reg[FVM_REG_R0];
+	addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
+	count = state->reg[FVM_REG_R1];
+	printf( "writing %d bytes addr %d\n", (int)count, (int)state->reg[FVM_REG_R0]);
+	
 	memset( &entry, 0, sizeof(entry) );
 	entry.iov = iov;
 	entry.niov = 1;
-	entry.iov[0].buf = &state->mem[offset];
+	entry.iov[0].buf = addr;
 	entry.iov[0].len = count;
 	log_write( &state->outlog, &entry );
 	break;
-#endif
     }
   } else {
     state->mem[offset] = val;

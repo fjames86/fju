@@ -35,11 +35,14 @@
 
 #include <fju/mmf.h>
 #include <fju/fvm.h>
+#include <fju/log.h>
 
 static void usage( char *fmt, ... ) {
   va_list args;
   
-  printf( "fvm -p program [-v] [-n n]\n" );
+  printf( "fvm -p program\n"
+	  "     [-v] [-n nsteps] [-t timeout]\n"
+	  "     [-i inlog-path] [-o outlog-path]\n" );
   if( fmt ) {
     va_start( args, fmt );
     printf( "Error: " );
@@ -55,6 +58,9 @@ static struct {
   struct fvm_state fvm;
   int verbose;
   int nsteps;
+  int timeout;
+  char *inlog;
+  char *outlog;
 } glob;
 
 int main( int argc, char **argv ) {
@@ -75,11 +81,23 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );      
       glob.nsteps = strtoul( argv[i], NULL, 10 );
+    } else if( strcmp( argv[i], "-t" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.timeout = strtoul( argv[i], NULL, 10 );
+    } else if( strcmp( argv[i], "-i" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.inlog = argv[i];
+    } else if( strcmp( argv[i], "-o" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.outlog = argv[i];
     } else usage( NULL );
     i++;
   }
   if( path == NULL ) usage( NULL );
-  
+	
   sts = mmf_open( path, &mmf );
   if( sts ) usage( "Failed to open program" );
   sts = mmf_remap( &mmf, mmf.fsize );
@@ -89,7 +107,13 @@ int main( int argc, char **argv ) {
   if( glob.verbose ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
   mmf_close( &mmf );
 
+  sts = log_open( glob.inlog ? glob.inlog : "fvm-in.log", NULL, &glob.fvm.inlog );
+  if( sts ) usage( "Failed to open inlog" );
+  sts = log_open( glob.inlog ? glob.outlog : "fvm-out.log", NULL, &glob.fvm.outlog );
+  if( sts ) usage( "Failed to open outlog" );
+  
   if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
+  else if( glob.timeout ) fvm_run_timeout( &glob.fvm, glob.timeout );
   else fvm_run( &glob.fvm );
 
   if( glob.verbose ) {
@@ -99,8 +123,11 @@ int main( int argc, char **argv ) {
 	    glob.fvm.reg[4], glob.fvm.reg[5],
 	    glob.fvm.reg[6], glob.fvm.reg[7],
 	    glob.fvm.reg[8] );
-    printf( ";; TickCount %d\n", glob.fvm.tickcount );
+    printf( ";; TickCount %d\n", (int)glob.fvm.tickcount );
   }
+
+  log_close( &glob.fvm.inlog );
+  log_close( &glob.fvm.outlog );
   
   return 0;
 }

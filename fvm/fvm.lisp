@@ -1,4 +1,5 @@
 ;;;; Copyright Frank James 2019
+;;;; This code is licensed under the MIT license.
 
 ;;;
 ;;; This file defines a very naive assembler and forth compiler for the 
@@ -16,29 +17,6 @@
 ;; #xfdff           top of data sack
 ;; #xfe00 - #xffff  device registers
 
-
-(eval-when (:load-toplevel :compile-toplevel :execute)
-  (ql:quickload '("babel" "nibbles")))
-
-(defpackage #:fvm
-  (:use #:cl)
-  (:export #:r0 #:r1 #:r2 #:r3 #:r4 #:r5 #:r6 #:r7 #:sp #:rp
-	   #:defword #:defvariable
-	   #:save-program
-	   #:begin #:until #:else #:then
-	   #:.blkw #:.origin #:.orig #:.string
-	   #:br #:br-p #:br-z #:br-n #:br-pn #:br-np #:br-pz #:br-zp 
-	   #:br-nz #:br-zn #:br-pnz #:br-pzn #:br-npz #:br-nzp #:br-zpn #:br-znp
-	   #:add #:ld #:st #:call #:nand #:ldr #:str #:push #:rpush #:pop #:rpop
-	   #:ldi #:sti #:jmp #:ret #:mul #:div #:mod #:cmp #:lea 
-	   #:! #:DUP2 #:AND #:2+ #:I #:TUCK #:1+
-	   #:XNOR #:NAND #:@ #:ROT #:NOR #:2- #:DROP #:FALSE
-	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
-	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
-	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
-	   #:lisp #:rand #:rti #:cr #:defisr #:compile-program))
-	   
-   
 
 (in-package #:fvm)
 
@@ -494,169 +472,6 @@ BODY ::= word definition. List of words or inline assembly.
 	 *words*)))
 	    
 
-;; define intrinsic words 
-(defword swap ()
-  (pop r0)
-  (pop r1)
-  (push r0)
-  (push r1))
-(defword drop (:inline t)
-  (pop r0))
-(defword dup ()
-  (ldr r0 sp 1)
-  (push r0))
-(defword dup2 () ;; (a b -- a b a b)
-  (ldr r0 sp 1)
-  (ldr r1 sp 2)
-  (push r0)
-  (push r1))
-(defword rot () ;; (a b c -- c a b)
-  (pop r0)
-  (pop r1)
-  (pop r2)
-  (push r0)
-  (push r1)
-  (push r2))
-(defword over () ;; (a b -- a b a)
-  (pop r0)
-  (pop r1)
-  (push r1)
-  (push r0)
-  (push r1))
-(defword tuck () ;; (a b -- b a b)
-  (pop r0)
-  (pop r1)
-  (push r0)
-  (push r1)
-  (push r0))
-(defword ! ()   ;; (value addr -- )
-  (pop r0) ;; addr
-  (pop r1) ;; value
-  (str r0 r1 0))
-(defword @ ()   ;; (addr -- [addr])
-  (pop r0) ;; get address
-  (ldr r1 r0 0)
-  (push r1))
-(defword + ()
-  (pop r0)
-  (pop r1)
-  (add r0 r0 r1)
-  (push r0))
-(defword - ()
-  (pop r0)
-  (pop r1)
-  (sub r0 r1 r0)
-  (push r0))
-(defword * ()
-  (pop r0)
-  (pop r1)
-  (mul r0 r0 r1)
-  (push r0))
-(defword / ()
-  (pop r0)
-  (pop r1)
-  (div r0 r0 r1)
-  (push r0))
-(defword mod () ;; (x n -- x%n)
-  (pop r0)
-  (pop r1)
-  (mod r0 r1 r0)
-  (push r0))
-(defword zero (:inline t)
-  (ldi r0 0)
-  (push r0))
-(defword 1+ ()
-  (pop r0)
-  (add r0 r0 1)
-  (push r0))
-(defword 1- ()
-  (pop r0)
-  (add r0 r0 -1)
-  (push r0))
-(defword 2+ ()
-  (pop r0)
-  (add r0 r0 2)
-  (push r0))
-(defword 2- ()
-  (pop r0)
-  (add r0 r0 -2)
-  (push r0))
-(defword r> ()
-  (rpop r0)
-  (push r0))
-(defword r< ()
-  (pop r0)
-  (rpush r0))
-(defword r@ ()
-  (ldr r0 r6 1)
-  (push r0))
-
-;; NOT X ::= X NAND X
-;; X AND Y ::= (X NAND Y) NAND (X NAND Y)
-;; X OR Y ::= (NOT X) NAND (NOT Y)
-;; X NOR Y ::= (X OR Y) NAND (X OR Y)
-;; X XOR Y ::= (X NAND (X NAND Y)) NAND (Y NAND (X NAND Y))
-;; X XNOR Y ::= (X OR Y) NAND (X NAND Y)
-(defword nand ()
-  (pop r0)
-  (pop r1)
-  (nand r0 r0 r1)
-  (push r0))
-(defword not ()
-  (pop r0)
-  (nand r0 r0 r0)
-  (push r0))
-(defword and ()
-  (pop r0)
-  (pop r1)
-  (nand r0 r0 r1)
-  (nand r0 r0 r0)
-  (push r0))
-(defword or ()
-  not swap not nand)
-(defword nor ()
-  or dup nand)
-(defword xor ()
-  (pop r0)
-  (pop r1)
-  (nand r2 r0 r1)
-  (nand r3 r1 r2)
-  (nand r4 r0 r2)
-  (nand r0 r3 r4)
-  (push r0))
-(defword xnor ()
-  dup2 nand swap or nand)
-(defword halt ()
-  (lisp +machine-control-register+)    ;; address of machine control register 
-  dup @ #x7fff and       ;; get contents of mcr and clear timer bit
-  swap !)                ;; store it 
-(defword i (:inline t)   ;; get current loop index 
-  (ldr r0 rp 1) ;; r0=[rp+1]
-  (push r0))
-(defword dumpchr ()
-  (lisp +console-data-register+) !)
-(defword true (:inline t)
-  (ldi r0 -1)
-  (push r0))
-(defword false (:inline t)
-  zero)
-(defword dumpstr () ;; (addr -- )
-  begin
-    dup 1+ swap @ dup dumpchr 
-  until
-  drop)
-(defword cr ()
-  10 dumpchr)
-(defword tos ()
-  (push r6))
-(defword bos ()
-  variable *bottom-of-stack*)
-(defword zero! () ;; (addr --)
-  (pop r0)
-  (sti r0 0))
-(defword rand () ;; (-- rand)
-  (lisp +random-number-generator+) @)
-
 (defparameter *variables* nil)
 (defun make-variable (name size &optional initial-contents)
   (list name size initial-contents))
@@ -667,7 +482,6 @@ INITIAL-CONTENTS ::= integer, list of integers or string
 " 
   `(push (make-variable ',name ,size ,initial-contents) *variables*))
 
-
 (defparameter *isr* nil)
 (defun make-isr (word ivec)
   (list word ivec))
@@ -677,18 +491,6 @@ WORD ::= symbol naming word designated as handler. This word must NOT be used in
 IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 " 
   `(push (make-isr ',word ,ivec) *isr*))
-(defword default-isr ()
-  halt)
-
-(defword privilege-exception-isr ()
-  "PrivilegeException" dumpstr cr
-  halt)
-(defisr privilege-exception-isr #x00)
-
-(defword illegal-opcode-isr ()
-  "IllegalOpcode" dumpstr cr)
-(defisr illegal-opcode-isr #x01)
-
 
 (defun find-isr (ivec)
   (etypecase ivec

@@ -9,7 +9,8 @@
 
 ;; layout:
 ;; #x0000 - #x07ff  word definition table, 2048 addresses of word definitions
-;; #x0800 - #x0fff  unused - interrupt table?
+;; #x0800 - #x0900  interrupt service table 
+;; #x0900 - #x0fff  unused
 ;; #x1000 - #x2fff  return stack
 ;; #x3000 -         word definitions, global variables 
 ;; #xfdff           top of data sack
@@ -35,7 +36,7 @@
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
 	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
-	   #:lisp #:rand #:rti #:cr #:defisr))
+	   #:lisp #:rand #:rti #:cr #:defisr #:compile-program))
 	   
    
 
@@ -430,18 +431,6 @@ assembled object code."
 			 (.blkw ,var-name)
 			 (ld r0 -2)
 			 (push r0))))
-		    ((eq wrd 'string) ;; like forth's ."
-		     (setf body (cdr body))
-		     (let ((str (car body))
-			   (lbl (gensym))
-			   (strlbl (gensym)))
-		       (unless (stringp str) (error "~S not a string" str))
-		       `((br-pnz ,lbl)
-			 ,strlbl
-			 (.string ,str)
-			 ,lbl
-			 (lea r0 ,strlbl)
-			 (push r0))))
 		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
 		  (if (<= (abs wrd) #xff)
@@ -454,6 +443,15 @@ assembled object code."
 		 ((characterp wrd)
 		  (let ((code (char-code wrd)))
 		    `((ldi r0 ,(logand code #x7f))
+		      (push r0))))
+		 ((stringp wrd)
+		  (let ((lbl (gensym))
+			(strlbl (gensym)))
+		    `((br-pnz ,lbl)
+		      ,strlbl
+		      (.string ,wrd)
+		      ,lbl
+		      (lea r0 ,strlbl)
 		      (push r0))))
 		 ((listp wrd)
 		  ;; if wrd is a list it is assembly instruction
@@ -683,12 +681,12 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
   halt)
 
 (defword privilege-exception-isr ()
-  string "PrivilegeException" dumpstr cr
+  "PrivilegeException" dumpstr cr
   halt)
 (defisr privilege-exception-isr #x00)
 
 (defword illegal-opcode-isr ()
-  string "IllegalOpcode" dumpstr cr)
+  "IllegalOpcode" dumpstr cr)
 (defisr illegal-opcode-isr #x01)
 
 
@@ -757,14 +755,8 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 			variables))
       *bottom-of-stack*)))
 
-
-(defun save-program (pathspec entry-word &key variables print-assembly)
-  "Compile and save a program.
-PATHSPEC ::= where to save the program file.
-ENTRY-WORD ::= word designated as entry point.
-VARIABLES ::= list of global variables defined with DEFVARIABLE to use.
-PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
-" 
+(defun compile-program (entry-word &key variables print-assembly)
+  "Compile a program. Returns a list of program object codes." 
   (let ((asm (generate-assembly entry-word :variables variables)))
     (when print-assembly
       (dolist (x asm)
@@ -777,8 +769,19 @@ PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
 	    (format t ";; ~4,'0X LENGTH ~A~%" (car obj) (length (cadr obj)))
 	    (incf count (length (cadr obj))))
 	  (format t ";; Total: ~A (~A bytes) ~A words~%" count (* 2 count) (length (required-words entry-word)))))
-      (when print-assembly
-	(format t ";; ~A~%" (truename pathspec)))
-      (%save-program pathspec objs))))
+      objs)))
+  
+(defun save-program (pathspec entry-word &key variables print-assembly)
+  "Compile and save a program.
+PATHSPEC ::= where to save the program file.
+ENTRY-WORD ::= word designated as entry point.
+VARIABLES ::= list of global variables defined with DEFVARIABLE to use.
+PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
+" 
+  (when print-assembly
+    (format t ";; ~A~%" (truename pathspec)))
+  (%save-program pathspec (compile-program entry-word
+					   :variables variables
+					   :print-assembly print-assembly)))
 
 

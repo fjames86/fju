@@ -56,7 +56,8 @@ struct fvm_state {
   uint16_t mem[FVM_MAX_MEM];
   uint32_t flags;
 #define FVM_FLAG_RUNNING 0x0001
-#define FVM_FLAG_VERBOSE 0x0002 
+#define FVM_FLAG_VERBOSE 0x0002
+  uint64_t tickcount;
 };
 
 int fvm_load( struct fvm_state *state, uint16_t *program, int proglen );

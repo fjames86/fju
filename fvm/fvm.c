@@ -41,6 +41,8 @@
 #define FVM_INT_PME_PL    0       /* pme priority level */
 #define FVM_INT_IOC       0x01    /* illegal opcode exception */
 #define FVM_INT_IOC_PL    0       /* ioc priority level */
+#define FVM_INT_DBZ       0x02    /* divide by zero */
+#define FVM_INT_DBZ_PL    0       /* divide by zero level */
 
 /*
  * Loosely modelled on the LC3 processor. 
@@ -73,6 +75,9 @@ static void update_flags( struct fvm_state *state, uint16_t x ) {
 #define FVM_DEVICE_MCR 0xfe00   /* machine control register */
 #define FVM_DEVICE_CDR 0xfe01   /* console data register */
 #define FVM_DEVICE_RNG 0xfe02   /* random number generator */
+#define FVM_DEVICE_TICKCOUNT 0xfe03 /* tick counter */
+#define FVM_DEVICE_CLOCKLOW 0xfe04  /* unix time clock */
+#define FVM_DEVICE_CLOCKHIGH 0xfe05  /* unix time clock */
 
 static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
   if( offset >= 0xfe00 ) {
@@ -84,6 +89,12 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
     case FVM_DEVICE_RNG:
 	/* random number generator */
 	return sec_rand_uint32() & 0xffff;
+    case FVM_DEVICE_TICKCOUNT:
+	return (uint16_t)state->tickcount;
+    case FVM_DEVICE_CLOCKLOW:
+	return (uint16_t)time( NULL ) & 0xffff;
+    case FVM_DEVICE_CLOCKHIGH:
+	return (uint16_t)((time( NULL ) >> 16) & 0xffff);
     default:
       return 0;
     }
@@ -430,6 +441,9 @@ static void fvm_inst_mul( struct fvm_state *state, uint16_t opcode ) {
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x DIV R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
     if( state->reg[sr2] == 0 ) {
       printf( ";; Divide by zero exception\n" );
+      //fvm_interrupt( state, FVM_INT_DBZ, FVM_INT_DBZ_PL|FVM_EXCEPTION );
+      //return;
+      
       state->reg[dr] = 0;
     } else {
       state->reg[dr] = state->reg[sr1] / state->reg[sr2];
@@ -437,6 +451,15 @@ static void fvm_inst_mul( struct fvm_state *state, uint16_t opcode ) {
   } else if( flags == 2 ) {
     /* mod */
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x MOD R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
+
+    /*
+    if( state->reg[sr2] == 0 ) {
+	printf( ";; Divide by zero exception\n" );
+	fvm_interrupt( state, FVM_INT_DBZ, FVM_INT_DBZ_PL|FVM_INT_EXCEPTION );
+	return;
+    }
+    */
+    
     state->reg[dr] = (state->reg[sr2] ? state->reg[sr1] % state->reg[sr2] : 0);
   } else if( flags == 3 ) {
     /* cmp */
@@ -496,7 +519,9 @@ static int fvm_step( struct fvm_state *state ) {
   /* get instruction and invoke handler */
   inst = (opcode >> 12) & 0xf;
   inst_handlers[inst]( state, opcode );
-
+  
+  state->tickcount++;
+  
   return 0;
 }
 

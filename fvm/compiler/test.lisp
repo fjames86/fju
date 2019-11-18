@@ -30,8 +30,7 @@
     (lisp `((br-z ,glabel)))
     hello-world cr
     (lisp glabel)
-    hello-world cr
-    halt))
+    hello-world cr))
 
 ;; test random number generator
 (defword testrand ()
@@ -43,22 +42,27 @@
 ;; test illegal opcode interrupt 
 (defword testint ()
   (fvm::res3)
-  hello-world cr 
-  halt)
+  hello-world cr)
 
 (defword testbreak ()
   1000 0 do
   rand 16 mod zero? if break then
   #\A dumpchr cr 
-  loop
-  halt)
+  loop)
 
 (defword +looptest ()
   1000 0 do
   i dumphex cr
   rand 100 mod
-  +loop
-  halt)
+  +loop)
+
+(defword ticktest ()
+  20 0 do
+  tick-count dumphex cr
+  loop)
+
+(defword testtime ()
+  time swap dumphex #\space dumpchr dumphex cr)
 
 ;; try a few words 
 (defword test ()
@@ -66,7 +70,9 @@
   "test-count: " dumpstr test-count cr
   "testrand: " dumpstr testrand cr 
   "testbreak: " dumpstr testbreak cr 
-  "+looptest: " dumpstr +looptest cr 
+  "+looptest: " dumpstr +looptest cr
+  "ticktest: " dumpstr ticktest cr
+  "testtime: " dumpstr testtime cr 
   halt)
 
 

@@ -281,6 +281,18 @@
   loop
   drop)
 
+(defword tick-count () ;; ( -- x)
+  #xfe03 @)
+
+(defword time () ;; ( -- high low)
+  (br-pnz 1)
+  (.blkw #xfe04)
+  (ld r0 -2)
+  (ldr r1 r0 0)
+  (ldr r2 r0 1)
+  (push r2)
+  (push r1))
+
 ;; ------------------ Interrupts --------------------
 
 (defword default-isr ()
@@ -295,3 +307,7 @@
   "IllegalOpcode" dumpstr cr)
 (defisr illegal-opcode-isr #x01)
 
+(defword divide-by-zero-isr ()
+  "DivideByZero" dumpstr cr
+  halt)
+(defisr divide-by-zero-isr #x02)

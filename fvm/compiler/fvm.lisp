@@ -581,7 +581,8 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	(format t "~%;; Objects: ~%")
 	(let ((count 0))
 	  (dolist (obj objs)
-	    (format t ";; ~4,'0X LENGTH ~A~%" (car obj) (length (cadr obj)))
+	    (format t ";; 0x~4,'0X - 0x~4,'0X LENGTH 0x~X~%"
+		    (car obj) (+ (car obj) (length (cadr obj))) (length (cadr obj)))
 	    (incf count (length (cadr obj))))
 	  (format t ";; Total: ~A (~A bytes) ~A words~%" count (* 2 count) (length (required-words entry-word)))))
       objs)))

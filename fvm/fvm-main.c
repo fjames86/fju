@@ -99,6 +99,7 @@ int main( int argc, char **argv ) {
 	    glob.fvm.reg[4], glob.fvm.reg[5],
 	    glob.fvm.reg[6], glob.fvm.reg[7],
 	    glob.fvm.reg[8] );
+    printf( ";; TickCount %d\n", glob.fvm.tickcount );
   }
   
   return 0;

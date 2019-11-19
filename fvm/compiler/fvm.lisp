@@ -59,7 +59,9 @@
 	     ((.ORIG .ORIGIN) ;; (:ORIGIN 232) set PC
 	      (setf offset (label-offset (cadr inst) ltab 0 #xffff)))
 	     (.STRING ;; (:STRING "hello")
-	      (incf offset (1+ (length (cadr inst)))))
+	      (let ((datalen (ceiling (length (cadr inst)) 2)))
+		(incf offset datalen)
+		(when (zerop (mod (length (cadr inst)) 2)) (incf offset))))
 	     (.BLKW ;; (.BLKW 123 ...)
 	      (incf offset (length (cdr inst))))
 	     (otherwise
@@ -268,12 +270,21 @@ assembled object code."
 		  (push (logand (label-offset x ltab 0 #xffff) #xffff) (cadr currobj))
 		  (incf offset)))
 	       (.STRING
-		(let ((octets (babel:string-to-octets (cadr inst))))
-		  (dotimes (i (length octets))
-		    (push (aref octets i) (cadr currobj))
+		(let* ((octets (babel:string-to-octets (cadr inst)))
+		       (datalen (ceiling (length octets) 2))
+		       (thewords nil))
+		  (dotimes (i datalen)
+		    (let ((x (aref octets (* 2 i))))
+		      (when (< (1+ (* 2 i)) (length octets))
+			(setf x (logior x (ash (aref octets (1+ (* 2 i))) 8))))
+		      (push x (cadr currobj))
+		      (incf offset)
+		      (push x thewords)))
+		  (when (zerop (mod (length octets) 2))
+		    (push 0 (cadr currobj))
+		    (push 0 thewords)
 		    (incf offset))
-		  (push 0 (cadr currobj))
-		  (incf offset)))
+		  (format t ";; .STRING ~A WORDS: ~4,'0X~%" (cadr inst) thewords)))
 	       (otherwise
 		;; TODO: eliminate redundant instructions e.g.
 		;; push/pop followed by pop/push (push x) (pop x) or (pop x) (push x)
@@ -595,7 +606,7 @@ VARIABLES ::= list of global variables defined with DEFVARIABLE to use.
 PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
 " 
   (when print-assembly
-    (format t ";; ~A~%" (truename pathspec)))
+    (format t ";; ~A~%" (pathname pathspec)))
   (%save-program pathspec (compile-program entry-word
 					   :variables variables
 					   :print-assembly print-assembly)))

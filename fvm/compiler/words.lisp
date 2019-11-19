@@ -17,6 +17,10 @@
 (defword dup ()
   (ldr r0 sp 1)
   (push r0))
+(defword 2dup ()
+  (ldr r0 sp 1)
+  (push r0)
+  (push r0))
 (defword dup2 () ;; (a b -- a b a b)
   (ldr r0 sp 1)
   (ldr r1 sp 2)
@@ -145,16 +149,24 @@
 (defword i (:inline t)   ;; get current loop index 
   (ldr r0 rp 1) ;; r0=[rp+1]
   (push r0))
-(defword dumpchr ()
+(defword dumpchr () ;; ( char -- )
   (lisp +console-data-register+) !)
 (defword true (:inline t)
   (ldi r0 -1)
   (push r0))
 (defword false (:inline t)
   zero)
-(defword dumpstr () ;; (addr -- )
+(defword rshift () ;; (x n -- y)
+  0 do 2 / loop)
+(defword lshift () ;; (x n -- y)
+  0 do 2 * loop)
+
+;; remember that strings are compacted i.e. low 8 bits followed by high 8 bits
+(defword dumpstr () ;; (addr -- ) 
   begin
-    dup 1+ swap @ dup dumpchr 
+    dup 1+ swap @ ;; get next 2 chars and increment address for next iteration
+    dup #x00ff and dup if dumpchr else drop then
+    8 rshift 2dup if dumpchr else drop then
   until
   drop)
 (defword cr ()
@@ -267,11 +279,6 @@
   dup 10 >= ;; test for >= 10
   if -10 + #\A else #\0 then
   + dumpchr)
-
-(defword rshift () ;; (x n -- y)
-  0 do 2 / loop)
-(defword lshift () ;; (x n -- y)
-  0 do 2 * loop)
 
 (defword dumphex () ;; (x -- )
   4 0 do

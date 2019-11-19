@@ -95,8 +95,8 @@
   begin 
     variable *input-buffer* 64 read-input  
     dup ;; (msglen msglen --)
-    if "GotAMessage Count=" dumpstr dumphex cr
-    variable *input-buffer* dumpstr cr true
+    if "GotAMessage Count=" dumpstr dup dumphex cr
+    variable *input-buffer* swap dumpstr-count cr true
     else "GotNoMessage" dumpstr drop false then
   until
   reset-input)

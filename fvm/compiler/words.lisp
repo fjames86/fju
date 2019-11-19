@@ -163,12 +163,22 @@
   0 do 2 * loop)
 
 ;; remember that strings are compacted i.e. low 8 bits followed by high 8 bits
+;; This writes a zero-terminated string to stdout 
 (defword dumpstr () ;; (addr -- ) 
   begin
     dup 1+ swap @ ;; get next 2 chars and increment address for next iteration
     dup #x00ff and dup if dumpchr else drop then
     8 rshift 2dup if dumpchr else drop then
   until
+  drop)
+
+;; this writes a string of specific length to stdout 
+(defword dumpstr-count () ;; (addr count -- )
+  0 do
+    dup 1+ swap @ ;; copy address and increment it, get current word 
+    dup #x00ff and dup if dumpchr else drop then
+    8 rshift dup if dumpchr else drop then
+  2 +loop
   drop)
 (defword cr ()
   10 dumpchr)

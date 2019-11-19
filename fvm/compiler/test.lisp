@@ -92,14 +92,15 @@
 
 (defvariable *input-buffer* 0 32) ;; allocate 32 words (64 bytes) buffer space
 (defword test-input ()
-  variable *input-buffer* 64 read-input  
-  dup ;; (msglen msglen --)
-  if "GotAMessage Count=" dumpstr dumphex cr
-  variable *input-buffer* dumpstr cr 
-  else "GotNoMessage" dumpstr drop then)
+  begin 
+    variable *input-buffer* 64 read-input  
+    dup ;; (msglen msglen --)
+    if "GotAMessage Count=" dumpstr dumphex cr
+    variable *input-buffer* dumpstr cr true
+    else "GotNoMessage" dumpstr drop false then
+  until
+  reset-input)
   
-
-
 ;; try a few words 
 (defword test ()
   "hello-world: " dumpstr hello-world cr
@@ -111,6 +112,7 @@
   "testtime: " dumpstr testtime cr
   "test-output: " dumpstr test-output cr
   "test-output2: " dumpstr test-output2 cr
+  "test-input: " dumpstr test-input cr
   "test-input: " dumpstr test-input cr 
   halt)
 

@@ -167,6 +167,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	  printf( "writing %d bytes addr %d\n", (int)count, (int)state->reg[FVM_REG_R0]);
 	  
 	  memset( &entry, 0, sizeof(entry) );
+	  entry.flags = LOG_LVL_INFO|LOG_BINARY;
 	  entry.iov = iov;
 	  entry.niov = 1;
 	  entry.iov[0].buf = addr;

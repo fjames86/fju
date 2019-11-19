@@ -2,6 +2,7 @@
 #include <fju/freg.h>
 #include <fju/rpc.h>
 #include <fju/hrauth.h>
+#include <fju/log.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,13 @@ static int freg_proc_null( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int freg_check_auth = 1;
+static int freg_authenticated( struct rpc_inc *inc ) {
+    if( !freg_check_auth ) return 1;
+    if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) return 0;
+    return 1;
+}
+
 static int freg_proc_list( struct rpc_inc *inc ) {
     int sts, handle;
     uint64_t parentid;
@@ -21,10 +29,8 @@ static int freg_proc_list( struct rpc_inc *inc ) {
     uint32_t u32;
     uint64_t u64;
     struct freg_entry *elist = NULL;
-
-    if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {	
-      return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
-    }
+    
+    if( !freg_authenticated( inc ) ) return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
 
     sts = xdr_decode_uint64( &inc->xdr, &parentid );
     if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
@@ -82,9 +88,7 @@ static int freg_proc_get( struct rpc_inc *inc ) {
   uint64_t id;
   char *buf = NULL;
 
-  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
-    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
-  }
+  if( !freg_authenticated( inc ) ) return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
 
   sts = xdr_decode_uint64( &inc->xdr, &id );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
@@ -142,10 +146,8 @@ static int freg_proc_put( struct rpc_inc *inc ) {
   char *buf = NULL;
   char name[FREG_MAX_NAME];
 
-  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
-    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
-  }
-
+  if( !freg_authenticated( inc ) ) return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  
   sts = xdr_decode_uint64( &inc->xdr, &parentid );
   if( !sts ) sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
@@ -170,9 +172,7 @@ static int freg_proc_rem( struct rpc_inc *inc ) {
   int sts, handle;
   uint64_t parentid, id;
 
-  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
-    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
-  }
+  if( !freg_authenticated( inc ) ) return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
   
   sts = xdr_decode_uint64( &inc->xdr, &parentid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &id );
@@ -205,6 +205,15 @@ static struct rpc_program freg_prog = {
 };
 
 void freg_register( void ) {
-  freg_open( NULL, NULL );
-  rpc_program_register( &freg_prog );
+    int sts, b;
+    freg_open( NULL, NULL );
+    rpc_program_register( &freg_prog );
+
+    /* load authentication configuration from registry */
+    sts = freg_get_by_name( NULL, 0, "/fju/freg/checkauth", FREG_TYPE_UINT32, (char *)&b, sizeof(b), NULL );
+    if( !sts && !b ) {
+	log_writef( NULL, LOG_LVL_INFO, "freg-rpc: disabling authentication" );
+	freg_check_auth = 0;
+    }
+  
 }

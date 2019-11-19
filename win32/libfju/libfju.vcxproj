@@ -97,7 +97,7 @@
     <Link>
       <ModuleDefinitionFile>libfju.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>bcrypt.lib;ws2_32.lib;iphlpapi.lib;libfreg.lib;libhostreg.lib;libhrauth.lib;liblht.lib;liblog.lib;libmmf.lib;libnls.lib;libraft.lib;librpc.lib;libsec.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libfvm.lib;bcrypt.lib;ws2_32.lib;iphlpapi.lib;libfreg.lib;libhostreg.lib;libhrauth.lib;liblht.lib;liblog.lib;libmmf.lib;libnls.lib;libraft.lib;librpc.lib;libsec.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>NotSet</SubSystem>
     </Link>
     <ProjectReference>
@@ -115,7 +115,7 @@
     <Link>
       <ModuleDefinitionFile>libfju.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>bcrypt.lib;ws2_32.lib;iphlpapi.lib;libfreg.lib;libhostreg.lib;libhrauth.lib;liblht.lib;liblog.lib;libmmf.lib;libnls.lib;libraft.lib;librpc.lib;libsec.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libfvm.lib;bcrypt.lib;ws2_32.lib;iphlpapi.lib;libfreg.lib;libhostreg.lib;libhrauth.lib;liblht.lib;liblog.lib;libmmf.lib;libnls.lib;libraft.lib;librpc.lib;libsec.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>NotSet</SubSystem>
     </Link>
     <ProjectReference>
@@ -137,7 +137,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <ModuleDefinitionFile>libfju.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>bcrypt.lib;ws2_32.lib;iphlpapi.lib;libfreg.lib;libhostreg.lib;libhrauth.lib;liblht.lib;liblog.lib;libmmf.lib;libnls.lib;libraft.lib;librpc.lib;libsec.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libfvm.lib;bcrypt.lib;ws2_32.lib;iphlpapi.lib;libfreg.lib;libhostreg.lib;libhrauth.lib;liblht.lib;liblog.lib;libmmf.lib;libnls.lib;libraft.lib;librpc.lib;libsec.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>NotSet</SubSystem>
     </Link>
     <ProjectReference>
@@ -159,7 +159,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <ModuleDefinitionFile>libfju.def</ModuleDefinitionFile>
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <AdditionalDependencies>bcrypt.lib;ws2_32.lib;iphlpapi.lib;libfreg.lib;libhostreg.lib;libhrauth.lib;liblht.lib;liblog.lib;libmmf.lib;libnls.lib;libraft.lib;librpc.lib;libsec.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libfvm.lib;bcrypt.lib;ws2_32.lib;iphlpapi.lib;libfreg.lib;libhostreg.lib;libhrauth.lib;liblht.lib;liblog.lib;libmmf.lib;libnls.lib;libraft.lib;librpc.lib;libsec.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>NotSet</SubSystem>
     </Link>
     <ProjectReference>

@@ -12,6 +12,7 @@ PROJECTS += lht
 PROJECTS += ef
 PROJECTS += ftab
 PROJECTS += freg
+PROJECTS += fvm
 PROGRAMS=
 LIBRARIES=
 
@@ -41,7 +42,7 @@ strip:
 .include "${proj}/${proj}.mk"
 .endfor
 
-install: all strip
+install: all #strip
 	mkdir -p /opt/fju
 	cd bin && cp ${PROGRAMS} /usr/local/bin
 	cp ${LIBFJU} /usr/local/lib

@@ -42,7 +42,8 @@ static void usage( char *fmt, ... ) {
   
   printf( "fvm -p program\n"
 	  "     [-v] [-n nsteps] [-t timeout]\n"
-	  "     [-i inlog-path] [-o outlog-path]\n" );
+	  "     [-i inlog-path] [-o outlog-path]\n"
+	  "     [-w word] [-wa arg]* [-wr nres]\n" );
   if( fmt ) {
     va_start( args, fmt );
     printf( "Error: " );
@@ -62,6 +63,11 @@ static struct {
   char *inlog;
   char *outlog;
   struct log_s logs[2];
+  int word;
+    uint16_t wordargs[32];
+    int nargs;
+    uint16_t wordres[32];
+    int nres;
 } glob;
 
 int main( int argc, char **argv ) {
@@ -94,6 +100,23 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       glob.outlog = argv[i];
+    } else if( strcmp( argv[i], "-w" ) == 0 ) {
+	i++;
+	if( i >= argc ) usage( NULL );
+	glob.word = strtoul( argv[i], NULL, 10 );
+	glob.word &= 0x07ff;
+	glob.word |= 0x8000;
+    } else if( strcmp( argv[i], "-wa" ) == 0 ) {
+	i++;
+	if( i >= argc ) usage( NULL );
+	if( glob.nargs >= 32 ) usage( "Max args = 32" );
+	glob.wordargs[glob.nargs] = strtoul( argv[i], NULL, 10 );
+	glob.nargs++;
+    } else if( strcmp( argv[i], "-wr" ) == 0 ) {
+	i++;
+	if( i >= argc ) usage( NULL );
+	glob.nres = strtoul( argv[i], NULL, 10 );
+	if( glob.nres > 32 ) usage( "Max results = 32" );
     } else usage( NULL );
     i++;
   }
@@ -118,8 +141,14 @@ int main( int argc, char **argv ) {
     if( sts ) usage( "Failed to open outlog" );
     glob.fvm.outlog = &glob.logs[1];
   }
-  
-  if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
+
+  if( glob.word & 0x8000 ) {
+      fvm_call_word( &glob.fvm, glob.word & ~0x8000, glob.wordargs, glob.nargs, glob.wordres, glob.nres );
+      for( i = 0; i < glob.nres; i++ ) {
+	  printf( "%04x\n", glob.wordres[i] );
+      }
+  }
+  else if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
   else if( glob.timeout ) fvm_run_timeout( &glob.fvm, glob.timeout );
   else fvm_run( &glob.fvm );
 

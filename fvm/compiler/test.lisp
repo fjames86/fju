@@ -117,8 +117,14 @@
   halt)
 
 
+(defword test-nohalt ()
+  "NoHalt" dumpstr cr)
+
+(defword test-callword () ;; (x y -- x+y x-y)
+  dup2 - rot +)
+
 (defun test ()
-  (save-program "test.obj" 'test
+  (save-program "test.obj" 'test-callword 
 		:print-assembly t
 		:variables '(*mystring* *input-buffer*)))
 

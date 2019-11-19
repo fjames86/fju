@@ -191,12 +191,13 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 }
 
 static void set_pc( struct fvm_state *state, uint16_t val ) {
-  if( val <= 0x2fff || val >= 0xfe00 ) {
-    printf( ";; Attempt to set PC to invalid address %x\n", val );
-    state->flags &= ~FVM_FLAG_RUNNING;
-    return;
-  }
-  state->reg[FVM_REG_PC] = val;
+    if( val <= 0x2fff || val >= 0xfe00 ) {
+	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Attempt to set PC to invalid address %x\n", val );
+	//fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
+	//state->flags &= ~FVM_FLAG_RUNNING;
+	//return;
+    }
+    state->reg[FVM_REG_PC] = val;
 }
 
 /* conditional branch */
@@ -559,6 +560,13 @@ static int fvm_step( struct fvm_state *state ) {
   inst_handlers[inst]( state, opcode );
   
   state->tickcount++;
+
+  /* Terminate if return from initial word */
+  if( state->reg[FVM_REG_RP] >= 0x3000 ) {
+      if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; return stack overflow\n" );
+      fvm_reset( state );
+      state->flags &= ~FVM_FLAG_RUNNING;
+  }
   
   return 0;
 }
@@ -613,25 +621,75 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
       }
   }
 
-  /* clear registers */
-  for( i = 0; i < FVM_REG_MAX; i++ ) {
-    state->reg[i] = 0;
-  }
-  /* set pc to start of program */
-  state->reg[FVM_REG_PC] = 0x3000;
-  state->reg[FVM_REG_SP] = 0xfdff;
-  state->reg[FVM_REG_RP] = 0x2fff;
-  state->reg[FVM_REG_PSR] = FVM_PSR_ZERO;
-  state->flags |= FVM_FLAG_RUNNING;
+  fvm_reset( state );
   
   return 0;
 }
 
+int fvm_reset( struct fvm_state *fvm ) {
+    int i;
+    
+    /* clear registers */
+    for( i = 0; i < FVM_REG_MAX; i++ ) {
+	fvm->reg[i] = 0;
+    }
+    /* set pc to start of program */
+    fvm->reg[FVM_REG_PC] = 0x3000;
+    fvm->reg[FVM_REG_SP] = 0xfdff;
+    fvm->reg[FVM_REG_RP] = 0x2fff;
+    fvm->reg[FVM_REG_PSR] = FVM_PSR_ZERO;
+    fvm->flags |= FVM_FLAG_RUNNING;
+
+  return 0;
+}
 
 
+int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, uint16_t *res, int nres ) {
+    uint16_t regs[FVM_REG_MAX];
+    int i;
 
+    /* save registers */
+    for( i = 0; i < FVM_REG_MAX; i++ ) {
+	regs[i] = fvm->reg[i];
+    }
 
+    /* set pc to work */
+    fvm->reg[FVM_REG_PC] = fvm->mem[word & 0x07ff];
 
+    /* push args onto stack */
+    for( i = 0; i < nargs; i++ ) {
+	fvm->mem[fvm->reg[FVM_REG_SP]] = args[i];
+	fvm->reg[FVM_REG_SP]--;
+    }
+    /* push current address */
+    fvm->mem[fvm->reg[FVM_REG_RP]] = fvm->reg[FVM_REG_PC];
+    fvm->reg[FVM_REG_RP]--;
+    
+    /* 
+     * run until it returns. 
+     * detect by watching rp get back to where it started 
+     */
+    while( fvm->flags & FVM_FLAG_RUNNING ) {
+	fvm_step( fvm );
 
+	/* detect word returend by checking return stack */
+	if( fvm->reg[FVM_REG_RP] == regs[FVM_REG_RP] ) {
+	    break; 
+	}
+    }
 
+    /* extract results */
+    for( i = 0; i < nres; i++ ) {
+	fvm->reg[FVM_REG_SP]++;
+	res[i] = fvm->mem[fvm->reg[FVM_REG_SP]];
+    }
+    
+    /* restore registers */
+    for( i = 0; i < FVM_REG_MAX; i++ ) {
+	fvm->reg[i] = regs[i];
+    }
 
+    return 0;
+}
+
+    

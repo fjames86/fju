@@ -61,6 +61,7 @@ static struct {
   int timeout;
   char *inlog;
   char *outlog;
+  struct log_s logs[2];
 } glob;
 
 int main( int argc, char **argv ) {
@@ -107,10 +108,16 @@ int main( int argc, char **argv ) {
   if( glob.verbose ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
   mmf_close( &mmf );
 
-  sts = log_open( glob.inlog ? glob.inlog : "fvm-in.log", NULL, &glob.fvm.inlog );
-  if( sts ) usage( "Failed to open inlog" );
-  sts = log_open( glob.inlog ? glob.outlog : "fvm-out.log", NULL, &glob.fvm.outlog );
-  if( sts ) usage( "Failed to open outlog" );
+  if( glob.inlog ) {
+    sts = log_open( glob.inlog, NULL, &glob.logs[0] );
+    if( sts ) usage( "Failed to open inlog" );
+    glob.fvm.inlog = &glob.logs[0];
+  }
+  if( glob.outlog ) {
+    sts = log_open( glob.outlog, NULL, &glob.logs[1] );
+    if( sts ) usage( "Failed to open outlog" );
+    glob.fvm.outlog = &glob.logs[1];
+  }
   
   if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
   else if( glob.timeout ) fvm_run_timeout( &glob.fvm, glob.timeout );
@@ -126,8 +133,8 @@ int main( int argc, char **argv ) {
     printf( ";; TickCount %d\n", (int)glob.fvm.tickcount );
   }
 
-  log_close( &glob.fvm.inlog );
-  log_close( &glob.fvm.outlog );
+  if( glob.inlog ) log_close( &glob.logs[0] );
+  if( glob.outlog ) log_close( &glob.logs[1] );
   
   return 0;
 }

@@ -60,9 +60,9 @@ struct fvm_state {
 #define FVM_FLAG_RUNNING 0x0001
 #define FVM_FLAG_VERBOSE 0x0002
   uint64_t tickcount;
-  struct log_s inlog;
+  struct log_s *inlog;
   uint64_t inlog_id;
-  struct log_s outlog;
+  struct log_s *outlog;
 };
 
 int fvm_load( struct fvm_state *state, uint16_t *program, int proglen );

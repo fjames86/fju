@@ -38,11 +38,11 @@
 
 #define FVM_INT_EXCEPTION 0x8000 
 #define FVM_INT_PME       0x00    /* privilege mode exception */
-#define FVM_INT_PME_PL    0       /* pme priority level */
+#define FVM_INT_PME_PL    FVM_INT_EXCEPTION       /* pme priority level */
 #define FVM_INT_IOC       0x01    /* illegal opcode exception */
-#define FVM_INT_IOC_PL    0       /* ioc priority level */
+#define FVM_INT_IOC_PL    FVM_INT_EXCEPTION       /* ioc priority level */
 #define FVM_INT_DBZ       0x02    /* divide by zero */
-#define FVM_INT_DBZ_PL    0       /* divide by zero level */
+#define FVM_INT_DBZ_PL    FVM_INT_EXCEPTION       /* divide by zero level */
 
 /*
  * Loosely modelled on the LC3 processor. 
@@ -89,14 +89,14 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
       /* machine control register */
       return 0x8000;
     case FVM_DEVICE_RNG:
-	/* random number generator */
-	return sec_rand_uint32() & 0xffff;
+      /* random number generator */
+      return sec_rand_uint32() & 0xffff;
     case FVM_DEVICE_TICKCOUNT:
-	return (uint16_t)state->tickcount;
+      return (uint16_t)state->tickcount;
     case FVM_DEVICE_CLOCKLOW:
-	return (uint16_t)time( NULL ) & 0xffff;
+      return (uint16_t)time( NULL ) & 0xffff;
     case FVM_DEVICE_CLOCKHIGH:
-	return (uint16_t)((time( NULL ) >> 16) & 0xffff);
+      return (uint16_t)((time( NULL ) >> 16) & 0xffff);
     default:
       return 0;
     }
@@ -128,43 +128,49 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       state->mem[offset] = val & 0xff;
       return;
     case FVM_DEVICE_INLOG:
-	/* Input register */
-	/* TODO: use value written as a command, allow doing different things 
-	 * e.g. resetting read index 
-	 */
-	switch( val ) {
-        case 0:
-	    /* read nex message */
-	    addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
-	    count = state->reg[FVM_REG_R1];
-	    memset( &entry, 0, sizeof(entry) );
-	    iov[0].buf = addr;
-	    iov[0].len = count;
-	    entry.niov = 1;
-	    entry.iov = iov;
-	    entry.id = state->inlog_id;
-	    sts = log_read( &state->inlog, state->inlog_id, &entry, 1, &ne );
-	    if( sts || !ne ) {
-	        state->reg[FVM_REG_R0] = 0; /* R0 receives msglen */
-            } else {
-	        state->inlog_id = entry.id;
-		state->reg[FVM_REG_R0] = entry.msglen;
-            }
-	    break;
-        case 1:
-	    /* reset msg id */
-	    state->inlog_id = 0;
-	    break;
+      /* Input register */
+      switch( val ) {
+      case 0:
+	/* read nex message */
+	if( !state->inlog ) {
+	  state->reg[FVM_REG_R0] = 0;
+	  return;
 	}
-	
+      
+	addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
+	count = state->reg[FVM_REG_R1];
+	memset( &entry, 0, sizeof(entry) );
+	iov[0].buf = addr;
+	iov[0].len = count;
+	entry.niov = 1;
+	entry.iov = iov;
+	entry.id = state->inlog_id;
+	sts = log_read( state->inlog, state->inlog_id, &entry, 1, &ne );
+	if( sts || !ne ) {
+	  state->reg[FVM_REG_R0] = 0; /* R0 receives msglen */
+	} else {
+	  state->inlog_id = entry.id;
+	  state->reg[FVM_REG_R0] = entry.msglen;
+	}
 	break;
+      case 1:
+	/* reset msg id */
+	state->inlog_id = 0;
+	break;
+      }
+      
+      break;
     case FVM_DEVICE_OUTLOG:
 	/* output register */
         switch( val ) {
 	case 0:
+	  if( !state->outlog ) {
+	    return;
+	  }
+
 	  addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
 	  count = state->reg[FVM_REG_R1];
-	  printf( "writing %d bytes addr %d\n", (int)count, (int)state->reg[FVM_REG_R0]);
+	  //printf( "writing %d bytes addr %d\n", (int)count, (int)state->reg[FVM_REG_R0]);
 	  
 	  memset( &entry, 0, sizeof(entry) );
 	  entry.flags = LOG_LVL_INFO|LOG_BINARY;
@@ -172,7 +178,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	  entry.niov = 1;
 	  entry.iov[0].buf = addr;
 	  entry.iov[0].len = count;
-	  log_write( &state->outlog, &entry );
+	  log_write( state->outlog, &entry );
 	  break;
 	default:
 	  break;
@@ -193,8 +199,6 @@ static void set_pc( struct fvm_state *state, uint16_t val ) {
   state->reg[FVM_REG_PC] = val;
 }
 
-
-
 /* conditional branch */
 static void fvm_inst_br( struct fvm_state *state, uint16_t opcode ) {
   uint16_t flags = (opcode >> 9) & 0x7;
@@ -212,7 +216,7 @@ static void fvm_inst_br( struct fvm_state *state, uint16_t opcode ) {
       (state->reg[FVM_REG_PSR] & flags) ) {
     if( pcoffset == 0xffff ) {
       /* This will cause an infinite loop so it is an invalid instruction */
-      fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL|FVM_INT_EXCEPTION );
+      fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
     } else {
       state->reg[FVM_REG_PC] += pcoffset;
     }
@@ -379,7 +383,7 @@ static void fvm_inst_rti( struct fvm_state *state, uint16_t opcode ) {
 
   if( state->reg[FVM_REG_PSR] & FVM_PSR_USERMODE ) {
       printf( ";; Privilege mode exception: Attempt to RTI from user mode\n" ); 
-      fvm_interrupt( state, FVM_INT_PME, FVM_INT_PME_PL|FVM_INT_EXCEPTION );
+      fvm_interrupt( state, FVM_INT_PME, FVM_INT_PME_PL );
   } else {
       /* restore pc and registers */
       state->reg[FVM_REG_SP]++; state->reg[FVM_REG_PC] = read_mem( state, state->reg[FVM_REG_SP] );
@@ -475,7 +479,7 @@ static void fvm_inst_mul( struct fvm_state *state, uint16_t opcode ) {
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x DIV R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
     if( state->reg[sr2] == 0 ) {
       printf( ";; Divide by zero exception\n" );
-      //fvm_interrupt( state, FVM_INT_DBZ, FVM_INT_DBZ_PL|FVM_EXCEPTION );
+      //fvm_interrupt( state, FVM_INT_DBZ, FVM_INT_DBZ_PL );
       //return;
       
       state->reg[dr] = 0;
@@ -489,7 +493,7 @@ static void fvm_inst_mul( struct fvm_state *state, uint16_t opcode ) {
     /*
     if( state->reg[sr2] == 0 ) {
 	printf( ";; Divide by zero exception\n" );
-	fvm_interrupt( state, FVM_INT_DBZ, FVM_INT_DBZ_PL|FVM_INT_EXCEPTION );
+	fvm_interrupt( state, FVM_INT_DBZ, FVM_INT_DBZ_PL );
 	return;
     }
     */
@@ -518,7 +522,7 @@ static void fvm_inst_lea( struct fvm_state *state, uint16_t opcode ) {
 /* reserved opcode 3 */
 static void fvm_inst_res3( struct fvm_state *state, uint16_t opcode ) {
   if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RES3\n", state->reg[FVM_REG_PC] - 1 );
-  fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL|FVM_INT_EXCEPTION );
+  fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
 }
 
 typedef void (*fvm_inst_handler_t)( struct fvm_state *state, uint16_t opcode );
@@ -545,7 +549,7 @@ static fvm_inst_handler_t inst_handlers[] = {
 static int fvm_step( struct fvm_state *state ) {
   uint16_t opcode;
   uint16_t inst;
-  
+
   /* get next opcode and increment pc */
   opcode = read_mem( state, state->reg[FVM_REG_PC] );
   state->reg[FVM_REG_PC]++;
@@ -560,7 +564,7 @@ static int fvm_step( struct fvm_state *state ) {
 }
 
 int fvm_run( struct fvm_state *state ) {  
-  state->flags |= FVM_FLAG_RUNNING;
+
   while( state->flags & FVM_FLAG_RUNNING ) {
     fvm_step( state );
   }

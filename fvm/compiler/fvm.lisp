@@ -271,24 +271,20 @@ assembled object code."
 		  (incf offset)))
 	       (.STRING
 		(let* ((octets (babel:string-to-octets (cadr inst)))
-		       (datalen (ceiling (length octets) 2))
-		       (thewords nil))
+		       (datalen (ceiling (length octets) 2)))
 		  (dotimes (i datalen)
 		    (let ((x (aref octets (* 2 i))))
 		      (when (< (1+ (* 2 i)) (length octets))
 			(setf x (logior x (ash (aref octets (1+ (* 2 i))) 8))))
 		      (push x (cadr currobj))
-		      (incf offset)
-		      (push x thewords)))
+		      (incf offset)))
 		  (when (zerop (mod (length octets) 2))
 		    (push 0 (cadr currobj))
-		    (push 0 thewords)
-		    (incf offset))
-		  (format t ";; .STRING ~A WORDS: ~4,'0X~%" (cadr inst) thewords)))
+		    (incf offset))))
 	       (otherwise
 		;; TODO: eliminate redundant instructions e.g.
-		;; push/pop followed by pop/push (push x) (pop x) or (pop x) (push x)
-		;; unconditional branch by offset 0 (br-pnz 0)
+		;; push/pop followed by pop/push (push x) (pop x) or (pop x) (push x) ???
+		;; unconditional branch by 0 offset (br-pnz 0) essentially a NOP?? 
 		(let ((opcode (encode-opcode (car instrs) ltab (1+ offset))))
 		  (push (logand opcode #xffff) (cadr currobj))
 		  (incf offset)))))))))))
@@ -547,8 +543,13 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	(push (first isr) deps)))
     (nreverse deps)))
 
-(defun generate-assembly (entry-point &key variables)
+(defun generate-assembly (entry-point &key variables print-assembly)
   (let ((words (required-words entry-point)))
+    (when print-assembly
+      (let ((idx 0))
+	(dolist (wrd words)
+	  (format t ";; WORD ~X ~A~%" idx wrd)
+	  (incf idx))))
     `((.ORIGIN 0) ;; word jump table 
       ,@(mapcan (lambda (w)
 		  (list w `(.BLKW ,(intern (format nil "~A-DEF" (symbol-name w))))))
@@ -583,7 +584,7 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 
 (defun compile-program (entry-word &key variables print-assembly)
   "Compile a program. Returns a list of program object codes." 
-  (let ((asm (generate-assembly entry-word :variables variables)))
+  (let ((asm (generate-assembly entry-word :variables variables :print-assembly print-assembly)))
     (when print-assembly
       (dolist (x asm)
 	(format t ";; ~S~%" x)))

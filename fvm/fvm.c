@@ -160,16 +160,22 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	break;
     case FVM_DEVICE_OUTLOG:
 	/* output register */
-	addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
-	count = state->reg[FVM_REG_R1];
-	printf( "writing %d bytes addr %d\n", (int)count, (int)state->reg[FVM_REG_R0]);
-	
-	memset( &entry, 0, sizeof(entry) );
-	entry.iov = iov;
-	entry.niov = 1;
-	entry.iov[0].buf = addr;
-	entry.iov[0].len = count;
-	log_write( &state->outlog, &entry );
+        switch( val ) {
+	case 0:
+	  addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
+	  count = state->reg[FVM_REG_R1];
+	  printf( "writing %d bytes addr %d\n", (int)count, (int)state->reg[FVM_REG_R0]);
+	  
+	  memset( &entry, 0, sizeof(entry) );
+	  entry.iov = iov;
+	  entry.niov = 1;
+	  entry.iov[0].buf = addr;
+	  entry.iov[0].len = count;
+	  log_write( &state->outlog, &entry );
+	  break;
+	default:
+	  break;
+	}
 	break;
     }
   } else {

@@ -6,7 +6,8 @@
 
 ;; ---------------------- Builtin Words ------------------
 
-;; define intrinsic words 
+;; define intrinsic words
+(defword nop (:inline t))
 (defword swap ()
   (pop r0)
   (pop r1)
@@ -303,8 +304,12 @@
 (defword read-input () ;; (addr count -- msglen)
   (pop r1) ;; r1=count
   (pop r0) ;; r0=addr
-  0 #xfe06 !  ;; write 0 to inlog register
-  (push r0)) ;; r0 receives msglen 
+  (ldi r2 0)
+  (br-pnz 1)
+  (.blkw #xfe06)
+  (ld r3 -2)
+  (str r3 r2 0) ;; write to device register, r0 receives msglen 
+  (push r0))
 
 (defword reset-input () ;; ( -- )
   1 #xfe06 !)
@@ -314,7 +319,7 @@
   (pop r0)
   (ldi r2 0)
   (br-pnz 1)
-  (.blkw #xfe07)
+  (.blkw #xfe07) ;; address of output data register 
   (ld r3 -2)
   (str r3 r2 0)) ;; write 0 to #xfe07
 

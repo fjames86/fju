@@ -84,6 +84,22 @@
 	    (push r0)))
     write-output))
 
+(let ((str "HelloWorld2"))
+  (defword test-output2 ()
+    (lisp str)
+    (lisp (length str))
+    write-output))
+
+(defvariable *input-buffer* 0 32) ;; allocate 32 words (64 bytes) buffer space
+(defword test-input ()
+  variable *input-buffer* 64 read-input  
+  dup ;; (msglen msglen --)
+  if "GotAMessage Count=" dumpstr dumphex cr
+  variable *input-buffer* dumpstr cr 
+  else "GotNoMessage" dumpstr drop then)
+  
+
+
 ;; try a few words 
 (defword test ()
   "hello-world: " dumpstr hello-world cr
@@ -93,12 +109,14 @@
   "+looptest: " dumpstr +looptest cr
   "ticktest: " dumpstr ticktest cr
   "testtime: " dumpstr testtime cr
-  "test-output: " dumpstr test-output cr 
+  "test-output: " dumpstr test-output cr
+  "test-output2: " dumpstr test-output2 cr
+  "test-input: " dumpstr test-input cr 
   halt)
 
 
 (defun test ()
   (save-program "test.obj" 'test
 		:print-assembly t
-		:variables '(*mystring*)))
+		:variables '(*mystring* *input-buffer*)))
 

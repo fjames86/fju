@@ -299,6 +299,20 @@
   loop
   drop)
 
+(defword dumpdecchr () ;; (x -- )
+  10 mod #\0 + dumpchr)
+
+(defword dumpdec () ;; (x -- )
+  dup 10000 / dup if dumpdecchr else drop then
+  dup 1000 / dup if dumpdecchr else drop then
+  dup 100 / dup if dumpdecchr else drop then
+  dup 10 / dup if dumpdecchr else drop then
+  dumpdecchr)
+
+  
+
+  
+
 (defword tick-count () ;; ( -- x)
   #xfe03 @)
 

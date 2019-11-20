@@ -58,7 +58,7 @@
 
 (defword ticktest ()
   20 0 do
-  tick-count dumphex cr
+  tick-count dup dumphex " " dumpstr dumpdec cr
   loop)
 
 (defword testtime ()

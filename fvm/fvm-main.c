@@ -36,6 +36,7 @@
 #include <fju/mmf.h>
 #include <fju/fvm.h>
 #include <fju/log.h>
+#include <fju/rpc.h>
 
 static void usage( char *fmt, ... ) {
   va_list args;
@@ -79,6 +80,7 @@ int main( int argc, char **argv ) {
   char *path = NULL;
   struct mmf_s mmf;
   int sts, i, len;
+  uint64_t start, end;
   
   i = 1;
   while( i < argc ) {
@@ -87,7 +89,7 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       path = argv[i];
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
-      glob.verbose = 1;
+      glob.verbose++;
     } else if( strcmp( argv[i], "-n" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );      
@@ -145,7 +147,7 @@ int main( int argc, char **argv ) {
   if( sts ) usage( "Failed to map program" );
   sts = fvm_load( &glob.fvm, mmf.file, mmf.fsize / 2 );
   if( sts ) usage( "Failed to load program\n" );
-  if( glob.verbose ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
+  if( glob.verbose > 1 ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
   mmf_close( &mmf );
 
   if( glob.inlog ) {
@@ -159,6 +161,7 @@ int main( int argc, char **argv ) {
     glob.fvm.outlog = &glob.logs[1];
   }
 
+  start = rpc_now();
   if( glob.word & 0x8000 ) {
     for( i = 0; i < glob.nargs; i++ ) {
       switch( glob.wordargtype[i] ) {
@@ -189,7 +192,8 @@ int main( int argc, char **argv ) {
   else if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
   else if( glob.timeout ) fvm_run_timeout( &glob.fvm, glob.timeout );
   else fvm_run( &glob.fvm );
-
+  end = rpc_now();
+      
   if( glob.verbose ) {
     printf( ";; R0 %x R1 %x R2 %x R3 %x R4 %x R5 %x R6 %x R7 %x PC %x\n",
 	    glob.fvm.reg[0], glob.fvm.reg[1],
@@ -198,8 +202,10 @@ int main( int argc, char **argv ) {
 	    glob.fvm.reg[6], glob.fvm.reg[7],
 	    glob.fvm.reg[8] );
     printf( ";; TickCount %d\n", (int)glob.fvm.tickcount );
+    printf( ";; ElapsedTime %dms\n", (int)(end - start) );
   }
 
+  
   if( glob.inlog ) log_close( &glob.logs[0] );
   if( glob.outlog ) log_close( &glob.logs[1] );
   

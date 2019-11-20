@@ -333,6 +333,35 @@
   (ld r3 -2)
   (str r3 r2 0)) ;; write 0 to #xfe07
 
+(let ((again (gensym)))
+  (defword memcpy () ;; (dest-addr src-addr count --)
+    (pop r0) ;; count
+    (pop r1) ;; src-addr
+    (pop r2) ;; dest-addr
+    (ldi r4 0) ;; loop index 
+    (lisp again) ;; start label
+    (ldr r3 r1 0)
+    (str r2 r3 0) ;; copy value
+    (add r1 r1 1)
+    (add r2 r2 1) ;; increment addresses
+    (add r4 r4 1) ;; increment loop index 
+    (cmp r5 r4 r0) ;; test index
+    (lisp `((br-pn ,again)))))
+
+(let ((again (gensym)))
+  (defword memset () ;; (dest-addr val count --)
+    (pop r0) ;; count
+    (pop r1) ;; val
+    (pop r2) ;; dest-addr
+    (ldi r4 0) ;; loop index 
+    (lisp again) ;; start label
+    (str r2 r1 0) ;; copy value
+    (add r2 r2 1) ;; increment address
+    (add r4 r4 1) ;; increment loop index 
+    (cmp r5 r4 r0) ;; test index
+    (lisp `((br-pn ,again)))))
+
+
 ;; ------------------ Interrupts --------------------
 
 (defword default-isr ()

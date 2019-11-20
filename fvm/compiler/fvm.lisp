@@ -543,8 +543,10 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	(push (first isr) deps)))
     (nreverse deps)))
 
-(defun generate-assembly (entry-point &key variables print-assembly)
-  (let ((words (required-words entry-point)))
+(defun generate-assembly (entry-point &key variables extra-words print-assembly)
+  (let ((words (remove-duplicates
+		(append (required-words entry-point)
+			(mapcan #'required-words extra-words)))))
     (when print-assembly
       (let ((idx 0))
 	(dolist (wrd words)
@@ -582,9 +584,12 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 			variables))
       *bottom-of-stack*)))
 
-(defun compile-program (entry-word &key variables print-assembly)
+(defun compile-program (entry-word &key variables print-assembly extra-words)
   "Compile a program. Returns a list of program object codes." 
-  (let ((asm (generate-assembly entry-word :variables variables :print-assembly print-assembly)))
+  (let ((asm (generate-assembly entry-word
+				:variables variables
+				:extra-words extra-words
+				:print-assembly print-assembly)))
     (when print-assembly
       (dolist (x asm)
 	(format t ";; ~S~%" x)))
@@ -599,17 +604,19 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	  (format t ";; Total: ~A (~A bytes) ~A words~%" count (* 2 count) (length (required-words entry-word)))))
       objs)))
   
-(defun save-program (pathspec entry-word &key variables print-assembly)
+(defun save-program (pathspec entry-word &key variables print-assembly extra-words)
   "Compile and save a program.
 PATHSPEC ::= where to save the program file.
 ENTRY-WORD ::= word designated as entry point.
 VARIABLES ::= list of global variables defined with DEFVARIABLE to use.
+EXTRA-WORDS ::= list of words which are compiled in even if never called by ENTRY-WORD 
 PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
 " 
   (when print-assembly
     (format t ";; ~A~%" (pathname pathspec)))
   (%save-program pathspec (compile-program entry-word
 					   :variables variables
+					   :extra-words extra-words
 					   :print-assembly print-assembly)))
 
 

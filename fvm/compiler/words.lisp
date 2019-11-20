@@ -375,6 +375,15 @@
     (cmp r5 r4 r0) ;; test index
     (lisp `((br-pn ,again)))))
 
+;; (defword strlen () ;; (addr -- len)
+;;   begin
+;;     dup 1+ swap @ ;; (cnt addr+1 chr --)
+;;     8 lshift ;; (cnt addr+1 chr --)
+;;   until
+;;   drop)
+
+
+
 
 ;; ------------------ Interrupts --------------------
 

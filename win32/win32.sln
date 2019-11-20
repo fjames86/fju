@@ -108,6 +108,9 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libfvm", "libfvm\libfvm.vcxproj", "{5CCADD3A-DE1F-48CE-83C2-4E8A0E8E0F62}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "fvm", "fvm\fvm.vcxproj", "{38927FAF-FA29-4D73-A479-525766521AA1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{7207AEFE-743F-45AF-A0AD-F5AF608A2DCF} = {7207AEFE-743F-45AF-A0AD-F5AF608A2DCF}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

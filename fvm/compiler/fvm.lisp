@@ -543,15 +543,10 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	(push (first isr) deps)))
     (nreverse deps)))
 
-(defun generate-assembly (entry-point &key variables extra-words print-assembly)
+(defun generate-assembly (entry-point &key variables extra-words)
   (let ((words (remove-duplicates
 		(append (required-words entry-point)
 			(mapcan #'required-words extra-words)))))
-    (when print-assembly
-      (let ((idx 0))
-	(dolist (wrd words)
-	  (format t ";; WORD ~X ~A~%" idx wrd)
-	  (incf idx))))
     `((.ORIGIN 0) ;; word jump table 
       ,@(mapcan (lambda (w)
 		  (list w `(.BLKW ,(intern (format nil "~A-DEF" (symbol-name w))))))
@@ -588,11 +583,21 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
   "Compile a program. Returns a list of program object codes." 
   (let ((asm (generate-assembly entry-word
 				:variables variables
-				:extra-words extra-words
-				:print-assembly print-assembly)))
+				:extra-words extra-words)))
     (when print-assembly
       (dolist (x asm)
 	(format t ";; ~S~%" x)))
+
+    (when print-assembly
+      (format t "~%;; Words:~%")
+      (let ((words (remove-duplicates
+		    (append (required-words entry-word)
+			    (mapcan #'required-words extra-words)))))
+	(let ((idx 0))
+	  (dolist (wrd words)
+	    (format t ";; WORD ~D ~A~%" idx wrd)
+	    (incf idx)))))
+    
     (let ((objs (assemble-instructions asm)))
       (when print-assembly
 	(format t "~%;; Objects: ~%")

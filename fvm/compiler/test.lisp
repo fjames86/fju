@@ -120,8 +120,42 @@
 (defword test-nohalt ()
   "NoHalt" dumpstr cr)
 
-(defword test-callword () ;; (x y -- x+y x-y)
-  dup2 - rot +)
+(let ((again (gensym)))
+  (defword memcpy () ;; (dest-addr src-addr count --)
+    (pop r0) ;; count
+    (pop r1) ;; src-addr
+    (pop r2) ;; dest-addr
+    (ldi r4 0) ;; loop index 
+    (lisp again) ;; start label
+    (ldr r3 r1 0)
+    (str r2 r3 0) ;; copy value
+    (add r1 r1 1)
+    (add r2 r2 1) ;; increment addresses
+    (add r4 r4 1) ;; increment loop index 
+    (cmp r5 r4 r0) ;; test index
+    (lisp `((br-pn ,again)))))
+
+(let ((again (gensym)))
+  (defword memset () ;; (dest-addr val count --)
+    (pop r0) ;; count
+    (pop r1) ;; val
+    (pop r2) ;; dest-addr
+    (ldi r4 0) ;; loop index 
+    (lisp again) ;; start label
+    (str r2 r1 0) ;; copy value
+    (add r2 r2 1) ;; increment address
+    (add r4 r4 1) ;; increment loop index 
+    (cmp r5 r4 r0) ;; test index
+    (lisp `((br-pn ,again)))))
+
+
+(defword test-callword () ;; (str -- num str)
+  dumpstr cr ;; print the input string 
+  #x0bad ;; push output number (num --)
+  variable *input-buffer* dup ;; (num addr addr --)
+  #x6565 12 memset ;; (num addr --)
+  )
+
 
 (defun test ()
   (save-program "test.obj" 'test-callword 

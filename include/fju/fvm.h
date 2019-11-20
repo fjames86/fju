@@ -63,6 +63,7 @@ struct fvm_state {
   struct log_s *inlog;
   uint64_t inlog_id;
   struct log_s *outlog;
+  uint16_t bos;
 };
 
 int fvm_load( struct fvm_state *state, uint16_t *program, int proglen );

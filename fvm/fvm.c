@@ -602,7 +602,13 @@ int fvm_run_timeout( struct fvm_state *state, int timeout ) {
 int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
   int i, j;
   uint16_t offset, count;
+  uint16_t bos = 0;
 
+  /* 
+   * TODO: better image format. We don't need anything as complex as 
+   * ELF or PE but something better than this would be good. 
+   */
+  
   memset( state->mem, 0, sizeof(state->mem) );
   i = 0;
   while( i < proglen ) {
@@ -612,6 +618,8 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
       count = program[i+1];
       i += 2;
       if( ((uint32_t)offset + (uint32_t)count) >= 0xffff ) return -1;
+
+      if( (offset + count) > bos ) bos = offset + count;
       
       for( j = 0; j < count; j++ ) {
 	  if( i >= proglen ) return -1;
@@ -622,6 +630,7 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
   }
 
   fvm_reset( state );
+  state->bos = bos;
   
   return 0;
 }
@@ -681,7 +690,7 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
     /* extract results */
     for( i = 0; i < nres; i++ ) {
 	fvm->reg[FVM_REG_SP]++;
-	res[i] = fvm->mem[fvm->reg[FVM_REG_SP]];
+	res[(nres - 1) - i] = fvm->mem[fvm->reg[FVM_REG_SP]];
     }
     
     /* restore registers */

@@ -73,5 +73,9 @@ int fvm_run_timeout( struct fvm_state *state, int timeout );
 int fvm_reset( struct fvm_state *fvm );
 int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, uint16_t *res, int nres );
 
+
+#define FVM_RPC_PROG 0x27E1FB11
+#define FVM_RPC_VERS 1
+
 #endif
 

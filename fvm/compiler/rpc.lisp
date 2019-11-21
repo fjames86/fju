@@ -13,11 +13,14 @@
 
 (drx:defxstruct load-args ((:mode :list))
   (progdata :opaque)
-  (start :boolean))
+  (start :boolean)
+  (flags :uint32))
 (frpc2:defrpc %call-load (+fvm-prog+ 1 1) load-args :uint32)
-(defun call-load (progdata &optional (start t))
+(defun call-load (progdata &optional (start t) autounload-p)
   (with-rpc-client (c)
-    (%call-load c (list progdata start))))
+    (%call-load c (list progdata
+			start
+			(if autounload-p #x0001 #x0000)))))
 
 (frpc2:defrpc %call-unload (+fvm-prog+ 1 2) :uint32 :void)
 (defun call-unload (id)

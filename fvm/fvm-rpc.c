@@ -11,6 +11,8 @@
 struct loaded_fvm {
   struct loaded_fvm *next;
   uint32_t id;
+    uint32_t flags;
+#define FVM_RPC_AUTOUNLOAD 0x0001 
   struct fvm_state fvm;
 };
   
@@ -41,9 +43,11 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   int handle, buflen, sts, start;
   char *bufp;
   struct loaded_fvm *lf;
+  uint32_t flags;
   
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
   if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &start );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   lf = malloc( sizeof(*lf) );
@@ -52,6 +56,7 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   fvm_load( &lf->fvm, (uint16_t *)bufp, buflen / 2 );
   lf->fvm.outlog = &glob.outlog;
   lf->fvm.inlog_id = 0;
+  lf->flags = flags;
   
   /* push onto list */
   lf->next = glob.progs;
@@ -162,18 +167,29 @@ static struct rpc_program fvm_prog = {
 
 
 static void fvm_iter_cb( struct rpc_iterator *iter ) {
-  struct loaded_fvm *lf;
+    struct loaded_fvm *lf, *prev, *next;
   uint64_t timeout;
 
   timeout = iter->timeout;
   lf = glob.progs;
+  prev = NULL;
   while( lf ) {
+    next = lf->next;
+    
     fvm_run_nsteps( &lf->fvm, 1000 );
     if( lf->fvm.flags & FVM_FLAG_RUNNING ) {
       /* program still needs to run, but we yield here and schedule ourselves to be run again ASAP */
       timeout = 0;
+      prev = lf;
+    } else if( (lf->fvm.flags & FVM_FLAG_DONE) && (lf->flags & FVM_RPC_AUTOUNLOAD) ) {
+	if( prev ) prev->next = next;
+	else glob.progs = next;
+	free( lf );
+    } else {
+	/* stopped running but set to auto unload when stopped */
+	prev = lf;
     }
-    lf = lf->next;
+    lf = next;
   }
 
   iter->timeout = timeout;

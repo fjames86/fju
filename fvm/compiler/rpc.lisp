@@ -10,17 +10,24 @@
   (timeout :uint32))
 
 (defconstant +fvm-prog+ #x27E1FB11)
-(frpc2:defrpc %call-run (+fvm-prog+ 1 1) run-args :void)
 
-(defun call-run (program &optional timeout)
-  (with-rpc-client (c)
-    (%call-run c (list program (or timeout 0)))))
-
-(frpc2:defrpc %call-start (+fvm-prog+ 1 2) :opaque :void)
+(frpc2:defrpc %call-start (+fvm-prog+ 1 1) :opaque :uint32)
 
 (defun call-start (program)
   (with-rpc-client (c)
     (%call-start c program)))
+
+(frpc2:defrpc %call-stop (+fvm-prog+ 1 2) :uint32 :void)
+(defun call-stop (id)
+  (with-rpc-client (c)
+    (%call-stop c id)))
+
+
+(drx:defxlist list-res () :uint32)
+(frpc2:defrpc %call-list (+fvm-prog+ 1 3) :void list-res)
+(defun call-list ()
+  (with-rpc-client (c)
+    (%call-list c)))
 
 
 

@@ -12,5 +12,5 @@
    (:file "fvm")
    (:file "words")
    (:file "rpc"))
-  :depends-on (:babel :nibbles :frpc2))
+  :depends-on (:babel :nibbles :frpc2 :flexi-streams))
 

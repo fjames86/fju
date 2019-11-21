@@ -1,4 +1,4 @@
-;;;; Copyright Frank James 2019
+ ;;;; Copyright Frank James 2019
 
 (defpackage #:fvm-test
   (:use #:cl #:fvm))
@@ -134,4 +134,14 @@
 		:print-assembly t
 		:variables '(*mystring* *input-buffer*)
 		:extra-words '(test-callword)))
+
+
+(defun test-call-run (&optional timeout)
+  (let ((progdata (compile-program 'test :variables '(*mystring* *input-buffer*) :extra-words '(test-callword))))
+    (call-run progdata timeout)))
+
+
+(defun test-call-start ()
+  (let ((progdata (compile-program 'test :variables '(*mystring* *input-buffer*) :extra-words '(test-callword))))
+    (call-start progdata)))
 

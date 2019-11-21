@@ -294,23 +294,20 @@ assembled object code."
   (let ((ltab (first-pass instructions)))
     (second-pass instructions ltab)))
 
-(defun %save-program (pathspec objs)
-  (with-open-file (f pathspec :direction :output
-		     :if-exists :supersede
-		     :element-type '(unsigned-byte 8))
+(defun %save-program (stream objs)
     (dolist (obj objs)
       (destructuring-bind (offset data) obj
 	;; write object header (just offset and count)
 	(let ((tmp (make-array 4 :element-type '(unsigned-byte 8))))
 	  (setf (nibbles:ub16ref/le tmp 0) offset
 		(nibbles:ub16ref/le tmp 2) (length data))
-	  (write-sequence tmp f))
+	  (write-sequence tmp stream))
 	;; write object data 
 	(let ((octets (make-array (* 2 (length data))
 				  :element-type '(unsigned-byte 8))))
 	  (dotimes (i (length data))
 	    (setf (nibbles:ub16ref/le octets (* 2 i)) (nth i data)))
-	  (write-sequence octets f))))))
+	  (write-sequence octets stream)))))
 
 
 ;; ----------------------------------------------------------
@@ -538,9 +535,7 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	    (t
 	     (unless (member 'default-isr deps)
 	       (push 'default-isr deps)
-	       (get-deps 'default-isr))))))
-      #+nil(dolist (isr *isr*)
-	(push (first isr) deps)))
+	       (get-deps 'default-isr)))))))
     (nreverse deps)))
 
 (defun generate-assembly (entry-point &key variables extra-words)
@@ -579,7 +574,7 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 			variables))
       *bottom-of-stack*)))
 
-(defun compile-program (entry-word &key variables print-assembly extra-words)
+(defun %compile-program (entry-word &key variables print-assembly extra-words)
   "Compile a program. Returns a list of program object codes." 
   (let ((asm (generate-assembly entry-word
 				:variables variables
@@ -619,9 +614,21 @@ PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
 " 
   (when print-assembly
     (format t ";; ~A~%" (pathname pathspec)))
-  (%save-program pathspec (compile-program entry-word
-					   :variables variables
-					   :extra-words extra-words
-					   :print-assembly print-assembly)))
+  (with-open-file (f pathspec :direction :output
+		     :if-exists :supersede
+		     :element-type '(unsigned-byte 8))
+    (%save-program f
+		   (%compile-program entry-word
+				    :variables variables
+				    :extra-words extra-words
+				    :print-assembly print-assembly))))
+
+(defun compile-program (entry-word &key variables print-assembly extra-words)
+  (flexi-streams:with-output-to-sequence (f)
+    (%save-program f
+		   (%compile-program entry-word
+				     :variables variables
+				     :extra-words extra-words
+				     :print-assembly print-assembly))))
 
 

@@ -48,7 +48,8 @@
  * Loosely modelled on the LC3 processor. 
  * Layout:
  * 0x0000 - 0x07ff word jump table 
- * 0x0800 - 0x0fff unused 
+ * 0x0800 - 0x08ff isr table 
+ * 0x0900 - 0x0fff unused/reserved
  * 0x1000 - 0x2fff return stack 
  * 0x3000 - 0xfdff user program code + data stack 
  * 0xfe00 - 0xffff device registers 

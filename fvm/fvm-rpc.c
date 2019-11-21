@@ -10,6 +10,17 @@ static struct {
   struct fvm_state fvm;
 } glob;
 
+static void fvm_iter_cb( struct rpc_iterator *iter );
+
+static struct rpc_iterator fvm_iter = {
+    NULL,
+    0,
+    1000,
+    fvm_iter_cb,
+    NULL
+};
+
+
 static int fvm_proc_null( struct rpc_inc *inc ) {
   int handle;
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -18,15 +29,15 @@ static int fvm_proc_null( struct rpc_inc *inc ) {
 }
 
 static int fvm_proc_run( struct rpc_inc *inc ) {
-  int handle, sts;
+  int handle, sts, buflen, timeout;
   char *bufp;
-  int buflen, timeout;
   
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&timeout );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   fvm_load( &glob.fvm, (uint16_t *)bufp, buflen / 2 );
+  glob.fvm.inlog_id = 0;
   if( timeout ) fvm_run_timeout( &glob.fvm, timeout );
   else fvm_run( &glob.fvm );
 
@@ -36,9 +47,27 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_start( struct rpc_inc *inc ) {
+  int handle, sts, buflen;
+  char *bufp;
+  
+  sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  fvm_load( &glob.fvm, (uint16_t *)bufp, buflen / 2 );
+  glob.fvm.inlog_id = 0;
+  fvm_iter.timeout = 0; /* ensure the iterator runs immediately */
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_run },
+  { 2, fvm_proc_start },
   { 0, NULL }
 };
 
@@ -51,17 +80,16 @@ static struct rpc_program fvm_prog = {
 };
 
 
-static void fvm_iter_cb( struct rpc_iterator *iter );
-
-static struct rpc_iterator fvm_iter = {
-    NULL,
-    0,
-    1000,
-    fvm_iter_cb,
-    NULL
-};
-
 static void fvm_iter_cb( struct rpc_iterator *iter ) {
+  if( glob.fvm.flags & FVM_FLAG_RUNNING ) {
+    fvm_run_nsteps( &glob.fvm, 1000 );
+    if( glob.fvm.flags & FVM_FLAG_RUNNING ) {
+      /* program still needs to run, but we yeield here and schedule ourselves to be run again ASAP */
+      iter->timeout = 0;
+    } else {
+      /* program run completed */
+    }
+  }
 }
 
 

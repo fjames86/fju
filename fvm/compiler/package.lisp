@@ -20,6 +20,7 @@
 	   #:lisp #:rand #:rti #:cr #:defisr #:compile-program
 	   #:zero? #:!= #:break #:+loop #:dumphex #:lshift #:rshift
 	   #:tick-count #:read-input #:reset-input #:write-output #:2dup #:nop
-	   #:dumpstr-count #:memcpy #:memset #:dumpdec))
+	   #:dumpstr-count #:memcpy #:memset #:dumpdec
+	   #:call-run #:call-start))
 	   
    

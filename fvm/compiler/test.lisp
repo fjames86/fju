@@ -127,6 +127,8 @@
   #x4141 12 memset ;; (num addr --)
   )
 
+(defword test-strlen ()
+  "123412345" strlen dumpdec cr)
 
 (defun test ()
   (save-program "test.obj" 'test

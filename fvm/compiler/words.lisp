@@ -375,14 +375,32 @@
     (cmp r5 r4 r0) ;; test index
     (lisp `((br-pn ,again)))))
 
-;; (defword strlen () ;; (addr -- len)
-;;   begin
-;;     dup 1+ swap @ ;; (cnt addr+1 chr --)
-;;     8 lshift ;; (cnt addr+1 chr --)
-;;   until
-;;   drop)
+(let ((again (gensym))
+      (done (gensym)))
+  (defword strlen () ;; (addr --len)
+    (pop r0)   ;; addr 
+    (ldi r1 0) ;; len
+    (lisp again)
+    (ldr r2 r0 0) ;; get char
+    (add r0 r0 1) ;; increment address
+    (ldi r3 16)     ;; load 16
+
+    ;; lshift 8 and test
+    (mul r4 r2 r3)  
+    (mul r4 r4 r3)  
+    (lisp `((br-z ,done)))
+    (add r1 r1 1)
+
+    ;; rshift 8 and test
+    (div r4 r2 r3)
+    (div r4 r4 r3)
+    (lisp `((br-z ,done)))
+    (add r1 r1 1)
 
 
+    (lisp `((br-pnz ,again)))
+    (lisp done)
+    (push r1)))
 
 (defword sleep () ;; (ms --)
   #xfe08 !)

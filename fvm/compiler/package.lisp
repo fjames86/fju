@@ -21,6 +21,6 @@
 	   #:zero? #:!= #:break #:+loop #:dumphex #:lshift #:rshift
 	   #:tick-count #:read-input #:reset-input #:write-output #:2dup #:nop
 	   #:dumpstr-count #:memcpy #:memset #:dumpdec
-	   #:call-load #:call-unload #:call-list #:call-pause))
+	   #:call-load #:call-unload #:call-list #:call-pause #:strlen))
 	   
    

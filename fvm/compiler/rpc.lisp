@@ -23,7 +23,8 @@
     (%call-stop c id)))
 
 
-(drx:defxlist list-res () :uint32)
+(drx:defxlist list-res* () :uint32)
+(drx:defxoptional list-res () list-res*)
 (frpc2:defrpc %call-list (+fvm-prog+ 1 3) :void list-res)
 (defun call-list ()
   (with-rpc-client (c)

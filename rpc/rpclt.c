@@ -47,6 +47,7 @@
 #include <fju/nls.h>
 #include <fju/freg.h>
 #include <fju/sec.h>
+#include <fju/fvm.h>
 
 struct clt_info {
     uint32_t prog;
@@ -434,6 +435,7 @@ static struct {
 			 { REX_RPC_PROG, "rex" },
 			 { NLS_RPC_PROG, "nls" },
 			 { FREG_RPC_PROG, "freg" },
+			 { FVM_RPC_PROG, "fvm" },
 			 { 100000, "rpcbind" },
 			 { 0, NULL }
 };

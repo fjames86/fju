@@ -37,6 +37,7 @@
 #include <fju/log.h>
 #include <fju/nls.h>
 #include <fju/freg.h>
+#include <fju/fvm.h>
 
 #include "rpc-private.h"
 
@@ -56,6 +57,7 @@ static void init_cb( void ) {
   raft_register();
   nls_register();
   freg_register();
+  fvm_register();
 }
 
 /* -------- Setup logging ---------------- */

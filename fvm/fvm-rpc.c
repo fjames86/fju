@@ -6,6 +6,7 @@
 #include <fju/rpc.h>
 #include <fju/fvm.h>
 #include <fju/sec.h>
+#include <fju/log.h>
 
 struct loaded_fvm {
   struct loaded_fvm *next;
@@ -15,6 +16,7 @@ struct loaded_fvm {
   
 static struct {
   struct loaded_fvm *progs;
+  struct log_s outlog;
 } glob;
 
 static void fvm_iter_cb( struct rpc_iterator *iter );
@@ -35,24 +37,30 @@ static int fvm_proc_null( struct rpc_inc *inc ) {
   return 0;
 }
 
-static int fvm_proc_start( struct rpc_inc *inc ) {
-  int handle, sts, buflen;
+static int fvm_proc_load( struct rpc_inc *inc ) {
+  int handle, buflen, sts, start;
   char *bufp;
   struct loaded_fvm *lf;
   
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
+  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &start );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   lf = malloc( sizeof(*lf) );
   memset( lf, 0, sizeof(*lf) );
   lf->id = sec_rand_uint32();
   fvm_load( &lf->fvm, (uint16_t *)bufp, buflen / 2 );
+  lf->fvm.outlog = &glob.outlog;
   lf->fvm.inlog_id = 0;
+  
   /* push onto list */
   lf->next = glob.progs;
   glob.progs = lf;
+  
   /* ensure the iterator runs immediately */
   fvm_iter.timeout = 0;
+  if( start ) lf->fvm.flags |= FVM_FLAG_RUNNING;
+  else lf->fvm.flags &= ~FVM_FLAG_RUNNING;
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_uint32( &inc->xdr, lf->id );
@@ -61,7 +69,7 @@ static int fvm_proc_start( struct rpc_inc *inc ) {
   return 0;
 }
 
-static int fvm_proc_stop( struct rpc_inc *inc ) {
+static int fvm_proc_unload( struct rpc_inc *inc ) {
   int handle, sts;
   uint32_t id;
   struct loaded_fvm *lf, *prev;
@@ -99,6 +107,7 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
   while( lf ) {
     xdr_encode_boolean( &inc->xdr, 1 );
     xdr_encode_uint32( &inc->xdr, lf->id );
+    xdr_encode_uint32( &inc->xdr, lf->fvm.flags );
     lf = lf->next;    
   }
   xdr_encode_boolean( &inc->xdr, 0 );
@@ -108,11 +117,38 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
   return 0;
 }
 
+
+static int fvm_proc_pause( struct rpc_inc *inc ) {
+  int handle, sts, stop;
+  struct loaded_fvm *lf;
+  uint32_t id;
+
+  sts = xdr_decode_uint32( &inc->xdr, &id );
+  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &stop );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );  
+  lf = glob.progs;
+  while( lf ) {
+      if( lf->id == id ) {
+	  if( stop ) lf->fvm.flags &= ~FVM_FLAG_RUNNING;
+	  else lf->fvm.flags |= FVM_FLAG_RUNNING;
+	  break;
+      }
+      lf = lf->next;    
+  }
+
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
-  { 1, fvm_proc_start },
-  { 2, fvm_proc_stop },
+  { 1, fvm_proc_load },
+  { 2, fvm_proc_unload },
   { 3, fvm_proc_list },
+  { 4, fvm_proc_pause },
   { 0, NULL }
 };
 
@@ -126,34 +162,26 @@ static struct rpc_program fvm_prog = {
 
 
 static void fvm_iter_cb( struct rpc_iterator *iter ) {
-  struct loaded_fvm *lf, *prev, *next;
+  struct loaded_fvm *lf;
   uint64_t timeout;
 
   timeout = iter->timeout;
   lf = glob.progs;
-  prev = NULL;
   while( lf ) {
-    next = lf->next;
     fvm_run_nsteps( &lf->fvm, 1000 );
     if( lf->fvm.flags & FVM_FLAG_RUNNING ) {
       /* program still needs to run, but we yield here and schedule ourselves to be run again ASAP */
       timeout = 0;
-      prev = lf;
-    } else {
-      /* program run completed - free */
-      if( prev ) prev->next = next;
-      else glob.progs = next;
-      free( lf );
     }
-    lf = next;
+    lf = lf->next;
   }
 
   iter->timeout = timeout;
-
 }
 
 
 void fvm_register( void ) {
+  log_open( NULL, NULL, &glob.outlog );
   rpc_program_register( &fvm_prog );
   rpc_iterator_register( &fvm_iter );
 }

@@ -137,6 +137,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\fvm\fvm.c" />
+    <ClCompile Include="..\..\fvm\fvm-rpc.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\fju\fvm.h" />

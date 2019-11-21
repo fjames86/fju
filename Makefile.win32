@@ -89,9 +89,9 @@ ${LIBDIR}/libfreg.a: freg/freg.c freg/freg-rpc.c
 	gcc -c ${CFLAGS} freg/freg.c freg/freg-rpc.c
 	ar rcs ${LIBDIR}/libfreg.a freg.o freg-rpc.o 
 
-${LIBDIR}/libfvm.a: fvm/fvm.c
-	gcc -c ${CFLAGS} fvm/fvm.c
-	ar rcs ${LIBDIR}/libfvm.a fvm.o
+${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-rpc.c 
+	gcc -c ${CFLAGS} fvm/fvm.c fvm/fvm-rpc.c 
+	ar rcs ${LIBDIR}/libfvm.a fvm.o fvm-rpc.o 
 
 ${BINDIR}/fjlog.exe: log/fjlog.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -lfju 

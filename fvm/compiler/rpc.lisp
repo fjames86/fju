@@ -11,25 +11,36 @@
 
 (defconstant +fvm-prog+ #x27E1FB11)
 
-(frpc2:defrpc %call-start (+fvm-prog+ 1 1) :opaque :uint32)
-
-(defun call-start (program)
+(drx:defxstruct load-args ((:mode :list))
+  (progdata :opaque)
+  (start :boolean))
+(frpc2:defrpc %call-load (+fvm-prog+ 1 1) load-args :uint32)
+(defun call-load (progdata &optional (start t))
   (with-rpc-client (c)
-    (%call-start c program)))
+    (%call-load c (list progdata start))))
 
-(frpc2:defrpc %call-stop (+fvm-prog+ 1 2) :uint32 :void)
-(defun call-stop (id)
+(frpc2:defrpc %call-unload (+fvm-prog+ 1 2) :uint32 :void)
+(defun call-unload (id)
   (with-rpc-client (c)
-    (%call-stop c id)))
+    (%call-unload c id)))
 
 
-(drx:defxlist list-res* () :uint32)
+(drx:defxstruct list-res-body ((:mode :plist))
+  (id :uint32)
+  (flags :uint32))
+(drx:defxlist list-res* () list-res-body)
 (drx:defxoptional list-res () list-res*)
 (frpc2:defrpc %call-list (+fvm-prog+ 1 3) :void list-res)
 (defun call-list ()
   (with-rpc-client (c)
     (%call-list c)))
 
-
+(drx:defxstruct pause-args ((:mode :list))
+  (id :uint32)
+  (stop :boolean))
+(frpc2:defrpc %call-pause (+fvm-prog+ 1 4) pause-args :void)
+(defun call-pause (id &optional (stop t))
+  (with-rpc-client (c)
+    (%call-pause c (list id stop))))
 
 

@@ -567,6 +567,7 @@ static int fvm_step( struct fvm_state *state ) {
       if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; return stack overflow\n" );
       fvm_reset( state );
       state->flags &= ~FVM_FLAG_RUNNING;
+      state->flags |= FVM_FLAG_DONE;
   }
   
   return 0;
@@ -649,6 +650,7 @@ int fvm_reset( struct fvm_state *fvm ) {
     fvm->reg[FVM_REG_RP] = 0x2fff;
     fvm->reg[FVM_REG_PSR] = FVM_PSR_ZERO;
     fvm->flags |= FVM_FLAG_RUNNING;
+    fvm->flags &= ~FVM_FLAG_DONE;
 
   return 0;
 }
@@ -682,8 +684,10 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
     while( fvm->flags & FVM_FLAG_RUNNING ) {
 	fvm_step( fvm );
 
-	/* detect word returend by checking return stack */
+	/* detect word returned by checking return stack */
 	if( fvm->reg[FVM_REG_RP] == regs[FVM_REG_RP] ) {
+	    fvm->flags &= ~FVM_FLAG_RUNNING;
+	    fvm->flags |= FVM_FLAG_DONE;	    
 	    break; 
 	}
     }

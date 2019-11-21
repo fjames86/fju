@@ -57,8 +57,9 @@ struct fvm_state {
   uint16_t reg[FVM_REG_MAX];
   uint16_t mem[FVM_MAX_MEM];
   uint32_t flags;
-#define FVM_FLAG_RUNNING 0x0001
+#define FVM_FLAG_RUNNING 0x0001    
 #define FVM_FLAG_VERBOSE 0x0002
+#define FVM_FLAG_DONE    0x0004 
   uint64_t tickcount;
   struct log_s *inlog;
   uint64_t inlog_id;
@@ -76,6 +77,7 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
 
 #define FVM_RPC_PROG 0x27E1FB11
 #define FVM_RPC_VERS 1
+void fvm_register( void );
 
 #endif
 

@@ -113,8 +113,7 @@
   "test-output: " dumpstr test-output cr
   "test-output2: " dumpstr test-output2 cr
   "test-input: " dumpstr test-input cr
-  "test-input: " dumpstr test-input cr 
-  halt)
+  "test-input: " dumpstr test-input cr)
 
 
 (defword test-nohalt ()
@@ -136,7 +135,11 @@
 		:extra-words '(test-callword)))
 
 
-(defun test-call-start ()
-  (let ((progdata (compile-program 'test :variables '(*mystring* *input-buffer*) :extra-words '(test-callword))))
-    (call-start progdata)))
+(defun test-call-start (&optional (entry-word 'test))
+  (let ((progdata (compile-program entry-word :variables '(*mystring* *input-buffer*) :extra-words '(test-callword))))
+    (call-load progdata)))
 
+(defword infinite-loop ()
+  begin true until)
+
+  

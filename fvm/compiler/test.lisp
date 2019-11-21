@@ -143,3 +143,7 @@
   begin true until)
 
   
+(defword test-sleep ()
+  "Start" dumpstr cr
+  2000 sleep
+  "End" dumpstr cr)

@@ -191,7 +191,22 @@ int main( int argc, char **argv ) {
   }
   else if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
   else if( glob.timeout ) fvm_run_timeout( &glob.fvm, glob.timeout );
-  else fvm_run( &glob.fvm );
+  else {
+      do {
+	  fvm_run( &glob.fvm );
+	  if( glob.fvm.sleep_timeout ) {
+	      uint64_t now;
+	      now = rpc_now();
+#ifdef WIN32
+	      if( glob.fvm.sleep_timeout > now ) Sleep( glob.fvm.sleep_timeout - now );
+#else
+	      if( glob.fvm.sleep_timeout > now ) usleep( (glob.fvm.sleep_timeout - now) * 1000 );
+#endif
+	      glob.fvm.sleep_timeout = 0;
+	      glob.fvm.flags |= FVM_FLAG_RUNNING;
+	  }	  
+      } while( glob.fvm.flags & FVM_FLAG_RUNNING );
+  }
   end = rpc_now();
       
   if( glob.verbose ) {

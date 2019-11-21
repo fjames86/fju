@@ -185,6 +185,10 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
 	if( prev ) prev->next = next;
 	else glob.progs = next;
 	free( lf );
+    } else if( lf->fvm.sleep_timeout && (rpc_now() >= lf->fvm.sleep_timeout) ) {
+	lf->fvm.flags |= FVM_FLAG_RUNNING;
+	lf->fvm.sleep_timeout = 0;
+	timeout = 0;
     } else {
 	/* stopped running but set to auto unload when stopped */
 	prev = lf;

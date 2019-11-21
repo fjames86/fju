@@ -384,7 +384,9 @@
 
 
 
-
+(defword sleep () ;; (ms --)
+  #xfe08 !)
+  
 ;; ------------------ Interrupts --------------------
 
 (defword default-isr ()

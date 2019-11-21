@@ -81,6 +81,7 @@ static void update_flags( struct fvm_state *state, uint16_t x ) {
 #define FVM_DEVICE_CLOCKHIGH 0xfe05  /* unix time clock */
 #define FVM_DEVICE_INLOG 0xfe06     /* input log register */
 #define FVM_DEVICE_OUTLOG 0xfe07    /* output log register */
+#define FVM_DEVICE_ALARM 0xfe08    /* sleep */
 
 static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
   if( offset >= 0xfe00 ) {
@@ -184,6 +185,10 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	default:
 	  break;
 	}
+	break;
+    case FVM_DEVICE_ALARM:
+	state->flags &= ~FVM_FLAG_RUNNING;
+	state->sleep_timeout = rpc_now() + val;
 	break;
     }
   } else {

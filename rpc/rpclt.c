@@ -84,6 +84,16 @@ static void freg_put_results( struct xdr_s *xdr );
 static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void freg_rem_results( struct xdr_s *xdr );
 static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_load_results( struct xdr_s *xdr );
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_unload_results( struct xdr_s *xdr );
+static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_list_results( struct xdr_s *xdr );
+static void fvm_pause_results( struct xdr_s *xdr );
+static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr );
+
+
+
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
@@ -101,6 +111,10 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH autounload outlog=OUTLOGID" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 2, fvm_unload_args, fvm_unload_results, "fvm.unload", "id=ID" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID stop" },
     { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -322,13 +336,14 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   struct hrauth_call hcall;
   struct xdr_s args, res;
   struct hrauth_call_opts opts;
-  char argbuf[1024];
+  char *argbuf;
   int sts;
   struct rpc_call_pars pars;
   struct sockaddr_in *sinp;
   uint64_t tstart, tend;
-      
-  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+
+  argbuf = malloc( 32 * 1024 );
+  xdr_init( &args, (uint8_t *)argbuf, 32*1024 );
   xdr_init( &res, NULL, 0 );
   
   if( glob.hostid ) {
@@ -372,6 +387,7 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   if( sts ) usage( "RPC call failed" );
   if( glob.reporttime ) printf( ";; Time: %dms\n", (int)(tend - tstart) );
   if( info->results ) info->results( &res );
+  free( argbuf );
 }
 
 static void clt_broadcast_cb( struct rpc_inc *inc, void *cxt ) {
@@ -975,4 +991,120 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   }
   xdr_encode_uint64( xdr, parentid );  
   xdr_encode_uint64( xdr, id );  
+}
+
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  int start, sts;
+  uint32_t flags;
+  uint64_t outlog_id;
+  char *filepath;
+  struct mmf_s mmf;
+  
+  start = 1;
+  flags = 0x0001; /* enasble autounload by default */
+  outlog_id = 0;
+  filepath = NULL;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "program" ) == 0 ) {
+      if( !argval ) usage( "Need file path" );
+      filepath = argval;
+    } else if( strcmp( argname, "start" ) == 0 ) {
+      if( argval && (strcmp( argval, "no" ) == 0) ) start = 0;
+    } else if( strcmp( argname, "autounload" ) == 0 ) {
+      if( argval && (strcmp( argval, "false" ) == 0) ) flags &= ~0x0001;
+    } else if( strcmp( argname, "outlog" ) == 0 ) {
+      if( !argval ) usage( "Need outlog value" );
+      outlog_id = strtoull( argval, NULL, 16 );
+      flags |= 0x0002;
+    } else usage( "Unknown arg \"%s\"", argname );    
+    i++;
+  }
+  
+  if( !filepath ) usage( "Need program" );
+  
+  sts = mmf_open( filepath, &mmf );
+  if( sts ) usage( "Failed to open program" );
+  sts = mmf_remap( &mmf, mmf.fsize );
+  if( sts ) usage( "Failed to map program" );
+  xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
+  mmf_close( &mmf );
+  
+  xdr_encode_boolean( xdr, start );
+  xdr_encode_uint32( xdr, flags );
+  xdr_encode_uint64( xdr, outlog_id );
+  
+}
+
+static void fvm_load_results( struct xdr_s *xdr ) {
+  uint32_t id;
+  xdr_decode_uint32( xdr, &id );
+  printf( "id=%u\n", id );
+}
+
+static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint32_t id = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "id" ) == 0 ) {
+      if( !argval ) usage( "Need id" );
+      id = strtoul( argval, NULL, 10 );
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+  if( !id ) usage( "Need id" );
+  xdr_encode_uint32( xdr, id );
+}
+
+static void fvm_unload_results( struct xdr_s *xdr ) {
+}
+
+static void fvm_list_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint32_t id, flags;
+  uint64_t outlog_id;
+
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  while( b ) {
+    sts = xdr_decode_uint32( xdr, &id );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &outlog_id );
+    if( sts ) usage( "XDR error" );
+    printf( "id=%u Flags=%s%s outlog=%" PRIu64 "\n",
+	    id,
+	    flags & 0x0001 ? "Autounload " : "",
+	    flags & 0x0002 ? "outlog" : "",
+	    outlog_id );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "XDR error" );
+  }
+}
+
+static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  int stop;
+  uint32_t id;
+  
+  stop = 0;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "id" ) == 0 ) {
+      if( !argval ) usage( "Need ID" );
+      id = strtoul( argval, NULL, 10 );
+    } else if( strcmp( argname, "stop" ) == 0 ) {
+      stop = 1;
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+
+  xdr_encode_uint32( xdr, id );
+  xdr_encode_boolean( xdr, stop );
+}
+
+static void fvm_pause_results( struct xdr_s *xdr ) {
 }

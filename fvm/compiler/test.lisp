@@ -139,7 +139,7 @@
 
 (defun test-call-start (&optional (entry-word 'test) autounload-p)
   (let ((progdata (compile-program entry-word :variables '(*mystring* *input-buffer*) :extra-words '(test-callword))))
-    (call-load progdata t autounload-p)))
+    (call-load progdata :autounload-p autounload-p)))
 
 (defword infinite-loop ()
   begin true until)

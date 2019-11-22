@@ -1074,10 +1074,11 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
     if( !sts ) sts = xdr_decode_uint64( xdr, &outlog_id );
     if( sts ) usage( "XDR error" );
-    printf( "id=%u Flags=%s%s outlog=%" PRIu64 "\n",
+    printf( "id=%u Flags=%s%s (%x) outlog=%" PRIx64 "\n",
 	    id,
-	    flags & 0x0001 ? "Autounload " : "",
-	    flags & 0x0002 ? "outlog" : "",
+	    flags & FVM_FLAG_RUNNING ? "Running" : "",
+	    flags & FVM_FLAG_DONE ? "Done" : "",
+	    flags,
 	    outlog_id );
     
     sts = xdr_decode_boolean( xdr, &b );

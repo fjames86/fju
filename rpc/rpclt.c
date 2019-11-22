@@ -114,7 +114,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH [autounload=false] [inlog=INLOGID] [outlog=OUTLOGID]" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 2, fvm_unload_args, fvm_unload_results, "fvm.unload", "id=ID" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [stop]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [stop|reset]" },
     { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1109,6 +1109,8 @@ static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
       id = strtoul( argval, NULL, 10 );
     } else if( strcmp( argname, "stop" ) == 0 ) {
       stop = 1;
+    } else if( strcmp( argname, "reset" ) == 0 ) {
+	stop = 2;
     } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }

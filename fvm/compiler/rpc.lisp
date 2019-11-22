@@ -52,10 +52,14 @@
 
 (drx:defxstruct pause-args ((:mode :list))
   (id :uint32)
-  (stop :boolean))
+  (stop :uint32))
 (frpc2:defrpc %call-pause (+fvm-prog+ 1 4) pause-args :void)
-(defun call-pause (id &optional (stop t))
+(defun call-pause (id cmd)
   (with-rpc-client (c)
-    (%call-pause c (list id stop))))
+    (%call-pause c
+		 (list id (ecase cmd
+			    (:continue 0)
+			    (:stop 1)
+			    (:reset 2))))))
 
 

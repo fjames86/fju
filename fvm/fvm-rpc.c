@@ -162,20 +162,31 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
 
 
 static int fvm_proc_pause( struct rpc_inc *inc ) {
-  int handle, sts, stop;
+  int handle, sts;
   struct loaded_fvm *lf;
-  uint32_t id;
+  uint32_t id, stop;
 
   sts = xdr_decode_uint32( &inc->xdr, &id );
-  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &stop );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &stop );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );  
   lf = glob.progs;
   while( lf ) {
       if( lf->id == id ) {
-	  if( stop ) lf->fvm.flags &= ~FVM_FLAG_RUNNING;
-	  else lf->fvm.flags |= FVM_FLAG_RUNNING;
+	  if( stop == 0 ) {
+	      /* continue */
+	      lf->fvm.flags |= FVM_FLAG_RUNNING;
+	  } else if( stop == 1 ) {
+	      /* stop running */
+	      lf->fvm.flags &= ~FVM_FLAG_RUNNING;
+	  }
+	  else if( stop == 2 ) {
+	      /* reset */
+	      fvm_reset( &lf->fvm );
+	  } else {
+	      /* other */
+	  }
 	  break;
       }
       lf = lf->next;    

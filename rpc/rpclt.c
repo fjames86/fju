@@ -111,10 +111,10 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH autounload outlog=OUTLOGID" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH [autounload=false] [inlog=INLOGID] [outlog=OUTLOGID]" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 2, fvm_unload_args, fvm_unload_results, "fvm.unload", "id=ID" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID stop" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [stop]" },
     { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -997,7 +997,7 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
   int start, sts;
   uint32_t flags;
-  uint64_t outlog_id;
+  uint64_t inlog_id, outlog_id;
   char *filepath;
   struct mmf_s mmf;
   
@@ -1014,10 +1014,14 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
       if( argval && (strcmp( argval, "no" ) == 0) ) start = 0;
     } else if( strcmp( argname, "autounload" ) == 0 ) {
       if( argval && (strcmp( argval, "false" ) == 0) ) flags &= ~0x0001;
+    } else if( strcmp( argname, "inlog" ) == 0 ) {
+      if( !argval ) usage( "Need inlog value" );
+      inlog_id = strtoull( argval, NULL, 16 );
+      flags |= 0x0002;
     } else if( strcmp( argname, "outlog" ) == 0 ) {
       if( !argval ) usage( "Need outlog value" );
       outlog_id = strtoull( argval, NULL, 16 );
-      flags |= 0x0002;
+      flags |= 0x0004;      
     } else usage( "Unknown arg \"%s\"", argname );    
     i++;
   }
@@ -1033,6 +1037,7 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   
   xdr_encode_boolean( xdr, start );
   xdr_encode_uint32( xdr, flags );
+  xdr_encode_uint64( xdr, inlog_id );
   xdr_encode_uint64( xdr, outlog_id );
   
 }
@@ -1065,20 +1070,25 @@ static void fvm_unload_results( struct xdr_s *xdr ) {
 static void fvm_list_results( struct xdr_s *xdr ) {
   int sts, b;
   uint32_t id, flags;
-  uint64_t outlog_id;
+  uint64_t tickcount, inlog_id, outlog_id, runtime;
 
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
   while( b ) {
     sts = xdr_decode_uint32( xdr, &id );
     if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &tickcount );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &runtime );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &inlog_id );
     if( !sts ) sts = xdr_decode_uint64( xdr, &outlog_id );
     if( sts ) usage( "XDR error" );
-    printf( "id=%u Flags=%s%s (%x) outlog=%" PRIx64 "\n",
+    printf( "id=%u Flags=%s%s (%x) ticks=%"PRIu64" runtime=%"PRIu64"ms inlog=%"PRIx64" outlog=%" PRIx64 "\n",
 	    id,
 	    flags & FVM_FLAG_RUNNING ? "Running" : "",
 	    flags & FVM_FLAG_DONE ? "Done" : "",
 	    flags,
+	    tickcount, runtime,
+	    inlog_id,
 	    outlog_id );
     
     sts = xdr_decode_boolean( xdr, &b );

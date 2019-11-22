@@ -14,10 +14,14 @@ struct loaded_fvm {
   uint32_t id;
   uint32_t flags;
 #define FVM_RPC_AUTOUNLOAD 0x0001
-#define FVM_RPC_OUTLOG     0x0002 
+#define FVM_RPC_INLOG      0x0002 
+#define FVM_RPC_OUTLOG     0x0004
   struct fvm_state fvm;
-  uint64_t outlog_nlsid;
+  uint64_t inlog_id;
+  struct log_s inlog;
+  uint64_t outlog_id;
   struct log_s outlog;
+  uint64_t runtime;
 };
   
 static struct {
@@ -47,13 +51,14 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   char *bufp;
   struct loaded_fvm *lf;
   uint32_t flags;
-  uint64_t nls_id;
+  uint64_t inid, outid;
   struct nls_share nls;
 
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
   if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &start );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &nls_id );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &inid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &outid );
   if( sts ) {
     return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   }
@@ -63,16 +68,26 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   lf->id = sec_rand_uint32();
   fvm_load( &lf->fvm, (uint16_t *)bufp, buflen / 2 );
 
+  if( flags & FVM_RPC_INLOG ) {
+    sts = nls_share_by_hshare( inid, &nls );
+    if( !sts ) sts = nls_share_open( &nls, &lf->inlog );
+    if( sts ) flags &= ~FVM_RPC_INLOG;
+    else {
+      lf->fvm.inlog = &lf->inlog;
+      lf->inlog_id = inid;
+    }
+    lf->fvm.inlog_id = 0;
+  }
+
   if( flags & FVM_RPC_OUTLOG ) {
-    sts = nls_share_by_hshare( nls_id, &nls );
+    sts = nls_share_by_hshare( outid, &nls );
     if( !sts ) sts = nls_share_open( &nls, &lf->outlog );
     if( sts ) flags &= ~FVM_RPC_OUTLOG;
     else {
       lf->fvm.outlog = &lf->outlog;
-      lf->outlog_nlsid = nls_id;
+      lf->outlog_id = outid;
     }
   }
-  lf->fvm.inlog_id = 0;
   lf->flags = flags;
   
   /* push onto list */
@@ -105,6 +120,7 @@ static int fvm_proc_unload( struct rpc_inc *inc ) {
     if( lf->id == id ) {
       if( prev ) prev = lf->next;
       else glob.progs = lf->next;
+      if( lf->flags & FVM_RPC_INLOG ) log_close( &lf->inlog );
       if( lf->flags & FVM_RPC_OUTLOG ) log_close( &lf->outlog );
       free( lf );
       break;
@@ -131,7 +147,10 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     xdr_encode_boolean( &inc->xdr, 1 );
     xdr_encode_uint32( &inc->xdr, lf->id );
     xdr_encode_uint32( &inc->xdr, lf->fvm.flags );
-    xdr_encode_uint64( &inc->xdr, lf->outlog_nlsid );
+    xdr_encode_uint64( &inc->xdr, lf->fvm.tickcount );
+    xdr_encode_uint64( &inc->xdr, lf->runtime );
+    xdr_encode_uint64( &inc->xdr, lf->inlog_id );
+    xdr_encode_uint64( &inc->xdr, lf->outlog_id );
     lf = lf->next;    
   }
   xdr_encode_boolean( &inc->xdr, 0 );
@@ -186,16 +205,18 @@ static struct rpc_program fvm_prog = {
 
 
 static void fvm_iter_cb( struct rpc_iterator *iter ) {
-    struct loaded_fvm *lf, *prev, *next;
-  uint64_t timeout;
+  struct loaded_fvm *lf, *prev, *next;
+  uint64_t timeout, start;
 
   timeout = iter->timeout;
   lf = glob.progs;
   prev = NULL;
   while( lf ) {
     next = lf->next;
-    
+
+    start = rpc_now();
     fvm_run_nsteps( &lf->fvm, 1000 );
+    lf->runtime += rpc_now() - start;
     if( lf->fvm.flags & FVM_FLAG_RUNNING ) {
       /* program still needs to run, but we yield here and schedule ourselves to be run again ASAP */
       timeout = 0;
@@ -203,6 +224,7 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
     } else if( (lf->fvm.flags & FVM_FLAG_DONE) && (lf->flags & FVM_RPC_AUTOUNLOAD) ) {
 	if( prev ) prev->next = next;
 	else glob.progs = next;
+	if( lf->flags & FVM_RPC_INLOG ) log_close( &lf->inlog );
 	if( lf->flags & FVM_RPC_OUTLOG ) log_close( &lf->outlog );
 	free( lf );
     } else if( lf->fvm.sleep_timeout && (rpc_now() >= lf->fvm.sleep_timeout) ) {

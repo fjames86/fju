@@ -62,7 +62,7 @@
   loop)
 
 (defword testtime ()
-  time swap dumphex #\space dumpchr dumphex cr)
+  time swap dumphex dumphex cr)
 
 (let ((octets (do ((bytes (coerce (babel:string-to-octets "hello world") 'list)
 			  (cddr bytes))
@@ -100,7 +100,15 @@
     else "GotNoMessage" dumpstr drop false then
   until
   reset-input)
-  
+
+(defword test-sleep ()
+  "Start" dumpstr cr
+  2000 sleep
+  "End" dumpstr cr)
+
+(defword test-strlen ()
+  "123412345" strlen dumpdec cr)
+
 ;; try a few words 
 (defword test ()
   "hello-world: " dumpstr hello-world cr
@@ -113,12 +121,12 @@
   "test-output: " dumpstr test-output cr
   "test-output2: " dumpstr test-output2 cr
   "test-input: " dumpstr test-input cr
-  "test-input: " dumpstr test-input cr)
-
+  "test-input: " dumpstr test-input cr
+  "test-sleep: " dumpstr test-sleep cr
+  "test-strlen: " dumpstr test-strlen cr)
 
 (defword test-nohalt ()
   "NoHalt" dumpstr cr)
-
 
 (defword test-callword () ;; (str -- num str)
   dumpstr cr ;; print the input string 
@@ -127,8 +135,8 @@
   #x4141 12 memset ;; (num addr --)
   )
 
-(defword test-strlen ()
-  "123412345" strlen dumpdec cr)
+(defword infinite-loop ()
+  begin true until)
 
 (defun test ()
   (save-program "test.obj" 'test
@@ -138,14 +146,11 @@
 
 
 (defun test-call-start (&optional (entry-word 'test) autounload-p)
-  (let ((progdata (compile-program entry-word :variables '(*mystring* *input-buffer*) :extra-words '(test-callword))))
+  (let ((progdata (compile-program entry-word
+				   :variables '(*mystring* *input-buffer*)
+				   :extra-words '(test-callword infinite-loop))))
     (call-load progdata :autounload-p autounload-p)))
 
-(defword infinite-loop ()
-  begin true until)
 
   
-(defword test-sleep ()
-  "Start" dumpstr cr
-  2000 sleep
-  "End" dumpstr cr)
+

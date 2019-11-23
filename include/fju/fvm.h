@@ -75,6 +75,14 @@ int fvm_run_timeout( struct fvm_state *state, int timeout );
 int fvm_reset( struct fvm_state *fvm );
 int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, uint16_t *res, int nres );
 
+#define FVM_INT_EXCEPTION 0x8000 
+#define FVM_INT_PME       0x00    /* privilege mode exception */
+#define FVM_INT_PME_PL    FVM_INT_EXCEPTION       /* pme priority level */
+#define FVM_INT_IOC       0x01    /* illegal opcode exception */
+#define FVM_INT_IOC_PL    FVM_INT_EXCEPTION       /* ioc priority level */
+#define FVM_INT_DBZ       0x02    /* divide by zero */
+#define FVM_INT_DBZ_PL    FVM_INT_EXCEPTION       /* divide by zero level */
+int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
 
 #define FVM_RPC_PROG 0x27E1FB11
 #define FVM_RPC_VERS 1

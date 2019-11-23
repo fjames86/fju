@@ -36,13 +36,6 @@
 #include <fju/rpc.h>
 #include <fju/sec.h>
 
-#define FVM_INT_EXCEPTION 0x8000 
-#define FVM_INT_PME       0x00    /* privilege mode exception */
-#define FVM_INT_PME_PL    FVM_INT_EXCEPTION       /* pme priority level */
-#define FVM_INT_IOC       0x01    /* illegal opcode exception */
-#define FVM_INT_IOC_PL    FVM_INT_EXCEPTION       /* ioc priority level */
-#define FVM_INT_DBZ       0x02    /* divide by zero */
-#define FVM_INT_DBZ_PL    FVM_INT_EXCEPTION       /* divide by zero level */
 
 /*
  * Loosely modelled on the LC3 processor. 
@@ -54,9 +47,6 @@
  * 0x3000 - 0xfdff user program code + data stack 
  * 0xfe00 - 0xffff device registers 
  */
-
-static int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
-
 
 static uint16_t sign_extend( uint16_t x, int bit_count ) {
   if( (x >> (bit_count - 1)) & 1 ) {
@@ -352,7 +342,7 @@ static void fvm_inst_str( struct fvm_state *state, uint16_t opcode ) {
   write_mem( state, state->reg[baser] + offset, state->reg[sr] );
 }
 
-static int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
+int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
     /* don't interrupt if current priority higher than this interrupts level */
     if( !(priority & 0x8000) &&
 	((state->reg[FVM_REG_PSR] & FVM_PSR_PL_MASK) >> 12) >= (priority & 0x7) ) {
@@ -381,6 +371,9 @@ static int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t prior
 
     /* jump */
     state->reg[FVM_REG_PC] = read_mem( state, 0x800 + ivec );
+
+    /* the vm should continue running */
+    state->flags |= FVM_FLAG_RUNNING;
     return 0;
 }
 

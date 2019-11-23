@@ -68,7 +68,7 @@ static void usage( char *fmt, ... ) {
 	     "Where CMD:\n"
 	     "               [list] [path]\n"
 	     "               [get] path|id\n"
-	     "               put path|id u32|u64|string|opaque|key [value]\n"
+	     "               put path|id u32|u64|string|opaque|opaque-file|key [value]\n"
 	     "               set path|id [name=NAME] [flags=FLAGS]\n" 
 	     "               rem path\n"
 	     "               dump [path]\n"
@@ -526,6 +526,7 @@ static void cmd_put( int argc, char **argv, int i ) {
     int len, sts, j;
     char tmpstr[32];
     char *term;
+    int opfile = 0;
     
     path = argv[i];
     setid = strtoull( path, &term, 16 );
@@ -543,6 +544,9 @@ static void cmd_put( int argc, char **argv, int i ) {
 	flags = FREG_TYPE_STRING;
       } else if( (strcmp( argv[i], "opaque" ) == 0) ) {
 	flags = FREG_TYPE_OPAQUE;
+      } else if( (strcmp( argv[i], "opaque-file" ) == 0) ) {
+	flags = FREG_TYPE_OPAQUE;
+	opfile = 1;
       } else if( strcmp( argv[i], "key" ) == 0 ) {
 	flags = FREG_TYPE_KEY;
       } else usage( NULL );    
@@ -603,18 +607,29 @@ static void cmd_put( int argc, char **argv, int i ) {
       }
       break;
     case FREG_TYPE_OPAQUE:
-      len = 0;
-      buf = malloc( 4096 );
-      while( i < argc ) {	
-	for( j = 0; j < strlen( argv[i] ) / 2; j++ ) {
-	  tmpstr[0] = argv[i][2*j];
-	  tmpstr[1] = argv[i][2*j + 1];
-	  tmpstr[2] = '\0';
-	  buf[len] = strtoul( tmpstr, NULL, 16 );
-	  len++;
+	if( opfile ) {
+	    struct mmf_s mmf;
+	    if( i >= argc ) usage( "Need file" );
+	    mmf_open( argv[i], &mmf );
+	    mmf_remap( &mmf, mmf.fsize );
+	    len = mmf.fsize;
+	    buf = malloc( len );
+	    memcpy( buf, mmf.file, len );
+	    mmf_close( &mmf );
+	} else {
+	    len = 0;
+	    buf = malloc( 4096 );
+	    while( i < argc ) {	
+		for( j = 0; j < strlen( argv[i] ) / 2; j++ ) {
+		    tmpstr[0] = argv[i][2*j];
+		    tmpstr[1] = argv[i][2*j + 1];
+		    tmpstr[2] = '\0';
+		    buf[len] = strtoul( tmpstr, NULL, 16 );
+		    len++;
+		}
+		i++;
+	    }
 	}
-	i++;
-      }
       break;
     default:
       usage( NULL );

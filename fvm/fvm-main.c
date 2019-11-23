@@ -206,6 +206,10 @@ int main( int argc, char **argv ) {
 	      glob.fvm.flags |= FVM_FLAG_RUNNING;
 	  }	  
       } while( glob.fvm.flags & FVM_FLAG_RUNNING );
+      
+      if( (glob.fvm.flags & FVM_FLAG_VERBOSE) && !(glob.fvm.flags & FVM_FLAG_DONE) && (!glob.fvm.flags & FVM_FLAG_RUNNING) ) {
+	  printf( ";; Stopped running but not done\n" );
+      }
   }
   end = rpc_now();
       

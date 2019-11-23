@@ -218,3 +218,4 @@ fvm_run_timeout
 fvm_reset
 fvm_call_word
 fvm_register
+fvm_interrupt

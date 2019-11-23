@@ -1000,6 +1000,7 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   uint64_t inlog_id, outlog_id;
   char *filepath;
   struct mmf_s mmf;
+  char name[64];
   
   start = 1;
   flags = 0x0001; /* enasble autounload by default */
@@ -1021,7 +1022,10 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     } else if( strcmp( argname, "outlog" ) == 0 ) {
       if( !argval ) usage( "Need outlog value" );
       outlog_id = strtoull( argval, NULL, 16 );
-      flags |= 0x0004;      
+      flags |= 0x0004;
+    } else if( strcmp( argname, "name" ) == 0 ) {
+      if( !argval ) usage( "Need name value" );
+      strncpy( name, argval, sizeof(name) - 1 );
     } else usage( "Unknown arg \"%s\"", argname );    
     i++;
   }
@@ -1039,6 +1043,7 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_uint32( xdr, flags );
   xdr_encode_uint64( xdr, inlog_id );
   xdr_encode_uint64( xdr, outlog_id );
+  xdr_encode_string( xdr, name );
   
 }
 
@@ -1071,7 +1076,8 @@ static void fvm_list_results( struct xdr_s *xdr ) {
   int sts, b;
   uint32_t id, flags;
   uint64_t tickcount, inlog_id, outlog_id, runtime;
-
+  char name[64];
+  
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
   while( b ) {
@@ -1081,8 +1087,11 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     if( !sts ) sts = xdr_decode_uint64( xdr, &runtime );
     if( !sts ) sts = xdr_decode_uint64( xdr, &inlog_id );
     if( !sts ) sts = xdr_decode_uint64( xdr, &outlog_id );
+    if( !sts ) sts = xdr_decode_string( xdr, name, sizeof(name) );
+    
     if( sts ) usage( "XDR error" );
-    printf( "id=%u Flags=%s%s (%x) ticks=%"PRIu64" runtime=%"PRIu64"ms inlog=%"PRIx64" outlog=%" PRIx64 "\n",
+    printf( "name=%s id=%u Flags=%s%s (%x) ticks=%"PRIu64" runtime=%"PRIu64"ms inlog=%"PRIx64" outlog=%" PRIx64 "\n",
+	    name,
 	    id,
 	    flags & FVM_FLAG_RUNNING ? "Running" : "",
 	    flags & FVM_FLAG_DONE ? "Done" : "",

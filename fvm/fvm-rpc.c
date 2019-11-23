@@ -25,6 +25,7 @@ struct loaded_fvm {
   uint64_t outlog_id;
   struct log_s outlog;
   uint64_t runtime;
+  char name[64];
 };
   
 static struct {
@@ -49,7 +50,7 @@ static int fvm_proc_null( struct rpc_inc *inc ) {
   return 0;
 }
 
-static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, int start, uint32_t flags, uint64_t inid, uint64_t outid ) {
+static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, int start, uint32_t flags, uint64_t inid, uint64_t outid, char *name ) {
     int sts;
     struct loaded_fvm *lf;
     struct nls_share nls;
@@ -57,6 +58,7 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, int start, u
     lf = malloc( sizeof(*lf) );
     memset( lf, 0, sizeof(*lf) );
     lf->id = sec_rand_uint32();
+    strncpy( lf->name, name, sizeof(lf->name) - 1 );
     fvm_load( &lf->fvm, (uint16_t *)bufp, buflen / 2 );
 
     if( flags & FVM_RPC_INLOG ) {
@@ -99,17 +101,19 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   struct loaded_fvm *lf;
   uint32_t flags;
   uint64_t inid, outid;
-  
+  char name[64];
+	    
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
   if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &start );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &inid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &outid );
+  if( !sts ) sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
   if( sts ) {
     return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   }
 
-  lf = fvm_load_prog( (uint8_t *)bufp, buflen, start, flags, inid, outid );
+  lf = fvm_load_prog( (uint8_t *)bufp, buflen, start, flags, inid, outid, name );
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_uint32( &inc->xdr, lf->id );
@@ -163,6 +167,7 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     xdr_encode_uint64( &inc->xdr, lf->runtime );
     xdr_encode_uint64( &inc->xdr, lf->inlog_id );
     xdr_encode_uint64( &inc->xdr, lf->outlog_id );
+    xdr_encode_string( &inc->xdr, lf->name );
     lf = lf->next;    
   }
   xdr_encode_boolean( &inc->xdr, 0 );
@@ -264,7 +269,7 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
   iter->timeout = timeout;
 }
 
-static void load_startup_prog( uint64_t id ) {
+static void load_startup_prog( struct freg_entry *entry ) {
     int sts;
     char *progdata;
     char path[256];
@@ -273,7 +278,9 @@ static void load_startup_prog( uint64_t id ) {
     uint32_t flags;
     uint64_t inlog, outlog;
     int len;
-    
+    uint64_t id;
+
+    id = entry->id;
     progdata = NULL;
     
     sts = freg_get_by_name( NULL, id, "progdata", FREG_TYPE_OPAQUE, NULL, 0, &len );
@@ -304,9 +311,9 @@ static void load_startup_prog( uint64_t id ) {
     freg_get_by_name( NULL, id, "inlog", FREG_TYPE_UINT64, (char *)&inlog, sizeof(inlog), NULL );
     freg_get_by_name( NULL, id, "outlog", FREG_TYPE_UINT64, (char *)&outlog, sizeof(outlog), NULL );
 
-    fvm_load_prog( (uint8_t *)progdata, proglen, start, flags, inlog, outlog );
-    log_writef( NULL, LOG_LVL_INFO, "Loaded startup program len=%d start=%s flags=%x inlog=%"PRIx64" outlog=%"PRIx64"",
-		proglen, start ? "true" : "false", flags, inlog, outlog );
+    fvm_load_prog( (uint8_t *)progdata, proglen, start, flags, inlog, outlog, entry->name );
+    log_writef( NULL, LOG_LVL_INFO, "Loaded startup program \"%s\" len=%d start=%s flags=%x inlog=%"PRIx64" outlog=%"PRIx64"",
+		entry->name, proglen, start ? "true" : "false", flags, inlog, outlog );
     
     free( progdata );
     progdata = NULL;
@@ -328,7 +335,7 @@ static void load_startup_progs( void ) {
 	if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) goto cont;
 
 	log_writef( NULL, LOG_LVL_INFO, "Loading startup program \"%s\"", entry.name );
-	load_startup_prog( entry.id );
+	load_startup_prog( &entry );
     cont:
 	id = entry.id;
     } while( 1 );

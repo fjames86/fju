@@ -16,9 +16,10 @@
   (start :boolean)
   (flags :uint32)
   (inlog-id :uint64)
-  (outlog-id :uint64))
+  (outlog-id :uint64)
+  (name :string))
 (frpc2:defrpc %call-load (+fvm-prog+ 1 1) load-args :uint32)
-(defun call-load (progdata &key (start t) autounload-p inlog-id outlog-id)
+(defun call-load (progdata &key (start t) autounload-p inlog-id outlog-id name)
   (with-rpc-client (c)
     (%call-load c (list progdata
 			start
@@ -28,7 +29,8 @@
 			  (when outlog-id (setf flags (logior flags #x4)))
 			  flags)
 			(or inlog-id 0)
-			(or outlog-id 0)))))
+			(or outlog-id 0)
+			(or name "")))))
 
 (frpc2:defrpc %call-unload (+fvm-prog+ 1 2) :uint32 :void)
 (defun call-unload (id)
@@ -42,7 +44,8 @@
   (tickcount :uint64)
   (runtime :uint64)
   (inlog-id :uint64)
-  (outlog-id :uint64))
+  (outlog-id :uint64)
+  (name :string))
 (drx:defxlist list-res* () list-res-body)
 (drx:defxoptional list-res () list-res*)
 (frpc2:defrpc %call-list (+fvm-prog+ 1 3) :void list-res)

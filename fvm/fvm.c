@@ -35,7 +35,7 @@
 #include <fju/fvm.h>
 #include <fju/rpc.h>
 #include <fju/sec.h>
-
+#include <fju/freg.h>
 
 /*
  * Loosely modelled on the LC3 processor. 
@@ -529,18 +529,62 @@ static void ecall_freg_get_by_name( struct fvm_state *fvm ) {
     uint16_t nameaddr;
     uint16_t flags;
     char *buf;
-    int len;
+    int sts, len;
     
     /* (flags nameaddr -- addr len) */
     fvm->reg[FVM_REG_SP]++;
-    flags = fvm->mem[fvm-reg[FVM_REG_SP]];
+    flags = fvm->mem[fvm->reg[FVM_REG_SP]];
     fvm->reg[FVM_REG_SP]++;
-    nameaddr = fvm->mem[fvm-reg[FVM_REG_SP]];
+    nameaddr = fvm->mem[fvm->reg[FVM_REG_SP]];
     
-    name = (char *)&fvm->mem[memaddr];
-    freg_get_by_name( NULL, 0, name, flags, NULL, 0, &len );
+    name = (char *)&fvm->mem[nameaddr];
+    buf = (char *)&fvm->mem[fvm->bos];
+    len = fvm->reg[FVM_REG_SP] - fvm->bos;
+    sts = freg_get_by_name( NULL, 0, name, flags, buf, len, &len );
+    if( sts ) {
+	/* failure - set return status to false */
+	fvm->reg[FVM_REG_R0] = 0;
+	return;
+    }
+
+    /* push onto stack */
+    fvm->mem[fvm->reg[FVM_REG_SP]] = fvm->bos;
+    fvm->reg[FVM_REG_SP]--;
+    fvm->mem[fvm->reg[FVM_REG_SP]] = len;
+    fvm->reg[FVM_REG_SP]--;
+
+    /* set return status to true */
+    fvm->reg[FVM_REG_R0] = -1;
+    return;
+}
+
+static void ecall_freg_put( struct fvm_state *fvm ) {
+    char *name, *buf;
+    uint16_t nameaddr, flags, len;
+    int sts;
     
-    freg_get_by_name( NULL, 0, name, flags, buf, len, NULL );
+    /* (flags nameaddr bufaddr len -- ) */
+    fvm->reg[FVM_REG_SP]++;
+    len = fvm->mem[fvm->reg[FVM_REG_SP]];
+    fvm->reg[FVM_REG_SP]++;
+    nameaddr = fvm->mem[fvm->reg[FVM_REG_SP]];
+    buf = (char *)&fvm->mem[nameaddr];
+    fvm->reg[FVM_REG_SP]++;
+    nameaddr = fvm->mem[fvm->reg[FVM_REG_SP]];
+    name = (char *)&fvm->mem[nameaddr];
+    fvm->reg[FVM_REG_SP]++;
+    flags = fvm->mem[fvm->reg[FVM_REG_SP]];
+
+    sts = freg_put( NULL, 0, name, flags, buf, len, NULL );
+    if( sts ) {
+	/* failure - set return status to false */
+	fvm->reg[FVM_REG_R0] = 0;
+	return;
+    }
+
+    /* set return status to true */
+    fvm->reg[FVM_REG_R0] = -1;
+    return;
 }
 
 
@@ -549,6 +593,8 @@ static struct {
     fvm_ecall_t fn;
 } ecall_table[] = {
     { 0, ecall_nop },
+    { 1, ecall_freg_get_by_name },
+    { 2, ecall_freg_put },
     { 0, NULL }
 };
 
@@ -561,7 +607,7 @@ static void fvm_inst_ecall( struct fvm_state *state, uint16_t opcode ) {
     while( 1 ) {
 	if( ecall_table[idx].fn == NULL ) break;
 	if( ecall_table[idx].id == id ) {
-	    ecall_table[idx].fn( fvm );
+	    ecall_table[idx].fn( state );
 	    break;
 	}
 	idx++;
@@ -586,7 +632,7 @@ static fvm_inst_handler_t inst_handlers[] = {
     fvm_inst_jmp,
     fvm_inst_mul,
     fvm_inst_lea,
-    fvm_inst_res3
+    fvm_inst_ecall
 };
 
 static int fvm_step( struct fvm_state *state ) {

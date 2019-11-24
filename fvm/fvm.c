@@ -519,10 +519,53 @@ static void fvm_inst_lea( struct fvm_state *state, uint16_t opcode ) {
   update_flags( state, state->reg[dr] );
 }
 
-/* reserved opcode 3 */
-static void fvm_inst_res3( struct fvm_state *state, uint16_t opcode ) {
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RES3\n", state->reg[FVM_REG_PC] - 1 );
-  fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
+typedef void (*fvm_ecall_t)( struct fvm_state *fvm );
+
+static void ecall_nop( struct fvm_state *fvm ) {
+}
+
+static void ecall_freg_get_by_name( struct fvm_state *fvm ) {
+    char *name;
+    uint16_t nameaddr;
+    uint16_t flags;
+    char *buf;
+    int len;
+    
+    /* (flags nameaddr -- addr len) */
+    fvm->reg[FVM_REG_SP]++;
+    flags = fvm->mem[fvm-reg[FVM_REG_SP]];
+    fvm->reg[FVM_REG_SP]++;
+    nameaddr = fvm->mem[fvm-reg[FVM_REG_SP]];
+    
+    name = (char *)&fvm->mem[memaddr];
+    freg_get_by_name( NULL, 0, name, flags, NULL, 0, &len );
+    
+    freg_get_by_name( NULL, 0, name, flags, buf, len, NULL );
+}
+
+
+static struct {
+    uint16_t id;
+    fvm_ecall_t fn;
+} ecall_table[] = {
+    { 0, ecall_nop },
+    { 0, NULL }
+};
+
+
+static void fvm_inst_ecall( struct fvm_state *state, uint16_t opcode ) {
+    uint16_t id = opcode & 0x0fff;
+    int idx;
+    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x ECALL %x\n", state->reg[FVM_REG_PC] - 1, id );
+    idx = 0;
+    while( 1 ) {
+	if( ecall_table[idx].fn == NULL ) break;
+	if( ecall_table[idx].id == id ) {
+	    ecall_table[idx].fn( fvm );
+	    break;
+	}
+	idx++;
+    }
 }
 
 typedef void (*fvm_inst_handler_t)( struct fvm_state *state, uint16_t opcode );

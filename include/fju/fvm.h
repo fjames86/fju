@@ -22,7 +22,7 @@ typedef enum {
 	      FVM_INST_JMP = 12,    /* unconditional jump / return */
 	      FVM_INST_MUL = 13,    /* mul/div/mod/cmp */
 	      FVM_INST_LEA = 14,    /* load effective address */
-	      FVM_INST_RES3 = 15,   /* reserved opcode 3 */
+	      FVM_INST_RES = 15,    /* reserved opcode  */
 } fvm_inst_t;
 
 typedef enum {

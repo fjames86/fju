@@ -49,6 +49,7 @@ static struct {
 	int foreground;
 	int no_rpcregister;
 	int quiet;
+        int rpcdp;
 	volatile int exiting;
 	char *pidfile;
   
@@ -221,6 +222,7 @@ int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
+	rpc.rpcdp = 1;
 	
 	freg_open( NULL, NULL );
 	
@@ -295,10 +297,15 @@ int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 	  unlink( rpc.pidfile );
 	}
 #endif
+
+	rpc.rpcdp = 0;
 	
 	return 0;
 }
 
+int rpcdp( void ) {
+    return rpc.rpcdp;
+}
 
 #ifdef WIN32
 static void WINAPI rpcd_svc_ctrl( DWORD req ) {

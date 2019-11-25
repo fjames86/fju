@@ -519,99 +519,33 @@ static void fvm_inst_lea( struct fvm_state *state, uint16_t opcode ) {
   update_flags( state, state->reg[dr] );
 }
 
-typedef void (*fvm_ecall_t)( struct fvm_state *fvm );
+static void fvm_inst_rpc( struct fvm_state *fvm, uint16_t opcode ) {
 
-static void ecall_nop( struct fvm_state *fvm ) {
-}
+    if( rpcdp() ) {
+	/* if running as rpcd then call directly */
 
-static void ecall_freg_get_by_name( struct fvm_state *fvm ) {
-    char *name;
-    uint16_t nameaddr;
-    uint16_t flags;
-    char *buf;
-    int sts, len;
-    
-    /* (flags nameaddr -- addr len) */
-    fvm->reg[FVM_REG_SP]++;
-    flags = fvm->mem[fvm->reg[FVM_REG_SP]];
-    fvm->reg[FVM_REG_SP]++;
-    nameaddr = fvm->mem[fvm->reg[FVM_REG_SP]];
-    
-    name = (char *)&fvm->mem[nameaddr];
-    buf = (char *)&fvm->mem[fvm->bos];
-    len = fvm->reg[FVM_REG_SP] - fvm->bos;
-    sts = freg_get_by_name( NULL, 0, name, flags, buf, len, &len );
-    if( sts ) {
-	/* failure - set return status to false */
-	fvm->reg[FVM_REG_R0] = 0;
-	return;
+	/* setup inc */
+	memset( inc, 0, sizeof(*inc) );
+	xdr_init( &inc.xdr, NULL, 0 ); /* TODO */
+	
+
+	/* lookup function and call it */
+	sts = rpc_program_find( prog, vers, proc, &pg, &vs, &pc );
+	sts = pc->fn( inc );
+	
+	/* deal with results */
+	
+    } else {
+	/* if not running a rpcd then just make a standard call */
+	sts = rpc_call_udp( &pars, &args, &res );	
     }
-
-    /* push onto stack */
-    fvm->mem[fvm->reg[FVM_REG_SP]] = fvm->bos;
-    fvm->reg[FVM_REG_SP]--;
-    fvm->mem[fvm->reg[FVM_REG_SP]] = len;
-    fvm->reg[FVM_REG_SP]--;
-
-    /* set return status to true */
-    fvm->reg[FVM_REG_R0] = -1;
-    return;
-}
-
-static void ecall_freg_put( struct fvm_state *fvm ) {
-    char *name, *buf;
-    uint16_t nameaddr, flags, len;
-    int sts;
     
-    /* (flags nameaddr bufaddr len -- ) */
-    fvm->reg[FVM_REG_SP]++;
-    len = fvm->mem[fvm->reg[FVM_REG_SP]];
-    fvm->reg[FVM_REG_SP]++;
-    nameaddr = fvm->mem[fvm->reg[FVM_REG_SP]];
-    buf = (char *)&fvm->mem[nameaddr];
-    fvm->reg[FVM_REG_SP]++;
-    nameaddr = fvm->mem[fvm->reg[FVM_REG_SP]];
-    name = (char *)&fvm->mem[nameaddr];
-    fvm->reg[FVM_REG_SP]++;
-    flags = fvm->mem[fvm->reg[FVM_REG_SP]];
-
-    sts = freg_put( NULL, 0, name, flags, buf, len, NULL );
-    if( sts ) {
-	/* failure - set return status to false */
-	fvm->reg[FVM_REG_R0] = 0;
-	return;
-    }
-
-    /* set return status to true */
-    fvm->reg[FVM_REG_R0] = -1;
-    return;
 }
 
 
-static struct {
-    uint16_t id;
-    fvm_ecall_t fn;
-} ecall_table[] = {
-    { 0, ecall_nop },
-    { 1, ecall_freg_get_by_name },
-    { 2, ecall_freg_put },
-    { 0, NULL }
-};
 
-
-static void fvm_inst_ecall( struct fvm_state *state, uint16_t opcode ) {
-    uint16_t id = opcode & 0x0fff;
-    int idx;
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x ECALL %x\n", state->reg[FVM_REG_PC] - 1, id );
-    idx = 0;
-    while( 1 ) {
-	if( ecall_table[idx].fn == NULL ) break;
-	if( ecall_table[idx].id == id ) {
-	    ecall_table[idx].fn( state );
-	    break;
-	}
-	idx++;
-    }
+static void fvm_inst_res( struct fvm_state *state, uint16_t opcode ) {
+  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RES 0x%x\n", state->reg[FVM_REG_PC] - 1, opcode & 0x0fff );
 }
 
 typedef void (*fvm_inst_handler_t)( struct fvm_state *state, uint16_t opcode );
@@ -632,7 +566,7 @@ static fvm_inst_handler_t inst_handlers[] = {
     fvm_inst_jmp,
     fvm_inst_mul,
     fvm_inst_lea,
-    fvm_inst_ecall
+    fvm_inst_res
 };
 
 static int fvm_step( struct fvm_state *state ) {

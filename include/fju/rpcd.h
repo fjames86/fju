@@ -134,5 +134,8 @@ typedef void (*rpcd_service_t)( void );
 /* stop the daemon and exit */
 void rpcd_stop( void );
 
+/* true if running as rpcd */
+int rpcdp( void );
+
 #endif
 

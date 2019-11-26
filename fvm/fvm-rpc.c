@@ -300,6 +300,7 @@ static void load_startup_prog( struct freg_entry *entry ) {
 	    
     } else {
 	/* load from program data directly */
+        proglen = len;
 	progdata = malloc( proglen );
 	sts = freg_get_by_name( NULL, id, "progdata", FREG_TYPE_OPAQUE, progdata, proglen, &proglen );
     }

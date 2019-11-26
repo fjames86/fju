@@ -207,7 +207,7 @@ int main( int argc, char **argv ) {
 	  }	  
       } while( glob.fvm.flags & FVM_FLAG_RUNNING );
       
-      if( (glob.fvm.flags & FVM_FLAG_VERBOSE) && !(glob.fvm.flags & FVM_FLAG_DONE) && (!glob.fvm.flags & FVM_FLAG_RUNNING) ) {
+      if( (glob.fvm.flags & FVM_FLAG_VERBOSE) && (!(glob.fvm.flags & FVM_FLAG_DONE)) && (!(glob.fvm.flags & FVM_FLAG_RUNNING)) ) {
 	  printf( ";; Stopped running but not done\n" );
       }
   }

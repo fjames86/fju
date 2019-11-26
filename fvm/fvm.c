@@ -519,29 +519,20 @@ static void fvm_inst_lea( struct fvm_state *state, uint16_t opcode ) {
   update_flags( state, state->reg[dr] );
 }
 
+#if 0
 static void fvm_inst_rpc( struct fvm_state *fvm, uint16_t opcode ) {
 
     if( rpcdp() ) {
-	/* if running as rpcd then call directly */
-
-	/* setup inc */
-	memset( inc, 0, sizeof(*inc) );
-	xdr_init( &inc.xdr, NULL, 0 ); /* TODO */
-	
-
-	/* lookup function and call it */
-	sts = rpc_program_find( prog, vers, proc, &pg, &vs, &pc );
-	sts = pc->fn( inc );
-	
-	/* deal with results */
-	
+      /* if running as rpcd then send call and await reply */
+      hrauth_call_udp_async( &hcall, &args, NULL );
+      fvm->flags &= ~FVM_FLAG_RUNNING;
     } else {
-	/* if not running a rpcd then just make a standard call */
-	sts = rpc_call_udp( &pars, &args, &res );	
+      /* if not running a rpcd then just make a standard call and block */
+      sts = rpc_call_udp( &pars, &args, &res );	
     }
     
 }
-
+#endif
 
 
 static void fvm_inst_res( struct fvm_state *state, uint16_t opcode ) {

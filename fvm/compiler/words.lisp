@@ -407,7 +407,31 @@
 
 ;; -----------------------------------
 
+(defmacro defcall (name (program version proc) arg-types res-types)
+  `(defword ,name ()
+     ;; TODO (lisp (expand-xdr-encoder ',arg-types))
+     (br-pnz 2)
+     (.blkw ,(logand (ash program 16) #xffff)
+	    ,(logand program #xffff))
+     (ld r1 -3)
+     (ld r2 -3)
+     (ldi r3 ,version)
+     (ldi r4 ,proc)
 
+     ;; make rpc call
+     (rpc)
+
+     ;; test r0
+     (add r0 r0 0)
+     (br-pn success)
+     ;; failure handler 
+     (push r0)
+     (ret)
+
+     success
+     ;; TODO (lisp (expand-xdr-decoder ',res-types))
+     (ldi r0 -1)
+     (push r0)))
 
 
 (defword call-myrpc ()

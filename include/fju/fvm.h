@@ -57,9 +57,10 @@ struct fvm_state {
   uint16_t reg[FVM_REG_MAX];
   uint16_t mem[FVM_MAX_MEM];
   uint32_t flags;
-#define FVM_FLAG_RUNNING 0x0001    
-#define FVM_FLAG_VERBOSE 0x0002
-#define FVM_FLAG_DONE    0x0004 
+#define FVM_FLAG_RUNNING 0x0001        /* program currently executing */
+#define FVM_FLAG_VERBOSE 0x0002        /* print debug info to console */
+#define FVM_FLAG_DONE    0x0004        /* program finished running */
+#define FVM_FLAG_RPC     0x0008        /* rpc in flight, awaiting reply */
   uint64_t tickcount;
   struct log_s *inlog;
   uint64_t inlog_id;

@@ -36,6 +36,8 @@
 #include <fju/rpc.h>
 #include <fju/sec.h>
 #include <fju/freg.h>
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
 
 /*
  * Loosely modelled on the LC3 processor. 
@@ -519,25 +521,101 @@ static void fvm_inst_lea( struct fvm_state *state, uint16_t opcode ) {
   update_flags( state, state->reg[dr] );
 }
 
-#if 0
-static void fvm_inst_rpc( struct fvm_state *fvm, uint16_t opcode ) {
+#if 1
 
-    if( rpcdp() ) {
-      /* if running as rpcd then send call and await reply */
-      hrauth_call_udp_async( &hcall, &args, NULL );
-      fvm->flags &= ~FVM_FLAG_RUNNING;
-    } else {
-      /* if not running a rpcd then just make a standard call and block */
-      sts = rpc_call_udp( &pars, &args, &res );	
+static void fvm_rpc_donecb( struct xdr_s *res, void *cxt ) {
+  struct fvm_state *fvm = (struct fvm_state *)cxt;
+  int maxlen;
+  
+  fvm->flags |= FVM_FLAG_RUNNING;
+  fvm->flags &= ~FVM_FLAG_RPC;
+  
+  if( !res ) {
+    fvm->reg[FVM_REG_R0] = 0;
+    return;
+  }
+
+  /* copy into fvm memory at bos */
+  maxlen = res->count - res->offset;
+  if( maxlen > 2*(fvm->reg[FVM_REG_SP] - fvm->bos) ) {
+    /* not enough space! return error status */
+    fvm->reg[FVM_REG_R0] = 0;
+    return;
+  }
+
+  fvm->reg[FVM_REG_R0] = -1;
+  memcpy( &fvm->mem[fvm->bos], res->buf + res->offset, maxlen );
+  fvm->reg[FVM_REG_R1] = maxlen;
+  
+}
+
+static void fvm_inst_rpc( struct fvm_state *fvm, uint16_t opcode ) {
+  int sts, maxlen;
+  struct hrauth_call hcall;
+  struct hrauth_call_opts opts;
+  struct xdr_s args, res;
+    
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostreg_localid();
+  hcall.prog = (((uint32_t)fvm->reg[FVM_REG_R1]) << 16) | fvm->reg[FVM_REG_R2];
+  hcall.vers = fvm->reg[FVM_REG_R3];
+  hcall.proc = fvm->reg[FVM_REG_R4];
+  hcall.donecb = fvm_rpc_donecb;
+  hcall.cxt = fvm;
+  hcall.timeout = 1000;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  if( fvm->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RPC %u:%u:%u\n", fvm->reg[FVM_REG_PC] - 1, hcall.prog, hcall.vers, hcall.proc );
+  
+  xdr_init( &args, (uint8_t *)&fvm->mem[fvm->bos], (uint32_t)fvm->reg[FVM_REG_R0] );
+
+  if( rpcdp() ) {
+    /* if running as rpcd then send call and await reply */
+    
+    sts = hrauth_call_udp_async( &hcall, &args, NULL );
+    if( sts ) {
+      fvm->reg[FVM_REG_R0] = 0;
+      return;
     }
     
-}
-#endif
+    /* stop execution, continue when reply received */
+    fvm->flags &= ~FVM_FLAG_RUNNING;
+    fvm->flags |= FVM_FLAG_RPC;
+  } else {
+    /* if not running a rpcd then just make a standard call and block */
 
+    memset( &opts, 0, sizeof(opts) );
+    opts.mask |= HRAUTH_CALL_OPT_TMPBUF;
+    xdr_init( &opts.tmpbuf, malloc( 32*1024 ), 32*1024 );  
+
+    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+    if( sts ) {
+      fvm->reg[FVM_REG_R0] = 0;
+      free( opts.tmpbuf.buf );
+      return;
+    }
+
+    maxlen = res.count - res.offset;
+    if( maxlen > 2*(fvm->reg[FVM_REG_SP] - fvm->bos) ) {
+      /* not enough space! return error status */
+      fvm->reg[FVM_REG_R0] = 0;
+    } else {    
+      /* copy result xdr into fvm memory */
+      fvm->reg[FVM_REG_R0] = -1;
+      memcpy( &fvm->mem[fvm->bos], res.buf + res.offset, res.count - res.offset );
+      fvm->reg[FVM_REG_R1] = res.count - res.offset;
+    }
+    free( opts.tmpbuf.buf );
+  }
+
+}
+
+#else
 
 static void fvm_inst_res( struct fvm_state *state, uint16_t opcode ) {
   if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RES 0x%x\n", state->reg[FVM_REG_PC] - 1, opcode & 0x0fff );
 }
+#endif
 
 typedef void (*fvm_inst_handler_t)( struct fvm_state *state, uint16_t opcode );
 
@@ -557,7 +635,7 @@ static fvm_inst_handler_t inst_handlers[] = {
     fvm_inst_jmp,
     fvm_inst_mul,
     fvm_inst_lea,
-    fvm_inst_res
+    fvm_inst_rpc
 };
 
 static int fvm_step( struct fvm_state *state ) {

@@ -182,7 +182,7 @@
   drop)
 (defword cr ()
   10 dumpchr)
-(defword tos ()
+(defword tos (:inline t)
   (push r6))
 (defword bos ()
   variable *bottom-of-stack*)
@@ -406,6 +406,22 @@
   #xfe08 !)
 
 ;; -----------------------------------
+
+(defvariable *xdr-offset* 0)
+
+(defword xdr-encode-uint32 () ;; (low high --)
+  variable *xdr-offset* @ bos + @ swap-bytes ! ;; (low)
+  swap-bytes variable *xdr-offset* @ bos + @ !)
+
+(defword xdr-encode-string ()        ;; (addr --)
+  dup dup strlen dup 0 xdr-encode-uint32     ;; (addr addr strlen --)
+  bos variable *xdr-offset* + ;; (addr addr strlen dest-addr)
+  rot ;; (addr dest-addr addr strlen)
+  memcpy ;; (addr)
+  strlen ;; (addr strlen)
+  variable *xdr-offset* @ + ;; (addr strlen+offset)
+  variable *xdr-offset* !
+  drop)
 
 (defmacro defcall (name (program version proc) arg-types res-types)
   `(defword ,name ()

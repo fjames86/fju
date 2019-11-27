@@ -426,6 +426,14 @@ assembled object code."
 			 (.blkw ,var-name)
 			 (ld r0 -2)
 			 (push r0))))
+		    #+nil((eq wrd 'variable-value)
+		     (setf body (cdr body))
+		     (let ((var-name (car body)))
+		       `((br-pnz 1)
+			 (.blkw ,var-name)
+			 (ld r0 -2) ;; get variable address
+			 (ldr r0 r0 0) ;; get variable value
+			 (push r0))))			 
 		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
 		  (if (<= (abs wrd) #xff)

@@ -201,7 +201,7 @@ int freg_next( struct freg_s *freg, uint64_t parentid, uint64_t id, struct freg_
     
     nentry = etry.len / sizeof(uint64_t);
     if( nentry < 0 ) return -1;  
-    if( !nentry ) return 0;
+    if( !nentry ) return -1;
     
     idx = 0;
     getnext = id ? 0 : 1;    

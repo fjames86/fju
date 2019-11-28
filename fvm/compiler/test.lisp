@@ -109,6 +109,22 @@
 (defword test-strlen ()
   "123412345" strlen dumpdec cr)
 
+(defcall rpcbind-call-null (100000 2 0))
+(defcall rpcbind-call-getport (100000 2 3))
+
+(defword test-rpc-success ()
+  fvm::xdr-decode-uint32 if "Port= " dumpstr dumpdec drop else "DecodeUInt32 failed" then cr)
+
+(defword test-rpc ()
+  rpcbind-call-null
+  if "rpcbind.null Success" dumpstr else "rpcbind.null Failure" then
+
+  fvm::xdr-reset
+  123 123 fvm::xdr-encode-uint32 
+  rpcbind-call-getport
+  if "rpcbind.getport Success " dumpstr cr test-rpc-success 
+  else "rpcbind.getport Failure" then)
+
 ;; try a few words 
 (defword test ()
   "hello-world: " dumpstr hello-world cr
@@ -122,8 +138,9 @@
   "test-output2: " dumpstr test-output2 cr
   "test-input: " dumpstr test-input cr
   "test-input: " dumpstr test-input cr
-  "test-sleep: " dumpstr test-sleep cr
-  "test-strlen: " dumpstr test-strlen cr)
+;;  "test-sleep: " dumpstr test-sleep cr
+  "test-strlen: " dumpstr test-strlen cr
+  "test-rpc: " dumpstr test-rpc cr)
 
 (defword test-nohalt ()
   "NoHalt" dumpstr cr)
@@ -137,6 +154,8 @@
 
 (defword infinite-loop ()
   begin true until)
+
+
 
 (defun test ()
   (save-program "test.obj" 'test

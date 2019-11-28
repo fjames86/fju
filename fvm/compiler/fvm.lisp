@@ -312,9 +312,9 @@ assembled object code."
 
 ;; ----------------------------------------------------------
 
-(defparameter *words* nil)
+(defparameter *words* (make-hash-table))
 (defun wordp (name)
-  (assoc name *words*))
+  (gethash name *words*))
 (defun word-deps (name)
   (cadr (wordp name)))
 (defun word-assembly (name)
@@ -477,24 +477,25 @@ NAME ::= symbol naming word
 OPTIONS ::= List of optioins, :inline 
 BODY ::= word definition. List of words or inline assembly.
 " 
-  `(progn
-     (push (make-word ',name (list ,@options)
-	     (append 
-	      ,@(mapcar
-		 (lambda (wrd)
-		   (cond
-		     ((symbolp wrd) `(list ',wrd))
-		     ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
-		     ((stringp wrd) `(list ,wrd)) 
-		     ((not (listp wrd)) (error "Unexpected form ~S" wrd))
-		     ((eq (car wrd) 'lisp) ;; a way of unquoting
-		      (let ((glist (gensym)))
-			`(let ((,glist ,(cadr wrd)))
-			   (if (listp ,glist) ,glist (list ,glist)))))
-		     (t 
-		      `(list ',wrd))))
-		 body)))
-	 *words*)))
+  `(let ((word 
+	  (make-word ',name (list ,@options)
+		     (append 
+		      ,@(mapcar
+			 (lambda (wrd)
+			   (cond
+			     ((symbolp wrd) `(list ',wrd))
+			     ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
+			     ((stringp wrd) `(list ,wrd)) 
+			     ((not (listp wrd)) (error "Unexpected form ~S" wrd))
+			     ((eq (car wrd) 'lisp) ;; a way of unquoting
+			      (let ((glist (gensym)))
+				`(let ((,glist ,(cadr wrd)))
+				   (if (listp ,glist) ,glist (list ,glist)))))
+			     (t 
+			      `(list ',wrd))))
+			 body)))))
+     (setf (gethash ',name *words*) word)
+     word))
 	    
 
 (defparameter *variables* nil)

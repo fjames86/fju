@@ -50,6 +50,10 @@
  * 0xfe00 - 0xffff device registers 
  */
 
+#define FVM_PUSH(fvm,val) do { fvm->mem[fvm->reg[FVM_REG_SP]] = val; fvm->reg[FVM_REG_SP]--; } while( 0 )
+#define FVM_POP(fvm) (fvm->reg[FVM_REG_SP]++, fvm->mem[fvm->reg[FVM_REG_SP]])
+
+
 static uint16_t sign_extend( uint16_t x, int bit_count ) {
   if( (x >> (bit_count - 1)) & 1 ) {
     x |= (0xFFFF << bit_count);
@@ -74,6 +78,7 @@ static void update_flags( struct fvm_state *state, uint16_t x ) {
 #define FVM_DEVICE_INLOG 0xfe06     /* input log register */
 #define FVM_DEVICE_OUTLOG 0xfe07    /* output log register */
 #define FVM_DEVICE_ALARM 0xfe08    /* sleep */
+#define FVM_DEVICE_RPC 0xfe09      /* rpc device */
 
 static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
   if( offset >= 0xfe00 ) {
@@ -97,6 +102,250 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
   }
   return state->mem[offset];    
 }
+
+#define FVM_RPCCMD_RESET  0
+#define FVM_RPCCMD_ENCU32 1
+#define FVM_RPCCMD_ENCU64 2
+#define FVM_RPCCMD_ENCSTR 3
+#define FVM_RPCCMD_ENCOPQ 4
+#define FVM_RPCCMD_ENCFIX 5
+#define FVM_RPCCMD_DECU32 6
+#define FVM_RPCCMD_DECU64 7
+#define FVM_RPCCMD_DECSTR 8
+#define FVM_RPCCMD_DECOPQ 9
+#define FVM_RPCCMD_DECFIX 10
+#define FVM_RPCCMD_CALL   11
+#define FVM_RPCCMD_RES1   12
+#define FVM_RPCCMD_RES2   13
+#define FVM_RPCCMD_RES3   14
+#define FVM_RPCCMD_RES4   15
+
+
+static void rpcdev_donecb( struct xdr_s *res, void *cxt ) {
+  struct fvm_state *fvm = (struct fvm_state *)cxt;
+  int maxlen;
+  
+  fvm->flags |= FVM_FLAG_RUNNING;
+  fvm->flags &= ~FVM_FLAG_RPC;
+  
+  if( !res ) {
+    fvm->reg[FVM_REG_R0] = 0;
+    return;
+  }
+
+  /* copy into fvm memory at bos */
+  maxlen = res->count - res->offset;
+  if( maxlen > FVM_RPC_MAXBUF ) {
+    /* not enough space! return error status */
+    fvm->reg[FVM_REG_R0] = 0;
+    return;
+  }
+
+  fvm->reg[FVM_REG_R0] = -1;
+  memcpy( fvm->rpc.rxtxbuf, res->buf + res->offset, maxlen );
+  fvm->rpc.buf.count = maxlen;
+  fvm->rpc.buf.offset = 0;
+}
+
+static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uint32_t proc ) {
+  int sts, maxlen;
+  struct hrauth_call hcall;
+  struct hrauth_call_opts opts;
+  struct xdr_s args, res;
+    
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = 0; // loopback hostreg_localid();
+  hcall.prog = prog;
+  hcall.vers = vers;
+  hcall.proc = proc;
+  hcall.donecb = rpcdev_donecb;
+  hcall.cxt = fvm;
+  hcall.timeout = 1000;
+  hcall.service = -1; //HRAUTH_SERVICE_PRIV;
+
+  if( fvm->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RPC %u:%u:%u\n", fvm->reg[FVM_REG_PC] - 1, hcall.prog, hcall.vers, hcall.proc );
+  
+  args = fvm->rpc.buf;
+
+  if( rpcdp() ) {
+    /* if running as rpcd then send call and await reply */
+    sts = hrauth_call_udp_async( &hcall, &args, NULL );
+    if( sts ) return sts;
+    
+    /* stop execution, continue when reply received */
+    fvm->flags &= ~FVM_FLAG_RUNNING;
+    fvm->flags |= FVM_FLAG_RPC;
+  } else {
+    /* if not running a rpcd then just make a standard call and block */
+
+    memset( &opts, 0, sizeof(opts) );
+    opts.mask |= HRAUTH_CALL_OPT_TMPBUF;
+    xdr_init( &opts.tmpbuf, malloc( 32*1024 ), 32*1024 );  
+    opts.mask |= HRAUTH_CALL_OPT_PORT;
+    opts.port = 8000; // TODO 
+    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+    if( sts ) {
+      free( opts.tmpbuf.buf );
+      return sts;
+    }
+
+    /* copy into buffer */
+    maxlen = res.count - res.offset;
+    if( maxlen > FVM_RPC_MAXBUF ) {
+      /* not enough space! return error status */
+      return -1;
+    } else {
+      memcpy( fvm->rpc.rxtxbuf, res.buf + res.offset, maxlen );
+      fvm->rpc.buf.count = maxlen;
+      fvm->rpc.buf.offset = 0;
+    }
+    free( opts.tmpbuf.buf );
+  }
+
+  return 0;
+}
+
+static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
+  int sts = 0;
+  uint16_t cmd = (val >> 12) & 0xf;
+
+  switch( cmd ) {
+  case FVM_RPCCMD_RESET:
+    /* reset device */
+    xdr_reset( &fvm->rpc.buf );
+    break;
+  case FVM_RPCCMD_ENCU32:
+    /* encode uint32. (low high --)*/
+    {
+      uint16_t words[2];
+      uint32_t u32;
+      
+      words[0] = FVM_POP(fvm);
+      words[1] = FVM_POP(fvm);
+      u32 = ((uint32_t)words[1] << 16) | words[0];
+      sts = xdr_encode_uint32( &fvm->rpc.buf, u32 );
+    }
+    break;
+  case FVM_RPCCMD_ENCU64:
+    /* encode uint32. (low ... high) */
+    {
+      uint16_t words[4];
+      uint64_t u64;
+      
+      words[0] = FVM_POP(fvm); /* lowest */
+      words[1] = FVM_POP(fvm);
+      words[2] = FVM_POP(fvm);
+      words[3] = FVM_POP(fvm);  /* highest */
+      u64 = ((uint64_t)words[3] << 48) |
+	((uint64_t)words[2] << 32) |
+	((uint64_t)words[1] << 16) |
+	(uint64_t)words[0];
+      sts = xdr_encode_uint64( &fvm->rpc.buf, u64 );
+    }
+    break;    
+  case FVM_RPCCMD_ENCSTR:
+    /* encode string. (addr) */
+    {
+      char *str = (char *)&fvm->mem[FVM_POP(fvm)];
+      sts = xdr_encode_string( &fvm->rpc.buf, str );
+    }
+    break;
+  case FVM_RPCCMD_ENCOPQ:
+    /* encode opqque. (addr len) */
+    {
+      int len;
+      uint8_t *opq;
+      len = FVM_POP(fvm);
+      opq = (uint8_t *)&fvm->mem[FVM_POP(fvm)]; 
+      sts = xdr_encode_opaque( &fvm->rpc.buf, opq, len );
+    }
+    break;
+  case FVM_RPCCMD_ENCFIX:
+    /* encode fixed */
+    {
+      int len;
+      uint8_t *opq;
+      len = FVM_POP(fvm);
+      opq = (uint8_t *)&fvm->mem[FVM_POP(fvm)]; 
+      sts = xdr_encode_fixed( &fvm->rpc.buf, opq, len );
+    }    
+    break;
+  case FVM_RPCCMD_DECU32:
+    /* decode u32. (-- high low) */
+    {
+      uint32_t u32 = 0;
+      sts = xdr_decode_uint32( &fvm->rpc.buf, &u32 );
+      if( !sts ) {
+	FVM_PUSH(fvm, (u32 >> 16) & 0xffff );
+	FVM_PUSH(fvm, u32 & 0xffff );
+      }
+    }
+    break;
+  case FVM_RPCCMD_DECU64:
+    /* decode u64 (-- high ... low */
+    {
+      uint64_t u64 = 0;
+      sts = xdr_decode_uint64( &fvm->rpc.buf, &u64 );
+      if( !sts ) {
+	FVM_PUSH(fvm, (u64 >> 48) & 0xffff );
+	FVM_PUSH(fvm, (u64 >> 32) & 0xffff );
+	FVM_PUSH(fvm, (u64 >> 16) & 0xffff );
+	FVM_PUSH(fvm, u64 & 0xffff );
+      }
+    }
+    break;
+  case FVM_RPCCMD_DECSTR:
+    /* decode string. (addr len --) */
+    {
+      int len;
+      char *str;
+      len = FVM_POP(fvm);
+      str = (char *)&fvm->mem[FVM_POP(fvm)];
+      sts = xdr_decode_string( &fvm->rpc.buf, str, len );
+    }
+    break;
+  case FVM_RPCCMD_DECOPQ:
+    /* decode opaque (addr len -- len) */
+    {
+      int len;
+      uint8_t *ptr;
+      len = FVM_POP(fvm);
+      ptr = (uint8_t *)&fvm->mem[FVM_POP(fvm)];
+      sts = xdr_decode_opaque( &fvm->rpc.buf, ptr, &len );
+      FVM_PUSH(fvm, sts ? 0 : len);      
+    }
+    break;
+  case FVM_RPCCMD_DECFIX:
+    /* decode fixed (addr len)*/
+    {
+      int len;
+      uint8_t *ptr;
+      len = FVM_POP(fvm);
+      ptr = (uint8_t *)&fvm->mem[FVM_POP(fvm)];
+      sts = xdr_decode_fixed( &fvm->rpc.buf, ptr, len );
+    }
+    break;
+  case FVM_RPCCMD_CALL:
+    /* send call, await reply */
+    {
+      uint32_t prog, vers, proc;
+      proc = (uint32_t)FVM_POP(fvm);
+      vers = (uint32_t)FVM_POP(fvm);
+      prog = (uint32_t)FVM_POP(fvm);
+      prog = prog << 16;
+      prog |= (uint32_t)FVM_POP(fvm);
+      sts = rpcdev_call( fvm, prog, vers, proc );
+    }
+    break;
+  default:
+    sts = -1;
+    break;
+  }
+
+  /* push error status */
+  FVM_PUSH(fvm,sts ? 0 : -1);
+}
+
 
 static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) {
   char *addr;
@@ -182,6 +431,9 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	state->flags &= ~FVM_FLAG_RUNNING;
 	state->sleep_timeout = rpc_now() + val;
 	break;
+    case FVM_DEVICE_RPC:
+      devrpc_writemem( state, val );
+      break;
     }
   } else {
     state->mem[offset] = val;
@@ -521,101 +773,11 @@ static void fvm_inst_lea( struct fvm_state *state, uint16_t opcode ) {
   update_flags( state, state->reg[dr] );
 }
 
-#if 1
-
-static void fvm_rpc_donecb( struct xdr_s *res, void *cxt ) {
-  struct fvm_state *fvm = (struct fvm_state *)cxt;
-  int maxlen;
-  
-  fvm->flags |= FVM_FLAG_RUNNING;
-  fvm->flags &= ~FVM_FLAG_RPC;
-  
-  if( !res ) {
-    fvm->reg[FVM_REG_R0] = 0;
-    return;
-  }
-
-  /* copy into fvm memory at bos */
-  maxlen = res->count - res->offset;
-  if( maxlen > 2*(fvm->reg[FVM_REG_SP] - fvm->bos) ) {
-    /* not enough space! return error status */
-    fvm->reg[FVM_REG_R0] = 0;
-    return;
-  }
-
-  fvm->reg[FVM_REG_R0] = -1;
-  memcpy( &fvm->mem[fvm->bos], res->buf + res->offset, maxlen );
-  fvm->reg[FVM_REG_R1] = maxlen;
-  
-}
-
-static void fvm_inst_rpc( struct fvm_state *fvm, uint16_t opcode ) {
-  int sts, maxlen;
-  struct hrauth_call hcall;
-  struct hrauth_call_opts opts;
-  struct xdr_s args, res;
-    
-  memset( &hcall, 0, sizeof(hcall) );
-  hcall.hostid = hostreg_localid();
-  hcall.prog = (((uint32_t)fvm->reg[FVM_REG_R1]) << 16) | fvm->reg[FVM_REG_R2];
-  hcall.vers = fvm->reg[FVM_REG_R3];
-  hcall.proc = fvm->reg[FVM_REG_R4];
-  hcall.donecb = fvm_rpc_donecb;
-  hcall.cxt = fvm;
-  hcall.timeout = 1000;
-  hcall.service = HRAUTH_SERVICE_PRIV;
-
-  if( fvm->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RPC %u:%u:%u\n", fvm->reg[FVM_REG_PC] - 1, hcall.prog, hcall.vers, hcall.proc );
-  
-  xdr_init( &args, (uint8_t *)&fvm->mem[fvm->bos], (uint32_t)fvm->reg[FVM_REG_R0] );
-
-  if( rpcdp() ) {
-    /* if running as rpcd then send call and await reply */
-    
-    sts = hrauth_call_udp_async( &hcall, &args, NULL );
-    if( sts ) {
-      fvm->reg[FVM_REG_R0] = 0;
-      return;
-    }
-    
-    /* stop execution, continue when reply received */
-    fvm->flags &= ~FVM_FLAG_RUNNING;
-    fvm->flags |= FVM_FLAG_RPC;
-  } else {
-    /* if not running a rpcd then just make a standard call and block */
-
-    memset( &opts, 0, sizeof(opts) );
-    opts.mask |= HRAUTH_CALL_OPT_TMPBUF;
-    xdr_init( &opts.tmpbuf, malloc( 32*1024 ), 32*1024 );  
-
-    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
-    if( sts ) {
-      fvm->reg[FVM_REG_R0] = 0;
-      free( opts.tmpbuf.buf );
-      return;
-    }
-
-    maxlen = res.count - res.offset;
-    if( maxlen > 2*(fvm->reg[FVM_REG_SP] - fvm->bos) ) {
-      /* not enough space! return error status */
-      fvm->reg[FVM_REG_R0] = 0;
-    } else {    
-      /* copy result xdr into fvm memory */
-      fvm->reg[FVM_REG_R0] = -1;
-      memcpy( &fvm->mem[fvm->bos], res.buf + res.offset, res.count - res.offset );
-      fvm->reg[FVM_REG_R1] = res.count - res.offset;
-    }
-    free( opts.tmpbuf.buf );
-  }
-
-}
-
-#else
-
+/* reserved opcode */
 static void fvm_inst_res( struct fvm_state *state, uint16_t opcode ) {
   if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RES 0x%x\n", state->reg[FVM_REG_PC] - 1, opcode & 0x0fff );
+  fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
 }
-#endif
 
 typedef void (*fvm_inst_handler_t)( struct fvm_state *state, uint16_t opcode );
 
@@ -635,7 +797,7 @@ static fvm_inst_handler_t inst_handlers[] = {
     fvm_inst_jmp,
     fvm_inst_mul,
     fvm_inst_lea,
-    fvm_inst_rpc
+    fvm_inst_res
 };
 
 static int fvm_step( struct fvm_state *state ) {
@@ -723,6 +885,8 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
 
   fvm_reset( state );
   state->bos = bos;
+
+  xdr_init( &state->rpc.buf, state->rpc.rxtxbuf, FVM_RPC_MAXBUF );
   
   return 0;
 }

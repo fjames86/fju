@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 
+#include <fju/rpc.h>
 #include <fju/log.h>
 
 typedef enum {
@@ -67,6 +68,11 @@ struct fvm_state {
   struct log_s *outlog;
   uint16_t bos;
   uint64_t sleep_timeout;
+  struct {
+    struct xdr_s buf;
+#define FVM_RPC_MAXBUF               4096
+    uint8_t rxtxbuf[FVM_RPC_MAXBUF];
+  } rpc;
 };
 
 int fvm_load( struct fvm_state *state, uint16_t *program, int proglen );

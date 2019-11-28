@@ -22,6 +22,10 @@
 	   #:tick-count #:read-input #:reset-input #:write-output #:2dup #:nop
 	   #:dumpstr-count #:memcpy #:memset #:dumpdec
 	   #:call-load #:call-unload #:call-list #:call-pause #:strlen
-	   #:defcall))
+	   #:defcall #:xdr-reset #:xdr-encode-uint32 #:xdr-encode-uint64
+	   #:xdr-encode-string #:xdr-encode-opaque #:xdr-encode-fixed
+	   #:xdr-decode-uint32 #:xdr-decode-uint64 #:xdr-decode-string
+	   #:xdr-decode-opaque #:xdr-decode-fixed #:rpc-call
+	   ))
 	   
    

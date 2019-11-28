@@ -295,19 +295,19 @@ assembled object code."
     (second-pass instructions ltab)))
 
 (defun %save-program (stream objs)
-    (dolist (obj objs)
-      (destructuring-bind (offset data) obj
-	;; write object header (just offset and count)
-	(let ((tmp (make-array 4 :element-type '(unsigned-byte 8))))
-	  (setf (nibbles:ub16ref/le tmp 0) offset
-		(nibbles:ub16ref/le tmp 2) (length data))
-	  (write-sequence tmp stream))
-	;; write object data 
-	(let ((octets (make-array (* 2 (length data))
-				  :element-type '(unsigned-byte 8))))
-	  (dotimes (i (length data))
-	    (setf (nibbles:ub16ref/le octets (* 2 i)) (nth i data)))
-	  (write-sequence octets stream)))))
+  (dolist (obj objs)
+    (destructuring-bind (offset data) obj
+      ;; write object header (just offset and count)
+      (let ((tmp (make-array 4 :element-type '(unsigned-byte 8))))
+	(setf (nibbles:ub16ref/le tmp 0) offset
+	      (nibbles:ub16ref/le tmp 2) (length data))
+	(write-sequence tmp stream))
+      ;; write object data 
+      (let ((octets (make-array (* 2 (length data))
+				:element-type '(unsigned-byte 8))))
+	(dotimes (i (length data))
+	  (setf (nibbles:ub16ref/le octets (* 2 i)) (nth i data)))
+	(write-sequence octets stream)))))
 
 
 ;; ----------------------------------------------------------
@@ -320,13 +320,14 @@ assembled object code."
 (defun word-assembly (name)
   (caddr (wordp name)))
 (defun word-dependencies (body)
-  (remove-duplicates
-   (mapcan (lambda (wrd)
-	     (when (and (symbolp wrd) (wordp wrd))
-	       (if (word-inline-p wrd)
-		   (word-deps wrd)
-		   (list wrd))))
-	   body)))
+  (let ((deps nil))
+    (dolist (word body)
+      (when (and (symbolp word) (wordp word))
+	(if (word-inline-p word)
+	    (dolist (w (word-deps word))
+	      (pushnew w deps))
+	    (pushnew word deps))))
+    deps))
 (defun word-options (name)
   (cadddr (wordp name)))
 (defun word-inline-p (name)
@@ -366,13 +367,14 @@ assembled object code."
 			       else-words (take-words '(then)))
 			 (when (null body) (error "IF ELSE expects THEN")))
 		       (unless (eq (car body) 'then) (error "IF expects THEN"))
-		       `((pop r0) ;; sets flags automatically 
-			 (br-z ,else-label)
-			 ,@(generate-word-assembly if-words)
-			 (br-pnz ,then-label)
-			 ,else-label
-			 ,@(generate-word-assembly else-words)
-			 ,then-label)))
+		       (apply #'list
+			      `((pop r0) ;; sets flags automatically 
+				(br-z ,else-label)
+				,@(generate-word-assembly if-words)
+				(br-pnz ,then-label)
+				,else-label
+				,@(generate-word-assembly else-words)
+				,then-label))))
 		    ((eq wrd 'do) ;; 10 0 do body-word loop
 		     (setf body (cdr body))
 		     (let ((start-label (gensym))
@@ -382,80 +384,88 @@ assembled object code."
 		       (setf body-words (take-words '(loop +loop)))
 		       (unless (member (car body) '(loop +loop)) (error "DO expects LOOP or +LOOP"))
 		       (when (eq (car body) '+loop) (setf +loop-p t))
-		       `((pop r0) ;; start index 
-			 (pop r1) ;; max counter
-			 (br-pnz 1)
-			 (.blkw ,end-label)
-			 (ld r2 -2) ;; push end label address to return stack 
-			 (rpush r2)			 
-			 (rpush r1) ;; push loop max onto return stack 
-			 (rpush r0) ;; push loop counter onto return stack
-			 ,start-label
-			 (rpop r0) ;; load current loop index
-			 (rpop r1)
-			 (cmp r2 r0 r1) ;; compare with max counter
-			 (br-pz ,end-label)
-			 (rpush r1) 
-			 (rpush r0) ;; restore loop index and max 
-			 ,@(generate-word-assembly body-words)
-			 ;; increment loop index
-			 (rpop r0)
-			 ,@(if +loop-p
-			       `((pop r1)
-				 (add r0 r0 r1))
-			       `((add r0 r0 1)))
-			 (rpush r0) ;; store updated loop index 
-			 (br-pnz ,start-label)
-			 ,end-label
-			 ;; drop end label address from stack 
-			 (rpop r0))))
+		       (apply #'list
+			      `((pop r0) ;; start index 
+				(pop r1) ;; max counter
+				(br-pnz 1)
+				(.blkw ,end-label)
+				(ld r2 -2) ;; push end label address to return stack 
+				(rpush r2)			 
+				(rpush r1) ;; push loop max onto return stack 
+				(rpush r0) ;; push loop counter onto return stack
+				,start-label
+				(rpop r0) ;; load current loop index
+				(rpop r1)
+				(cmp r2 r0 r1) ;; compare with max counter
+				(br-pz ,end-label)
+				(rpush r1) 
+				(rpush r0) ;; restore loop index and max 
+				,@(generate-word-assembly body-words)
+				;; increment loop index
+				(rpop r0)
+				,@(if +loop-p
+				      (list '(pop r1)
+					    '(add r0 r0 r1))
+				      (list '(add r0 r0 1)))
+				(rpush r0) ;; store updated loop index 
+				(br-pnz ,start-label)
+				,end-label
+				;; drop end label address from stack 
+				(rpop r0)))))
 		    ((eq wrd 'begin)
 		     (setf body (cdr body))
 		     (let ((begin-words nil)
 			   (start-label (gensym)))
 		       (setf begin-words (take-words '(until)))
 		       (unless (eq (car body) 'until) (error "BEGIN expects UNTIL"))
-		       `(,start-label
-			 ,@(generate-word-assembly begin-words)
-			 (pop r0) ;; sets flags automatically 
-			 (br-pn ,start-label))))
+		       (apply #'list
+			      `(,start-label
+				,@(generate-word-assembly begin-words)
+				(pop r0) ;; sets flags automatically 
+				(br-pn ,start-label)))))
 		    ((eq wrd 'variable)
 		     (setf body (cdr body))
 		     (let ((var-name (car body)))
-		       `((br-pnz 1)
-			 (.blkw ,var-name)
-			 (ld r0 -2)
-			 (push r0))))
+		       (apply #'list
+			      `((br-pnz 1)
+				(.blkw ,var-name)
+				(ld r0 -2)
+				(push r0)))))
 		    #+nil((eq wrd 'variable-value)
-		     (setf body (cdr body))
-		     (let ((var-name (car body)))
-		       `((br-pnz 1)
-			 (.blkw ,var-name)
-			 (ld r0 -2) ;; get variable address
-			 (ldr r0 r0 0) ;; get variable value
-			 (push r0))))			 
+			  (setf body (cdr body))
+			  (let ((var-name (car body)))
+			    (apply #'list
+				   `((br-pnz 1)
+				     (.blkw ,var-name)
+				     (ld r0 -2) ;; get variable address
+				     (ldr r0 r0 0) ;; get variable value
+				     (push r0)))))
 		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
 		  (if (<= (abs wrd) #xff)
-		      `((ldi r0 ,wrd) ;; load 8 bit immediates directly 
-			(push r0))
-		      `((br-pnz 1) ;; skip immediate value and load it 
-			(.blkw ,wrd)
-			(ld r0 -2)
-			(push r0))))
+		      (apply #'list 
+			     `((ldi r0 ,wrd) ;; load 8 bit immediates directly 
+			       (push r0)))
+		      (apply #'list
+			     `((br-pnz 1) ;; skip immediate value and load it 
+			       (.blkw ,wrd)
+			       (ld r0 -2)
+			       (push r0)))))
 		 ((characterp wrd)
 		  (let ((code (char-code wrd)))
-		    `((ldi r0 ,(logand code #x7f))
-		      (push r0))))
+		    (apply #'list
+			   `((ldi r0 ,(logand code #x7f))
+			     (push r0)))))
 		 ((stringp wrd)
 		  (let ((lbl (gensym))
 			(strlbl (gensym)))
-		    `((br-pnz ,lbl)
-		      ,strlbl
-		      (.string ,wrd)
-		      ,lbl
-		      (lea r0 ,strlbl)
-		      (push r0))))
+		    (apply #'list
+			   `((br-pnz ,lbl)
+			     ,strlbl
+			     (.string ,wrd)
+			     ,lbl
+			     (lea r0 ,strlbl)
+			     (push r0)))))
 		 ((listp wrd)
 		  ;; if wrd is a list it is assembly instruction
 		  (list wrd))
@@ -476,26 +486,26 @@ assembled object code."
 NAME ::= symbol naming word 
 OPTIONS ::= List of optioins, :inline 
 BODY ::= word definition. List of words or inline assembly.
-" 
-  `(let ((word 
-	  (make-word ',name (list ,@options)
-		     (append 
-		      ,@(mapcar
-			 (lambda (wrd)
-			   (cond
-			     ((symbolp wrd) `(list ',wrd))
-			     ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
-			     ((stringp wrd) `(list ,wrd)) 
-			     ((not (listp wrd)) (error "Unexpected form ~S" wrd))
-			     ((eq (car wrd) 'lisp) ;; a way of unquoting
-			      (let ((glist (gensym)))
-				`(let ((,glist ,(cadr wrd)))
-				   (if (listp ,glist) ,glist (list ,glist)))))
-			     (t 
-			      `(list ',wrd))))
-			 body)))))
-     (setf (gethash ',name *words*) word)
-     word))
+"
+  (let ((gword (gensym)))
+    `(let ((,gword 
+	    (make-word ',name (list ,@options)
+		       (append 
+			,@(mapcar
+			   (lambda (wrd)
+			     (cond
+			       ((symbolp wrd) `(list ',wrd))
+			       ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
+			       ((stringp wrd) `(list ,wrd)) 
+			       ((not (listp wrd)) (error "Unexpected form ~S" wrd))
+			       ((eq (car wrd) 'lisp) ;; a way of unquoting
+				(let ((glist (gensym)))
+				  `(let ((,glist ,(cadr wrd)))
+				     (if (listp ,glist) ,glist (list ,glist)))))
+			       (t 
+				`(list ',wrd))))
+			   body)))))
+       (setf (gethash ',name *words*) ,gword))))
 	    
 
 (defparameter *variables* nil)

@@ -109,18 +109,18 @@
 (defword test-strlen ()
   "123412345" strlen dumpdec cr)
 
-(defcall rpcbind-call-null (100000 2 0))
-(defcall rpcbind-call-getport (100000 2 3))
+;;(defcall rpcbind-call-null (100000 2 0))
+;;(defcall rpcbind-call-getport (100000 2 3))
 
-(defword test-rpc-success ()
-  fvm::xdr-decode-uint32 if "Port= " dumpstr dumpdec drop else "DecodeUInt32 failed" then cr)
+#+nil(defword test-rpc-success ()
+ xdr-decode-uint32 if "Port= " dumpstr dumpdec drop else "DecodeUInt32 failed" then cr)
 
 (defword test-rpc ()
   rpcbind-call-null
-  if "rpcbind.null Success" dumpstr else "rpcbind.null Failure" then
+  if "rpcbind.null Success" dumpstr else "rpcbind.null Failure" then cr 
 
-  fvm::xdr-reset
-  123 123 fvm::xdr-encode-uint32 
+  xdr-reset
+  123 123 xdr-encode-uint32 
   rpcbind-call-getport
   if "rpcbind.getport Success " dumpstr cr test-rpc-success 
   else "rpcbind.getport Failure" then)

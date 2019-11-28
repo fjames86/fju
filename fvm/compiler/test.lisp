@@ -109,10 +109,10 @@
 (defword test-strlen ()
   "123412345" strlen dumpdec cr)
 
-;;(defcall rpcbind-call-null (100000 2 0))
-;;(defcall rpcbind-call-getport (100000 2 3))
+(defcall rpcbind-call-null (100000 2 0))
+(defcall rpcbind-call-getport (100000 2 3))
 
-#+nil(defword test-rpc-success ()
+(defword test-rpc-success ()
  xdr-decode-uint32 if "Port= " dumpstr dumpdec drop else "DecodeUInt32 failed" then cr)
 
 (defword test-rpc ()

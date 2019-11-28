@@ -426,13 +426,14 @@
   (def-rpcdev-cmd xdr-decode-fixed 10)
   (def-rpcdev-cmd rpc-call 11))
 
-(defmacro defcall (name (program version proc))
+(defmacro defcall (name (program version proc) &body body)
   `(defword ,name ()
      (lisp (list (logand ,program #xffff)
 		 (logand (ash ,program -16) #xffff)
 		 (logand ,version #xffff)
 		 (logand ,proc #xffff)))
-     rpc-call))
+     rpc-call
+     ,@body))
 
 
 ;; ------------------ Interrupts --------------------

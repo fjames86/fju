@@ -333,18 +333,24 @@ assembled object code."
 (defun word-inline-p (name)
   (getf (word-options name) :inline nil))
 
+
 (defun generate-word-assembly (body)
   (do ((body body (cdr body))
        (asm nil))
       ((null body) (nreverse asm))
-    (labels ((take-words (end-words)
+    (labels ((take-words (start-word end-words)
 	       (let ((words nil))
 		 (do ()
 		     ((or (member (car body) end-words)
 			  (null body)))
-		   (push (car body) words)
-		   (setf body (cdr body)))
-		 (nreverse words)))     
+		   (cond
+		     ((eq (car body) start-word)
+		      ;; get nested words, expand to assembly and return these
+		      (error "Nested ~S not yet supported. Move contents to external word" start-word))
+		     (t 
+		      (push (car body) words)
+		      (setf body (cdr body)))))
+		 (nreverse words)))
 	     (expand-word-asm (wrd)
 	       (cond
 		 ((symbolp wrd)
@@ -360,112 +366,103 @@ assembled object code."
 			   (else-label (gensym))
 			   (then-label (gensym)))
 		       ;; extract if-words
-		       (setf if-words (take-words '(else then)))
+		       (setf if-words (take-words 'if '(else then)))
 		       (when (null body) (error "IF expects THEN"))
 		       (when (eq (car body) 'else)
 			 (setf body (cdr body)
-			       else-words (take-words '(then)))
+			       else-words (take-words 'else '(then)))
 			 (when (null body) (error "IF ELSE expects THEN")))
 		       (unless (eq (car body) 'then) (error "IF expects THEN"))
-		       (apply #'list
-			      `((pop r0) ;; sets flags automatically 
-				(br-z ,else-label)
-				,@(generate-word-assembly if-words)
-				(br-pnz ,then-label)
-				,else-label
-				,@(generate-word-assembly else-words)
-				,then-label))))
+		       `((pop r0) ;; sets flags automatically 
+			 (br-z ,else-label)
+			 ,@(generate-word-assembly if-words)
+			 (br-pnz ,then-label)
+			 ,else-label
+			 ,@(generate-word-assembly else-words)
+			 ,then-label)))
 		    ((eq wrd 'do) ;; 10 0 do body-word loop
 		     (setf body (cdr body))
 		     (let ((start-label (gensym))
 			   (end-label (gensym))
 			   (body-words nil)
 			   (+loop-p nil))
-		       (setf body-words (take-words '(loop +loop)))
+		       (setf body-words (take-words 'do '(loop +loop)))
 		       (unless (member (car body) '(loop +loop)) (error "DO expects LOOP or +LOOP"))
 		       (when (eq (car body) '+loop) (setf +loop-p t))
-		       (apply #'list
-			      `((pop r0) ;; start index 
-				(pop r1) ;; max counter
-				(br-pnz 1)
-				(.blkw ,end-label)
-				(ld r2 -2) ;; push end label address to return stack 
-				(rpush r2)			 
-				(rpush r1) ;; push loop max onto return stack 
-				(rpush r0) ;; push loop counter onto return stack
-				,start-label
-				(rpop r0) ;; load current loop index
-				(rpop r1)
-				(cmp r2 r0 r1) ;; compare with max counter
-				(br-pz ,end-label)
-				(rpush r1) 
-				(rpush r0) ;; restore loop index and max 
-				,@(generate-word-assembly body-words)
-				;; increment loop index
-				(rpop r0)
-				,@(if +loop-p
-				      (list '(pop r1)
-					    '(add r0 r0 r1))
-				      (list '(add r0 r0 1)))
-				(rpush r0) ;; store updated loop index 
-				(br-pnz ,start-label)
-				,end-label
-				;; drop end label address from stack 
-				(rpop r0)))))
+		       `((pop r0) ;; start index 
+			 (pop r1) ;; max counter
+			 (br-pnz 1)
+			 (.blkw ,end-label)
+			 (ld r2 -2) ;; push end label address to return stack 
+			 (rpush r2)			 
+			 (rpush r1) ;; push loop max onto return stack 
+			 (rpush r0) ;; push loop counter onto return stack
+			 ,start-label
+			 (rpop r0) ;; load current loop index
+			 (rpop r1)
+			 (cmp r2 r0 r1) ;; compare with max counter
+			 (br-pz ,end-label)
+			 (rpush r1) 
+			 (rpush r0) ;; restore loop index and max 
+			 ,@(generate-word-assembly body-words)
+			 ;; increment loop index
+			 (rpop r0)
+			 ,@(if +loop-p
+			       (list '(pop r1)
+				     '(add r0 r0 r1))
+			       (list '(add r0 r0 1)))
+			 (rpush r0) ;; store updated loop index 
+			 (br-pnz ,start-label)
+			 ,end-label
+			 ;; drop end label address from stack 
+			 (rpop r0))))
 		    ((eq wrd 'begin)
 		     (setf body (cdr body))
 		     (let ((begin-words nil)
 			   (start-label (gensym)))
-		       (setf begin-words (take-words '(until)))
+		       (setf begin-words (take-words 'begin '(until)))
 		       (unless (eq (car body) 'until) (error "BEGIN expects UNTIL"))
-		       (apply #'list
-			      `(,start-label
-				,@(generate-word-assembly begin-words)
-				(pop r0) ;; sets flags automatically 
-				(br-pn ,start-label)))))
+		       `(,start-label
+			 ,@(generate-word-assembly begin-words)
+			 (pop r0) ;; sets flags automatically 
+			 (br-pn ,start-label))))
 		    ((eq wrd 'variable)
 		     (setf body (cdr body))
 		     (let ((var-name (car body)))
-		       (apply #'list
-			      `((br-pnz 1)
-				(.blkw ,var-name)
-				(ld r0 -2)
-				(push r0)))))
+		       `((br-pnz 1)
+			 (.blkw ,var-name)
+			 (ld r0 -2)
+			 (push r0))))
 		    #+nil((eq wrd 'variable-value)
 			  (setf body (cdr body))
 			  (let ((var-name (car body)))
-			    (apply #'list
-				   `((br-pnz 1)
-				     (.blkw ,var-name)
-				     (ld r0 -2) ;; get variable address
-				     (ldr r0 r0 0) ;; get variable value
-				     (push r0)))))
+			    `((br-pnz 1)
+			      (.blkw ,var-name)
+			      (ld r0 -2) ;; get variable address
+			      (ldr r0 r0 0) ;; get variable value
+			      (push r0))))
 		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
 		  (if (<= (abs wrd) #xff)
-		      (apply #'list 
-			     `((ldi r0 ,wrd) ;; load 8 bit immediates directly 
-			       (push r0)))
-		      (apply #'list
-			     `((br-pnz 1) ;; skip immediate value and load it 
-			       (.blkw ,wrd)
-			       (ld r0 -2)
-			       (push r0)))))
+		      `((ldi r0 ,wrd) ;; load 8 bit immediates directly 
+			(push r0))
+		      `((br-pnz 1) ;; skip immediate value and load it 
+			(.blkw ,wrd)
+			(ld r0 -2)
+			(push r0))))
 		 ((characterp wrd)
 		  (let ((code (char-code wrd)))
-		    (apply #'list
-			   `((ldi r0 ,(logand code #x7f))
-			     (push r0)))))
+		    `((ldi r0 ,(logand code #x7f))
+		      (push r0))))
 		 ((stringp wrd)
 		  (let ((lbl (gensym))
 			(strlbl (gensym)))
-		    (apply #'list
-			   `((br-pnz ,lbl)
-			     ,strlbl
-			     (.string ,wrd)
-			     ,lbl
-			     (lea r0 ,strlbl)
-			     (push r0)))))
+		    `((br-pnz ,lbl)
+		      ,strlbl
+		      (.string ,wrd)
+		      ,lbl
+		      (lea r0 ,strlbl)
+		      (push r0))))
 		 ((listp wrd)
 		  ;; if wrd is a list it is assembly instruction
 		  (list wrd))

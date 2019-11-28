@@ -125,6 +125,12 @@
   if "rpcbind.getport Success " dumpstr cr test-rpc-success 
   else "rpcbind.getport Failure" then)
 
+(defword bobby ()
+  12 if 12 if "fred" dumpstr then then)
+
+
+  
+
 ;; try a few words 
 (defword test ()
   "hello-world: " dumpstr hello-world cr

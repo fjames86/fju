@@ -51,6 +51,9 @@ struct mmf_s {
 };
 
 int mmf_open( char *path, struct mmf_s *mmf );
+#define MMF_OPEN_ALWAYS   0x0000
+#define MMF_OPEN_EXISTING 0x0001
+int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags );
 int mmf_close( struct mmf_s *mmf );
 int mmf_lock( struct mmf_s *mmf );
 int mmf_unlock( struct mmf_s *mmf );

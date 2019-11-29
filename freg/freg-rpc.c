@@ -16,9 +16,16 @@ static int freg_proc_null( struct rpc_inc *inc ) {
 
 static int freg_check_auth = 1;
 static int freg_authenticated( struct rpc_inc *inc ) {
-    if( !freg_check_auth ) return 1;
-    if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) return 0;
+  if( !freg_check_auth ) {
+    log_writef( NULL, LOG_LVL_INFO, "freg_authenticated freg_check_auth=true ignoring auth" );
     return 1;
+  }
+  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
+    log_writef( NULL, LOG_LVL_INFO, "freg_authenticated flavour=%d rejecting", inc->msg.u.call.auth.flavour );
+    return 0;
+  }
+  log_writef( NULL, LOG_LVL_INFO, "freg_authencticated allowing" );
+  return 1;
 }
 
 static int freg_proc_list( struct rpc_inc *inc ) {

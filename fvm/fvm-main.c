@@ -41,10 +41,20 @@
 static void usage( char *fmt, ... ) {
   va_list args;
   
-  printf( "fvm -p program\n"
+  printf( "fvm program\n"
 	  "     [-v] [-n nsteps] [-t timeout]\n"
 	  "     [-i inlog-path] [-o outlog-path]\n"
-	  "     [-w word] [-wa arg]* [-wr int|string]\n" );
+	  "     [-w word] [-wa arg]* [-wr int|string]\n"
+	  "\n"
+	  "  Where:\n"
+	  "     -v [-v]            Verbose mode\n"
+	  "     -n nsteps          Limit runtime by number of clock ticks.\n"
+	  "     -t timeout         Limit runtime by number of milliseconds.\n"
+	  "     -i inlog -o outlog Set in/out log files.\n"
+	  "     -w word            Start at a given word index\n"
+	  "     -wa arg            Push arg onto stack (use with -w)\n"
+	  "     -wr int|string     Pop result value from stack and print (use with -w)\n"
+	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
     printf( "Error: " );
@@ -83,12 +93,16 @@ int main( int argc, char **argv ) {
   uint64_t start, end;
   
   i = 1;
+  if( i >= argc ) usage( NULL );
+  if( (strcmp( argv[i], "-h" ) == 0) ||
+      (strcmp( argv[i], "--help" ) == 0) ) {
+    usage( NULL );
+  }
+  
+  path = argv[i];
+  i++;
   while( i < argc ) {
-    if( strcmp( argv[i], "-p" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      path = argv[i];
-    } else if( strcmp( argv[i], "-v" ) == 0 ) {
+    if( strcmp( argv[i], "-v" ) == 0 ) {
       glob.verbose++;
     } else if( strcmp( argv[i], "-n" ) == 0 ) {
       i++;
@@ -140,9 +154,9 @@ int main( int argc, char **argv ) {
     i++;
   }
   if( path == NULL ) usage( NULL );
-	
-  sts = mmf_open( path, &mmf );
-  if( sts ) usage( "Failed to open program" );
+  
+  sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) usage( "Failed to open program file \"%s\"", path );
   sts = mmf_remap( &mmf, mmf.fsize );
   if( sts ) usage( "Failed to map program" );
   sts = fvm_load( &glob.fvm, mmf.file, mmf.fsize / 2 );

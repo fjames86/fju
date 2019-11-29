@@ -109,7 +109,7 @@ static struct clt_info clt_procs[] = {
     { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
-    { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS [u32=*] [u64=*] [str=*] [opaque-file=*]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH [autounload=false] [inlog=INLOGID] [outlog=OUTLOGID]" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 2, fvm_unload_args, fvm_unload_results, "fvm.unload", "id=ID" },
@@ -948,7 +948,10 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
   uint64_t parentid = 0;
   char *name = NULL;
-  uint32_t flags;
+  uint32_t flags, u32;
+  uint64_t u64;
+  char *bufp = NULL;
+  int len = 0;
   
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
@@ -957,7 +960,30 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     } else if( strcmp( argname, "name" ) == 0 ) {
       name = argval;
     } else if( strcmp( argname, "flags" ) == 0 ) {
-      flags = strtoul( argval, NULL, 16 );      
+      flags = strtoul( argval, NULL, 16 );
+    } else if( strcmp( argname, "u32" ) == 0 ) {
+      u32 = strtoul( argval, NULL, 10 );
+      bufp = (char *)&u32;
+      len = 4;
+    } else if( strcmp( argname, "u64" ) == 0 ) {
+      u64 = strtoull( argval, NULL, 16 );
+      bufp = (char *)&u64;
+      len = 8;
+    } else if( strcmp( argname, "str" ) == 0 ) {
+      bufp = argval;
+      len = strlen( argval );
+    } else if( strcmp( argname, "opaque-file" ) == 0 ) {
+      struct mmf_s mmf;
+      int sts;
+      
+      sts = mmf_open2( argval, &mmf, MMF_OPEN_EXISTING );
+      if( sts ) usage( "Failed to open file \"%s\"", argval );
+      sts = mmf_remap( &mmf, mmf.fsize );
+      if( sts ) usage( "Failed to map file" );
+      bufp = malloc( mmf.fsize );
+      len = mmf.fsize;
+      memcpy( bufp, mmf.file, mmf.fsize );
+      mmf_close( &mmf );
     } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
@@ -966,7 +992,7 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_uint64( xdr, parentid );
   xdr_encode_string( xdr, name );
   xdr_encode_uint32( xdr, flags );
-  xdr_encode_opaque( xdr, NULL, 0 );
+  xdr_encode_opaque( xdr, (uint8_t *)bufp, len );
 }
 
 static void freg_rem_results( struct xdr_s *xdr ) {

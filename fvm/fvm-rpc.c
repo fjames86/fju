@@ -293,20 +293,32 @@ static void load_startup_prog( struct freg_entry *entry ) {
 	sts = freg_get_by_name( NULL, id, "path", FREG_TYPE_STRING, path, sizeof(path), NULL );
 	if( sts ) return;
 
-	mmf_open( path, &mmf );
-	mmf_remap( &mmf, mmf.fsize );
-	
-	progdata = malloc( mmf.fsize );
-	proglen = mmf.fsize;
+	sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+	if( sts ) {
+	  log_writef( NULL, LOG_LVL_ERROR, "mmf_open2 failed \"%s\"", path );
+	} else {
+	  sts = mmf_remap( &mmf, mmf.fsize );
+	  if( sts ) {
+	    log_writef( NULL, LOG_LVL_ERROR, "mmf_remap failed" );
+	  } else {
+	    progdata = malloc( mmf.fsize );
+	    proglen = mmf.fsize;
 	    
-	memcpy( progdata, mmf.file, mmf.fsize );
-	mmf_close( &mmf );
-	    
+	    memcpy( progdata, mmf.file, mmf.fsize );
+	  }
+	  
+	  mmf_close( &mmf );
+	}
     } else {
 	/* load from program data directly */
         proglen = len;
 	progdata = malloc( proglen );
 	sts = freg_get_by_name( NULL, id, "progdata", FREG_TYPE_OPAQUE, progdata, proglen, &proglen );
+	if( sts ) {
+	  log_writef( NULL, LOG_LVL_ERROR, "Unexpected failure reading progdata" );
+	  free( progdata );
+	  return;
+	}
     }
     if( !progdata ) return;
     

@@ -44,16 +44,19 @@
 #endif
 
 #ifdef WIN32
-int mmf_open( char *path, struct mmf_s *mmf ) {
+int mmf_open( char *path, struct mmf_s *mmf, uint32_t flags ) {
 
 	memset( mmf, 0, sizeof(*mmf) );
 
-	mmf->fd = CreateFileA( path, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+	mmf->fd = CreateFileA( path, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, flags & MMF_OPEN_EXISTING ? OPEN_EXISTING : OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
 	if( mmf->fd == INVALID_HANDLE_VALUE ) return -1;
 
 	mmf->fsize = (int)GetFileSize( mmf->fd, NULL );
 	
 	return 0;
+}
+int mmf_open( char *path, struct mmf_s *mmf ) {
+  return mmf_open2( path, mmf, 0 );
 }
 
 int mmf_close( struct mmf_s *mmf ) {
@@ -192,12 +195,15 @@ int mmf_truncate( struct mmf_s *mmf, int size ) {
 }
 
 #else
-int mmf_open( char *path, struct mmf_s *mmf ) {
+int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 	memset( mmf, 0, sizeof(*mmf) );
-	mmf->fd = open( path, O_RDWR|O_CREAT, 0600 );
+	mmf->fd = open( path, O_RDWR|(flags & MMF_OPEN_EXISTING ? 0 : O_CREAT), 0600 );
 	if( mmf->fd < 0 ) return -1;
 	mmf->fsize = lseek( mmf->fd, 0, SEEK_END );
 	return 0;
+}
+int mmf_open( char *path, struct mmf_s *mmf ) {
+  return mmf_open2( path, mmf, 0 );
 }
 
 int mmf_close( struct mmf_s *mmf ) {

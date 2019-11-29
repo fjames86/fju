@@ -201,6 +201,7 @@ static int fvm_proc_pause( struct rpc_inc *inc ) {
 	  else if( stop == 2 ) {
 	      /* reset */
 	      fvm_reset( &lf->fvm );
+	      lf->fvm.flags |= FVM_FLAG_RUNNING;
 	  } else {
 	      /* other */
 	  }
@@ -231,6 +232,9 @@ static struct rpc_program fvm_prog = {
   NULL, FVM_RPC_PROG, &fvm_vers
 };
 
+void fvm_rpc_force_iter( void ) {
+  fvm_iter.timeout = 0;
+}
 
 static void fvm_iter_cb( struct rpc_iterator *iter ) {
   struct loaded_fvm *lf, *prev, *next;

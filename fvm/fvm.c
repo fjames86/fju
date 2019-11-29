@@ -120,13 +120,15 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 #define FVM_RPCCMD_RES3   14
 #define FVM_RPCCMD_RES4   15
 
+void fvm_rpc_force_iter( void );
 
 static void rpcdev_donecb( struct xdr_s *res, void *cxt ) {
   struct fvm_state *fvm = (struct fvm_state *)cxt;
   int maxlen;
-  
+
   fvm->flags |= FVM_FLAG_RUNNING;
   fvm->flags &= ~FVM_FLAG_RPC;
+  fvm_rpc_force_iter();
   
   if( !res ) {
     fvm->reg[FVM_REG_R0] = 0;
@@ -169,6 +171,7 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
 
   if( rpcdp() ) {
     /* if running as rpcd then send call and await reply */
+    hcall.hostid = hostreg_localid();
     sts = hrauth_call_udp_async( &hcall, &args, NULL );
     if( sts ) return sts;
     
@@ -926,7 +929,7 @@ int fvm_reset( struct fvm_state *fvm ) {
     fvm->reg[FVM_REG_SP] = 0xfdff;
     fvm->reg[FVM_REG_RP] = 0x2fff;
     fvm->reg[FVM_REG_PSR] = FVM_PSR_ZERO;
-    fvm->flags |= FVM_FLAG_RUNNING;
+    fvm->flags = FVM_FLAG_RUNNING;
     fvm->flags &= ~FVM_FLAG_DONE;
 
   return 0;

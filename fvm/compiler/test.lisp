@@ -85,6 +85,7 @@
     write-output-binary))
 
 (defword test-output2 ()
+  bobby 
   "HelloWorld2" write-output)
 
 (defvariable *input-buffer* 0 32) ;; allocate 32 words (64 bytes) buffer space

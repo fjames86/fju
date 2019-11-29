@@ -283,6 +283,14 @@ int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, stru
     return -1;
 }
 
+uint64_t freg_id_by_name( struct freg_s *freg, char *name, uint64_t *parentidp ) {
+  int sts;
+  struct freg_entry entry;
+  sts = freg_entry_by_name( freg, 0, name, &entry, parentidp );
+  if( sts ) return 0;
+  return entry.id;
+}
+
 int freg_get( struct freg_s *freg, uint64_t id, uint32_t *flags, char *buf, int len, int *lenp ) {
     int sts, nbytes, size;
     struct entry_s e;

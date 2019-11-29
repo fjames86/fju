@@ -220,3 +220,5 @@ fvm_call_word
 fvm_register
 fvm_interrupt
 rpcdp
+freg_id_by_name
+fvm_load_freg

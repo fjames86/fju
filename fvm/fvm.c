@@ -892,6 +892,28 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
   return 0;
 }
 
+int fvm_load_freg( struct fvm_state *fvm, uint64_t hreg ) {
+  int sts;
+  uint32_t flags;
+  char *buf;
+  int len;
+  
+  sts = freg_get( NULL, hreg, &flags, NULL, 0, &len );
+  if( sts ) return sts;
+  if( (flags & FREG_TYPE_MASK) != FREG_TYPE_OPAQUE ) return -1;
+
+  buf = malloc( len );
+  sts = freg_get( NULL, hreg, NULL, buf, len, NULL );
+  if( sts ) {
+    free( buf );
+    return -1;
+  }
+
+  fvm_load( fvm, (uint16_t *)buf, len / 2 );
+  free( buf );
+  return 0;
+}
+
 int fvm_reset( struct fvm_state *fvm ) {
     int i;
     

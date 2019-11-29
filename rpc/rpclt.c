@@ -1058,7 +1058,7 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   
   if( !filepath ) usage( "Need program" );
   
-  sts = mmf_open( filepath, &mmf );
+  sts = mmf_open2( filepath, &mmf, MMF_OPEN_EXISTING );
   if( sts ) usage( "Failed to open program" );
   sts = mmf_remap( &mmf, mmf.fsize );
   if( sts ) usage( "Failed to map program" );

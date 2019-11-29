@@ -508,27 +508,41 @@ BODY ::= word definition. List of words or inline assembly.
 (defparameter *variables* nil)
 (defun make-variable (name size &optional initial-contents)
   (list name size initial-contents))
+(defun %define-variable (var)
+  (dolist (v *variables*)
+    (when (eq (car v) (car var))
+      (setf (cdr v) (cdr var))
+      (return-from %define-variable nil)))
+  (push var *variables*))
 (defmacro defvariable (name initial-contents &optional size)
   "Define a global variable. 
 NAME ::= symbol naming global.
 INITIAL-CONTENTS ::= integer, list of integers or string
 " 
-  `(push (make-variable ',name ,size ,initial-contents) *variables*))
+  `(%define-variable (make-variable ',name ,size ,initial-contents)))
 
 (defparameter *isr* nil)
 (defun make-isr (word ivec)
-  (list word ivec))
+  (list ivec word))
+(defun %define-isr (isr)
+  (dolist (i *isr*)
+    (when (= (car i) (car isr))
+      (setf (cdr i) (cdr isr))
+      (return-from %define-isr nil)))
+  (push isr *isr*))
+(defun isr-index (isr) (first isr))
+(defun isr-word (isr) (second isr))
 (defmacro defisr (word ivec)
   "Define an interrupt service routine.
 WORD ::= symbol naming word designated as handler. This word must NOT be used in regular program operation, only for the purposes of this ISR. 
 IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 " 
-  `(push (make-isr ',word ,ivec) *isr*))
+  `(%define-isr (make-isr ',word ,ivec)))
 
 (defun find-isr (ivec)
   (etypecase ivec
-    (integer (find ivec *isr* :key #'second :test #'=))
-    (symbol (find ivec *isr* :key #'first :test #'eq))))
+    (integer (find ivec *isr* :key #'first :test #'=))
+    (symbol (find ivec *isr* :key #'second :test #'eq))))
   
 
 
@@ -541,35 +555,41 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 		     (push d deps)
 		     (get-deps d))))))
       (get-deps entry-point)
-      (dotimes (ivec 256)
-	(let ((isr (find-isr ivec)))
-	  (cond
-	    (isr
-	     (unless (member (first isr) deps)
-	       (push (first isr) deps)
-	       (get-deps (first isr))))
-	    (t
-	     (unless (member 'default-isr deps)
-	       (push 'default-isr deps)
-	       (get-deps 'default-isr)))))))
+      (dolist (isr *isr*)
+	(unless (member (isr-word isr) deps)
+	  (push (isr-word isr) deps)
+	  (get-deps (isr-word isr)))))
     (nreverse deps)))
 
+(defun generate-isr-table (word-definition-table)
+  (do ((ret nil)
+       (index 0)
+       (isr (sort *isr* #'>= :key #'first) (cdr isr)))
+      ((null isr) (nreverse ret))
+    (destructuring-bind (idx word) (car isr)
+      (cond
+	((> idx index)
+	 (setf index idx)
+	 (push `(.ORIGIN ,(+ #x0800 index)) ret))
+	(t
+	 (setf index idx)))
+      (push `(.BLKW ,(cdr (assoc word word-definition-table))) ret))))
+
 (defun generate-assembly (entry-point &key variables extra-words)
-  (let ((words (remove-duplicates
-		(append (required-words entry-point)
-			(mapcan #'required-words extra-words)))))
+  (let* ((words (remove-duplicates
+		 (append (required-words entry-point)
+			 (mapcan #'required-words extra-words))))
+	 (word-definition-table (mapcar (lambda (word) (cons word (gensym))) words)))
     `((.ORIGIN 0) ;; word jump table 
       ,@(mapcan (lambda (w)
-		  (list w `(.BLKW ,(intern (format nil "~A-DEF" (symbol-name w))))))
+		  (list w `(.BLKW ,(cdr (assoc w word-definition-table)))))
 		words)
-      (.ORIGIN #x800) ;; isr table
-      ,@(loop :for ivec :below 256 :collect
-	   (let ((isr (find-isr ivec)))
-	     `(.BLKW ,(intern (format nil "~A-DEF"
-				      (if isr (first isr) 'default-isr))))))
+      ;; isr table
+      (.ORIGIN #x0800)
+      ,@(generate-isr-table word-definition-table)
       (.ORIGIN #x3000)
       ,@(mapcan (lambda (word)
-		  (append (list (intern (format nil "~A-DEF" (symbol-name word))))
+		  (append (list (cdr (assoc word word-definition-table))) ;; word definition label
 			  (word-assembly word)
 			  (list (list (if (or (eq word 'default-isr) (find-isr word)) 'rti 'ret)))))
 		words)

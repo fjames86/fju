@@ -82,13 +82,10 @@
 	    (push r0)
 	    (ldi r0 ,(* 2 (length octets)))
 	    (push r0)))
-    write-output))
+    write-output-binary))
 
-(let ((str "HelloWorld2"))
-  (defword test-output2 ()
-    (lisp str)
-    (lisp (length str))
-    write-output))
+(defword test-output2 ()
+  "HelloWorld2" write-output)
 
 (defvariable *input-buffer* 0 32) ;; allocate 32 words (64 bytes) buffer space
 (defword test-input ()

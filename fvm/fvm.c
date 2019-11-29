@@ -405,17 +405,19 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
     case FVM_DEVICE_OUTLOG:
 	/* output register */
         switch( val ) {
-	case 0:
+	case 0: /* write string */
+	case 1: /* write binary */
 	  if( !state->outlog ) {
 	    return;
 	  }
 
 	  addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
-	  count = state->reg[FVM_REG_R1];
+	  if( val == 0 ) count = strlen( addr );
+	  else count = state->reg[FVM_REG_R1];
 	  //printf( "writing %d bytes addr %d\n", (int)count, (int)state->reg[FVM_REG_R0]);
 	  
 	  memset( &entry, 0, sizeof(entry) );
-	  entry.flags = LOG_LVL_INFO|LOG_BINARY;
+	  entry.flags = LOG_LVL_INFO|(val == 1 ? LOG_BINARY : 0);
 	  entry.iov = iov;
 	  entry.niov = 1;
 	  entry.iov[0].buf = addr;

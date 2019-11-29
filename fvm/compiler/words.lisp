@@ -337,14 +337,22 @@
 (defword reset-input () ;; ( -- )
   1 #xfe06 !)
 
-(defword write-output () ;; (addr count -- )
+(defword write-output () ;; (addr -- )
+  (pop r0)
+  (ldi r2 0)
+  (br-pnz 1)
+  (.blkw #xfe07) ;; address of output data register 
+  (ld r3 -2)
+  (str r3 r2 0)) ;; write 0 to #xfe07. val=0 implies write string 
+(defword write-output-binary () ;; (addr count -- )
   (pop r1)
   (pop r0)
   (ldi r2 0)
   (br-pnz 1)
   (.blkw #xfe07) ;; address of output data register 
   (ld r3 -2)
-  (str r3 r2 0)) ;; write 0 to #xfe07
+  (str r3 r2 1)) ;; write 0 to #xfe07. val=1 implies write binary 
+
 
 (let ((again (gensym)))
   (defword memcpy () ;; (dest-addr src-addr count --)

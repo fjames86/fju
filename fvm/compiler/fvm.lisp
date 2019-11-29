@@ -360,7 +360,7 @@ assembled object code."
 		   (br-pnz ,then-label)
 		   ,else-label
 		   ,@(generate-word-assembly else-words)
-		   ,then-label)))	     
+		   ,then-label)))
 	     (expand-word-asm (wrd)
 	       (cond
 		 ((symbolp wrd)
@@ -486,26 +486,24 @@ NAME ::= symbol naming word
 OPTIONS ::= List of optioins, :inline 
 BODY ::= word definition. List of words or inline assembly.
 "
-  (let ((gword (gensym)))
-    `(let ((,gword 
-	    (make-word ',name (list ,@options)
-		       (append 
-			,@(mapcar
-			   (lambda (wrd)
-			     (cond
-			       ((symbolp wrd) `(list ',wrd))
-			       ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
-			       ((stringp wrd) `(list ,wrd)) 
-			       ((not (listp wrd)) (error "Unexpected form ~S" wrd))
-			       ((eq (car wrd) 'lisp) ;; a way of unquoting
-				(let ((glist (gensym)))
-				  `(let ((,glist ,(cadr wrd)))
-				     (if (listp ,glist) ,glist (list ,glist)))))
-			       (t 
-				`(list ',wrd))))
-			   body)))))
-       (setf (gethash ',name *words*) ,gword))))
-	    
+  `(setf (gethash ',name *words*) 
+	 (make-word ',name
+		    (list ,@options)
+		    (append 
+		     ,@(mapcar
+			(lambda (wrd)
+			  (cond
+			    ((symbolp wrd) `(list ',wrd))
+			    ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
+			    ((stringp wrd) `(list ,wrd)) 
+			    ((not (listp wrd)) (error "Unexpected form ~S" wrd))
+			    ((eq (car wrd) 'lisp) ;; a way of unquoting
+			     (let ((glist (gensym)))
+			       `(let ((,glist ,(cadr wrd)))
+				  (if (listp ,glist) ,glist (list ,glist)))))
+			    (t 
+			     `(list ',wrd))))
+			body)))))
 
 (defparameter *variables* nil)
 (defun make-variable (name size &optional initial-contents)

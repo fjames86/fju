@@ -443,14 +443,16 @@
 (defword xdr-decode-boolean (:inline t)
   xdr-decode-uint32 swap drop)
 
-(defmacro defrpc (name (program version proc))
-  `(defword ,name ()
+(defmacro defrpc (name (program version proc &rest options) &key arg-body result-body fail-body)
+  `(defword ,name ,options
+     xdr-reset
+     ,@arg-body
      (lisp (list (logand ,(ash program -16) #xffff)
 		 (logand ,program #xffff)
 		 (logand ,version #xffff)
 		 (logand ,proc #xffff)))
-     rpc-call))
-
+     rpc-call
+     if ,@result-body else ,@fail-body then))
 
 ;; ------------------ Interrupts --------------------
 

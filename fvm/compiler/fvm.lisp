@@ -351,6 +351,16 @@ assembled object code."
 		      (push (car body) words)
 		      (setf body (cdr body)))))
 		 (nreverse words)))
+	     (expand-if-form (if-words else-words)
+	       (let ((else-label (gensym))
+		     (then-label (gensym)))
+		 `((pop r0) ;; sets flags automatically 
+		   (br-z ,else-label)
+		   ,@(generate-word-assembly if-words)
+		   (br-pnz ,then-label)
+		   ,else-label
+		   ,@(generate-word-assembly else-words)
+		   ,then-label)))	     
 	     (expand-word-asm (wrd)
 	       (cond
 		 ((symbolp wrd)
@@ -359,13 +369,11 @@ assembled object code."
 		     (if (word-inline-p wrd)
 			 (word-assembly wrd)
 			 (list `(call ,wrd))))
-		    ((eq wrd 'if) ;; if word [else word] then
+		    ((eq wrd 'if) ;; if words [else words] then
 		     (setf body (cdr body))
 		     (let ((if-words nil)
-			   (else-words nil)
-			   (else-label (gensym))
-			   (then-label (gensym)))
-		       ;; extract if-words
+			   (else-words nil))
+		       ;; extract if-words		       
 		       (setf if-words (take-words 'if '(else then)))
 		       (when (null body) (error "IF expects THEN"))
 		       (when (eq (car body) 'else)
@@ -373,13 +381,7 @@ assembled object code."
 			       else-words (take-words 'else '(then)))
 			 (when (null body) (error "IF ELSE expects THEN")))
 		       (unless (eq (car body) 'then) (error "IF expects THEN"))
-		       `((pop r0) ;; sets flags automatically 
-			 (br-z ,else-label)
-			 ,@(generate-word-assembly if-words)
-			 (br-pnz ,then-label)
-			 ,else-label
-			 ,@(generate-word-assembly else-words)
-			 ,then-label)))
+		       (expand-if-form if-words else-words)))
 		    ((eq wrd 'do) ;; 10 0 do body-word loop
 		     (setf body (cdr body))
 		     (let ((start-label (gensym))
@@ -564,7 +566,7 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 (defun generate-isr-table (word-definition-table)
   (do ((ret nil)
        (index 0)
-       (isr (sort *isr* #'>= :key #'first) (cdr isr)))
+       (isr (sort *isr* #'< :key #'first) (cdr isr)))
       ((null isr) (nreverse ret))
     (destructuring-bind (idx word) (car isr)
       (cond

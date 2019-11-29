@@ -107,41 +107,31 @@
 (defword test-strlen ()
   "123412345" strlen dumpdec cr)
 
-(defrpc %rpcbind-call-null (100000 2 0))
-(defword rpcbind-call-null ()
-  xdr-reset
-  %rpcbind-call-null)
+(defrpc rpcbind-call-null (100000 2 0)
+  :result-body ("rpcbind.null Success" dumpstr cr)
+  :fail-body ("rpcbind.null failed" dumpstr cr))
 
-(defrpc %rpcbind-call-getport (100000 2 3))
-(defword rpcbind-call-getport ()
-  xdr-reset
-  %rpcbind-call-getport
-  if
-    xdr-decode-uint32 "Port = " dumpstr dumpdec drop
-  else
-    "rpcbind-call-getport failed" dumpstr
-  then cr)
+(defrpc rpcbind-call-getport (100000 2 3)
+  :result-body (xdr-decode-uint32 "Port = " dumpstr dumpdec drop cr)
+  :fail-body ("rpcbind-call-getport failed" dumpstr cr))
 
-
-(defrpc %rpcbind-call-list (100000 2 4))
-
-(defword rpcbind-call-list ()
-  xdr-reset %rpcbind-call-list
-  not if "rpc-call failed" dumpstr cr return then ;; early return on failure
-  "rpcbind-list:" dumpstr cr 
-  "PROG     VERS     PROT     PORT" dumpstr cr 
-  begin
-    xdr-decode-boolean
-    if
-     4 0 do 
-       xdr-decode-uint32 swap dumphex dumphex " " dumpstr 
-     loop
+(defrpc rpcbind-call-list (100000 2 4)
+  :fail-body ("rpc-call-list failed" dumpstr cr)
+  :result-body (
+   "rpcbind-list:" dumpstr cr 
+   "PROG     VERS     PROT     PORT" dumpstr cr 
+   begin
+     xdr-decode-boolean
+     if
+       4 0 do 
+         xdr-decode-uint32 swap dumphex dumphex " " dumpstr 
+       loop
        cr 
-      true
-    else
-      false
-    then
-  until)
+       true
+     else
+       false
+     then
+   until))
   
   
 
@@ -166,8 +156,6 @@
 
 (defword test-rpc ()
   rpcbind-call-null
-  if "rpcbind.null Success" dumpstr else "rpcbind.null Failure" then cr 
-
   rpcbind-call-getport
   rpcbind-call-list)
 

@@ -388,7 +388,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* derive common key */
     sts = hrauth_common( auth.u.full.id, sa->key );
     if( sts ) {
-      hrauth_log( LOG_LVL_DEBUG, "hrauth: unknown host %"PRIx64"", auth.u.full.id );
+      hrauth_log( LOG_LVL_DEBUG, "hrauth_common failed: host=%"PRIx64"", auth.u.full.id );
       return sts;
     }
     hrauth_decrypt( tmpx.buf, tmpx.count, sa->key, sa->cipher );

@@ -72,6 +72,7 @@ struct fvm_state {
     struct xdr_s buf;
 #define FVM_RPC_MAXBUF               4096
     uint8_t rxtxbuf[FVM_RPC_MAXBUF];
+    uint16_t timeout;
   } rpc;
 };
 

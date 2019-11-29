@@ -333,24 +333,26 @@ assembled object code."
 (defun word-inline-p (name)
   (getf (word-options name) :inline nil))
 
+;; TODO:
+;; need to support nested special forms. 
+;; Can we cheat by defining inline words
 
 (defun generate-word-assembly (body)
   (do ((body body (cdr body))
        (asm nil))
       ((null body) (nreverse asm))
     (labels ((take-words (start-word end-words)
-	       (let ((words nil))
-		 (do ()
-		     ((or (member (car body) end-words)
-			  (null body)))
-		   (cond
-		     ((eq (car body) start-word)
-		      ;; get nested words, expand to assembly and return these
-		      (error "Nested ~S not yet supported. Move contents to external word" start-word))
-		     (t 
-		      (push (car body) words)
-		      (setf body (cdr body)))))
-		 (nreverse words)))
+	       (do ((words nil))
+		   ((or (member (car body) end-words)
+			(null body))
+		    (nreverse words))
+		 (cond
+		   ((eq (car body) start-word)
+		    ;; get nested words, expand to assembly and return these
+		    (error "Nested ~S not yet supported. Move contents to external word" start-word))
+		   (t 
+		    (push (car body) words)
+		    (setf body (cdr body))))))
 	     (expand-if-form (if-words else-words)
 	       (let ((else-label (gensym))
 		     (then-label (gensym)))

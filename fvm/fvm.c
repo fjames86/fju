@@ -115,10 +115,8 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 #define FVM_RPCCMD_DECOPQ 9
 #define FVM_RPCCMD_DECFIX 10
 #define FVM_RPCCMD_CALL   11
-#define FVM_RPCCMD_RES1   12
-#define FVM_RPCCMD_RES2   13
-#define FVM_RPCCMD_RES3   14
-#define FVM_RPCCMD_RES4   15
+#define FVM_RPCCMD_SETTIMEOUT   12
+#define FVM_RPCCMD_GETTIMEOUT   13
 
 void fvm_rpc_force_iter( void );
 
@@ -162,7 +160,7 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
   hcall.proc = proc;
   hcall.donecb = rpcdev_donecb;
   hcall.cxt = fvm;
-  hcall.timeout = 1000;
+  hcall.timeout = fvm->rpc.timeout ? fvm->rpc.timeout : 1000;
   hcall.service = -1; //HRAUTH_SERVICE_PRIV;
 
   if( fvm->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RPC %u:%u:%u\n", fvm->reg[FVM_REG_PC] - 1, hcall.prog, hcall.vers, hcall.proc );
@@ -341,6 +339,17 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       FVM_PUSH(fvm,sts ? 0 : -1);
     }
     break;
+  case FVM_RPCCMD_SETTIMEOUT:
+    {
+	uint16_t timeout = FVM_POP(fvm);
+	fvm->rpc.timeout = timeout;
+    }
+    break;
+  case FVM_RPCCMD_GETTIMEOUT:
+    {
+	FVM_PUSH(fvm, fvm->rpc.timeout);
+    }
+    break;    
   default:
     sts = -1;
     break;

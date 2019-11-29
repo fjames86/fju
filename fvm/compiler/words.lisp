@@ -444,15 +444,25 @@
   xdr-decode-uint32 swap drop)
 
 (defmacro defrpc (name (program version proc &rest options) &key arg-body result-body fail-body)
-  `(defword ,name ,options
-     xdr-reset
-     ,@arg-body
-     (lisp (list (logand ,(ash program -16) #xffff)
-		 (logand ,program #xffff)
-		 (logand ,version #xffff)
-		 (logand ,proc #xffff)))
-     rpc-call
-     if ,@result-body else ,@fail-body then))
+  (let ((gfail-label (gensym))
+	(gend-label (gensym)))
+    `(defword ,name ,options
+       xdr-reset
+       ,@arg-body
+       (lisp (list (logand ,(ash program -16) #xffff)
+		   (logand ,program #xffff)
+		   (logand ,version #xffff)
+		   (logand ,proc #xffff)))
+       rpc-call
+       (pop r0)
+       (br-z ,gfail-label)
+       ,@result-body
+       (br-pnz ,gend-label)
+       ,gfail-label
+       ,@fail-body
+       ,gend-label)))
+
+;;     if ,@result-body else ,@fail-body then))
 
 ;; ------------------ Interrupts --------------------
 

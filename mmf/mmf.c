@@ -44,7 +44,7 @@
 #endif
 
 #ifdef WIN32
-int mmf_open( char *path, struct mmf_s *mmf, uint32_t flags ) {
+int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 
 	memset( mmf, 0, sizeof(*mmf) );
 

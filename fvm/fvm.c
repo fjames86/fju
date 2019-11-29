@@ -207,7 +207,7 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
 
 static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
   int sts = 0;
-  uint16_t cmd = (val >> 12) & 0xf;
+  uint16_t cmd = val & 0xf;
 
   switch( cmd ) {
   case FVM_RPCCMD_RESET:
@@ -215,7 +215,7 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
     xdr_reset( &fvm->rpc.buf );
     break;
   case FVM_RPCCMD_ENCU32:
-    /* encode uint32. (low high --)*/
+    /* encode uint32. (high low --)*/
     {
       uint16_t words[2];
       uint32_t u32;
@@ -227,7 +227,7 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
     }
     break;
   case FVM_RPCCMD_ENCU64:
-    /* encode uint32. (low ... high) */
+    /* encode uint32. (high ... low) */
     {
       uint16_t words[4];
       uint64_t u64;
@@ -275,10 +275,9 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
     {
       uint32_t u32 = 0;
       sts = xdr_decode_uint32( &fvm->rpc.buf, &u32 );
-      if( !sts ) {
-	FVM_PUSH(fvm, (u32 >> 16) & 0xffff );
-	FVM_PUSH(fvm, u32 & 0xffff );
-      }
+      if( sts ) u32 = 0;
+      FVM_PUSH(fvm, (u32 >> 16) & 0xffff );
+      FVM_PUSH(fvm, u32 & 0xffff );
     }
     break;
   case FVM_RPCCMD_DECU64:
@@ -286,12 +285,11 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
     {
       uint64_t u64 = 0;
       sts = xdr_decode_uint64( &fvm->rpc.buf, &u64 );
-      if( !sts ) {
-	FVM_PUSH(fvm, (u64 >> 48) & 0xffff );
-	FVM_PUSH(fvm, (u64 >> 32) & 0xffff );
-	FVM_PUSH(fvm, (u64 >> 16) & 0xffff );
-	FVM_PUSH(fvm, u64 & 0xffff );
-      }
+      if( sts ) u64 = 0;
+      FVM_PUSH(fvm, (u64 >> 48) & 0xffff );
+      FVM_PUSH(fvm, (u64 >> 32) & 0xffff );
+      FVM_PUSH(fvm, (u64 >> 16) & 0xffff );
+      FVM_PUSH(fvm, u64 & 0xffff );
     }
     break;
   case FVM_RPCCMD_DECSTR:
@@ -302,6 +300,7 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       len = FVM_POP(fvm);
       str = (char *)&fvm->mem[FVM_POP(fvm)];
       sts = xdr_decode_string( &fvm->rpc.buf, str, len );
+      if( sts ) *str = 0;
     }
     break;
   case FVM_RPCCMD_DECOPQ:
@@ -323,18 +322,20 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       len = FVM_POP(fvm);
       ptr = (uint8_t *)&fvm->mem[FVM_POP(fvm)];
       sts = xdr_decode_fixed( &fvm->rpc.buf, ptr, len );
+      if( sts ) memset( ptr, 0, len );
     }
     break;
   case FVM_RPCCMD_CALL:
-    /* send call, await reply */
+    /* send call, await reply (prog-high prog-low vers proc -- sts) */
     {
       uint32_t prog, vers, proc;
       proc = (uint32_t)FVM_POP(fvm);
       vers = (uint32_t)FVM_POP(fvm);
       prog = (uint32_t)FVM_POP(fvm);
-      prog = prog << 16;
-      prog |= (uint32_t)FVM_POP(fvm);
+      prog |= ((uint32_t)FVM_POP(fvm)) << 16;
       sts = rpcdev_call( fvm, prog, vers, proc );
+      /* push error status */
+      FVM_PUSH(fvm,sts ? 0 : -1);
     }
     break;
   default:
@@ -342,8 +343,6 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
     break;
   }
 
-  /* push error status */
-  FVM_PUSH(fvm,sts ? 0 : -1);
 }
 
 

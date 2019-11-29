@@ -312,7 +312,6 @@
   
 
   
-
 (defword tick-count () ;; ( -- x)
   #xfe03 @)
 
@@ -405,6 +404,11 @@
 (defword sleep () ;; (ms --)
   #xfe08 !)
 
+;; must not be used from with any do/loops, will break the return stack.
+;; can be used from within begin/until because this doesn't use reutnr stack.
+(defword return (:inline t)
+  (ret))
+
 ;; -----------------------------------
 
 ;; send command to rpc device 
@@ -412,28 +416,32 @@
   #xfe09 !)
 
 (macrolet ((def-rpcdev-cmd (name cmd)
-	     `(defword ,name (:inline t) ,(ash cmd 12) rpcdev-cmd)))
-  (def-rpcdev-cmd xdr-reset 0)
-  (def-rpcdev-cmd xdr-encode-uint32 1)
-  (def-rpcdev-cmd xdr-encode-uint64 2)
-  (def-rpcdev-cmd xdr-encode-string 3)
-  (def-rpcdev-cmd xdr-encode-opaque 4)
-  (def-rpcdev-cmd xdr-encode-fixed 5)
-  (def-rpcdev-cmd xdr-decode-uint32 6)
-  (def-rpcdev-cmd xdr-decode-uint64 7)
-  (def-rpcdev-cmd xdr-decode-string 8)
-  (def-rpcdev-cmd xdr-decode-opaque 9)
-  (def-rpcdev-cmd xdr-decode-fixed 10)
-  (def-rpcdev-cmd rpc-call 11))
+	     `(defword ,name (:inline t) ,cmd rpcdev-cmd)))
+  (def-rpcdev-cmd xdr-reset 0)         ;; ( -- )
+  (def-rpcdev-cmd xdr-encode-uint32 1) ;; ( low high --)
+  (def-rpcdev-cmd xdr-encode-uint64 2) ;; ( low ... high --)
+  (def-rpcdev-cmd xdr-encode-string 3) ;; ( addr -- )
+  (def-rpcdev-cmd xdr-encode-opaque 4) ;; ( addr len --)
+  (def-rpcdev-cmd xdr-encode-fixed 5)  ;; ( addr len --)
+  (def-rpcdev-cmd xdr-decode-uint32 6) ;; ( -- high low)
+  (def-rpcdev-cmd xdr-decode-uint64 7) ;; ( -- high .. low)
+  (def-rpcdev-cmd xdr-decode-string 8) ;; ( addr len -- )
+  (def-rpcdev-cmd xdr-decode-opaque 9) ;; ( addr len -- len)
+  (def-rpcdev-cmd xdr-decode-fixed 10) ;; ( addr len --)
+  (def-rpcdev-cmd rpc-call 11))        ;; ( prog-high prog-low vers proc -- sts )
 
-(defmacro defcall (name (program version proc) &body body)
+(defword xdr-encode-boolean (:inline t)
+  0 swap xdr-encode-uint32)
+(defword xdr-decode-boolean (:inline t)
+  xdr-decode-uint32 swap drop)
+
+(defmacro defrpc (name (program version proc))
   `(defword ,name ()
-     (lisp (list (logand ,program #xffff)
-		 (logand (ash ,program -16) #xffff)
+     (lisp (list (logand ,(ash program -16) #xffff)
+		 (logand ,program #xffff)
 		 (logand ,version #xffff)
 		 (logand ,proc #xffff)))
-     rpc-call
-     ,@body))
+     rpc-call))
 
 
 ;; ------------------ Interrupts --------------------

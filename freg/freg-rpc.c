@@ -187,12 +187,71 @@ static int freg_proc_rem( struct rpc_inc *inc ) {
   return 0;
 }
 
+
+static int freg_proc_get_by_name( struct rpc_inc *inc ) {
+  int sts, handle, len, i;
+  uint32_t flags;
+  char path[256];
+  char *buf = NULL;
+
+  if( !freg_authenticated( inc ) ) return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+
+  sts = xdr_decode_string( &inc->xdr, path, sizeof(path) );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  sts = freg_get_by_name( NULL, 0, path, flags, NULL, 0, &len );
+  if( sts ) {
+    xdr_encode_boolean( &inc->xdr, 0 );
+    goto done;
+  }
+
+  buf = malloc( len );
+  sts = freg_get_by_name( NULL, 0, path, flags, buf, len, NULL );
+  if( sts ) {
+    xdr_encode_boolean( &inc->xdr, 0 );
+    goto done;
+  }
+
+  xdr_encode_boolean( &inc->xdr, 1 );
+  switch( flags & FREG_TYPE_MASK ) {
+  case FREG_TYPE_UINT32:
+    xdr_encode_uint32( &inc->xdr, *(uint32_t *)buf );
+    break;
+  case FREG_TYPE_UINT64:
+    xdr_encode_uint64( &inc->xdr, *(uint64_t *)buf ); 
+    break;
+  case FREG_TYPE_KEY:
+    xdr_encode_uint32( &inc->xdr, len / sizeof(uint64_t) );
+    for( i = 0; i < (len / sizeof(uint64_t)); i++ ) {
+      xdr_encode_uint64( &inc->xdr, ((uint64_t *)buf)[i] );
+    }
+    break;
+  case FREG_TYPE_STRING:
+    xdr_encode_string( &inc->xdr, buf );
+    break;
+  case FREG_TYPE_OPAQUE:
+    xdr_encode_opaque( &inc->xdr, (uint8_t *)buf, len );
+    break;
+  }
+
+ done:
+  if( buf ) free( buf );
+  
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
+
 static struct rpc_proc freg_procs[] = {
   { 0, freg_proc_null },
   { 1, freg_proc_list },
   { 2, freg_proc_get },
   { 3, freg_proc_put },
   { 4, freg_proc_rem },
+  { 5, freg_proc_get_by_name },
   { 0, NULL }
 };
 

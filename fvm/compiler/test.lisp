@@ -109,23 +109,71 @@
 (defword test-strlen ()
   "123412345" strlen dumpdec cr)
 
-(defcall rpcbind-call-null (100000 2 0))
-(defcall rpcbind-call-getport (100000 2 3))
+(defrpc %rpcbind-call-null (100000 2 0))
+(defword rpcbind-call-null ()
+  xdr-reset
+  %rpcbind-call-null)
 
-(defword test-rpc-success ()
- xdr-decode-uint32 if "Port= " dumpstr dumpdec drop else "DecodeUInt32 failed" then cr)
+(defrpc %rpcbind-call-getport (100000 2 3))
+(defword rpcbind-call-getport ()
+  xdr-reset
+  %rpcbind-call-getport
+  if
+    xdr-decode-uint32 "Port = " dumpstr dumpdec drop
+  else
+    "rpcbind-call-getport failed" dumpstr
+  then cr)
+
+
+(defrpc %rpcbind-call-list (100000 2 4))
+
+(defword rpcbind-call-list ()
+  xdr-reset %rpcbind-call-list
+  not if "rpc-call failed" dumpstr cr return then ;; early return on failure
+  "rpcbind-list:" dumpstr cr 
+  "PROG     VERS     PROT     PORT" dumpstr cr 
+  begin
+    xdr-decode-boolean
+    if
+     4 0 do 
+       xdr-decode-uint32 swap dumphex dumphex " " dumpstr 
+     loop
+       cr 
+      true
+    else
+      false
+    then
+  until)
+  
+  
+
+(defrpc %freg-call-getbyname (#x27E1FB10 1 5))
+#+nil(defword freg-call-get-string () ;; (name -- sts &optional val)
+  xdr-reset
+  xdr-encode-string
+  0 3 xdr-encode-uint32 ;; flags=freg_type_string 
+  %freg-call-getbyname
+  if 
+    xdr-decode-uint32 ;; get status
+    if
+      bos 64 xdr-decode-string bos dumpstr cr
+    else
+      "freg-get-by-name failed" dumpstr cr 
+    then
+  else
+    "rpccall failed" dumpstr cr
+  then)
+
+  
 
 (defword test-rpc ()
   rpcbind-call-null
   if "rpcbind.null Success" dumpstr else "rpcbind.null Failure" then cr 
 
-  xdr-reset
-  123 123 xdr-encode-uint32 
   rpcbind-call-getport
-  if "rpcbind.getport Success " dumpstr cr test-rpc-success 
-  else "rpcbind.getport Failure" then)
+  rpcbind-call-list)
 
-(defword bobby ()
+#+nil(defword bobby ()
   12 if 12 if "fred" dumpstr then then)
 
 

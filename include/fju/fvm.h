@@ -94,9 +94,14 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
 #define FVM_INT_DBZ_PL    FVM_INT_EXCEPTION       /* divide by zero level */
 int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
 
+/* ----------- rpcd only ---------- */
+
 #define FVM_RPC_PROG 0x27E1FB11
 #define FVM_RPC_VERS 1
 void fvm_register( void );
+
+/* load and run a program from an freg entry. path to key */
+int fvm_rpc_runprogram( char *freg_path );
 
 #define FVM_EVENT_CATEGORY FVM_RPC_PROG
 #define FVM_EVENT_PROGDONE 0        /* parm = &id */

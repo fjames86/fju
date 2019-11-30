@@ -371,6 +371,18 @@ static void load_startup_progs( void ) {
     } while( 1 );
 }
 
+int fvm_rpc_runprogram( char *freg_path ) {
+    int sts;
+    struct freg_entry entry;
+
+    sts = freg_entry_by_name( NULL, 0, freg_path, &entry, NULL );
+    if( sts ) return sts;
+    load_startup_prog( &entry );
+    return 0;
+}
+
+
+
 void fvm_register( void ) {
   rpc_program_register( &fvm_prog );
   rpc_iterator_register( &fvm_iter );

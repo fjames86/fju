@@ -175,6 +175,10 @@
     loop
   loop)
   
+(defword test-rpc-timeout ()
+  "rpc-timeout = " dumpstr get-rpc-timeout dumpdec cr 
+  1000 set-rpc-timeout
+  "rpc-timeout = " dumpstr get-rpc-timeout dumpdec)
 
 ;; try a few words 
 (defword test ()
@@ -196,7 +200,8 @@
   "test-nested-if true false: " dumpstr true false test-nested-if cr 
   "test-nested-if false true: " dumpstr false true test-nested-if cr
   "test-nested-if false false: " dumpstr false false test-nested-if cr
-  "test-nested-do: " dumpstr test-nested-do cr)
+  "test-nested-do: " dumpstr test-nested-do cr
+  "test-rpc-timeout: " dumpstr test-rpc-timeout cr)
 
 (defword test-nohalt ()
   "NoHalt" dumpstr cr)

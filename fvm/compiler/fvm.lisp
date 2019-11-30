@@ -446,6 +446,7 @@ assembled object code."
 			 (pop r0) ;; sets flags automatically 
 			 (br-pn ,start-label))))
 		    ((eq wrd 'variable)
+		     ;; get address of a given variable 
 		     (setf body (cdr body))
 		     (let ((var-name (car body)))
 		       (setf body (cdr body))
@@ -453,6 +454,16 @@ assembled object code."
 			 (.blkw ,var-name)
 			 (ld r0 -2)
 			 (push r0))))
+		    ((eq wrd 'variable*)
+		     ;; get value of given variable. same as (variable xxx @)
+		     (setf body (cdr body))
+		     (let ((var-name (car body)))
+		       (setf body (cdr body))
+		       `((br-pnz 1)
+			 (.blkw ,var-name)
+			 (ld r0 -2)
+			 (ldr r1 r0 0)
+			 (push r1))))
 		    (t (setf body (cdr body))
 		       (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)

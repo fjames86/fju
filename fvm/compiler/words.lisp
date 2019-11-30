@@ -306,11 +306,15 @@
   10 mod #\0 + dumpchr)
 
 (defword dumpdec () ;; (x -- )
+  dup if 
   dup 10000 / dup if dumpdecchr else drop then
   dup 1000 / dup if dumpdecchr else drop then
   dup 100 / dup if dumpdecchr else drop then
   dup 10 / dup if dumpdecchr else drop then
-  dumpdecchr)
+  dumpdecchr
+  else
+  0 dumpdecchr
+  then)
 
   
 
@@ -439,7 +443,10 @@
   (def-rpcdev-cmd xdr-decode-string 8) ;; ( addr len -- )
   (def-rpcdev-cmd xdr-decode-opaque 9) ;; ( addr len -- len)
   (def-rpcdev-cmd xdr-decode-fixed 10) ;; ( addr len --)
-  (def-rpcdev-cmd rpc-call 11))        ;; ( prog-high prog-low vers proc -- sts )
+  (def-rpcdev-cmd rpc-call 11)         ;; ( prog-high prog-low vers proc -- sts )
+  (def-rpcdev-cmd get-rpc-timeout 12)  ;; ( -- timeout )
+  (def-rpcdev-cmd set-rpc-timeout 13)  ;; ( timeout -- )
+  )
 
 (defword xdr-encode-boolean (:inline t)
   0 swap xdr-encode-uint32)

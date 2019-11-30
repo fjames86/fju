@@ -115,8 +115,9 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 #define FVM_RPCCMD_DECOPQ 9
 #define FVM_RPCCMD_DECFIX 10
 #define FVM_RPCCMD_CALL   11
-#define FVM_RPCCMD_SETTIMEOUT   12
-#define FVM_RPCCMD_GETTIMEOUT   13
+#define FVM_RPCCMD_GETTIMEOUT   12
+#define FVM_RPCCMD_SETTIMEOUT   13
+
 
 void fvm_rpc_force_iter( void );
 
@@ -339,15 +340,15 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       FVM_PUSH(fvm,sts ? 0 : -1);
     }
     break;
+  case FVM_RPCCMD_GETTIMEOUT:
+    {
+	FVM_PUSH(fvm, fvm->rpc.timeout);
+    }
+    break;
   case FVM_RPCCMD_SETTIMEOUT:
     {
 	uint16_t timeout = FVM_POP(fvm);
 	fvm->rpc.timeout = timeout;
-    }
-    break;
-  case FVM_RPCCMD_GETTIMEOUT:
-    {
-	FVM_PUSH(fvm, fvm->rpc.timeout);
     }
     break;    
   default:

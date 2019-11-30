@@ -27,7 +27,8 @@
 	   #:xdr-decode-uint32 #:xdr-decode-uint64 #:xdr-decode-string
 	   #:xdr-decode-opaque #:xdr-decode-fixed #:rpc-call
 	   #:xdr-encode-boolean #:xdr-decode-boolean #:write-output-binary
-	   #:pprint-assembly 
+	   #:pprint-assembly #:get-rpc-timeout #:set-rpc-timeout
+	   #:variable*
 	   ))
 	   
    

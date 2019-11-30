@@ -117,7 +117,8 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 #define FVM_RPCCMD_CALL   11
 #define FVM_RPCCMD_GETTIMEOUT   12
 #define FVM_RPCCMD_SETTIMEOUT   13
-
+#define FVM_RPCCMD_GETSERVICE   14
+#define FVM_RPCCMD_SETSERVICE   15 
 
 void fvm_rpc_force_iter( void );
 
@@ -162,7 +163,7 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
   hcall.donecb = rpcdev_donecb;
   hcall.cxt = fvm;
   hcall.timeout = fvm->rpc.timeout ? fvm->rpc.timeout : 1000;
-  hcall.service = -1; //HRAUTH_SERVICE_PRIV;
+  hcall.service = (fvm->rpc.service > HRAUTH_SERVICE_PRIV ? -1 : (uint32_t)fvm->rpc.service); // -1 == no auth
 
   if( fvm->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RPC %u:%u:%u\n", fvm->reg[FVM_REG_PC] - 1, hcall.prog, hcall.vers, hcall.proc );
   
@@ -350,7 +351,18 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
 	uint16_t timeout = FVM_POP(fvm);
 	fvm->rpc.timeout = timeout;
     }
-    break;    
+    break;
+  case FVM_RPCCMD_GETSERVICE:
+    {
+	FVM_PUSH(fvm, fvm->rpc.service);
+    }
+    break;
+  case FVM_RPCCMD_SETSERVICE:
+    {
+	uint16_t service = FVM_POP(fvm);
+	fvm->rpc.service = service > HRAUTH_SERVICE_PRIV ? -1 : service;
+    }
+    break;        
   default:
     sts = -1;
     break;
@@ -901,6 +913,7 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
   state->bos = bos;
 
   xdr_init( &state->rpc.buf, state->rpc.rxtxbuf, FVM_RPC_MAXBUF );
+  state->rpc.service = -1; // default to no auth
   
   return 0;
 }

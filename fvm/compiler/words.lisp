@@ -446,6 +446,8 @@
   (def-rpcdev-cmd rpc-call 11)         ;; ( prog-high prog-low vers proc -- sts )
   (def-rpcdev-cmd get-rpc-timeout 12)  ;; ( -- timeout )
   (def-rpcdev-cmd set-rpc-timeout 13)  ;; ( timeout -- )
+  (def-rpcdev-cmd get-rpc-service 14)   ;; ( -- sevice )
+  (def-rpcdev-cmd set-rpc-service 15)  ;; (service --)
   )
 
 (defword xdr-encode-boolean (:inline t)

@@ -178,6 +178,11 @@
   1000 set-rpc-timeout
   "rpc-timeout = " dumpstr get-rpc-timeout dumpdec)
 
+(defword test-rpc-service ()
+  "rpc-service = " dumpstr get-rpc-service dumpdec cr 
+  2 set-rpc-service
+  "rpc-service = " dumpstr get-rpc-service dumpdec)
+
 ;; try a few words 
 (defword test ()
   "hello-world: " dumpstr hello-world cr
@@ -199,7 +204,9 @@
   "test-nested-if false true: " dumpstr false true test-nested-if cr
   "test-nested-if false false: " dumpstr false false test-nested-if cr
   "test-nested-do: " dumpstr test-nested-do cr
-  "test-rpc-timeout: " dumpstr test-rpc-timeout cr)
+  "test-rpc-timeout: " dumpstr test-rpc-timeout cr
+  "test-rpc-service: " dumpstr test-rpc-service cr)
+
 
 (defword test-nohalt ()
   "NoHalt" dumpstr cr)

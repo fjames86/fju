@@ -598,7 +598,7 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	 (setf index idx)
 	 (push `(.ORIGIN ,(+ #x0800 index)) ret))
 	(t
-	 (setf index idx)))
+	 (setf index (1+ idx))))
       (push `(.BLKW ,(cdr (assoc word word-definition-table))) ret))))
 
 (defun generate-assembly (entry-point &key variables extra-words)

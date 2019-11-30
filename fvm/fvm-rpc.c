@@ -322,7 +322,12 @@ static void load_startup_prog( struct freg_entry *entry ) {
     }
     if( !progdata ) return;
     
-    /* get other params */
+    /* get other params or use defaults */
+    start = 1;
+    flags = FVM_RPC_AUTOUNLOAD; 
+    inlog = 0;
+    outlog = 0;
+    
     freg_get_by_name( NULL, id, "start", FREG_TYPE_UINT32, (char *)&start, sizeof(start), NULL );
     freg_get_by_name( NULL, id, "flags", FREG_TYPE_UINT32, (char *)&flags, sizeof(flags), NULL );
     freg_get_by_name( NULL, id, "inlog", FREG_TYPE_UINT64, (char *)&inlog, sizeof(inlog), NULL );

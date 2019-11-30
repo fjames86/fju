@@ -159,8 +159,14 @@
   rpcbind-call-getport
   rpcbind-call-list)
 
-#+nil(defword bobby ()
-  12 if 12 if "fred" dumpstr then then)
+(defword test-nested-if () ;; (f2 f1 --)
+  if
+    "first-true " dumpstr 
+    if "second-true " else "second-false" then dumpstr
+  else
+    "first-false " dumpstr 
+    if "second-true" else "second-false" then dumpstr
+  then)
 
 
   
@@ -178,9 +184,13 @@
   "test-output2: " dumpstr test-output2 cr
   "test-input: " dumpstr test-input cr
   "test-input: " dumpstr test-input cr
-;;  "test-sleep: " dumpstr test-sleep cr
+  "test-sleep: " dumpstr test-sleep cr
   "test-strlen: " dumpstr test-strlen cr
-  "test-rpc: " dumpstr test-rpc cr)
+  "test-rpc: " dumpstr test-rpc cr
+  "test-nested-if true true: " dumpstr true true test-nested-if cr 
+  "test-nested-if true false: " dumpstr true false test-nested-if cr 
+  "test-nested-if false true: " dumpstr false true test-nested-if cr
+  "test-nested-if false false: " dumpstr false false test-nested-if cr )
 
 (defword test-nohalt ()
   "NoHalt" dumpstr cr)

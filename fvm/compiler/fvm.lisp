@@ -338,18 +338,24 @@ assembled object code."
 ;; Can we cheat by defining inline words
 
 (defun generate-word-assembly (body)
-  (do ((body body (cdr body))
+  (do ((body body)
        (asm nil))
       ((null body) (nreverse asm))
     (labels ((take-words (start-word end-words)
 	       (do ((words nil))
 		   ((or (member (car body) end-words)
 			(null body))
-		    (nreverse words))
+		    (when (null body) (error "Ran out of words before finding end word ~S" end-words))
+		    (let ((eword (car body)))
+		      (push eword words)
+		      (setf body (cdr body))
+		      (values (nreverse words) eword)))
 		 (cond
 		   ((eq (car body) start-word)
-		    ;; get nested words, expand to assembly and return these
-		    (error "Nested ~S not yet supported. Move contents to external word" start-word))
+		    (setf body (cdr body))
+		    (let ((subbody (take-words start-word end-words)))
+		      (dolist (w (generate-word-assembly (cons start-word subbody)))
+			(push w words))))
 		   (t 
 		    (push (car body) words)
 		    (setf body (cdr body))))))
@@ -357,42 +363,52 @@ assembled object code."
 	       (let ((else-label (gensym))
 		     (then-label (gensym)))
 		 `((pop r0) ;; sets flags automatically 
-		   (br-z ,else-label)
+		   (br-z ,(if else-words else-label then-label))
 		   ,@(generate-word-assembly if-words)
-		   (br-pnz ,then-label)
-		   ,else-label
-		   ,@(generate-word-assembly else-words)
+		   ,@(when else-words
+			   `((br-pnz ,then-label)
+			     ,else-label
+			     ,@(generate-word-assembly else-words)))
 		   ,then-label)))
 	     (expand-word-asm (wrd)
 	       (cond
 		 ((symbolp wrd)
 		  (cond
 		    ((wordp wrd)
+		     (setf body (cdr body))
 		     (if (word-inline-p wrd)
 			 (word-assembly wrd)
 			 (list `(call ,wrd))))
 		    ((eq wrd 'if) ;; if words [else words] then
 		     (setf body (cdr body))
-		     (let ((if-words nil)
-			   (else-words nil))
-		       ;; extract if-words		       
-		       (setf if-words (take-words 'if '(else then)))
-		       (when (null body) (error "IF expects THEN"))
-		       (when (eq (car body) 'else)
-			 (setf body (cdr body)
-			       else-words (take-words 'else '(then)))
-			 (when (null body) (error "IF ELSE expects THEN")))
-		       (unless (eq (car body) 'then) (error "IF expects THEN"))
-		       (expand-if-form if-words else-words)))
+		     (let ((if-contents (take-words 'if '(then))))
+		       (let ((if-words nil)
+			     (else-words nil))
+			 ;; extract if-words
+			 (do ((ifc if-contents (cdr ifc))
+			      (elsep nil))
+			     ((eq (car ifc) 'then)
+			      (unless (null (cdr ifc)) (error "THEN not final word")))
+			   (cond
+			     ((eq (car ifc) 'else)
+			      (if elsep
+				  (error "multiple ELSE")
+				  (setf elsep t)))
+			     (elsep
+			      (push (car ifc) else-words))
+			     (t
+			      (push (car ifc) if-words))))
+			 (setf if-words (nreverse if-words)
+			       else-words (nreverse else-words))
+			 (expand-if-form if-words else-words))))
 		    ((eq wrd 'do) ;; 10 0 do body-word loop
 		     (setf body (cdr body))
 		     (let ((start-label (gensym))
 			   (end-label (gensym))
-			   (body-words nil)
 			   (+loop-p nil))
-		       (setf body-words (take-words 'do '(loop +loop)))
-		       (unless (member (car body) '(loop +loop)) (error "DO expects LOOP or +LOOP"))
-		       (when (eq (car body) '+loop) (setf +loop-p t))
+		       (multiple-value-bind (body-words end-word) (take-words 'di '(loop +loop))
+			 (unless (member end-word '(loop +loop)) (error "DO expects LOOP or +LOOP"))
+			 (when (eq end-word '+loop) (setf +loop-p t))
 		       `((pop r0) ;; start index 
 			 (pop r1) ;; max counter
 			 (br-pnz 1)
@@ -408,7 +424,7 @@ assembled object code."
 			 (br-pz ,end-label)
 			 (rpush r1) 
 			 (rpush r0) ;; restore loop index and max 
-			 ,@(generate-word-assembly body-words)
+			 ,@(generate-word-assembly (butlast body-words))
 			 ;; increment loop index
 			 (rpop r0)
 			 ,@(if +loop-p
@@ -419,34 +435,28 @@ assembled object code."
 			 (br-pnz ,start-label)
 			 ,end-label
 			 ;; drop end label address from stack 
-			 (rpop r0))))
+			 (rpop r0)))))
 		    ((eq wrd 'begin)
 		     (setf body (cdr body))
 		     (let ((begin-words nil)
 			   (start-label (gensym)))
 		       (setf begin-words (take-words 'begin '(until)))
-		       (unless (eq (car body) 'until) (error "BEGIN expects UNTIL"))
 		       `(,start-label
-			 ,@(generate-word-assembly begin-words)
+			 ,@(generate-word-assembly (butlast begin-words))
 			 (pop r0) ;; sets flags automatically 
 			 (br-pn ,start-label))))
 		    ((eq wrd 'variable)
 		     (setf body (cdr body))
 		     (let ((var-name (car body)))
+		       (setf body (cdr body))
 		       `((br-pnz 1)
 			 (.blkw ,var-name)
 			 (ld r0 -2)
 			 (push r0))))
-		    #+nil((eq wrd 'variable-value)
-			  (setf body (cdr body))
-			  (let ((var-name (car body)))
-			    `((br-pnz 1)
-			      (.blkw ,var-name)
-			      (ld r0 -2) ;; get variable address
-			      (ldr r0 r0 0) ;; get variable value
-			      (push r0))))
-		    (t (list wrd))))   ;; symbol but not a word, assume an assembly label
+		    (t (setf body (cdr body))
+		       (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)
+		  (setf body (cdr body))
 		  (if (<= (abs wrd) #xff)
 		      `((ldi r0 ,wrd) ;; load 8 bit immediates directly 
 			(push r0))
@@ -455,10 +465,12 @@ assembled object code."
 			(ld r0 -2)
 			(push r0))))
 		 ((characterp wrd)
+		  (setf body (cdr body))
 		  (let ((code (char-code wrd)))
 		    `((ldi r0 ,(logand code #x7f))
 		      (push r0))))
 		 ((stringp wrd)
+		  (setf body (cdr body))
 		  (let ((lbl (gensym))
 			(strlbl (gensym)))
 		    `((br-pnz ,lbl)
@@ -469,10 +481,11 @@ assembled object code."
 		      (push r0))))
 		 ((listp wrd)
 		  ;; if wrd is a list it is assembly instruction
+		  (setf body (cdr body))
 		  (list wrd))
 		 (t (error "Unknown form ~S" wrd)))))
-      (let ((wrd (car body)))
-	(dolist (x (expand-word-asm wrd))
+      (let ((wrdasm (expand-word-asm (car body))))
+	(dolist (x wrdasm)
 	  (push x asm))))))
 
 
@@ -664,6 +677,13 @@ PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
 				    :print-assembly print-assembly))))
 
 (defun compile-program (entry-word &key variables print-assembly extra-words)
+  "Compile a program with a given starting word.
+ENTRY-WORD ::= symbol naming entry point.
+VARIABLES ::= list of variables defined with DEFVARIABLE
+PRINT-ASSEMBLY ::= if true then prints entire program assembly listing.
+EXTRA-WORDS ::= ensure these words are added to the generated image, even if never called by ENTRY-WORD or its dependencies.
+
+Returns compiled bytecode." 
   (flexi-streams:with-output-to-sequence (f)
     (%save-program f
 		   (%compile-program entry-word
@@ -672,3 +692,22 @@ PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
 				     :print-assembly print-assembly))))
 
 
+(defun pprint-assembly (word)
+  "Pretty print assembly for WORD."
+  (let ((asms (word-assembly word)))
+    (dolist (asm asms)
+      (cond
+	((symbolp asm)
+	 (format t ";; ~S : ~%" asm))
+	((listp asm)
+	 (case (car asm)
+	   ((.ORIG .ORIGIN)
+	    (format t ";; ORIGIN #x~4,'0X~%" (cadr asm)))
+	   (.BLKW
+	    (format t ";; .BLKW       ~{~X~}~%" (cdr asm)))
+	   (.STRING
+	    (format t ";; .STRING     ~S~%" (cadr asm)))
+	   (otherwise
+	    (format t ";;             ~{~S ~}~%" asm))))
+	(t
+	 (error "Unexpected form ~S~%" asm))))))

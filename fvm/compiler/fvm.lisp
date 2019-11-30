@@ -406,7 +406,7 @@ assembled object code."
 		     (let ((start-label (gensym))
 			   (end-label (gensym))
 			   (+loop-p nil))
-		       (multiple-value-bind (body-words end-word) (take-words 'di '(loop +loop))
+		       (multiple-value-bind (body-words end-word) (take-words 'do '(loop +loop))
 			 (unless (member end-word '(loop +loop)) (error "DO expects LOOP or +LOOP"))
 			 (when (eq end-word '+loop) (setf +loop-p t))
 		       `((pop r0) ;; start index 
@@ -704,7 +704,7 @@ Returns compiled bytecode."
 	   ((.ORIG .ORIGIN)
 	    (format t ";; ORIGIN #x~4,'0X~%" (cadr asm)))
 	   (.BLKW
-	    (format t ";; .BLKW       ~{~X~}~%" (cdr asm)))
+	    (format t ";; .BLKW       ~{~S~}~%" (cdr asm)))
 	   (.STRING
 	    (format t ";; .STRING     ~S~%" (cadr asm)))
 	   (otherwise

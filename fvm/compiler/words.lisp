@@ -150,6 +150,9 @@
 (defword i (:inline t)   ;; get current loop index 
   (ldr r0 rp 1) ;; r0=[rp+1]
   (push r0))
+(defword j (:inline t)    ;; get current outer loop index
+  (ldr r0 rp 4)
+  (push r0))
 (defword dumpchr () ;; ( char -- )
   (lisp +console-data-register+) !)
 (defword true (:inline t)

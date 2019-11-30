@@ -12,7 +12,7 @@
 	   #:br-nz #:br-zn #:br-pnz #:br-pzn #:br-npz #:br-nzp #:br-zpn #:br-znp
 	   #:add #:ld #:st #:call #:nand #:ldr #:str #:push #:rpush #:pop #:rpop
 	   #:ldi #:sti #:jmp #:ret #:mul #:div #:mod #:cmp #:lea 
-	   #:! #:DUP2 #:AND #:2+ #:I #:TUCK #:1+
+	   #:! #:DUP2 #:AND #:2+ #:I #:J #:TUCK #:1+
 	   #:XNOR #:NAND #:@ #:ROT #:NOR #:2- #:DROP #:FALSE
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-

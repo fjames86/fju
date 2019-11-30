@@ -168,7 +168,12 @@
     if "second-true" else "second-false" then dumpstr
   then)
 
-
+(defword test-nested-do ()
+  5 0 do
+    5 0 do
+      "I=" dumpstr i dumpdec " J=" dumpstr j dumpdec cr
+    loop
+  loop)
   
 
 ;; try a few words 
@@ -190,7 +195,8 @@
   "test-nested-if true true: " dumpstr true true test-nested-if cr 
   "test-nested-if true false: " dumpstr true false test-nested-if cr 
   "test-nested-if false true: " dumpstr false true test-nested-if cr
-  "test-nested-if false false: " dumpstr false false test-nested-if cr )
+  "test-nested-if false false: " dumpstr false false test-nested-if cr
+  "test-nested-do: " dumpstr test-nested-do cr)
 
 (defword test-nohalt ()
   "NoHalt" dumpstr cr)

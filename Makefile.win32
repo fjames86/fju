@@ -136,7 +136,7 @@ ${BINDIR}/shamir.exe: sec/shamir.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/shamir.exe ${CFLAGS} sec/shamir.c -L${LIBDIR} -lfju
 
 ${BINDIR}/fvm.exe: fvm/fvm-main.c ${LIBDIR}/libfju.dll
-	gcc -o ${BINDIR}/fvm.exe ${CFLAGS} fvm/fvm-main.c -L${LIBDIR} -lfju 
+	gcc -o ${BINDIR}/fvm.exe ${CFLAGS} fvm/fvm-main.c -L${LIBDIR} -lfju -lws2_32 
 
 FJU_DEPS += ${LIBDIR}/libmmf.a
 FJU_LIBS += -lmmf

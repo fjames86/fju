@@ -91,7 +91,14 @@ int main( int argc, char **argv ) {
   struct mmf_s mmf;
   int sts, i, len;
   uint64_t start, end;
-  
+
+#ifdef WIN32
+  {
+      WSADATA wsadata;
+      WSAStartup( MAKEWORD( 2, 2 ), &wsadata );
+  }
+#endif
+
   i = 1;
   if( i >= argc ) usage( NULL );
   if( (strcmp( argv[i], "-h" ) == 0) ||

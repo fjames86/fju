@@ -100,9 +100,7 @@
   reset-input)
 
 (defword test-sleep ()
-  "Start" dumpstr cr
-  2000 sleep
-  "End" dumpstr cr)
+  "Start " dumpstr 2000 sleep "End" dumpstr cr)
 
 (defword test-strlen ()
   "123412345" strlen dumpdec cr)

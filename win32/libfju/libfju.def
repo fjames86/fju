@@ -224,3 +224,4 @@ freg_id_by_name
 fvm_load_freg
 fvm_rpc_force_iter
 mmf_open2
+rpcd_get_default_port;

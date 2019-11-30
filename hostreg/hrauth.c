@@ -1055,12 +1055,12 @@ static int hrauth_call( int tcp, struct hrauth_call *hcall, struct xdr_s *args, 
     sin.sin_family = AF_INET;
     sin.sin_port = htons( port );
 
-    if( hcall->hostid ) {
-      sts = hostreg_host_by_id( hcall->hostid, &host );
-      if( sts ) return sts;   
-      sin.sin_addr.s_addr = host.addr[0];
+    if( (hcall->hostid == 0) || (hcall->hostid == hostreg_localid()) ) {
+	sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
     } else {
-      sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
+	sts = hostreg_host_by_id( hcall->hostid, &host );
+	if( sts ) return sts;   
+	sin.sin_addr.s_addr = host.addr[0];
     }      
 
     memset( &pars, 0, sizeof(pars) );

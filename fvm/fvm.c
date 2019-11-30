@@ -34,6 +34,7 @@
 
 #include <fju/fvm.h>
 #include <fju/rpc.h>
+#include <fju/rpcd.h>
 #include <fju/sec.h>
 #include <fju/freg.h>
 #include <fju/hrauth.h>
@@ -156,7 +157,7 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
   struct xdr_s args, res;
     
   memset( &hcall, 0, sizeof(hcall) );
-  hcall.hostid = 0; // loopback hostreg_localid();
+  hcall.hostid = hostreg_localid();
   hcall.prog = prog;
   hcall.vers = vers;
   hcall.proc = proc;
@@ -171,7 +172,7 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
 
   if( rpcdp() ) {
     /* if running as rpcd then send call and await reply */
-    hcall.hostid = hostreg_localid();
+//    hcall.hostid = hostreg_localid();
     sts = hrauth_call_udp_async( &hcall, &args, NULL );
     if( sts ) return sts;
     
@@ -185,7 +186,8 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
     opts.mask |= HRAUTH_CALL_OPT_TMPBUF;
     xdr_init( &opts.tmpbuf, malloc( 32*1024 ), 32*1024 );  
     opts.mask |= HRAUTH_CALL_OPT_PORT;
-    opts.port = 8000; // TODO 
+    opts.port = rpcd_get_default_port();
+    if( !opts.port ) opts.port = 8000; /*  Default to something sane */
     sts = hrauth_call_udp( &hcall, &args, &res, &opts );
     if( sts ) {
       free( opts.tmpbuf.buf );

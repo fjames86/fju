@@ -342,6 +342,14 @@ static void WINAPI rpcd_svc( DWORD argc, char **argv ) {
 
 
 
+int rpcd_get_default_port( void ) {
+    int sts;
+    uint32_t port;
+    sts = freg_get_by_name( NULL, 0,
+			    "/fju/rpc/port", FREG_TYPE_UINT32,
+			    (char *)&port, sizeof(port), NULL );
+    return sts ? 0 : port;
+}
 
 static void rpc_init_listen( void ) {
 	int i, sts, j;
@@ -359,11 +367,8 @@ static void rpc_init_listen( void ) {
 	}
 
 	if( !rpc.nlisten ) {
-	    uint32_t port;
-	    sts = freg_get_by_name( NULL, 0,
-				    "/fju/rpc/port", FREG_TYPE_UINT32,
-				    (char *)&port, sizeof(port), NULL );
-	    if( !sts ) {
+	    uint32_t port = rpcd_get_default_port();
+	    if( port ) {
 		rpc.listen[0].type = RPC_LISTEN_UDP;
 		rpc.listen[0].addr.sin.sin_family = AF_INET;
 		rpc.listen[0].addr.sin.sin_port = htons( port );

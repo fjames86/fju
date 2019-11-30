@@ -136,6 +136,7 @@ void rpcd_stop( void );
 
 /* true if running as rpcd */
 int rpcdp( void );
+int rpcd_get_default_port( void );
 
 #endif
 

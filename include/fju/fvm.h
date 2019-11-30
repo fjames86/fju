@@ -98,5 +98,8 @@ int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
 #define FVM_RPC_VERS 1
 void fvm_register( void );
 
+#define FVM_EVENT_CATEGORY FVM_RPC_PROG
+#define FVM_EVENT_PROGDONE 0        /* parm = &id */
+
 #endif
 

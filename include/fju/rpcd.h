@@ -138,5 +138,30 @@ void rpcd_stop( void );
 int rpcdp( void );
 int rpcd_get_default_port( void );
 
+struct rpcd_event;
+struct rpcd_subscriber;
+struct rpcd_subscriber {
+    struct rpcd_subscriber *next;
+    void (*cb)( struct rpcd_subscriber *subsc, struct rpcd_event *evt, uint32_t id, void *parm );
+    void *prv;
+};
+    
+struct rpcd_event {
+    struct rpcd_event *next;
+    
+    uint32_t category;
+    struct rpcd_subscriber *subcs;
+    void *prv;
+};
+
+int rpcd_event_register( struct rpcd_event *evt );
+int rpcd_event_unregister( struct rpcd_event *evt );
+void rpcd_event_publish( uint32_t category, uint32_t id, void *parm );
+int rpcd_event_subscribe( uint32_t category, struct rpcd_subscriber *sc );
+int rpcd_event_unsubscribe( uint32_t category, struct rpcd_subscriber *subsc );
+
+#define RPCD_EVENT_CATEGORY 0x00001000
+#define RPCD_EVENT_RPCCALL  0
+
 #endif
 

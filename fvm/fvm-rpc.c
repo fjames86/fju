@@ -6,6 +6,7 @@
 #include <inttypes.h>
 
 #include <fju/rpc.h>
+#include <fju/rpcd.h>
 #include <fju/fvm.h>
 #include <fju/sec.h>
 #include <fju/log.h>
@@ -30,6 +31,7 @@ struct loaded_fvm {
   
 static struct {
   struct loaded_fvm *progs;
+  struct rpcd_event evt;
 } glob;
 
 static void fvm_iter_cb( struct rpc_iterator *iter );
@@ -253,18 +255,21 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
       /* program still needs to run, but we yield here and schedule ourselves to be run again ASAP */
       timeout = 0;
       prev = lf;
-    } else if( (lf->fvm.flags & FVM_FLAG_DONE) && (lf->flags & FVM_RPC_AUTOUNLOAD) ) {
-	if( prev ) prev->next = next;
-	else glob.progs = next;
-	if( lf->flags & FVM_RPC_INLOG ) log_close( &lf->inlog );
-	if( lf->flags & FVM_RPC_OUTLOG ) log_close( &lf->outlog );
-	free( lf );
+    } else if( (lf->fvm.flags & FVM_FLAG_DONE) ) {
+	rpcd_event_publish( FVM_EVENT_CATEGORY, FVM_EVENT_PROGDONE, &lf->id );
+	if( lf->flags & FVM_RPC_AUTOUNLOAD ) {
+	    if( prev ) prev->next = next;
+	    else glob.progs = next;
+	    if( lf->flags & FVM_RPC_INLOG ) log_close( &lf->inlog );
+	    if( lf->flags & FVM_RPC_OUTLOG ) log_close( &lf->outlog );
+	    free( lf );
+	}
     } else if( lf->fvm.sleep_timeout && (rpc_now() >= lf->fvm.sleep_timeout) ) {
 	lf->fvm.flags |= FVM_FLAG_RUNNING;
 	lf->fvm.sleep_timeout = 0;
 	timeout = 0;
     } else {
-	/* stopped running but set to auto unload when stopped */
+	/* stopped running but not set to auto unload when stopped */
 	prev = lf;
     }
     lf = next;
@@ -363,9 +368,11 @@ static void load_startup_progs( void ) {
     } while( 1 );
 }
 
-
 void fvm_register( void ) {
   rpc_program_register( &fvm_prog );
   rpc_iterator_register( &fvm_iter );
   load_startup_progs();
+
+  glob.evt.category = FVM_EVENT_CATEGORY;
+  rpcd_event_register( &glob.evt );
 }

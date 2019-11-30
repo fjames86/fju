@@ -138,30 +138,24 @@ void rpcd_stop( void );
 int rpcdp( void );
 int rpcd_get_default_port( void );
 
-struct rpcd_event;
 struct rpcd_subscriber;
 struct rpcd_subscriber {
     struct rpcd_subscriber *next;
-    void (*cb)( struct rpcd_subscriber *subsc, struct rpcd_event *evt, uint32_t id, void *parm );
+
+    uint32_t *category;     /* list of event categories. empty list implies all categories */
+    int ncategory;
+
+    /* callback and private data */
+    void (*cb)( struct rpcd_subscriber *sc, uint32_t category, uint32_t eventid, void *parm );
     void *prv;
 };
     
-struct rpcd_event {
-    struct rpcd_event *next;
-    
-    uint32_t category;
-    struct rpcd_subscriber *subcs;
-    void *prv;
-};
+void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm );
+void rpcd_event_subscribe( struct rpcd_subscriber *sc );
+int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc );
 
-int rpcd_event_register( struct rpcd_event *evt );
-int rpcd_event_unregister( struct rpcd_event *evt );
-void rpcd_event_publish( uint32_t category, uint32_t id, void *parm );
-int rpcd_event_subscribe( uint32_t category, struct rpcd_subscriber *sc );
-int rpcd_event_unsubscribe( uint32_t category, struct rpcd_subscriber *subsc );
-
-#define RPCD_EVENT_CATEGORY 0x00001000
-#define RPCD_EVENT_RPCCALL  0
+#define RPCD_EVENT_CATEGORY 0x00001000  /* event category for rpcd itself */
+#define RPCD_EVENT_RPCCALL  0           /* received an rpc call */
 
 #endif
 

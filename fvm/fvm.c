@@ -937,9 +937,9 @@ int fvm_load_freg( struct fvm_state *fvm, uint64_t hreg ) {
     return -1;
   }
 
-  fvm_load( fvm, (uint16_t *)buf, len / 2 );
+  sts = fvm_load( fvm, (uint16_t *)buf, len / 2 );
   free( buf );
-  return 0;
+  return sts;
 }
 
 int fvm_reset( struct fvm_state *fvm ) {

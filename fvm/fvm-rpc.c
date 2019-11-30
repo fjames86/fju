@@ -31,7 +31,6 @@ struct loaded_fvm {
   
 static struct {
   struct loaded_fvm *progs;
-  struct rpcd_event evt;
 } glob;
 
 static void fvm_iter_cb( struct rpc_iterator *iter );
@@ -61,8 +60,12 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, int start, u
     memset( lf, 0, sizeof(*lf) );
     lf->id = sec_rand_uint32();
     strncpy( lf->name, name, sizeof(lf->name) - 1 );
-    fvm_load( &lf->fvm, (uint16_t *)bufp, buflen / 2 );
-
+    sts = fvm_load( &lf->fvm, (uint16_t *)bufp, buflen / 2 );
+    if( sts ) {
+	free( lf );
+	return NULL;
+    }
+    
     if( flags & FVM_RPC_INLOG ) {
 	sts = nls_share_by_hshare( inid, &nls );
 	if( !sts ) sts = nls_share_open( &nls, &lf->inlog );
@@ -118,7 +121,7 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   lf = fvm_load_prog( (uint8_t *)bufp, buflen, start, flags, inid, outid, name );
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  xdr_encode_uint32( &inc->xdr, lf->id );
+  xdr_encode_uint32( &inc->xdr, lf ? lf->id : 0);
   rpc_complete_accept_reply( inc, handle );
   
   return 0;
@@ -372,7 +375,4 @@ void fvm_register( void ) {
   rpc_program_register( &fvm_prog );
   rpc_iterator_register( &fvm_iter );
   load_startup_progs();
-
-  glob.evt.category = FVM_EVENT_CATEGORY;
-  rpcd_event_register( &glob.evt );
 }

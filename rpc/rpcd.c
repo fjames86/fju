@@ -74,7 +74,7 @@ static struct {
 	uint8_t buftab[RPC_MAX_CONN][RPC_MAX_BUF];
 
 	uint64_t connid;
-        struct rpcd_event *rpcd_events;
+        struct rpcd_subscriber *rpcd_subcs;
 } rpc;
 
 #ifdef WIN32
@@ -88,7 +88,6 @@ static void rpc_close_connections( void );
 static char *mynet_ntop( rpc_listen_t type, struct sockaddr *addr, int alen, char *ipstr );
 static void rpcd_load_service( char *svcname, char *path, char *mainfn );
 static void rpcd_load_services( void );
-static void rpcd_reg_evts( void );
 
 #ifndef WIN32
 static void rpc_sig( int sig, siginfo_t *info, void *context ) {
@@ -990,9 +989,6 @@ static void rpcd_run( void ) {
 	}
 #endif
 
-	/* register rpcd events */
-	rpcd_reg_evts();
-	
 	/* register programs and initialize */
 	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_INIT, NULL, rpc.main_cxt );
 
@@ -1310,95 +1306,46 @@ void rpcd_stop( void ) {
 }
 
 
-int rpcd_event_register( struct rpcd_event *evt ) {
-    struct rpcd_event *ev;
-    
-    ev = rpc.rpcd_events;
-    while( ev ) {
-	if( ev->category == evt->category ) return -1;
-	ev = ev->next;
-    }
-    
-    evt->next = rpc.rpcd_events;
-    evt->subcs = NULL;
-    rpc.rpcd_events = evt;    
-}
-
-int rpcd_event_unregister( struct rpcd_event *evt ) {
-    struct rpcd_event *ev, *prev;
-    prev = NULL;
-    ev = rpc.rpcd_events;
-    while( ev ) {
-	if( ev == evt ) {
-	    if( prev ) prev->next = ev->next;
-	    else rpc.rpcd_events = ev->next;
-	    return 0;
-	}
-	prev = ev;
-	ev = ev->next;
-    }
-    return -1;	
-}
-
-void rpcd_event_publish( uint32_t category, uint32_t id, void *parm ) {
-    struct rpcd_event *ev;
+void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm ) {
     struct rpcd_subscriber *sc;
-    ev = rpc.rpcd_events;
-    while( ev ) {
-	if( ev->category == category ) {
-	    sc = ev->subcs;
-	    while( sc ) {
-		sc->cb( sc, ev, id, parm );
-		sc = sc->next;
+    int i, found;
+    sc = rpc.rpcd_subcs;
+    while( sc ) {
+	found = 0;
+	if( sc->ncategory == 0 ) found = 1;
+	else {
+	    for( i = 0; i < sc->ncategory; i++ ) {
+		if( sc->category[i] == category ) {
+		    found = 1;
+		    break;
+		}
 	    }
-	    return;
 	}
-	ev = ev->next;
+	if( found ) {
+	    sc->cb( sc, category, eventid, parm );
+	}
+	sc = sc->next;
     }
 }
 
-int rpcd_event_subscribe( uint32_t category, struct rpcd_subscriber *sc ) {
-    struct rpcd_event *ev;
-    ev = rpc.rpcd_events;
-    while( ev ) {
-	if( ev->category == category ) {
-	    sc->next = ev->subcs;
-	    ev->subcs = sc;
+void rpcd_event_subscribe( struct rpcd_subscriber *sc ) {
+    sc->next = rpc.rpcd_subcs;
+    rpc.rpcd_subcs = sc;
+}
+
+int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc ) {
+    struct rpcd_subscriber *sc, *prev;
+    sc = rpc.rpcd_subcs;
+    prev = NULL;
+    while( sc ) {
+	if( sc == subsc ) {
+	    if( prev ) prev->next = sc->next;
+	    else rpc.rpcd_subcs = sc->next;
 	    return 0;
 	}
-	ev = ev->next;
+	prev = sc;
+	sc = sc->next;
     }
     return -1;
 }
 
-int rpcd_event_unsubscribe( uint32_t category, struct rpcd_subscriber *subsc ) {
-    struct rpcd_event *ev;
-    struct rpcd_subscriber *sc, *prev;
-    ev = rpc.rpcd_events;
-    while( ev ) {
-	if( ev->category == category ) {
-	    sc = ev->subcs;
-	    prev = NULL;
-	    while( sc ) {
-		if( sc == subsc ) {
-		    if( prev ) prev->next = sc->next;
-		    else ev->subcs = sc->next;
-		    return 0;
-		}
-		sc = sc->next;
-	    }
-	    return -1;
-	}
-	ev = ev->next;
-    }
-    return -1;
-}
-
-static void rpcd_reg_evts( void ) {
-    static struct rpcd_event evt;
-
-    /* register an event that gets published when we receive an rpc call */
-    evt.category = RPCD_EVENT_CATEGORY;
-    rpcd_event_register( &evt );
-    
-}

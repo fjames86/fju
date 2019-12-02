@@ -295,6 +295,12 @@ assembled object code."
     (second-pass instructions ltab)))
 
 (defun %save-program (stream objs)
+  ;; write header
+  (write-sequence #(#x46 #x56 #x4d #x20) stream)  ;; magic number "FVM " 
+  (write-sequence #(0 0 0 0) stream)  ;; version
+  (write-sequence (make-array (* 30 4) :element-type '(unsigned-byte 8)) stream) ;; spare 
+  
+  ;; write program data 
   (dolist (obj objs)
     (destructuring-bind (offset data) obj
       ;; write object header (just offset and count)

@@ -881,30 +881,46 @@ int fvm_run_timeout( struct fvm_state *state, int timeout ) {
   return 0;
 }
 
-int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
+int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   int i, j;
   uint16_t offset, count;
   uint16_t bos = 0;
-
+  uint16_t *program;
+  struct fvm_program_header *hdr;
+  
   /* 
    * TODO: better image format. We don't need anything as complex as 
    * ELF or PE but something better than this would be good. 
    */
 
+  hdr = (struct fvm_program_header *)progdata;
+  program = (uint16_t *)(progdata + sizeof(*hdr) );
+  proglen -= sizeof(*hdr);
+  proglen /= 2; /* convert to number of uint16_t */
+
+  /* check header */
+  if( hdr->magic != FVM_PROGRAM_MAGIC ) return -1;
+  
   memset( state->mem, 0, sizeof(state->mem) );
   i = 0;
   while( i < proglen ) {
-      if( (i + 1) >= proglen ) return -1;
+    if( (i + 1) >= proglen ) {
+      return -1;
+    }
 
       offset = program[i];
       count = program[i+1];
       i += 2;
-      if( ((uint32_t)offset + (uint32_t)count) >= 0xffff ) return -1;
+      if( ((uint32_t)offset + (uint32_t)count) >= 0xffff ) {
+	return -1;
+      }
 
       if( (offset + count) > bos ) bos = offset + count;
       
       for( j = 0; j < count; j++ ) {
-	  if( i >= proglen ) return -1;
+	if( i >= proglen ) {
+	  return -1;
+	}
 	  
 	  state->mem[offset + j] = program[i];
 	  i++;
@@ -937,7 +953,7 @@ int fvm_load_freg( struct fvm_state *fvm, uint64_t hreg ) {
     return -1;
   }
 
-  sts = fvm_load( fvm, (uint16_t *)buf, len / 2 );
+  sts = fvm_load( fvm, buf, len );
   free( buf );
   return sts;
 }

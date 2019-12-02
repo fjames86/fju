@@ -77,7 +77,7 @@ struct fvm_state {
   } rpc;
 };
 
-int fvm_load( struct fvm_state *state, uint16_t *program, int proglen );
+int fvm_load( struct fvm_state *state, char *progdata, int proglen );
 int fvm_load_freg( struct fvm_state *fvm, uint64_t hreg );
 int fvm_run( struct fvm_state *state );
 int fvm_run_nsteps( struct fvm_state *state, int nsteps );
@@ -94,6 +94,14 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
 #define FVM_INT_DBZ_PL    FVM_INT_EXCEPTION       /* divide by zero level */
 int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
 
+struct fvm_program_header {
+  uint32_t magic;
+#define FVM_PROGRAM_MAGIC 0x204D5646 /* header magic identifier "FVM " */
+  uint32_t version;
+
+  uint32_t spare[30];
+};
+
 /* ----------- rpcd only ---------- */
 
 #define FVM_RPC_PROG 0x27E1FB11
@@ -102,6 +110,7 @@ void fvm_register( void );
 
 #define FVM_EVENT_CATEGORY FVM_RPC_PROG
 #define FVM_EVENT_PROGDONE 0        /* parm = &id */
+
 
 #endif
 

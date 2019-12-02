@@ -166,7 +166,7 @@ int main( int argc, char **argv ) {
   if( sts ) usage( "Failed to open program file \"%s\"", path );
   sts = mmf_remap( &mmf, mmf.fsize );
   if( sts ) usage( "Failed to map program" );
-  sts = fvm_load( &glob.fvm, mmf.file, mmf.fsize / 2 );
+  sts = fvm_load( &glob.fvm, mmf.file, mmf.fsize );
   if( sts ) usage( "Failed to load program\n" );
   if( glob.verbose > 1 ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
   mmf_close( &mmf );

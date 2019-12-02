@@ -161,7 +161,11 @@ static int freg_proc_put( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&buf, &len );  
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  sts = freg_put( NULL, parentid, name, flags, buf, len, &id );
+  if( (flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+    sts = freg_subkey( NULL, parentid, name, FREG_CREATE, &id );
+  } else {
+    sts = freg_put( NULL, parentid, name, flags, buf, len, &id );
+  }
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   if( sts ) {

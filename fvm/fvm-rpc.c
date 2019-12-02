@@ -74,7 +74,7 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, int start, u
     memset( lf, 0, sizeof(*lf) );
     lf->id = sec_rand_uint32();
     strncpy( lf->name, name, sizeof(lf->name) - 1 );
-    sts = fvm_load( &lf->fvm, (uint16_t *)bufp, buflen / 2 );
+    sts = fvm_load( &lf->fvm, (char *)bufp, buflen );
     if( sts ) {
 	free( lf );
 	return NULL;

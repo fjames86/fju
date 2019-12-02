@@ -237,5 +237,12 @@
     (call-load progdata :autounload-p autounload-p)))
 
 
-  
+;; --------------
+
+(defword test-event-trigger ()
+  "test-event-trigger" write-output)
+
+(defun test-event-trigger ()
+  (save-program "test-event-trigger.obj" 'test-event-trigger))
+
 

@@ -122,19 +122,39 @@
 				   (:key 4))))))
 
 
-(defun install-event-program (entry-word category eventid &optional inlogid outlogid)
-  (let ((parentid (call-freg-get "/fju/fvm/event" :key))
-	(name (let ((n (string-downcase (symbol-name entry-word))))
-		(subseq n 0 (if (> (length n) 32) 32 (length n))))))
+(defun install-event-program (name progdata category eventid &key inlogid outlogid)
+  (let ((parentid (call-freg-get "/fju/fvm/event" :key)))
     (call-freg-put parentid name :key nil)
     (let ((parentid (call-freg-get (format nil "/fju/fvm/event/~A" name) :key)))
-      (call-freg-put parentid "progdata" :opaque (compile-program entry-word))
+      (call-freg-put parentid "progdata" :opaque progdata)
       (call-freg-put parentid "category" :uint32 category)
       (call-freg-put parentid "eventid" :uint32 eventid)
       (when inlogid
 	(call-freg-put parentid "inlogid" :uint64 inlogid))
       (when outlogid
 	(call-freg-put parentid "outlogid" :uint64 outlogid)))))
+
+
+(defun install-startup-program (name progdata &key startp autounloadp inlogid outlogid)
+  (let ((parentid (call-freg-get "/fju/fvm/event" :key)))
+    (call-freg-put parentid name :key nil)
+    (let ((parentid (call-freg-get (format nil "/fju/fvm/startup/~A" name) :key))
+	  (flags 0))
+      (when autounloadp (setf flags (logior flags #x0001)))
+      (when inlogid (setf flags (logior flags #x0002)))
+      (when outlogid (setf flags (logior flags #x0004)))
+      
+      (call-freg-put parentid "progdata" :opaque progdata)
+      (call-freg-put parentid "flags" :uint32 flags)
+      (call-freg-put parentid "start" :uint32 (if startp 1 0))
+      (when inlogid
+	(call-freg-put parentid "inlogid" :uint64 inlogid))
+      (when outlogid
+	(call-freg-put parentid "outlogid" :uint64 outlogid)))))
+
+
+
+
 
 
   

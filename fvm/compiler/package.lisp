@@ -28,7 +28,8 @@
 	   #:xdr-decode-opaque #:xdr-decode-fixed #:rpc-call
 	   #:xdr-encode-boolean #:xdr-decode-boolean #:write-output-binary
 	   #:pprint-assembly #:get-rpc-timeout #:set-rpc-timeout
-	   #:variable* #:get-rpc-service #:set-rpc-service 
+	   #:variable* #:get-rpc-service #:set-rpc-service
+	   #:install-event-program #:install-startup-program
 	   ))
 	   
    

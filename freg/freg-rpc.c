@@ -200,6 +200,7 @@ static int freg_proc_get_by_name( struct rpc_inc *inc ) {
   uint32_t flags;
   char path[256];
   char *buf = NULL;
+  struct freg_entry entry;
 
   if( !freg_authenticated( inc ) ) return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
 
@@ -222,7 +223,12 @@ static int freg_proc_get_by_name( struct rpc_inc *inc ) {
     goto done;
   }
 
+  sts = freg_entry_by_name( NULL, 0, path, &entry, NULL );
+
   xdr_encode_boolean( &inc->xdr, 1 );
+  xdr_encode_uint64( &inc->xdr, entry.id );
+  xdr_encode_uint32( &inc->xdr, flags );
+
   switch( flags & FREG_TYPE_MASK ) {
   case FREG_TYPE_UINT32:
     xdr_encode_uint32( &inc->xdr, *(uint32_t *)buf );

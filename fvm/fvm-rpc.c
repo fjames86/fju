@@ -460,7 +460,7 @@ static void reload_evtprogs( struct rpc_iterator *iter ) {
     if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) goto cont;
     tlentry = entry;
     
-    log_writef( NULL, LOG_LVL_INFO, "Loading event trigger program \"%s\"", entry.name );
+    log_writef( NULL, LOG_LVL_TRACE, "Loading event trigger program \"%s\"", entry.name );
 
     i = glob.nevtprogs;
     sts = freg_get_by_name( NULL, tlentry.id, "category", FREG_TYPE_UINT32, (char *)&glob.evtprogs[i].category, sizeof(uint32_t), NULL );
@@ -486,7 +486,7 @@ static void reload_evtprogs( struct rpc_iterator *iter ) {
     sts = freg_get_by_name( NULL, tlentry.id, "outlogid", FREG_TYPE_UINT64, (char *)&glob.evtprogs[i].outlogid, sizeof(uint64_t), NULL );
     if( !sts ) glob.evtprogs[i].flags |= FVM_RPC_OUTLOG;
 
-    log_writef( NULL, LOG_LVL_ERROR, "Loaded event program \"%s\"", tlentry.name );
+    log_writef( NULL, LOG_LVL_TRACE, "Loaded event program \"%s\"", tlentry.name );
     glob.nevtprogs++;
     if( glob.nevtprogs >= FVM_MAX_EVTPROGS ) break;
 						    

@@ -890,7 +890,7 @@ int fvm_load( struct fvm_state *state, uint16_t *program, int proglen ) {
    * TODO: better image format. We don't need anything as complex as 
    * ELF or PE but something better than this would be good. 
    */
-  
+
   memset( state->mem, 0, sizeof(state->mem) );
   i = 0;
   while( i < proglen ) {

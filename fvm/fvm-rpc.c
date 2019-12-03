@@ -415,7 +415,7 @@ static int fvm_rpc_runprogram( struct event_prog *ep ) {
 
     sprintf( name, "evt:%u:%u", ep->category, ep->eventid );
     fvm_load_prog( (uint8_t *)progdata, proglen, 1, ep->flags, ep->inlogid, ep->outlogid, name );
-    log_writef( NULL, LOG_LVL_INFO, "Loaded event program category=%u eventid=%u len=%d inlog=%"PRIx64" outlog=%"PRIx64"",
+    log_writef( NULL, LOG_LVL_INFO, "Loaded event program category=%u eventid=%u proglen=%d inlog=%"PRIx64" outlog=%"PRIx64"",
 		ep->category, ep->eventid, proglen, ep->inlogid, ep->outlogid );
     
     free( progdata );
@@ -433,7 +433,7 @@ static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t 
     ep = &glob.evtprogs[i];
     
     if( (ep->category == category) && (ep->eventid == id) ) {
-      log_writef( NULL, LOG_LVL_INFO, "fvm_evt_cb category=%u eventid=%u freg_id=%"PRIx64"", category, id, ep->progdata );
+      log_writef( NULL, LOG_LVL_INFO, "fvm_evt_cb category=%u eventid=%u progdata=%"PRIx64"", category, id, ep->progdata );
       fvm_rpc_runprogram( ep );
     }
     

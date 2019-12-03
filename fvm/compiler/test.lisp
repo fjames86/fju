@@ -246,3 +246,17 @@
   (save-program "test-event-trigger.obj" 'test-event-trigger))
 
 
+(defrpc call-cmdprog-event (999999 1 2)
+  :arg-body ;; (eventid category --)
+  (xdr-encode-uint32 xdr-encode-uint32)
+  :result-body
+  ("call-cmdprog-event success" dumpstr)
+  :fail-body
+  ("call-cmdprog-event failed" dumpstr))
+
+(defword trigger-1234-event ()
+  uint32 1234 uint32 1234 call-cmdprog-event)
+
+
+
+  

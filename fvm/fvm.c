@@ -413,18 +413,18 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	iov[0].len = count;
 	entry.niov = 1;
 	entry.iov = iov;
-	entry.id = state->inlog_id;
-	sts = log_read( state->inlog, state->inlog_id, &entry, 1, &ne );
+	entry.id = state->inlogid;
+	sts = log_read( state->inlog, state->inlogid, &entry, 1, &ne );
 	if( sts || !ne ) {
 	  state->reg[FVM_REG_R0] = 0; /* R0 receives msglen */
 	} else {
-	  state->inlog_id = entry.id;
+	  state->inlogid = entry.id;
 	  state->reg[FVM_REG_R0] = entry.msglen;
 	}
 	break;
       case 1:
 	/* reset msg id */
-	state->inlog_id = 0;
+	state->inlogid = 0;
 	break;
       }
       

@@ -64,7 +64,7 @@ struct fvm_state {
 #define FVM_FLAG_RPC     0x0008        /* rpc in flight, awaiting reply */
   uint64_t tickcount;
   struct log_s *inlog;
-  uint64_t inlog_id;
+  uint64_t inlogid;
   struct log_s *outlog;
   uint16_t bos;
   uint64_t sleep_timeout;
@@ -107,6 +107,9 @@ struct fvm_program_header {
 #define FVM_RPC_PROG 0x27E1FB11
 #define FVM_RPC_VERS 1
 void fvm_register( void );
+
+#define FVM_RPC_AUTOUNLOAD 0x0001    /* unload program when finished, otherwise leaves it loaded */
+#define FVM_RPC_START      0x0002    /* start immediately, otherwise loads in paused state */
 
 #define FVM_EVENT_CATEGORY FVM_RPC_PROG
 #define FVM_EVENT_PROGDONE 0        /* parm = &id */

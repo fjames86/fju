@@ -1023,15 +1023,14 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 
 static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
-  int start, sts;
+  int sts;
   uint32_t flags;
   uint64_t inlog_id, outlog_id;
   char *filepath;
   struct mmf_s mmf;
   char name[64];
   
-  start = 1;
-  flags = 0x0001; /* enasble autounload by default */
+  flags = FVM_RPC_AUTOUNLOAD|FVM_RPC_START;
   outlog_id = 0;
   filepath = NULL;
   while( i < argc ) {
@@ -1040,17 +1039,15 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
       if( !argval ) usage( "Need file path" );
       filepath = argval;
     } else if( strcmp( argname, "start" ) == 0 ) {
-      if( argval && (strcmp( argval, "no" ) == 0) ) start = 0;
+      if( argval && (strcmp( argval, "no" ) == 0) ) flags &= ~FVM_RPC_START;
     } else if( strcmp( argname, "autounload" ) == 0 ) {
       if( argval && (strcmp( argval, "false" ) == 0) ) flags &= ~0x0001;
     } else if( strcmp( argname, "inlog" ) == 0 ) {
       if( !argval ) usage( "Need inlog value" );
       inlog_id = strtoull( argval, NULL, 16 );
-      flags |= 0x0002;
     } else if( strcmp( argname, "outlog" ) == 0 ) {
       if( !argval ) usage( "Need outlog value" );
       outlog_id = strtoull( argval, NULL, 16 );
-      flags |= 0x0004;
     } else if( strcmp( argname, "name" ) == 0 ) {
       if( !argval ) usage( "Need name value" );
       strncpy( name, argval, sizeof(name) - 1 );
@@ -1067,7 +1064,6 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
   mmf_close( &mmf );
   
-  xdr_encode_boolean( xdr, start );
   xdr_encode_uint32( xdr, flags );
   xdr_encode_uint64( xdr, inlog_id );
   xdr_encode_uint64( xdr, outlog_id );

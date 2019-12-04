@@ -13,7 +13,6 @@
 
 (drx:defxstruct load-args ((:mode :list))
   (progdata :opaque)
-  (start :boolean)
   (flags :uint32)
   (inlog-id :uint64)
   (outlog-id :uint64)
@@ -25,8 +24,7 @@
 			start
 			(let ((flags 0))
 			  (when autounload-p (setf flags (logior flags #x1)))
-			  (when inlog-id (setf flags (logior flags #x2)))
-			  (when outlog-id (setf flags (logior flags #x4)))
+			  (when start (setf flags (logior flags #x2)))
 			  flags)
 			(or inlog-id 0)
 			(or outlog-id 0)

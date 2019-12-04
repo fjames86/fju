@@ -29,10 +29,7 @@ struct loaded_fvm {
 struct event_prog {
   uint32_t category;
   uint32_t eventid;
-  uint64_t progdata;
-  uint32_t flags;
-  uint64_t inlogid;
-  uint64_t outlogid;
+  char name[64];  
 };
 
 static struct {
@@ -237,12 +234,38 @@ static int fvm_proc_pause( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_interrupt( struct rpc_inc *inc ) {
+  int handle, sts;
+  struct loaded_fvm *lf;
+  uint32_t id, ivec, priority;
+
+  sts = xdr_decode_uint32( &inc->xdr, &id );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &ivec );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &priority );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );  
+  lf = glob.progs;
+  while( lf ) {
+      if( lf->id == id ) {
+	  fvm_interrupt( &lf->fvm, (uint16_t)ivec, (uint16_t)priority );
+	  break;
+      }
+      lf = lf->next;    
+  }
+
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_load },
   { 2, fvm_proc_unload },
   { 3, fvm_proc_list },
   { 4, fvm_proc_pause },
+  { 5, fvm_proc_interrupt },
   { 0, NULL }
 };
 
@@ -298,7 +321,24 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
   iter->timeout = timeout;
 }
 
-static void load_startup_prog( struct freg_entry *entry ) {
+
+/*
+ * /fju/fvm/programs/NAME/
+ *   progdata opaque   program data
+ *   program string    path to file storing program
+ *   flags   uint32
+ *   inlog   uint64 
+ *   outlog  uint64 
+ */
+static uint64_t fvm_root_handle( void ) {
+    static uint64_t hreg = 0;
+    if( !hreg ) {
+	freg_subkey( NULL, 0, "/fju/fvm", 0, &hreg );
+    }
+    return hreg;
+}
+	
+static void load_freg_prog( struct freg_entry *entry ) {
     int sts, proglen, len;
     char *progdata;
     char path[256];
@@ -362,64 +402,39 @@ static void load_startup_prog( struct freg_entry *entry ) {
     
 }
 
+static void load_prog_by_name( char *name ) {
+    int sts;
+    struct freg_entry entry;
+    
+    sts = freg_entry_by_name( NULL, fvm_root_handle(), name, &entry, NULL );
+    if( sts ) return;
+    load_freg_prog( &entry );
+}
+
+
 static void load_startup_progs( void ) {
     int sts;
     uint64_t fvmid, id;
     struct freg_entry entry;
+    char name[64];
     
-    sts = freg_subkey( NULL, 0, "/fju/fvm/startup", FREG_CREATE, &fvmid );
+    sts = freg_subkey( NULL, fvm_root_handle(), "startup", FREG_CREATE, &fvmid );
     if( sts ) return;
 
     id = 0;
     do {
 	sts = freg_next( NULL, fvmid, id, &entry );
 	if( sts ) break;
-	if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) goto cont;
+	if( (entry.flags & FREG_TYPE_MASK) != FREG_TYPE_STRING ) goto cont;
 
-	log_writef( NULL, LOG_LVL_INFO, "Loading startup program \"%s\"", entry.name );
-	load_startup_prog( &entry );
+	sts = freg_get( NULL, entry.id, NULL, name, sizeof(name), NULL );
+	if( !sts ) load_prog_by_name( name );
+
     cont:
 	id = entry.id;
     } while( 1 );
 }
 
-
-static int fvm_rpc_runprogram( struct event_prog *ep ) {
-    int sts;
-    uint32_t flags;
-    char name[32];
-    char *progdata;
-    int proglen, len;
-    
-    sts = freg_get( NULL, ep->progdata, &flags, NULL, 0, &len );
-    if( sts ) {
-      log_writef( NULL, LOG_LVL_ERROR, "event progdata missing" );
-      return -1;
-    }
-    
-    if( (flags & FREG_TYPE_MASK) != FREG_TYPE_OPAQUE ) {
-      log_writef( NULL, LOG_LVL_ERROR, "event progdata not opaque" );
-      return -1;
-    }
-    
-    proglen = len;
-    progdata = malloc( proglen );
-    sts = freg_get( NULL, ep->progdata, NULL, progdata, len, NULL );
-    if( sts ) {
-      log_writef( NULL, LOG_LVL_ERROR, "Unexpected failure reading progdata" );
-      free( progdata );
-      return -1;
-    }
-
-    sprintf( name, "evt:%u:%u", ep->category, ep->eventid );
-    fvm_load_prog( (uint8_t *)progdata, proglen, ep->flags | FVM_RPC_START, ep->inlogid, ep->outlogid, name );
-    log_writef( NULL, LOG_LVL_INFO, "Loaded event program category=%u eventid=%u proglen=%d inlog=%"PRIx64" outlog=%"PRIx64"",
-		ep->category, ep->eventid, proglen, ep->inlogid, ep->outlogid );
-    
-    free( progdata );
-
-    return 0;
-}
 
 static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t id, void *parm ) {
   struct event_prog *ep;
@@ -431,8 +446,8 @@ static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t 
     ep = &glob.evtprogs[i];
     
     if( (ep->category == category) && (ep->eventid == id) ) {
-      log_writef( NULL, LOG_LVL_INFO, "fvm_evt_cb category=%u eventid=%u progdata=%"PRIx64"", category, id, ep->progdata );
-      fvm_rpc_runprogram( ep );
+      log_writef( NULL, LOG_LVL_INFO, "fvm_evt_cb category=%u eventid=%u", category, id );
+      load_prog_by_name( ep->name );
     }
     
   }
@@ -443,7 +458,7 @@ static void reload_evtprogs( struct rpc_iterator *iter ) {
   int sts, i;
   uint64_t fvmid, id;
   struct freg_entry entry, tlentry;
-
+  
   (void)(iter);
   
   glob.nevtprogs = 0;
@@ -462,24 +477,14 @@ static void reload_evtprogs( struct rpc_iterator *iter ) {
 
     i = glob.nevtprogs;
     sts = freg_get_by_name( NULL, tlentry.id, "category", FREG_TYPE_UINT32, (char *)&glob.evtprogs[i].category, sizeof(uint32_t), NULL );
-    
     if( !sts ) freg_get_by_name( NULL, tlentry.id, "eventid", FREG_TYPE_UINT32, (char *)&glob.evtprogs[i].eventid, sizeof(uint32_t), NULL );
-    if( !sts ) {
-      sts = freg_entry_by_name( NULL, tlentry.id, "progdata", &entry, NULL );
-      if( !sts ) glob.evtprogs[i].progdata = entry.id;
-    }
+    if( !sts ) sts = freg_get_by_name( NULL, tlentry.id, "name", FREG_TYPE_STRING, glob.evtprogs[i].name, sizeof(glob.evtprogs[i].name), NULL );
 
     if( sts ) {
-      log_writef( NULL, LOG_LVL_ERROR, "Failed to load event program \"%s\"", tlentry.name );
+	log_writef( NULL, LOG_LVL_ERROR, "Failed to load event program \"%s\" category=%u eventid=%d program=%s", tlentry.name,
+		    glob.evtprogs[i].category, glob.evtprogs[i].eventid, glob.evtprogs[i].name );
       goto cont;
     }
-
-    glob.evtprogs[i].flags = FVM_RPC_AUTOUNLOAD;
-    glob.evtprogs[i].inlogid = 0;
-    glob.evtprogs[i].outlogid = 0;
-    
-    sts = freg_get_by_name( NULL, tlentry.id, "inlogid", FREG_TYPE_UINT64, (char *)&glob.evtprogs[i].inlogid, sizeof(uint64_t), NULL );
-    sts = freg_get_by_name( NULL, tlentry.id, "outlogid", FREG_TYPE_UINT64, (char *)&glob.evtprogs[i].outlogid, sizeof(uint64_t), NULL );
 
     log_writef( NULL, LOG_LVL_TRACE, "Loaded event program \"%s\"", tlentry.name );
     glob.nevtprogs++;

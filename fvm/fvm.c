@@ -625,6 +625,8 @@ static void fvm_inst_str( struct fvm_state *state, uint16_t opcode ) {
 }
 
 int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
+    uint16_t isrpc;
+
     /* don't interrupt if current priority higher than this interrupts level */
     if( !(priority & 0x8000) &&
 	((state->reg[FVM_REG_PSR] & FVM_PSR_PL_MASK) >> 12) >= (priority & 0x7) ) {
@@ -633,6 +635,16 @@ int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
     }
 
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Interrupt %x PL %x\n", ivec, priority & 0x7 );
+
+    /* always continue running after an interrupt */
+    state->flags |= FVM_FLAG_RUNNING;	
+
+    /* get jump address */
+    isrpc = read_mem( state, 0x800 + ivec );
+    if( isrpc == 0 ) {
+	/* no isr set, do nothing ? */
+	return 0;
+    }
     
     /* save registers */
     write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R5] ); state->reg[FVM_REG_SP]--;
@@ -652,10 +664,8 @@ int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
     }
 
     /* jump */
-    state->reg[FVM_REG_PC] = read_mem( state, 0x800 + ivec );
+    state->reg[FVM_REG_PC] = isrpc;
 
-    /* the vm should continue running */
-    state->flags |= FVM_FLAG_RUNNING;
     return 0;
 }
 

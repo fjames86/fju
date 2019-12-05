@@ -31,6 +31,7 @@
 	   #:variable* #:get-rpc-service #:set-rpc-service
 	   #:install-event-program #:install-startup-program
 	   #:uint32 #:uint64 #:get-rpc-hostid #:set-rpc-hostid
+	   #:save-program-as-freg-script 
 	   ))
 	   
    

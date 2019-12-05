@@ -755,3 +755,25 @@ Returns compiled bytecode."
 	    (format t ";;             ~{~S ~}~%" asm))))
 	(t
 	 (error "Unexpected form ~S~%" asm))))))
+
+(defun print-program-freg (progdata name &key inlog outlog (autounload-p t) (start-p t) (stream *standard-output*))
+  (format stream "/fju/fvm/programs/~A/progdata opaque ~{~2,'0X~}~%" name (coerce progdata 'list))
+  (let ((flags 0))
+    (when autounload-p (setf flags (logior flags 1)))
+    (when start-p (setf flags (logior flags 2)))
+    (format stream "/fju/fvm/programs/~A/flags ~A~%" name flags))
+  (when inlog (format stream "/fju/fvm/programs/~A/inlog u64 ~A~%" name inlog))
+  (when outlog (format stream "/fju/fvm/programs/~A/outlog u64 ~A~%" name outlog)))
+	  
+(defun save-program-as-freg-script (pathspec entry-word &key variables extra-words inlog outlog (autounload-p t) (start-p t))
+  (with-open-file (f pathspec :direction :output :if-exists :supersede)
+    (print-program-freg (compile-program entry-word
+					 :variables variables
+					 :extra-words extra-words)
+			(string-downcase (symbol-name entry-word))
+			:inlog inlog
+			:outlog outlog
+			:autounload-p autounload-p
+			:start-p start-p)))
+
+  

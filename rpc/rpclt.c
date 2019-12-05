@@ -1029,10 +1029,12 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char *filepath;
   struct mmf_s mmf;
   char name[64];
-  
-  flags = FVM_RPC_AUTOUNLOAD|FVM_RPC_START;
-  outlog_id = 0;
+
   filepath = NULL;
+  flags = FVM_RPC_AUTOUNLOAD|FVM_RPC_START;
+  inlog_id = 0;
+  outlog_id = 0;
+  strcpy( name, "" );
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "program" ) == 0 ) {
@@ -1054,21 +1056,22 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     } else usage( "Unknown arg \"%s\"", argname );    
     i++;
   }
-  
-  if( !filepath ) usage( "Need program" );
-  
-  sts = mmf_open2( filepath, &mmf, MMF_OPEN_EXISTING );
-  if( sts ) usage( "Failed to open program" );
-  sts = mmf_remap( &mmf, mmf.fsize );
-  if( sts ) usage( "Failed to map program" );
-  xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
-  mmf_close( &mmf );
+
+  if( filepath ) {
+    sts = mmf_open2( filepath, &mmf, MMF_OPEN_EXISTING );
+    if( sts ) usage( "Failed to open program" );
+    sts = mmf_remap( &mmf, mmf.fsize );
+    if( sts ) usage( "Failed to map program" );
+    xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
+    mmf_close( &mmf );
+  } else {
+    xdr_encode_opaque( xdr, NULL, 0 );
+  }
   
   xdr_encode_uint32( xdr, flags );
   xdr_encode_uint64( xdr, inlog_id );
   xdr_encode_uint64( xdr, outlog_id );
-  xdr_encode_string( xdr, name );
-  
+  xdr_encode_string( xdr, name );  
 }
 
 static void fvm_load_results( struct xdr_s *xdr ) {

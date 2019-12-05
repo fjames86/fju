@@ -120,6 +120,8 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 #define FVM_RPCCMD_SETTIMEOUT   13
 #define FVM_RPCCMD_GETSERVICE   14
 #define FVM_RPCCMD_SETSERVICE   15 
+#define FVM_RPCCMD_GETHOSTID    16
+#define FVM_RPCCMD_SETHOSTID    17 
 
 void fvm_rpc_force_iter( void );
 
@@ -157,7 +159,7 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
   struct xdr_s args, res;
     
   memset( &hcall, 0, sizeof(hcall) );
-  hcall.hostid = hostreg_localid();
+  hcall.hostid = fvm->rpc.hostid ? fvm->rpc.hostid : hostreg_localid();
   hcall.prog = prog;
   hcall.vers = vers;
   hcall.proc = proc;
@@ -364,7 +366,26 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
 	uint16_t service = FVM_POP(fvm);
 	fvm->rpc.service = service > HRAUTH_SERVICE_PRIV ? -1 : service;
     }
-    break;        
+    break;
+  case FVM_RPCCMD_GETHOSTID:
+    {
+        FVM_PUSH(fvm, (fvm->rpc.hostid >> 48) & 0xffff );
+	FVM_PUSH(fvm, (fvm->rpc.hostid >> 32) & 0xffff );
+	FVM_PUSH(fvm, (fvm->rpc.hostid >> 16) & 0xffff );
+	FVM_PUSH(fvm, (fvm->rpc.hostid) & 0xffff );
+    }
+    break;
+  case FVM_RPCCMD_SETHOSTID:
+    {
+	fvm->rpc.hostid = FVM_POP(fvm); /* high word */
+	fvm->rpc.hostid <<= 16;
+	fvm->rpc.hostid |= FVM_POP(fvm);
+	fvm->rpc.hostid <<= 16;
+	fvm->rpc.hostid |= FVM_POP(fvm);
+	fvm->rpc.hostid <<= 16;
+	fvm->rpc.hostid |= FVM_POP(fvm); /* lowest word */	
+    }
+    break;            
   default:
     sts = -1;
     break;
@@ -942,6 +963,7 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
 
   xdr_init( &state->rpc.buf, state->rpc.rxtxbuf, FVM_RPC_MAXBUF );
   state->rpc.service = -1; // default to no auth
+  state->rpc.hostid = hostreg_localid();
   
   return 0;
 }

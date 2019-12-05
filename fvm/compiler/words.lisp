@@ -448,6 +448,8 @@
   (def-rpcdev-cmd set-rpc-timeout 13)  ;; ( timeout -- )
   (def-rpcdev-cmd get-rpc-service 14)   ;; ( -- sevice )
   (def-rpcdev-cmd set-rpc-service 15)  ;; (service --)
+  (def-rpcdev-cmd get-rpc-hostid 16)   ;; ( -- sevice )
+  (def-rpcdev-cmd set-rpc-hostid 17)  ;; (service --)  
   )
 
 (defword xdr-encode-boolean (:inline t)

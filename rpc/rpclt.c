@@ -112,7 +112,7 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS [u32=*] [u64=*] [str=*] [opaque-file=*]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH [autounload=false] [inlog=INLOGID] [outlog=OUTLOGID]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH [autounload=false] [start=no] [inlog=INLOGID] [outlog=OUTLOGID]" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 2, fvm_unload_args, fvm_unload_results, "fvm.unload", "id=ID" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [cont|stop|reset]" },

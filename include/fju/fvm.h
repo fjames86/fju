@@ -74,6 +74,7 @@ struct fvm_state {
     uint8_t rxtxbuf[FVM_RPC_MAXBUF];
     uint16_t timeout;         /* rpc timeout */
     uint16_t service;       /* hrauth sevice level */
+    uint64_t hostid;
   } rpc;
 };
 

@@ -127,6 +127,9 @@
       (call-freg-put parentid "category" :uint32 category)
       (call-freg-put parentid "eventid" :uint32 eventid))))
 
+(defun install-startup-program (name)
+  (let ((parentid (call-freg-get "/fju/fvm/startup" :key)))
+    (call-freg-put parentid name :string name)))
 
 (defun install-program (name progdata &key startp autounloadp inlogid outlogid)
   (let ((parentid (call-freg-get "/fju/fvm/programs" :key)))

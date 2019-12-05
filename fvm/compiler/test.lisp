@@ -131,7 +131,11 @@
      then
    until))
   
-  
+(defword rpcbind-call-list-remote ()
+  uint64 #xb8ec6497ad281d4 set-rpc-hostid
+  "rpcbind-call-list remote" dumpstr cr 
+  rpcbind-call-list
+  uint64 0 set-rpc-hostid)
 
 (defrpc %freg-call-getbyname (#x27E1FB10 1 5))
 #+nil(defword freg-call-get-string () ;; (name -- sts &optional val)
@@ -199,6 +203,7 @@
   "test-sleep: " dumpstr test-sleep cr
   "test-strlen: " dumpstr test-strlen cr
   "test-rpc: " dumpstr test-rpc cr
+  "test-rpc-remote: " dumpstr rpcbind-call-list-remote cr
   "test-nested-if true true: " dumpstr true true test-nested-if cr 
   "test-nested-if true false: " dumpstr true false test-nested-if cr 
   "test-nested-if false true: " dumpstr false true test-nested-if cr
@@ -206,6 +211,7 @@
   "test-nested-do: " dumpstr test-nested-do cr
   "test-rpc-timeout: " dumpstr test-rpc-timeout cr
   "test-rpc-service: " dumpstr test-rpc-service cr)
+
 
 
 (defword test-nohalt ()

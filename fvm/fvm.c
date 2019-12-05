@@ -214,9 +214,8 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
 
 static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
   int sts = 0;
-  uint16_t cmd = val & 0xf;
 
-  switch( cmd ) {
+  switch( val ) {
   case FVM_RPCCMD_RESET:
     /* reset device */
     xdr_reset( &fvm->rpc.buf );
@@ -377,16 +376,14 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
     break;
   case FVM_RPCCMD_SETHOSTID:
     {
-	fvm->rpc.hostid = FVM_POP(fvm); /* high word */
-	fvm->rpc.hostid <<= 16;
-	fvm->rpc.hostid |= FVM_POP(fvm);
-	fvm->rpc.hostid <<= 16;
-	fvm->rpc.hostid |= FVM_POP(fvm);
-	fvm->rpc.hostid <<= 16;
-	fvm->rpc.hostid |= FVM_POP(fvm); /* lowest word */	
+      fvm->rpc.hostid = (uint64_t)FVM_POP(fvm); 
+      fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 16;
+      fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 32;
+      fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 48;
     }
     break;            
   default:
+    log_writef( NULL, LOG_LVL_INFO, "fvm rpcdev unknown command %u", val );
     sts = -1;
     break;
   }

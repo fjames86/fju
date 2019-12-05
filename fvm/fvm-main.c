@@ -37,6 +37,8 @@
 #include <fju/fvm.h>
 #include <fju/log.h>
 #include <fju/rpc.h>
+#include <fju/nls.h>
+#include <fju/hostreg.h>
 
 static void usage( char *fmt, ... ) {
   va_list args;
@@ -99,6 +101,9 @@ int main( int argc, char **argv ) {
   }
 #endif
 
+  nls_open();
+  hostreg_open();
+  
   i = 1;
   if( i >= argc ) usage( NULL );
   if( (strcmp( argv[i], "-h" ) == 0) ||

@@ -118,7 +118,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 2, fvm_unload_args, fvm_unload_results, "fvm.unload", "id=ID" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [cont|stop|reset]" },
-	{ FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.pause", "id=ID msgid=ID msg=*" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.msg", "id=ID msgid=ID msg=*" },
     { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
     { 999999, 1, 2, cmdprog_event_args, NULL, "cmdprog.event", "category=* eventid=*" },
     { 0, 0, 0, NULL, NULL, NULL }
@@ -1202,15 +1202,15 @@ static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     } else if( strcmp( argname, "msgid" ) == 0 ) {
       if( !argval ) usage( "Need msgid" );
       msgid = strtoul( argval, NULL, 10 );
-	} else if( strcmp( argname, "msg" ) == 0 ) {
+    } else if( strcmp( argname, "msg" ) == 0 ) {
       if( !argval ) usage( "Need msg" );
       bufp = argval;
-	  buflen = strlen( argval ) + 1;
+      buflen = strlen( argval ) + 1;
     } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
 
   xdr_encode_uint32( xdr, id );
   xdr_encode_uint32( xdr, msgid );
-  xdr_encode_opaque( xdr, bufp, buflen );
+  xdr_encode_opaque( xdr, (uint8_t *)bufp, buflen );
 }

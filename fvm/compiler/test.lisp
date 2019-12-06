@@ -266,3 +266,19 @@
 
 
   
+;; -------------------------------
+
+(define-isr-table *test-isr-table*)
+(defisr test-msg-handler (*test-isr-table* #x03)
+  ;; Get params R0 = msgid R1 = msgaddr R2 = msglen
+
+  ;; for now just log the message 
+  (push r1)
+  write-output)
+
+(defword test-msg-handler-loop ()
+  begin
+  1 sleep
+  true until)
+
+

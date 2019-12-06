@@ -267,7 +267,7 @@ static int fvm_proc_interrupt( struct rpc_inc *inc ) {
   return 0;
 }
 
-static int fvm_proc_postmessage( struct rpc_inc *inc ) {
+static int fvm_proc_msg( struct rpc_inc *inc ) {
   int handle, sts;
   struct loaded_fvm *lf;
   uint32_t id, msgid;
@@ -276,25 +276,29 @@ static int fvm_proc_postmessage( struct rpc_inc *inc ) {
 
   sts = xdr_decode_uint32( &inc->xdr, &id );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &msgid );
-  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, &bufp, &buflen );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
   lf = glob.progs;
   while( lf ) {
-      if( lf->id == id ) {
-	    /* signal interrupt */
-		sts = fvm_interrupt( &lf->fvm, FVM_INT_MSG, FVM_INT_MSG_PL );
-		if( !sts ) {
-			/* if successfully jumped to ISR then copy message and set params */
-			if( buflen > 1024 ) buflen = 1024;
-			memcpy( &lf->fvm.mem[lf->fvm.bos], bufp, buflen );
-			lf->fvm.reg[FVM_REG_R0] = msgid;         /* R0 = msgid */
-			lf->fvm.reg[FVM_REG_R1] = lf->fvm.bos;   /* R1 = address of msg */
-			lf->fvm.reg[FVM_REG_R2] = buflen;        /* R2 = length of msg */
-		}
-		break;
+    if( lf->id == id ) {
+      /* signal interrupt */
+      sts = fvm_interrupt( &lf->fvm, FVM_INT_MSG, FVM_INT_MSG_PL );
+      if( sts ) {
+	log_writef( NULL, LOG_LVL_INFO, "fvm_proc_msg interrupt failed" );
+      } else {
+	/* if successfully jumped to ISR then copy message and set params */
+	log_writef( NULL, LOG_LVL_INFO, "fvm_proc_msg msglen=%d", buflen );
+	
+	if( buflen > 1024 ) buflen = 1024;
+	memcpy( &lf->fvm.mem[lf->fvm.bos], bufp, buflen );
+	lf->fvm.reg[FVM_REG_R0] = msgid;         /* R0 = msgid */
+	lf->fvm.reg[FVM_REG_R1] = lf->fvm.bos;   /* R1 = address of msg */
+	lf->fvm.reg[FVM_REG_R2] = buflen;        /* R2 = length of msg */
       }
-      lf = lf->next;    
+      break;
+    }
+    lf = lf->next;    
   }
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle ); 
@@ -310,7 +314,7 @@ static struct rpc_proc fvm_procs[] = {
   { 3, fvm_proc_list },
   { 4, fvm_proc_pause },
   { 5, fvm_proc_interrupt },
-  { 6, fvm_proc_postmessage },
+  { 6, fvm_proc_msg },
   { 0, NULL }
 };
 

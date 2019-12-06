@@ -32,6 +32,7 @@
 	   #:install-event-program #:install-startup-program
 	   #:uint32 #:uint64 #:get-rpc-hostid #:set-rpc-hostid
 	   #:save-program-as-freg-script #:install-program
+	   #:define-isr-table #:merge-isr-tables
 	   ))
 	   
    

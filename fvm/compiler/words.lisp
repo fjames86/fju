@@ -480,20 +480,14 @@
 
 ;; ------------------ Interrupts --------------------
 
-(defword default-isr ()
-  halt)
-
-(defword privilege-exception-isr ()
+(defisr privilege-exception-isr (*default-isr-table* #x00)
   "PrivilegeException" dumpstr cr
   halt)
-(defisr privilege-exception-isr #x00)
 
-(defword illegal-opcode-isr ()
+(defisr illegal-opcode-isr (*default-isr-table* #x01)  
   "IllegalOpcode" dumpstr cr)
-(defisr illegal-opcode-isr #x01)
 
-(defword divide-by-zero-isr ()
-  "DivideByZero" dumpstr cr
-  halt)
-(defisr divide-by-zero-isr #x02)
+(defisr divide-by-zero-isr (*default-isr-table* #x02)
+   "DivideByZero" dumpstr cr
+   halt)
 

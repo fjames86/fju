@@ -580,30 +580,38 @@ INITIAL-CONTENTS ::= integer, list of integers or string
 " 
   `(%define-variable (make-variable ',name ,size ,initial-contents)))
 
-(defparameter *isr* nil)
-(defun make-isr (word ivec)
-  (list ivec word))
-(defun %define-isr (isr)
-  (dolist (i *isr*)
-    (when (= (car i) (car isr))
-      (setf (cdr i) (cdr isr))
-      (return-from %define-isr nil)))
-  (push isr *isr*))
-(defun isr-index (isr) (first isr))
-(defun isr-word (isr) (second isr))
-(defmacro defisr (word ivec)
-  "Define an interrupt service routine.
-WORD ::= symbol naming word designated as handler. This word must NOT be used in regular program operation, only for the purposes of this ISR. 
-IVEC ::= integer >= 0 <= 255 specifying the interrupt.
-" 
-  `(%define-isr (make-isr ',word ,ivec)))
 
-(defun find-isr (ivec)
+(defmacro define-isr-table (name)
+  `(defparameter ,name nil))
+(define-isr-table *default-isr-table*)
+
+(defmacro defisr (name (isr-table isr-vector &rest options) &body body)
+  (let ((gisr-vector (gensym))
+	(gisr (gensym))
+	(gfound (gensym)))
+    `(let ((,gisr-vector ,isr-vector))
+       (defword ,name ,options ,@body)
+       (let ((,gfound nil))
+	 (dolist (,gisr ,isr-table)
+	   (when (= (car ,gisr) ,gisr-vector)
+	     (setf (cdr ,gisr) (list ',name)
+		   ,gfound t)))
+	 (unless ,gfound (push (list ,gisr-vector ',name) ,isr-table))))))
+
+(defvar *isr* nil)
+
+(defun find-isr (ivec &optional (isr-table *isr*))
   (etypecase ivec
-    (integer (find ivec *isr* :key #'first :test #'=))
-    (symbol (find ivec *isr* :key #'second :test #'eq))))
+    (integer (find ivec isr-table :key #'first :test #'=))
+    (symbol (find ivec isr-table :key #'second :test #'eq))))
   
-
+(defun merge-isr-tables (tables)
+  (let ((merged nil))
+    (dolist (table tables)
+      (dolist (isr table)
+	(unless (find-isr (first isr) merged)
+	  (push isr merged))))
+    merged))
 
 (defun required-words (entry-point)
   (let ((deps (list entry-point)))
@@ -634,8 +642,9 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	 (setf index (1+ idx))))
       (push `(.BLKW ,(cdr (assoc word word-definition-table))) ret))))
 
-(defun generate-assembly (entry-point &key variables extra-words)
-  (let* ((words (remove-duplicates
+(defun generate-assembly (entry-point &key variables extra-words isr-table)
+  (let* ((*isr* (merge-isr-tables (list *default-isr-table* isr-table)))
+	 (words (remove-duplicates
 		 (append (required-words entry-point)
 			 (mapcan #'required-words extra-words))))
 	 (word-definition-table (mapcar (lambda (word) (cons word (gensym))) words)))
@@ -650,7 +659,7 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
       ,@(mapcan (lambda (word)
 		  (append (list (cdr (assoc word word-definition-table))) ;; word definition label
 			  (word-assembly word)
-			  (list (list (if (or (eq word 'default-isr) (find-isr word)) 'rti 'ret)))))
+			  (list (list (if (or (eq word 'default-isr) (find-isr word isr-table)) 'rti 'ret)))))
 		words)
       ;; put variables immediately after word definitions 
       ,@(mapcan (lambda (var)
@@ -669,11 +678,12 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 			variables))
       *bottom-of-stack*)))
 
-(defun %compile-program (entry-word &key variables print-assembly extra-words)
+(defun %compile-program (entry-word &key variables print-assembly extra-words isr-table)
   "Compile a program. Returns a list of program object codes." 
   (let ((asm (generate-assembly entry-word
 				:variables variables
-				:extra-words extra-words))
+				:extra-words extra-words
+				:isr-table isr-table))
 	(words (remove-duplicates
 		(append (required-words entry-word)
 			(mapcan #'required-words extra-words)))))
@@ -701,7 +711,7 @@ IVEC ::= integer >= 0 <= 255 specifying the interrupt.
 	  (format t ";; Total: ~A (~A bytes)~%" count (* 2 count))))
       objs)))
   
-(defun save-program (pathspec entry-word &key variables print-assembly extra-words)
+(defun save-program (pathspec entry-word &key variables print-assembly extra-words isr-table)
   "Compile and save a program.
 PATHSPEC ::= where to save the program file.
 ENTRY-WORD ::= word designated as entry point.
@@ -718,9 +728,10 @@ PRINT-ASSEMBLY ::= if true, prints assembly listing and other info.
 		   (%compile-program entry-word
 				    :variables variables
 				    :extra-words extra-words
-				    :print-assembly print-assembly))))
+				    :print-assembly print-assembly
+				    :isr-table isr-table))))
 
-(defun compile-program (entry-word &key variables print-assembly extra-words)
+(defun compile-program (entry-word &key variables print-assembly extra-words isr-table)
   "Compile a program with a given starting word.
 ENTRY-WORD ::= symbol naming entry point.
 VARIABLES ::= list of variables defined with DEFVARIABLE
@@ -733,7 +744,8 @@ Returns compiled bytecode."
 		   (%compile-program entry-word
 				     :variables variables
 				     :extra-words extra-words
-				     :print-assembly print-assembly))))
+				     :print-assembly print-assembly
+				     :isr-table isr-table))))
 
 
 (defun pprint-assembly (word)
@@ -765,11 +777,12 @@ Returns compiled bytecode."
   (when inlog (format stream "/fju/fvm/programs/~A/inlog u64 ~A~%" name inlog))
   (when outlog (format stream "/fju/fvm/programs/~A/outlog u64 ~A~%" name outlog)))
 	  
-(defun save-program-as-freg-script (pathspec entry-word &key variables extra-words inlog outlog (autounload-p t) (start-p t))
+(defun save-program-as-freg-script (pathspec entry-word &key variables extra-words inlog outlog (autounload-p t) (start-p t) isr-table)
   (with-open-file (f pathspec :direction :output :if-exists :supersede)
     (print-program-freg (compile-program entry-word
 					 :variables variables
-					 :extra-words extra-words)
+					 :extra-words extra-words
+					 :isr-table isr-table)
 			(string-downcase (symbol-name entry-word))
 			:inlog inlog
 			:outlog outlog

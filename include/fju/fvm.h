@@ -93,6 +93,8 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
 #define FVM_INT_IOC_PL    FVM_INT_EXCEPTION       /* ioc priority level */
 #define FVM_INT_DBZ       0x02    /* divide by zero */
 #define FVM_INT_DBZ_PL    FVM_INT_EXCEPTION       /* divide by zero level */
+#define FVM_INT_MSG       0x03    /* external message received */
+#define FVM_INT_MSG_PL    1 
 int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
 
 struct fvm_program_header {

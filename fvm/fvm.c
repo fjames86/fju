@@ -661,7 +661,7 @@ int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
     isrpc = read_mem( state, 0x800 + ivec );
     if( isrpc == 0 ) {
 	/* no isr set, do nothing ? */
-	return 0;
+	return -1;
     }
     
     /* save registers */

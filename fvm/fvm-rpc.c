@@ -252,7 +252,6 @@ static int fvm_proc_interrupt( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &priority );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );  
   lf = glob.progs;
   while( lf ) {
       if( lf->id == id ) {
@@ -262,6 +261,43 @@ static int fvm_proc_interrupt( struct rpc_inc *inc ) {
       lf = lf->next;    
   }
 
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle ); 
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_postmessage( struct rpc_inc *inc ) {
+  int handle, sts;
+  struct loaded_fvm *lf;
+  uint32_t id, msgid;
+  char *bufp = NULL;
+  int buflen = 0;
+
+  sts = xdr_decode_uint32( &inc->xdr, &id );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &msgid );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, &bufp, &buflen );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  lf = glob.progs;
+  while( lf ) {
+      if( lf->id == id ) {
+	    /* signal interrupt */
+		sts = fvm_interrupt( &lf->fvm, FVM_INT_MSG, FVM_INT_MSG_PL );
+		if( !sts ) {
+			/* if successfully jumped to ISR then copy message and set params */
+			if( buflen > 1024 ) buflen = 1024;
+			memcpy( &lf->fvm.mem[lf->fvm.bos], bufp, buflen );
+			lf->fvm.reg[FVM_REG_R0] = msgid;         /* R0 = msgid */
+			lf->fvm.reg[FVM_REG_R1] = lf->fvm.bos;   /* R1 = address of msg */
+			lf->fvm.reg[FVM_REG_R2] = buflen;        /* R2 = length of msg */
+		}
+		break;
+      }
+      lf = lf->next;    
+  }
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle ); 
   rpc_complete_accept_reply( inc, handle );
   
   return 0;
@@ -274,6 +310,7 @@ static struct rpc_proc fvm_procs[] = {
   { 3, fvm_proc_list },
   { 4, fvm_proc_pause },
   { 5, fvm_proc_interrupt },
+  { 6, fvm_proc_postmessage },
   { 0, NULL }
 };
 

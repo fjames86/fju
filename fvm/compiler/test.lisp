@@ -278,7 +278,6 @@
 
 (defword test-msg-handler-loop ()
   begin
-  1 sleep
+  1000 sleep
   true until)
-
 

@@ -597,6 +597,8 @@ INITIAL-CONTENTS ::= integer, list of integers or string
 	     (setf (cdr ,gisr) (list ',name)
 		   ,gfound t)))
 	 (unless ,gfound (push (list ,gisr-vector ',name) ,isr-table))))))
+(defun isr-word (isr)
+  (second isr))
 
 (defvar *isr* nil)
 
@@ -768,7 +770,7 @@ Returns compiled bytecode."
 	(t
 	 (error "Unexpected form ~S~%" asm))))))
 
-(defun print-program-freg (progdata name &key inlog outlog (autounload-p t) (start-p t) (stream *standard-output*))
+(defun print-program-script (progdata name &key inlog outlog (autounload-p t) (start-p t) (stream *standard-output*))
   (format stream "/fju/fvm/programs/~A/progdata opaque ~{~2,'0X~}~%" name (coerce progdata 'list))
   (let ((flags 0))
     (when autounload-p (setf flags (logior flags 1)))
@@ -777,16 +779,4 @@ Returns compiled bytecode."
   (when inlog (format stream "/fju/fvm/programs/~A/inlog u64 ~A~%" name inlog))
   (when outlog (format stream "/fju/fvm/programs/~A/outlog u64 ~A~%" name outlog)))
 	  
-(defun save-program-as-freg-script (pathspec entry-word &key variables extra-words inlog outlog (autounload-p t) (start-p t) isr-table)
-  (with-open-file (f pathspec :direction :output :if-exists :supersede)
-    (print-program-freg (compile-program entry-word
-					 :variables variables
-					 :extra-words extra-words
-					 :isr-table isr-table)
-			(string-downcase (symbol-name entry-word))
-			:inlog inlog
-			:outlog outlog
-			:autounload-p autounload-p
-			:start-p start-p)))
-
   

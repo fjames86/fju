@@ -482,7 +482,14 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       break;
     }
   } else {
-    state->mem[offset] = val;
+      uint32_t idx, off;
+      /* just write into memory */
+      state->mem[offset] = val;
+      
+      /* set dirty flag */
+      idx = (offset / 4) / 32;
+      off = (offset / 4) % 32;
+      state->dirtybm.dirty[idx] |= (1 << off);
   }  
 }
 
@@ -1057,3 +1064,7 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
 }
 
     
+void fvm_dirty_reset( struct fvm_state *fvm ) {
+    memset( fvm->dirtybm.dirty, 0, sizeof(fvm->dirtybm.dirty) );
+}
+

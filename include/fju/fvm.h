@@ -76,6 +76,13 @@ struct fvm_state {
     uint16_t service;       /* hrauth sevice level */
     uint64_t hostid;
   } rpc;
+    struct {
+	/* 
+	 * Divide the program memory up into chunks of 8 bytes (4 words).
+	 * Keep a bitmap storing when memory is written.
+	 */
+	uint32_t dirty[(FVM_MAX_MEM / 4) / 32];
+    } dirtybm;
 };
 
 int fvm_load( struct fvm_state *state, char *progdata, int proglen );

@@ -276,8 +276,34 @@
   (push r1)
   write-output)
 
+;; loop infinitely waiting to service an incoming message 
 (defword test-msg-handler-loop ()
   begin
   1000 sleep
   true until)
 
+(defconstant +fvm-prog+ #x27E1FB11)
+(defrpc call-send-msg (+fvm-prog+ 1 6)
+  :arg-body (xdr-encode-uint32 xdr-encode-uint32 xdr-encode-string)
+  :results-body ("call-send-msg success" dumpstr)
+  :fail-body ("call-send-msg failed" dumpstr))
+
+(defword wait-for-logmsg ()
+  begin
+  bos 1024 read-input ;; (msglen)
+  dup zero? ;; (msglen f)
+  if ;; msglen = 0
+    drop       ;; drop the msglen from stack
+    1000 sleep ;; sleep for a while 
+    true       ;; continue looping 
+  else
+    bos swap false  ;; (addr msg f) exit loop
+  then
+  until)
+
+(defword test-logmsg ()
+  begin
+    wait-for-logmsg ;; wait until message received
+    drop ;; ignore msglen
+    dumpstr ;; print msg to console
+  true until)

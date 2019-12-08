@@ -329,11 +329,12 @@ static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
   if( lf ) {
       xdr_encode_boolean( &inc->xdr, 1 );
       nd = fvm_dirty_regions( &lf->fvm, dirty, 32 );
-      xdr_encode_uint32( &inc->xdr, nd );
       for( i = 0; i < nd; i++ ) {
+	  xdr_encode_boolean( &inc->xdr, 1 );
 	  xdr_encode_uint32( &inc->xdr, dirty[i].offset );
 	  xdr_encode_opaque( &inc->xdr, (uint8_t *)&lf->fvm.mem[dirty[i].offset], 2 * dirty[i].count );
       }
+      xdr_encode_boolean( &inc->xdr, 0 );
   } else {
       xdr_encode_boolean( &inc->xdr, 0 );
   }
@@ -348,7 +349,7 @@ static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
   struct loaded_fvm *lf;
   uint32_t id, offset;
   char *bufp;
-  int lenp, i;
+  int lenp, i, b;
       
   sts = xdr_decode_uint32( &inc->xdr, &id );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
@@ -361,12 +362,15 @@ static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
     lf = lf->next;    
   }
   if( lf ) {
-      sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&nd );
-      for( i = 0; i < nd; i++ ) {
+      xdr_decode_boolean( &inc->xdr, &b );
+      while( b ) {
 	  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &offset );
 	  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
 	  if( !sts ) memcpy( &lf->fvm.mem[offset], bufp, lenp );
+
+	  xdr_decode_boolean( &inc->xdr, b );
       }
+      /* TODO */
   }
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   

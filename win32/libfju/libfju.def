@@ -228,4 +228,6 @@ rpcd_get_default_port;
 rpcd_event_publish
 rpcd_event_subscribe
 rpcd_event_unsubscribe
+fvm_dirty_reset
+fvm_dirty_regions
 

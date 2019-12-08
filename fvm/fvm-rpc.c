@@ -307,6 +307,77 @@ static int fvm_proc_msg( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
+  int handle, sts, nd, i;
+  struct loaded_fvm *lf;
+  uint32_t id;
+  struct fvm_dirty dirty[32];
+
+  sts = xdr_decode_uint32( &inc->xdr, &id );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  
+  lf = glob.progs;
+  while( lf ) {
+    if( lf->id == id ) {
+	break;
+    }
+    lf = lf->next;    
+  }
+  
+  if( lf ) {
+      xdr_encode_boolean( &inc->xdr, 1 );
+      nd = fvm_dirty_regions( &lf->fvm, dirty, 32 );
+      xdr_encode_uint32( &inc->xdr, nd );
+      for( i = 0; i < nd; i++ ) {
+	  xdr_encode_uint32( &inc->xdr, dirty[i].offset );
+	  xdr_encode_opaque( &inc->xdr, (uint8_t *)&lf->fvm.mem[dirty[i].offset], 2 * dirty[i].count );
+      }
+  } else {
+      xdr_encode_boolean( &inc->xdr, 0 );
+  }
+
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
+  int handle, sts, nd;
+  struct loaded_fvm *lf;
+  uint32_t id, offset;
+  char *bufp;
+  int lenp, i;
+      
+  sts = xdr_decode_uint32( &inc->xdr, &id );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  lf = glob.progs;
+  while( lf ) {
+    if( lf->id == id ) {
+	break;
+    }
+    lf = lf->next;    
+  }
+  if( lf ) {
+      sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&nd );
+      for( i = 0; i < nd; i++ ) {
+	  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &offset );
+	  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+	  if( !sts ) memcpy( &lf->fvm.mem[offset], bufp, lenp );
+      }
+  }
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, lf ? 1 : 0 );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_load },
@@ -315,6 +386,8 @@ static struct rpc_proc fvm_procs[] = {
   { 4, fvm_proc_pause },
   { 5, fvm_proc_interrupt },
   { 6, fvm_proc_msg },
+  { 7, fvm_proc_read_dirty },
+  { 8, fvm_proc_write_dirty },
   { 0, NULL }
 };
 

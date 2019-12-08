@@ -475,6 +475,7 @@
        (pop r0)
        (br-z ,gfail-label)
        ,@result-body
+       xdr-reset
        (br-pnz ,gend-label)
        ,gfail-label
        ,@fail-body

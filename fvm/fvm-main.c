@@ -256,7 +256,7 @@ int main( int argc, char **argv ) {
     dirty = malloc( sizeof(*dirty) * nd );
     fvm_dirty_regions( &glob.fvm, dirty, nd );
     for( i = 0; i < nd; i++ ) {
-	printf( ";; Dirty 0x%04x - 0x%04x\n", (uint32_t)dirty[i].offset, (uint32_t)(dirty[i].offset + dirty[i].count) );
+	printf( ";; Dirty 0x%04x - 0x%04x\n", (uint32_t)dirty[i].offset, (uint32_t)(dirty[i].offset + dirty[i].count - 1) );
     }
 	
   }

@@ -307,3 +307,6 @@
     drop ;; ignore msglen
     dumpstr ;; print msg to console
   true until)
+
+(defword small-test ()
+  "hello world!" dumpstr cr)

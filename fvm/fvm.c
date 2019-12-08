@@ -1070,31 +1070,32 @@ void fvm_dirty_reset( struct fvm_state *fvm ) {
 }
 
 int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) {
-    int i;
-    uint16_t offset;
+    int i, n, started;
+    uint32_t offset, idx, off;
 
-    i = 0;
+    n = 0;
     started = 0;
-    for( offset = 0; offset < FVM_MAX_MEM; offset++ ) {
-	idx = (offset / FVM_PAGE_SIZE) / 32;
-	off = (offset / FVM_PAGE_SIZE) % 32;
+    for( i = 0; i < (FVM_MAX_MEM / FVM_PAGE_SIZE); i++ ) {
+	offset = i * FVM_PAGE_SIZE;
+	idx = i / 32;
+	off = i % 32;
 	
 	if( started ) {
 	    if( fvm->dirty[idx] & (1 << off) ) {
 		/* currently reading a region, so append */
-		if( i < nd ) dirty[i].count++;
+		if( n < nd ) dirty[n].count += FVM_PAGE_SIZE;
 	    } else {
 		/* currently reading a region but this is a clean page */
-		i++;
+		n++;
 		started = 0;
 	    }
 	} else {
 	    if( fvm->dirty[idx] & (1 << off) ) {
 		/* start a new region */
 		started = 1;
-		if( i < nd ) {
-		    dirty[i].offset = offset;
-		    dirty[i].count = 1;
+		if( n < nd ) {
+		    dirty[n].offset = offset;
+		    dirty[n].count = FVM_PAGE_SIZE;
 		}
 	    } else {
 		/* not started a region and not dirty either -  do nothing */
@@ -1102,5 +1103,5 @@ int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) 
 	}
     }
     
-    return i;
+    return n;
 }

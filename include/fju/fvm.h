@@ -82,6 +82,7 @@ struct fvm_state {
      */
 #define FVM_PAGE_SIZE 4
     uint32_t dirty[(FVM_MAX_MEM / FVM_PAGE_SIZE) / 32];
+    uint32_t id;
 };
 
 int fvm_load( struct fvm_state *state, char *progdata, int proglen );

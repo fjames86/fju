@@ -81,6 +81,8 @@ static void update_flags( struct fvm_state *state, uint16_t x ) {
 #define FVM_DEVICE_OUTLOG 0xfe07    /* output log register */
 #define FVM_DEVICE_ALARM 0xfe08    /* sleep */
 #define FVM_DEVICE_RPC 0xfe09      /* rpc device */
+#define FVM_DEVICE_IDLOW 0xfe0a
+#define FVM_DEVICE_IDHIGH 0xfe0b
 
 static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
   if( offset >= 0xfe00 ) {
@@ -98,6 +100,10 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
       return (uint16_t)time( NULL ) & 0xffff;
     case FVM_DEVICE_CLOCKHIGH:
       return (uint16_t)((time( NULL ) >> 16) & 0xffff);
+    case FVM_DEVICE_IDLOW:
+	return (state->id & 0xffff);
+    case FVM_DEVICE_IDHIGH:
+	return (state->id >> 16) & 0xffff;
     default:
       return 0;
     }
@@ -970,7 +976,8 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   state->rpc.service = -1; // default to no auth
   state->rpc.hostid = hostreg_localid();
   fvm_dirty_reset( state );
-      
+  state->id = sec_rand_uint32();
+  
   return 0;
 }
 

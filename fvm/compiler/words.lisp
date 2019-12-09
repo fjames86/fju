@@ -420,10 +420,20 @@
   #xfe08 !)
 
 ;; must not be used from with any do/loops, will break the return stack.
-;; can be used from within begin/until because this doesn't use reutnr stack.
+;; can be used from within begin/until because this doesn't use return stack.
 (defword return (:inline t)
   (ret))
 
+;; get this program's id 
+(defword fvm-id () ;; (-- idhigh idlow)
+  (br-pnz 1)
+  (.blkw #xfe0a)
+  (ld r0 -2)
+  (ldr r1 r0 0) ;; get low word 
+  (ldr r2 r0 1) ;; high word 
+  (push r2)
+  (push r1))
+  
 ;; -----------------------------------
 
 ;; send command to rpc device 

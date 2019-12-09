@@ -70,7 +70,7 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, uint32_t fla
     
     lf = malloc( sizeof(*lf) );
     memset( lf, 0, sizeof(*lf) );
-    lf->id = sec_rand_uint32();
+    lf->id = sec_rand_uint32();    
     strncpy( lf->name, name, sizeof(lf->name) - 1 );
     sts = fvm_load( &lf->fvm, (char *)bufp, buflen );
     if( sts ) {
@@ -105,6 +105,7 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, uint32_t fla
     }
     
     lf->flags = flags;
+    lf->fvm.id = lf->id;
     
     /* push onto list */
     lf->next = glob.progs;

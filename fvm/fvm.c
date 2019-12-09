@@ -482,7 +482,14 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       break;
     }
   } else {
-    state->mem[offset] = val;
+      uint32_t idx, off;
+      /* just write into memory */
+      state->mem[offset] = val;
+      
+      /* set dirty flag */
+      idx = (offset / 4) / 32;
+      off = (offset / 4) % 32;
+      state->dirty[idx] |= (1 << off);
   }  
 }
 
@@ -961,7 +968,8 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   xdr_init( &state->rpc.buf, state->rpc.rxtxbuf, FVM_RPC_MAXBUF );
   state->rpc.service = -1; // default to no auth
   state->rpc.hostid = hostreg_localid();
-  
+  fvm_dirty_reset( state );
+      
   return 0;
 }
 
@@ -1057,3 +1065,43 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
 }
 
     
+void fvm_dirty_reset( struct fvm_state *fvm ) {
+    memset( fvm->dirty, 0, sizeof(fvm->dirty) );
+}
+
+int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) {
+    int i, n, started;
+    uint32_t offset, idx, off;
+
+    n = 0;
+    started = 0;
+    for( i = 0; i < (FVM_MAX_MEM / FVM_PAGE_SIZE); i++ ) {
+	offset = i * FVM_PAGE_SIZE;
+	idx = i / 32;
+	off = i % 32;
+	
+	if( started ) {
+	    if( fvm->dirty[idx] & (1 << off) ) {
+		/* currently reading a region, so append */
+		if( n < nd ) dirty[n].count += FVM_PAGE_SIZE;
+	    } else {
+		/* currently reading a region but this is a clean page */
+		n++;
+		started = 0;
+	    }
+	} else {
+	    if( fvm->dirty[idx] & (1 << off) ) {
+		/* start a new region */
+		started = 1;
+		if( n < nd ) {
+		    dirty[n].offset = offset;
+		    dirty[n].count = FVM_PAGE_SIZE;
+		}
+	    } else {
+		/* not started a region and not dirty either -  do nothing */
+	    }
+	}
+    }
+    
+    return n;
+}

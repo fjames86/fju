@@ -240,6 +240,8 @@ int main( int argc, char **argv ) {
   end = rpc_now();
       
   if( glob.verbose ) {
+      struct fvm_dirty *dirty;
+      int nd;
     printf( ";; R0 %x R1 %x R2 %x R3 %x R4 %x R5 %x R6 %x R7 %x PC %x\n",
 	    glob.fvm.reg[0], glob.fvm.reg[1],
 	    glob.fvm.reg[2], glob.fvm.reg[3], 
@@ -248,6 +250,15 @@ int main( int argc, char **argv ) {
 	    glob.fvm.reg[8] );
     printf( ";; TickCount %d\n", (int)glob.fvm.tickcount );
     printf( ";; ElapsedTime %dms\n", (int)(end - start) );
+
+    nd = fvm_dirty_regions( &glob.fvm, NULL, 0 );
+    printf( "nd = %d\n", nd );
+    dirty = malloc( sizeof(*dirty) * nd );
+    fvm_dirty_regions( &glob.fvm, dirty, nd );
+    for( i = 0; i < nd; i++ ) {
+	printf( ";; Dirty 0x%04x - 0x%04x\n", (uint32_t)dirty[i].offset, (uint32_t)(dirty[i].offset + dirty[i].count - 1) );
+    }
+	
   }
 
   

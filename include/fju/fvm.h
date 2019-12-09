@@ -76,6 +76,12 @@ struct fvm_state {
     uint16_t service;       /* hrauth sevice level */
     uint64_t hostid;
   } rpc;
+    /* 
+     * Divide the program memory up into "pages" of 8 bytes (4 words).
+     * Keep a bitmap storing when memory is written.
+     */
+#define FVM_PAGE_SIZE 4
+    uint32_t dirty[(FVM_MAX_MEM / FVM_PAGE_SIZE) / 32];
 };
 
 int fvm_load( struct fvm_state *state, char *progdata, int proglen );
@@ -104,6 +110,13 @@ struct fvm_program_header {
 
   uint32_t spare[30];
 };
+
+struct fvm_dirty {
+    uint16_t offset;
+    uint16_t count;
+};
+void fvm_dirty_reset( struct fvm_state *fvm );
+int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd );
 
 /* ----------- rpcd only ---------- */
 

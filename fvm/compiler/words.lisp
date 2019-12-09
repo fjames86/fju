@@ -456,6 +456,10 @@
   0 swap xdr-encode-uint32)
 (defword xdr-decode-boolean (:inline t)
   xdr-decode-uint32 swap drop)
+(defword xdr-encode-uint32* (:inline t)
+  0 swap xdr-encode-uint32)
+(defword xdr-decode-uint32* (:inlint t)
+  xdr-decode-uint32 swap drop)
 
 (defmacro defrpc (name (program version proc &rest options) &key arg-body result-body fail-body)
   (let ((gfail-label (gensym))
@@ -471,6 +475,7 @@
        (pop r0)
        (br-z ,gfail-label)
        ,@result-body
+       xdr-reset
        (br-pnz ,gend-label)
        ,gfail-label
        ,@fail-body

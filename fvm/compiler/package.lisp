@@ -33,7 +33,7 @@
 	   #:uint32 #:uint64 #:get-rpc-hostid #:set-rpc-hostid
 	   #:print-program-script #:install-program
 	   #:define-isr-table #:merge-isr-tables
-	   #:fvm-id
+	   #:fvm-id #:get-fvm-id 
 	   ))
 	   
    

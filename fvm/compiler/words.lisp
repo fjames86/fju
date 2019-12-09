@@ -477,7 +477,7 @@
     `(defword ,name ,options
        xdr-reset
        ,@arg-body
-       (lisp (list (logand ,(ash program -16) #xffff)
+       (lisp (list (logand (ash ,program -16) #xffff)
 		   (logand ,program #xffff)
 		   (logand ,version #xffff)
 		   (logand ,proc #xffff)))
@@ -491,7 +491,24 @@
        ,@fail-body
        ,gend-label)))
 
-;;     if ,@result-body else ,@fail-body then))
+(defconstant +fvm-prog+ #x27E1FB11)
+(defrpc get-fvm-id (+fvm-prog+ 1 3)   ;; (name -- idhigh idlow)
+  :result-body
+  (xdr-decode-boolean
+   begin
+   xdr-decode-uint32                     ;; id
+   xdr-decode-uint32 drop drop           ;; flags
+   xdr-decode-uint64 drop drop drop drop ;; tickcount
+   xdr-decode-uint64 drop drop drop drop ;; runtime
+   xdr-decode-uint64 drop drop drop drop ;; inlogid
+   xdr-decode-uint64 drop drop drop drop ;; outlogid
+   over ;; (nameaddr id nameaddr)
+   xdr-decode-string ;; name ( nameaddr id nameaddr name)
+   strcmp if swap drop return then
+   xdr-decode-boolean
+   until
+   0 0)
+  :fail-body (0 0))
 
 ;; ------------------ Interrupts --------------------
 

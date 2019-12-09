@@ -9,8 +9,6 @@
   (program :opaque)
   (timeout :uint32))
 
-(defconstant +fvm-prog+ #x27E1FB11)
-
 (drx:defxstruct load-args ((:mode :list))
   (progdata :opaque)
   (flags :uint32)

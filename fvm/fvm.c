@@ -51,7 +51,7 @@
  * 0xfe00 - 0xffff device registers 
  */
 
-#define FVM_PUSH(fvm,val) do { fvm->mem[fvm->reg[FVM_REG_SP]] = val; fvm->reg[FVM_REG_SP]--; } while( 0 )
+#define FVM_PUSH(fvm,val) do { write_mem( fvm, fvm->reg[FVM_REG_SP], val ); fvm->reg[FVM_REG_SP]--; } while( 0 )
 #define FVM_POP(fvm) (fvm->reg[FVM_REG_SP]++, fvm->mem[fvm->reg[FVM_REG_SP]])
 
 

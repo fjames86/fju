@@ -54,6 +54,7 @@
 #define FVM_PUSH(fvm,val) do { write_mem( fvm, fvm->reg[FVM_REG_SP], val ); fvm->reg[FVM_REG_SP]--; } while( 0 )
 #define FVM_POP(fvm) (fvm->reg[FVM_REG_SP]++, fvm->mem[fvm->reg[FVM_REG_SP]])
 
+static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val );
 
 static uint16_t sign_extend( uint16_t x, int bit_count ) {
   if( (x >> (bit_count - 1)) & 1 ) {

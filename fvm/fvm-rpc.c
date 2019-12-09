@@ -307,6 +307,8 @@ static int fvm_proc_msg( struct rpc_inc *inc ) {
   return 0;
 }
 
+#if 0
+
 static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
   int handle, sts, nd, i;
   struct loaded_fvm *lf;
@@ -408,6 +410,7 @@ static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
   
   return 0;
 }
+#endif
 
 
 static struct rpc_proc fvm_procs[] = {
@@ -418,8 +421,10 @@ static struct rpc_proc fvm_procs[] = {
   { 4, fvm_proc_pause },
   { 5, fvm_proc_interrupt },
   { 6, fvm_proc_msg },
+#if 0
   { 7, fvm_proc_read_dirty },
   { 8, fvm_proc_write_dirty },
+#endif 
   { 0, NULL }
 };
 

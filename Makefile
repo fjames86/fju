@@ -26,11 +26,11 @@ LIBFJU=${LIBDIR}/libfju.so
 
 .PHONY: all strip clean tar install uninstall strip ${PROJECTS}
 
-all: ${PROJECTS} ${LIBFJU}
+all: ${PROJECTS} ${LIBFJU} fvm.core
 	rm -f *.o
 
 clean:
-	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm.core
 
 tar:
 	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}
@@ -59,3 +59,6 @@ FJU_LIBS+=-l${lib}
 .endfor
 ${LIBFJU}: ${FJU_DEPS}
 	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive 
+
+fvm.core: fvm/compiler/package.lisp fvm/compiler/fvm.lisp fvm/compiler/words.lisp fvm/compiler/rpc.lisp
+	sbcl --load scripts/make-lisp-core.lisp

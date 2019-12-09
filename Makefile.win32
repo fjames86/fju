@@ -36,10 +36,10 @@ progs += ${BINDIR}/fvm.exe
 
 .PHONY: all clean strip 
 
-all: ${libs} ${progs} ${LIBDIR}/libfju.dll ${LIBDIR}/libsvctest.dll ${LIBDIR}/libcmdprog.dll
+all: ${libs} ${progs} ${LIBDIR}/libfju.dll ${LIBDIR}/libsvctest.dll ${LIBDIR}/libcmdprog.dll fvm.core
 
 clean:
-	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm.core
 
 ${LIBDIR}/libmmf.a: mmf/mmf.c
 	gcc -c ${CFLAGS} mmf/mmf.c
@@ -171,4 +171,7 @@ ${LIBDIR}/libfju.dll: ${FJU_DEPS}
 
 strip:
 	strip -s bin/*
-	
+
+
+fvm.core: fvm/compiler/package.lisp fvm/compiler/fvm.lisp fvm/compiler/words.lisp fvm/compiler/rpc.lisp
+	sbcl --load scripts/make-lisp-core.lisp

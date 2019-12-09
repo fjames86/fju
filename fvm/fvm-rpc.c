@@ -422,8 +422,8 @@ static struct rpc_proc fvm_procs[] = {
   { 5, fvm_proc_interrupt },
   { 6, fvm_proc_msg },
 #if 0
-  { 7, fvm_proc_read_dirty },
-  { 8, fvm_proc_write_dirty },
+  { 0, fvm_proc_read_dirty },
+  { 0, fvm_proc_write_dirty },
 #endif 
   { 0, NULL }
 };

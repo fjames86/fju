@@ -327,6 +327,9 @@
     dumpstr ;; print msg to console
   true until)
 
+(defun test-logmsg ()
+  (save-program "test-logmsg.obj" 'test-logmsg))
+
 (defword small-test ()
   "hello world!" dumpstr cr)
 
@@ -334,7 +337,9 @@
   "fvm-id: " dumpstr fvm-id swap dumphex dumphex cr)
 
 
-(defparameter *build-programs* '(test test-msg))
+;; --------------------------------------
+
+(defparameter *build-programs* '(test test-msg test-logmsg))
 (defun build-all ()
   (dolist (p *build-programs*)
     (funcall p)))

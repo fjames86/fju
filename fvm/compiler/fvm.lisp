@@ -295,29 +295,36 @@ assembled object code."
     (second-pass instructions ltab)))
 
 (defun crc32 (seq &key crc (start 0) end)
+  (declare ((vector (unsigned-byte 8)) seq))  
   (unless crc (setf crc #xffffffff))
   (dotimes (i (- (or end (length seq)) start))
-    (setf crc (logand (logxor crc (elt seq (+ start i)))
+    (setf crc (logand (logxor crc (aref seq (+ start i)))
 		      #xffffffff))
     (dotimes (j 8)
       (let ((mask (logand (- (logand crc 1)) #xffffffff)))
-	(setf crc (logand (logxor (ash crc 1)
+	(setf crc (logand (logxor (ash crc -1)
 				  (logand #xedb88320 mask))
 			  #xffffffff)))))
   (logand (lognot crc) #xffffffff))
 	  
-
+(defun obj-data (obj)
+  (let ((octets (make-array (* 2 (length obj))
+			    :element-type '(unsigned-byte 8))))
+    (dotimes (i (length obj))
+      (setf (nibbles:ub16ref/le octets (* 2 i)) (nth i obj)))
+    octets))
+  
 (defun %save-program (stream objs)
   ;; write header
   (write-sequence #(#x46 #x56 #x4d #x20) stream)  ;; magic number "FVM " 
   (write-sequence #(0 0 0 0) stream)  ;; version
-  (let ((crc nil))
+  (let ((crc #xffffffff))
     (dolist (obj objs)
-      (setf crc (crc32 (second obj) :crc crc)))    
+      (setf crc (crc32 (obj-data (second obj)) :crc crc)))
     (nibbles:write-ub32/le crc stream))
   (write-sequence (make-array (* 29 4) :element-type '(unsigned-byte 8)) stream) ;; spare 
   
-  ;; write program data 
+  ;; write program data
   (dolist (obj objs)
     (destructuring-bind (offset data) obj
       ;; write object header (just offset and count)
@@ -325,13 +332,9 @@ assembled object code."
 	(setf (nibbles:ub16ref/le tmp 0) offset
 	      (nibbles:ub16ref/le tmp 2) (length data))
 	(write-sequence tmp stream))
-      ;; write object data 
-      (let ((octets (make-array (* 2 (length data))
-				:element-type '(unsigned-byte 8))))
-	(dotimes (i (length data))
-	  (setf (nibbles:ub16ref/le octets (* 2 i)) (nth i data)))
+      ;; write object data
+      (let ((octets (obj-data data)))
 	(write-sequence octets stream)))))
-
 
 ;; ----------------------------------------------------------
 

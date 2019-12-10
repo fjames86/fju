@@ -107,6 +107,7 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, uint32_t fla
     }
     
     lf->flags = flags;
+    lf->fvm.id = lf->id;
     
     /* push onto list */
     lf->next = glob.progs;

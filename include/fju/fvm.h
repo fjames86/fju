@@ -80,8 +80,11 @@ struct fvm_state {
      * Divide the program memory up into "pages" of 8 bytes (4 words).
      * Keep a bitmap storing when memory is written.
      */
+#ifdef FVM_USE_DIRTY
 #define FVM_PAGE_SIZE 4
     uint32_t dirty[(FVM_MAX_MEM / FVM_PAGE_SIZE) / 32];
+#endif
+    
     uint32_t id;
 };
 

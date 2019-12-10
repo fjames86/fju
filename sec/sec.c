@@ -443,15 +443,16 @@ char *sec_timestr( uint64_t now, char *str ) {
 
 uint32_t sec_crc32( uint32_t crc, char *buf, int len ) {
    int i, j;
-   uint32_t mask;
+   uint32_t mask, b;
 
    //crc = 0xffffffff;
    for( i = 0; i < len; i++ ) {
-     crc = crc ^ buf[i];
-     for( j = 0; j < 8; j++ ) {
-       mask = -(crc & 1);
-       crc = (crc >> 1) ^ (0xEDB88320 & mask);
-     }
+       b = (uint32_t)((uint8_t)buf[i]);
+       crc = crc ^ b;
+       for( j = 0; j < 8; j++ ) {
+	   mask = -(crc & 1);
+	   crc = (crc >> 1) ^ (0xEDB88320 & mask);
+       }
    }
    return ~crc;
 }

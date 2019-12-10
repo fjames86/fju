@@ -492,11 +492,13 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       uint32_t idx, off;
       /* just write into memory */
       state->mem[offset] = val;
-      
+
+#ifdef FVM_USE_DIRTY
       /* set dirty flag */
       idx = (offset / 4) / 32;
       off = (offset / 4) % 32;
       state->dirty[idx] |= (1 << off);
+#endif
   }  
 }
 
@@ -930,11 +932,6 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   uint16_t *program;
   struct fvm_program_header *hdr;
   uint32_t crc;
-  
-  /* 
-   * TODO: better image format. We don't need anything as complex as 
-   * ELF or PE but something better than this would be good. 
-   */
 
   hdr = (struct fvm_program_header *)progdata;
   program = (uint16_t *)(progdata + sizeof(*hdr) );
@@ -948,15 +945,15 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   i = 0;
   crc = 0xffffffff;
   while( i < proglen ) {
-    if( (i + 1) >= proglen ) {
-      return -1;
-    }
+      if( (i + 1) >= proglen ) {
+	  return -1;
+      }
 
       offset = program[i];
       count = program[i+1];
       i += 2;
       if( ((uint32_t)offset + (uint32_t)count) >= 0xffff ) {
-	return -1;
+	  return -1;
       }
 
       if( (offset + count) > bos ) bos = offset + count;
@@ -964,9 +961,9 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
       crc = sec_crc32( crc, (char *)&program[i], 2 * count );
       
       for( j = 0; j < count; j++ ) {
-	if( i >= proglen ) {
-	  return -1;
-	}
+	  if( i >= proglen ) {
+	      return -1;
+	  }
 	  
 	  state->mem[offset + j] = program[i];
 	  i++;
@@ -979,12 +976,14 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   xdr_init( &state->rpc.buf, state->rpc.rxtxbuf, FVM_RPC_MAXBUF );
   state->rpc.service = -1; // default to no auth
   state->rpc.hostid = hostreg_localid();
+#ifdef FVM_USE_DIRTY
   fvm_dirty_reset( state );
-  state->id = crc;
+#endif
+  state->id = 0xffffffff;
 
   if( crc != hdr->crc32 ) {
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; crc32 mismatch\n" );
-    //return -1;
+      printf( ";; crc32 mismatch hdr=0x%08x calculated=0x%08x\n", hdr->crc32, crc );
+      return -1;
   }
   
   return 0;
@@ -1081,7 +1080,8 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
     return 0;
 }
 
-    
+
+#ifdef FVM_USE_DIRTY
 void fvm_dirty_reset( struct fvm_state *fvm ) {
     memset( fvm->dirty, 0, sizeof(fvm->dirty) );
 }
@@ -1122,3 +1122,10 @@ int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) 
     
     return n;
 }
+#else
+void fvm_dirty_reset( struct fvm_state *fvm ) {
+}
+int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) {
+    return 0;
+}
+#endif

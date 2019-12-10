@@ -310,6 +310,103 @@ static int fvm_proc_msg( struct rpc_inc *inc ) {
   return 0;
 }
 
+
+static struct loaded_fvm *lf_by_id( uint32_t id ) {
+    struct loaded_fvm *lf;
+    lf = glob.progs;
+    while( lf ) {
+	if( lf->id == id ) {
+	    break;
+	}
+	lf = lf->next;
+    }
+    return lf;
+}
+
+#define FVM_RPC_ARGTYPE_INT 0
+#define FVM_RPC_ARGTYPE_STRING 1
+
+static int fvm_proc_callword( struct rpc_inc *inc ) {
+  int handle, sts;
+  struct loaded_fvm *lf;
+  uint32_t id, wordidx, u32;
+  uint16_t args[32], res[32];
+  uint16_t argtypes[32], restypes[32];
+  int nargs, nres, i;
+  uint16_t bos;
+  char str[1024];
+  
+  sts = xdr_decode_uint32( &inc->xdr, &id );
+  if( !sts ) lf = lf_by_id( id );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &wordidx );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&nargs );
+  if( !sts ) {
+      for( i = 0; i < nargs; i++ ) {
+	  sts = xdr_decode_uint32( &inc->xdr, &u32 );
+	  if( sts ) break;
+	  argtypes[i] = (uint16_t)u32;
+	  switch( argtypes[i] ) {
+	  case FVM_RPC_ARGTYPE_INT:
+	      sts = xdr_decode_uint32( &inc->xdr, &u32 );
+	      if( sts ) break;
+	      args[i] = (uint16_t)u32;
+	      break;
+	  case FVM_RPC_ARGTYPE_STRING:
+	      sts = xdr_decode_string( &inc->xdr, str, sizeof(str) );
+	      if( sts ) break;
+	      if( lf ) memcpy( &lf->fvm.mem[bos], str, strlen( str ) + 1 );
+	      args[i] = bos;
+	      bos += (strlen( str ) / 2) + (strlen( str ) % 2);
+	      break;
+	  default:
+	      sts = -1;
+	  }
+	  if( sts ) break;
+      }
+  }
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&nres );
+  if( !sts ) {
+      for( i = 0; i < nres; i++ ) {
+	  sts = xdr_decode_uint32( &inc->xdr, &u32 );
+	  if( sts ) break;
+	  restypes[i] = (uint16_t)u32;
+      }
+  }
+      
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  if( !lf ) {
+      xdr_encode_boolean( &inc->xdr, 0 );
+  } else if( lf->fvm.flags & FVM_FLAG_RUNNING ) {
+      /* forbid calling words if the program is currently running */
+      xdr_encode_boolean( &inc->xdr, 0 );
+  } else {
+      xdr_encode_boolean( &inc->xdr, 1 );
+      sts = fvm_call_word( &lf->fvm, wordidx, args, nargs, res, nres );
+      for( i = 0; i < nres; i++ ) {
+	  xdr_encode_uint32( &inc->xdr, (uint32_t)restypes[i] );
+	  switch( restypes[i] ) {
+	  case FVM_RPC_ARGTYPE_INT:
+	      xdr_encode_uint32( &inc->xdr, (uint32_t)res[i] );
+	      break;
+	  case FVM_RPC_ARGTYPE_STRING:
+	      memset( str, 0, sizeof(str) );
+	      strncpy( str, (char *)&lf->fvm.mem[res[i]], sizeof(str) - 1 );
+	      xdr_encode_string( &inc->xdr, str );
+	      break;
+	  }
+      }
+  }
+  
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+
+
 #if 0
 
 static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
@@ -424,6 +521,8 @@ static struct rpc_proc fvm_procs[] = {
   { 4, fvm_proc_pause },
   { 5, fvm_proc_interrupt },
   { 6, fvm_proc_msg },
+  { 7, fvm_proc_callword },
+  
 #if 0
   { 0, fvm_proc_read_dirty },
   { 0, fvm_proc_write_dirty },

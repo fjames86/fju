@@ -489,15 +489,17 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       break;
     }
   } else {
-      uint32_t idx, off;
       /* just write into memory */
       state->mem[offset] = val;
 
 #ifdef FVM_USE_DIRTY
       /* set dirty flag */
-      idx = (offset / 4) / 32;
-      off = (offset / 4) % 32;
-      state->dirty[idx] |= (1 << off);
+      {
+	  uint32_t idx, off;
+	  idx = (offset / 4) / 32;
+	  off = (offset / 4) % 32;
+	  state->dirty[idx] |= (1 << off);
+      }
 #endif
   }  
 }

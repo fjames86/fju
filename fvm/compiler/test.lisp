@@ -280,7 +280,7 @@
 ;; loop infinitely waiting to service an incoming message 
 (defword test-msg-handler-loop ()
   begin
-  1000 sleep
+  1000 sleep 
   true until)
 
 (defun test-msg ()
@@ -335,6 +335,7 @@
 
 (defword idtest ()
   "fvm-id: " dumpstr fvm-id swap dumphex dumphex cr)
+
 
 
 ;; --------------------------------------

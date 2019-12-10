@@ -294,11 +294,28 @@ assembled object code."
   (let ((ltab (first-pass instructions)))
     (second-pass instructions ltab)))
 
+(defun crc32 (seq &key crc (start 0) end)
+  (unless crc (setf crc #xffffffff))
+  (dotimes (i (- (or end (length seq)) start))
+    (setf crc (logand (logxor crc (elt seq (+ start i)))
+		      #xffffffff))
+    (dotimes (j 8)
+      (let ((mask (logand (- (logand crc 1)) #xffffffff)))
+	(setf crc (logand (logxor (ash crc 1)
+				  (logand #xedb88320 mask))
+			  #xffffffff)))))
+  (logand (lognot crc) #xffffffff))
+	  
+
 (defun %save-program (stream objs)
   ;; write header
   (write-sequence #(#x46 #x56 #x4d #x20) stream)  ;; magic number "FVM " 
   (write-sequence #(0 0 0 0) stream)  ;; version
-  (write-sequence (make-array (* 30 4) :element-type '(unsigned-byte 8)) stream) ;; spare 
+  (let ((crc nil))
+    (dolist (obj objs)
+      (setf crc (crc32 (second obj) :crc crc)))    
+    (nibbles:write-ub32/le crc stream))
+  (write-sequence (make-array (* 29 4) :element-type '(unsigned-byte 8)) stream) ;; spare 
   
   ;; write program data 
   (dolist (obj objs)

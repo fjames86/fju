@@ -285,7 +285,7 @@
 (defconstant +fvm-prog+ #x27E1FB11)
 (defrpc call-send-msg (+fvm-prog+ 1 6)
   :arg-body (xdr-encode-uint32 xdr-encode-uint32 xdr-encode-string)
-  :results-body ("call-send-msg success" dumpstr)
+  :result-body ("call-send-msg success" dumpstr)
   :fail-body ("call-send-msg failed" dumpstr))
 
 (defword wait-for-logmsg ()
@@ -310,3 +310,6 @@
 
 (defword small-test ()
   "hello world!" dumpstr cr)
+
+(defword idtest ()
+  "fvm-id: " dumpstr fvm-id swap dumphex dumphex cr)

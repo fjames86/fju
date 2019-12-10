@@ -41,6 +41,7 @@ static struct {
   int nevtprogs;
 #define FVM_MAX_EVTPROGS 64
   struct event_prog evtprogs[FVM_MAX_EVTPROGS];
+  uint32_t idseq;
 } glob;
 
 static void fvm_iter_cb( struct rpc_iterator *iter );
@@ -70,13 +71,14 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, uint32_t fla
     
     lf = malloc( sizeof(*lf) );
     memset( lf, 0, sizeof(*lf) );
-    lf->id = sec_rand_uint32();    
+    lf->id = ++glob.idseq;
     strncpy( lf->name, name, sizeof(lf->name) - 1 );
     sts = fvm_load( &lf->fvm, (char *)bufp, buflen );
     if( sts ) {
 	free( lf );
 	return NULL;
     }
+
     
     if( inid ) {
 	sts = nls_share_by_hshare( inid, &nls );
@@ -105,7 +107,6 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, uint32_t fla
     }
     
     lf->flags = flags;
-    lf->fvm.id = lf->id;
     
     /* push onto list */
     lf->next = glob.progs;

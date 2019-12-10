@@ -101,9 +101,9 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
     case FVM_DEVICE_CLOCKHIGH:
       return (uint16_t)((time( NULL ) >> 16) & 0xffff);
     case FVM_DEVICE_IDLOW:
-	return (state->id & 0xffff);
+      return (state->id & 0xffff);
     case FVM_DEVICE_IDHIGH:
-	return (state->id >> 16) & 0xffff;
+      return (state->id >> 16) & 0xffff;
     default:
       return 0;
     }
@@ -929,6 +929,7 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   uint16_t bos = 0;
   uint16_t *program;
   struct fvm_program_header *hdr;
+  uint32_t crc;
   
   /* 
    * TODO: better image format. We don't need anything as complex as 
@@ -945,6 +946,7 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   
   memset( state->mem, 0, sizeof(state->mem) );
   i = 0;
+  crc = 0xffffffff;
   while( i < proglen ) {
     if( (i + 1) >= proglen ) {
       return -1;
@@ -958,6 +960,8 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
       }
 
       if( (offset + count) > bos ) bos = offset + count;
+
+      crc = sec_crc32( crc, (char *)&program[i], 2 * count );
       
       for( j = 0; j < count; j++ ) {
 	if( i >= proglen ) {
@@ -976,7 +980,12 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   state->rpc.service = -1; // default to no auth
   state->rpc.hostid = hostreg_localid();
   fvm_dirty_reset( state );
-  state->id = sec_rand_uint32();
+  state->id = crc;
+
+  if( crc != hdr->crc32 ) {
+    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; crc32 mismatch\n" );
+    //return -1;
+  }
   
   return 0;
 }

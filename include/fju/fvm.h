@@ -108,8 +108,9 @@ struct fvm_program_header {
   uint32_t magic;
 #define FVM_PROGRAM_MAGIC 0x204D5646 /* header magic identifier "FVM " */
   uint32_t version;
-
-  uint32_t spare[30];
+  uint32_t crc32;
+  
+  uint32_t spare[29];
 };
 
 struct fvm_dirty {

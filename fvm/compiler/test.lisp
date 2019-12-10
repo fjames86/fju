@@ -1,7 +1,8 @@
  ;;;; Copyright Frank James 2019
 
 (defpackage #:fvm-test
-  (:use #:cl #:fvm))
+  (:use #:cl #:fvm)
+  (:export #:build-all))
 
 (in-package #:fvm-test)
 
@@ -231,7 +232,7 @@
 
 (defun test ()
   (save-program "test.obj" 'test
-		:print-assembly t
+		:print-assembly nil
 		:variables '(*mystring* *input-buffer*)
 		:extra-words '(test-callword)))
 
@@ -282,11 +283,29 @@
   1000 sleep
   true until)
 
+(defun test-msg ()
+  (save-program "test-msg.obj" 'test-msg-handler-loop :isr-table *test-isr-table*))
+
 (defconstant +fvm-prog+ #x27E1FB11)
 (defrpc call-send-msg (+fvm-prog+ 1 6)
   :arg-body (xdr-encode-uint32 xdr-encode-uint32 xdr-encode-string)
   :result-body ("call-send-msg success" dumpstr)
   :fail-body ("call-send-msg failed" dumpstr))
+
+(defrpc fvm-list-all (+fvm-prog+ 1 3)
+  :result-body 
+  (xdr-decode-boolean
+   begin
+   "id=" dumpstr xdr-decode-uint32 dumphex                ;; id
+   " flags=" dumpstr xdr-decode-uint32 swap dumphex dumphex ;; flags
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; tickcount
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; runtime
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; inlogid
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; outlogid
+   " name=" dumpstr bos 1024 xdr-decode-string bos dumpstr
+   cr 
+   xdr-decode-boolean
+   until))
 
 (defword wait-for-logmsg ()
   begin
@@ -313,3 +332,9 @@
 
 (defword idtest ()
   "fvm-id: " dumpstr fvm-id swap dumphex dumphex cr)
+
+
+(defparameter *build-programs* '(test test-msg))
+(defun build-all ()
+  (dolist (p *build-programs*)
+    (funcall p)))

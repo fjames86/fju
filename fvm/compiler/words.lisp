@@ -411,10 +411,51 @@
     (lisp `((br-z ,done)))
     (add r1 r1 1)
 
-
     (lisp `((br-pnz ,again)))
     (lisp done)
     (push r1)))
+
+(let ((gagain (gensym))
+      (gfirstzero (gensym))
+      (gsecondzero (gensym))
+      (gdone (gensym))
+      (gsuccess (gensym)))	
+  (defword strcmp () ;; (str1 str2 -- f)
+    (lisp 
+     `((pop r1)  ;; str2
+       (pop r0)  ;; str1
+       ,gagain
+       ;; fetch chars
+       (ldr r2 r0 0)
+       (ldr r3 r1 0)
+       ;; test first char
+       (add r2 r2 0) 
+       (br-z ,gfirstzero)
+       ;; test second char 
+       (add r3 r3 0)
+       (br-z ,gsecondzero)
+       ;; both are non-zero - increment addresses and loop 
+       (add r0 r0 1)
+       (add r1 r1 1)
+       (br-pnz ,gagain)
+       
+       ,gfirstzero
+       (add r3 r3 0)
+       (br-z ,gsuccess)
+       ;; fallthrough 
+       ,gsecondzero
+       ;; one is zero but other is non-zero 
+       (ldi r4 0)
+       (push r4)
+       (br-pnz ,gdone)
+       
+       ,gsuccess
+       (ldi r4 -1)
+       (push r4)
+       
+       ,gdone))))
+  
+  
 
 (defword sleep () ;; (ms --)
   #xfe08 !)
@@ -497,13 +538,13 @@
   (xdr-decode-boolean
    begin
    xdr-decode-uint32                     ;; id
-   xdr-decode-uint32 drop drop           ;; flags
-   xdr-decode-uint64 drop drop drop drop ;; tickcount
-   xdr-decode-uint64 drop drop drop drop ;; runtime
-   xdr-decode-uint64 drop drop drop drop ;; inlogid
-   xdr-decode-uint64 drop drop drop drop ;; outlogid
+   xdr-decode-uint32 (add sp sp 2) ;; drop drop           ;; flags
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; tickcount
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; runtime
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; inlogid
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; outlogid
    over ;; (nameaddr id nameaddr)
-   xdr-decode-string ;; name ( nameaddr id nameaddr name)
+   bos 1024 xdr-decode-string bos ;; name ( nameaddr id nameaddr name)
    strcmp if swap drop return then
    xdr-decode-boolean
    until

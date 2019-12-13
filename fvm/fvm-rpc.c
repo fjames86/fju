@@ -47,6 +47,7 @@ static struct {
 static void fvm_iter_cb( struct rpc_iterator *iter );
 static void reload_evtprogs( struct rpc_iterator *iter );
 static struct loaded_fvm *load_prog_by_name( char *name );
+static struct loaded_fvm *lf_by_id( uint32_t id );
 
 static struct rpc_iterator fvm_iter = {
     NULL,
@@ -217,29 +218,25 @@ static int fvm_proc_pause( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &stop );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );  
-  lf = glob.progs;
-  while( lf ) {
-      if( lf->id == id ) {
-	  if( stop == 0 ) {
-	      /* continue */
-	      lf->fvm.flags |= FVM_FLAG_RUNNING;
-	  } else if( stop == 1 ) {
-	      /* stop running */
-	      lf->fvm.flags &= ~FVM_FLAG_RUNNING;
-	  }
-	  else if( stop == 2 ) {
-	      /* reset */
-	      fvm_reset( &lf->fvm );
-	      lf->fvm.flags |= FVM_FLAG_RUNNING;
-	  } else {
-	      /* other */
-	  }
-	  break;
-      }
-      lf = lf->next;    
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  lf = lf_by_id( id );
+  if( lf ) {
+    if( stop == 0 ) {
+      /* continue */
+      lf->fvm.flags |= FVM_FLAG_RUNNING;
+    } else if( stop == 1 ) {
+      /* stop running */
+      lf->fvm.flags &= ~FVM_FLAG_RUNNING;
+    }
+    else if( stop == 2 ) {
+      /* reset */
+      fvm_reset( &lf->fvm );
+      lf->fvm.flags |= FVM_FLAG_RUNNING;
+    } else {
+      /* other */
+    }
   }
-
+  
   rpc_complete_accept_reply( inc, handle );
   
   return 0;
@@ -254,14 +251,10 @@ static int fvm_proc_interrupt( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &ivec );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &priority );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-  
-  lf = glob.progs;
-  while( lf ) {
-      if( lf->id == id ) {
-	  fvm_interrupt( &lf->fvm, (uint16_t)ivec, (uint16_t)priority );
-	  break;
-      }
-      lf = lf->next;    
+
+  lf = lf_by_id( id );
+  if( lf ) {
+    fvm_interrupt( &lf->fvm, (uint16_t)ivec, (uint16_t)priority );
   }
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle ); 
@@ -281,27 +274,23 @@ static int fvm_proc_msg( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &msgid );
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &buflen );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-  
-  lf = glob.progs;
-  while( lf ) {
-    if( lf->id == id ) {
-      /* signal interrupt */
-      sts = fvm_interrupt( &lf->fvm, FVM_INT_MSG, FVM_INT_MSG_PL );
-      if( sts ) {
-	log_writef( NULL, LOG_LVL_INFO, "fvm_proc_msg interrupt failed" );
-      } else {
-	/* if successfully jumped to ISR then copy message and set params */
-	log_writef( NULL, LOG_LVL_INFO, "fvm_proc_msg msglen=%d", buflen );
-	
-	if( buflen > 1024 ) buflen = 1024;
-	memcpy( &lf->fvm.mem[lf->fvm.bos], bufp, buflen );
-	lf->fvm.reg[FVM_REG_R0] = msgid;         /* R0 = msgid */
-	lf->fvm.reg[FVM_REG_R1] = lf->fvm.bos;   /* R1 = address of msg */
-	lf->fvm.reg[FVM_REG_R2] = buflen;        /* R2 = length of msg */
-      }
-      break;
+
+  lf = lf_by_id( id );
+  if( lf ) {
+    /* signal interrupt */
+    sts = fvm_interrupt( &lf->fvm, FVM_INT_MSG, FVM_INT_MSG_PL );
+    if( sts ) {
+      log_writef( NULL, LOG_LVL_INFO, "fvm_proc_msg interrupt failed" );
+    } else {
+      /* if successfully jumped to ISR then copy message and set params */
+      log_writef( NULL, LOG_LVL_INFO, "fvm_proc_msg msglen=%d", buflen );
+      
+      if( buflen > 1024 ) buflen = 1024;
+      memcpy( &lf->fvm.mem[lf->fvm.bos], bufp, buflen );
+      lf->fvm.reg[FVM_REG_R0] = msgid;         /* R0 = msgid */
+      lf->fvm.reg[FVM_REG_R1] = lf->fvm.bos;   /* R1 = address of msg */
+      lf->fvm.reg[FVM_REG_R2] = buflen;        /* R2 = length of msg */
     }
-    lf = lf->next;    
   }
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle ); 
@@ -326,80 +315,100 @@ static struct loaded_fvm *lf_by_id( uint32_t id ) {
 #define FVM_RPC_ARGTYPE_INT 0
 #define FVM_RPC_ARGTYPE_STRING 1
 
-static int fvm_proc_callword( struct rpc_inc *inc ) {
-  int handle, sts;
+static int fvm_proc_stackpush( struct rpc_inc *inc ) {
+  int handle, sts, b;
   struct loaded_fvm *lf;
-  uint32_t id, wordidx, u32;
-  uint16_t args[32], res[32];
-  uint16_t argtypes[32], restypes[32];
-  int nargs, nres, i;
+  uint32_t id, u32, argtype;
   uint16_t bos;
   char str[1024];
   
   sts = xdr_decode_uint32( &inc->xdr, &id );
-  if( !sts ) lf = lf_by_id( id );
-  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &wordidx );
-  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&nargs );
-  if( !sts ) {
-      for( i = 0; i < nargs; i++ ) {
-	  sts = xdr_decode_uint32( &inc->xdr, &u32 );
-	  if( sts ) break;
-	  argtypes[i] = (uint16_t)u32;
-	  switch( argtypes[i] ) {
-	  case FVM_RPC_ARGTYPE_INT:
-	      sts = xdr_decode_uint32( &inc->xdr, &u32 );
-	      if( sts ) break;
-	      args[i] = (uint16_t)u32;
-	      break;
-	  case FVM_RPC_ARGTYPE_STRING:
-	      sts = xdr_decode_string( &inc->xdr, str, sizeof(str) );
-	      if( sts ) break;
-	      if( lf ) memcpy( &lf->fvm.mem[bos], str, strlen( str ) + 1 );
-	      args[i] = bos;
-	      bos += (strlen( str ) / 2) + (strlen( str ) % 2);
-	      break;
-	  default:
-	      sts = -1;
-	  }
-	  if( sts ) break;
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  sts = xdr_decode_boolean( &inc->xdr, &b );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  lf = lf_by_id( id );
+  if( lf && !(lf->fvm.flags & FVM_FLAG_RUNNING) ) {
+    bos = lf->fvm.bos;
+    lf->fvm.reg[FVM_REG_SP] = 0xfdff;  /* reset stack pointer */
+    while( b ) {
+      sts = xdr_decode_uint32( &inc->xdr, &argtype );
+      if( sts ) break;
+      switch( argtype ) {
+      case FVM_RPC_ARGTYPE_INT:
+	sts = xdr_decode_uint32( &inc->xdr, &u32 );
+	if( sts ) break;
+	lf->fvm.mem[lf->fvm.reg[FVM_REG_SP]] = (uint16_t)u32;
+	lf->fvm.reg[FVM_REG_SP]--;
+	break;
+      case FVM_RPC_ARGTYPE_STRING:
+	sts = xdr_decode_string( &inc->xdr, str, sizeof(str) );
+	if( sts ) break;
+	memcpy( &lf->fvm.mem[bos], str, strlen( str ) + 1 );
+	lf->fvm.mem[lf->fvm.reg[FVM_REG_SP]] = bos;
+	lf->fvm.reg[FVM_REG_SP]--;
+	bos += (strlen( str ) + 1) / 2 + ((strlen( str ) + 1) % 2);
+	break;
+      default:
+	break;
       }
+      if( sts ) break;
+    }
+
+    sts = xdr_decode_boolean( &inc->xdr, &b );
   }
-  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&nres );
-  if( !sts ) {
-      for( i = 0; i < nres; i++ ) {
-	  sts = xdr_decode_uint32( &inc->xdr, &u32 );
-	  if( sts ) break;
-	  restypes[i] = (uint16_t)u32;
-      }
-  }
+
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_stackpop( struct rpc_inc *inc ) {
+  int handle, sts, b, i, nres;
+  struct loaded_fvm *lf;
+  uint32_t id;
+  uint16_t bos, res[32];
+  uint32_t restypes[32];
+  
+  sts = xdr_decode_uint32( &inc->xdr, &id );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  sts = xdr_decode_boolean( &inc->xdr, &b );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  nres = 0;
+  lf = lf_by_id( id );
+  if( lf && !(lf->fvm.flags & FVM_FLAG_RUNNING) && (lf->fvm.flags & FVM_FLAG_DONE) ) {
+    bos = lf->fvm.bos;
+    while( b ) {
+      sts = xdr_decode_uint32( &inc->xdr, &restypes[nres] );
+      if( sts ) break;
+      lf->fvm.reg[FVM_REG_SP]++;
+      res[nres] = lf->fvm.mem[lf->fvm.reg[FVM_REG_SP]];
+      nres++;
+      if( nres >= 32 ) break;
       
+      sts = xdr_decode_boolean( &inc->xdr, &b );
+      if( sts ) break;
+    }
+  }
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-
-  if( !lf ) {
-      xdr_encode_boolean( &inc->xdr, 0 );
-  } else if( lf->fvm.flags & FVM_FLAG_RUNNING ) {
-      /* forbid calling words if the program is currently running */
-      xdr_encode_boolean( &inc->xdr, 0 );
-  } else {
-      xdr_encode_boolean( &inc->xdr, 1 );
-      sts = fvm_call_word( &lf->fvm, wordidx, args, nargs, res, nres );
-      for( i = 0; i < nres; i++ ) {
-	  xdr_encode_uint32( &inc->xdr, (uint32_t)restypes[i] );
-	  switch( restypes[i] ) {
-	  case FVM_RPC_ARGTYPE_INT:
-	      xdr_encode_uint32( &inc->xdr, (uint32_t)res[i] );
-	      break;
-	  case FVM_RPC_ARGTYPE_STRING:
-	      memset( str, 0, sizeof(str) );
-	      strncpy( str, (char *)&lf->fvm.mem[res[i]], sizeof(str) - 1 );
-	      xdr_encode_string( &inc->xdr, str );
-	      break;
-	  }
-      }
+  for( i = 0; i < nres; i++ ) {
+    xdr_encode_boolean( &inc->xdr, 1 );
+    xdr_encode_uint32( &inc->xdr, restypes[i] );
+    switch( restypes[i] ) {
+    case FVM_RPC_ARGTYPE_INT:
+      xdr_encode_uint32( &inc->xdr, res[i] );
+      break;
+    case FVM_RPC_ARGTYPE_STRING:
+      xdr_encode_string( &inc->xdr, (char *)&lf->fvm.mem[res[i]] );
+      break;
+    }
   }
-  
+  xdr_encode_boolean( &inc->xdr, 0 );    
   rpc_complete_accept_reply( inc, handle );
   
   return 0;
@@ -521,7 +530,8 @@ static struct rpc_proc fvm_procs[] = {
   { 4, fvm_proc_pause },
   { 5, fvm_proc_interrupt },
   { 6, fvm_proc_msg },
-  { 7, fvm_proc_callword },
+  { 7, fvm_proc_stackpush },
+  { 8, fvm_proc_stackpop },
   
 #if 0
   { 0, fvm_proc_read_dirty },

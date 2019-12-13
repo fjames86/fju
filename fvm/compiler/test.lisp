@@ -357,7 +357,9 @@
 
 (defword localtest1 (:gensyms (fred))
   local-variable fred
-  12 local! fred)
+  10 0 do
+  local@ fred 1 + dup dumpdec cr local! fred
+  loop)
 
 ;; --------------------------------------
 

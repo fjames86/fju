@@ -490,6 +490,32 @@ assembled object code."
 			 (ld r0 -2)
 			 (ldr r1 r0 0)
 			 (push r1))))
+		    ((eq wrd 'local-variable)
+		     ;; allocate local variable
+		     (setf body (cdr body))
+		     (let ((var-name (car body)))
+		       (setf body (cdr body))
+		       `((br-pnz 1)
+			 ,var-name
+			 (.blkw 0))))
+		    ((eq wrd 'local)
+		     (setf body (cdr body))
+		     (let ((var-name (car body)))
+		       (setf body (cdr body))
+		       `((lea r0 ,var-name)
+			 (push r0))))
+		    ((eq wrd 'local@)
+		     (setf body (cdr body))
+		     (let ((var-name (car body)))
+		       (setf body (cdr body))
+		       `((ld r0 ,var-name)
+			 (push r0))))
+		    ((eq wrd 'local!)
+		     (setf body (cdr body))
+		     (let ((var-name (car body)))
+		       (setf body (cdr body))
+		       `((pop r0)
+			 (st r0 ,var-name))))
 		    ((eq wrd 'uint32)
 		     (setf body (cdr body))
 		     (let ((val (car body)))
@@ -565,24 +591,29 @@ NAME ::= symbol naming word
 OPTIONS ::= List of optioins, :inline 
 BODY ::= word definition. List of words or inline assembly.
 "
-  `(setf (gethash ',name *words*) 
-	 (make-word ',name
-		    (list ,@options)
-		    (append 
-		     ,@(mapcar
-			(lambda (wrd)
-			  (cond
-			    ((symbolp wrd) `(list ',wrd))
-			    ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
-			    ((stringp wrd) `(list ,wrd)) 
-			    ((not (listp wrd)) (error "Unexpected form ~S" wrd))
-			    ((eq (car wrd) 'lisp) ;; a way of unquoting
-			     (let ((glist (gensym)))
-			       `(let ((,glist ,(cadr wrd)))
-				  (if (listp ,glist) ,glist (list ,glist)))))
-			    (t 
-			     `(list ',wrd))))
-			body)))))
+  (let ((gensyms (mapcar (lambda (gs)
+			   (cons gs (gensym (symbol-name gs))))
+			 (getf options :gensyms))))
+    (setf (getf options :gensyms) nil)
+    `(setf (gethash ',name *words*) 
+	   (make-word ',name
+		      (list ,@options)
+		      (append 
+		       ,@(mapcar
+			  (lambda (wrd)
+			    (cond
+			      ((symbolp wrd)
+			       `(list ',(or (cdr (assoc wrd gensyms)) wrd)))
+			      ((or (integerp wrd) (characterp wrd)) `(list ,wrd))
+			      ((stringp wrd) `(list ,wrd)) 
+			      ((not (listp wrd)) (error "Unexpected form ~S" wrd))
+			      ((eq (car wrd) 'lisp) ;; a way of unquoting
+			       (let ((glist (gensym)))
+				 `(let ((,glist ,(cadr wrd)))
+				    (if (listp ,glist) ,glist (list ,glist)))))
+			      (t 
+			       `(list ',wrd))))
+			  body))))))
 
 (defparameter *variables* nil)
 (defun make-variable (name size &optional initial-contents)

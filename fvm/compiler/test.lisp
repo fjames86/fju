@@ -355,6 +355,9 @@
  loop)
 
 
+(defword localtest1 (:gensyms (fred))
+  local-variable fred
+  12 local! fred)
 
 ;; --------------------------------------
 

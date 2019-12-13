@@ -800,3 +800,5 @@ Returns compiled bytecode."
   (when outlog (format stream "/fju/fvm/programs/~A/outlog u64 ~A~%" name outlog)))
 	  
   
+;; -----------------------------------
+

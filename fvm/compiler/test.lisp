@@ -337,6 +337,24 @@
   "fvm-id: " dumpstr fvm-id swap dumphex dumphex cr)
 
 
+;; ------------------------------------
+
+(defword localvar ()
+  ;; allocate a local (static) variable 
+  (br-pnz 1)
+  mylocalvar 
+  (.blkw 0)
+  ;; loop adding current index to it 
+  4 0 do 
+    (ld r0 mylocalvar)
+    (push r0)
+    @                    ;; fetch mylocalvar 
+    i +                  ;; add current index 
+    (lea r0 mylocalvar)  ;; get address and store 
+    !
+ loop)
+
+
 
 ;; --------------------------------------
 

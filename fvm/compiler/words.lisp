@@ -98,13 +98,13 @@
   (pop r0)
   (add r0 r0 -2)
   (push r0))
-(defword r> (:inline t)
+(defword r> (:inline t)  ;; pop return stack onto data stack
   (rpop r0)
   (push r0))
-(defword r< (:inline t)
+(defword >r (:inline t)  ;; pop stack stack onto return stack
   (pop r0)
   (rpush r0))
-(defword r@ (:inline t)
+(defword r@ (:inline t)  ;; fetch return stack to data stack 
   (ldr r0 r6 1)
   (push r0))
 

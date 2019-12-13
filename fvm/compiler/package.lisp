@@ -16,7 +16,7 @@
 	   #:XNOR #:NAND #:@ #:ROT #:NOR #:2- #:DROP #:FALSE
 	   #:DUMPCHR #:ZERO #:SWAP #:HALT #:DUP #:OVER #:TRUE
 	   #:TEST #:* #:- #:or #:xor #:+ #:mod #:/ #:not #:1-
-	   #:dumpstr #:variable #:r> #:r< #:r@ #:tos #:bos #:zero!
+	   #:dumpstr #:variable #:r> #:>r #:r@ #:tos #:bos #:zero!
 	   #:lisp #:rand #:rti #:cr #:defisr #:compile-program
 	   #:zero? #:!= #:break #:+loop #:dumphex #:lshift #:rshift
 	   #:tick-count #:read-input #:reset-input #:write-output #:2dup #:nop

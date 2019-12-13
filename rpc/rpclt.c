@@ -94,7 +94,9 @@ static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_msg_results( struct xdr_s *xdr );
 static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
-
+static void fvm_push_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_pop_results( struct xdr_s *xdr );
+static void fvm_pop_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 
 
@@ -119,6 +121,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [cont|stop|reset]" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.msg", "id=ID msgid=ID msg=*" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_push_args, NULL, "fvm.push", "id=ID [int=*] [str=*]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_pop_args, fvm_pop_results, "fvm.pop", "id=ID [int] [str]" },
     { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
     { 999999, 1, 2, cmdprog_event_args, NULL, "cmdprog.event", "category=* eventid=*" },
     { 0, 0, 0, NULL, NULL, NULL }
@@ -473,10 +477,8 @@ static char *rpcbind_name_by_prog( uint32_t prog ) {
 
 static void rpcbind_results( struct xdr_s *xdr ) {
   int sts, b;
-  int i;
   uint32_t prog, vers, prot, port;
   
-  i = 0;
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) goto bad;
   while( b ) {
@@ -566,8 +568,10 @@ static void rex_write_results( struct xdr_s *xdr ) {
   uint64_t leaderid;
 
   sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
   sts = xdr_decode_uint64( xdr, &leaderid );
-
+  if( sts ) usage( "xdr error" );
+  
   printf( "Success=%s Leader=%"PRIx64"\n", b ? "True" : "False", leaderid );
 }
 
@@ -869,6 +873,7 @@ static void freg_list_results( struct xdr_s *xdr ) {
     uint64_t id;
     
     sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
     while( b ) {
 	xdr_decode_uint64( xdr, &id );
 	xdr_decode_string( xdr, name, sizeof(name) );
@@ -946,6 +951,7 @@ static void freg_get_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 static void freg_put_results( struct xdr_s *xdr ) {
   int sts, b;
   sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
   printf( "%s\n", b ? "Success" : "Failure" );
 }
 
@@ -1003,6 +1009,7 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 static void freg_rem_results( struct xdr_s *xdr ) {
   int sts, b;
   sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
   printf( "%s\n", b ? "Success" : "Failure" );  
 }
 
@@ -1214,3 +1221,77 @@ static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_uint32( xdr, msgid );
   xdr_encode_opaque( xdr, (uint8_t *)bufp, buflen );
 }
+
+static void fvm_push_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t u32;
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    u32 = strtoul( argval, NULL, 10 );
+	    xdr_encode_uint32( xdr, u32 );
+	} else if( strcmp( argname, "int" ) == 0 ) {
+	    xdr_encode_boolean( xdr, 1 );
+	    xdr_encode_uint32( xdr, 0 ); // argtype=int 
+	    u32 = strtoul( argval, NULL, 10 );
+	    xdr_encode_uint32( xdr, u32 );
+	} else if( strcmp( argname, "str" ) == 0 ) {
+	    xdr_encode_boolean( xdr, 1 );
+	    xdr_encode_uint32( xdr, 1 ); // argtype=str
+	    xdr_encode_string( xdr, argval );
+	} else usage( NULL );
+	i++;
+    }
+    xdr_encode_boolean( xdr, 0 );
+}
+
+static void fvm_pop_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t u32;
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    u32 = strtoul( argval, NULL, 10 );
+	    xdr_encode_uint32( xdr, u32 );
+	} else if( strcmp( argname, "int" ) == 0 ) {
+	    xdr_encode_boolean( xdr, 1 );
+	    xdr_encode_uint32( xdr, 0 ); // argtype=int 
+	} else if( strcmp( argname, "str" ) == 0 ) {
+	    xdr_encode_boolean( xdr, 1 );
+	    xdr_encode_uint32( xdr, 1 ); // argtype=str
+	} else usage( NULL );
+	i++;
+    }
+    xdr_encode_boolean( xdr, 0 );
+}
+
+static void fvm_pop_results( struct xdr_s *xdr ) {
+    int sts, b;
+    uint32_t u32, argtype;
+    char str[1024];
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
+    while( !sts && b ) {
+	sts = xdr_decode_uint32( xdr, &argtype );
+	if( sts ) usage( "xdr error" );
+	switch( argtype ) {
+	case 0:
+	    sts = xdr_decode_uint32( xdr, &u32 );
+	    if( sts ) usage( "xdr error" );
+	    printf( "%u\n", u32 );
+	    break;
+	case 1:
+	    sts = xdr_decode_string( xdr, str, sizeof(str) );
+	    if( sts ) usage( "xdr error" );
+	    printf( "%s\n", str );
+	    break;
+	}
+
+	sts = xdr_decode_boolean( xdr, &b );
+    }
+}
+
+

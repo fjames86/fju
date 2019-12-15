@@ -1134,16 +1134,24 @@ int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) 
 #endif
 
 int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset ) {
-    int len = n;
+    int len;
+    
+    n &= 0x3ff;
+    offset &= 0x3ff;
+    len = n;
     if( offset > FVM_MAX_SHMEM ) return -1;
-    if( n >= (FVM_MAX_SHMEM - offset) ) n = FVM_MAX_SHMEM - offset;
+    if( len >= (FVM_MAX_SHMEM - offset) ) len = FVM_MAX_SHMEM - offset;
     memcpy( buf, &fvm->mem[0x0900], len );
     return len;
 }
 int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
-    int len = n;
+    int len;
+    
+    n &= 0x3ff;
+    offset &= 0x3ff;
+    len = n;
     if( offset > FVM_MAX_SHMEM ) return -1;
-    if( n >= (FVM_MAX_SHMEM - offset) ) n = FVM_MAX_SHMEM - offset;    
-    memcpy( &fvm->mem[0x900], buf, n );
+    if( len >= (FVM_MAX_SHMEM - offset) ) len = FVM_MAX_SHMEM - offset;    
+    memcpy( &fvm->mem[0x900], buf, len );
     return len;
 }

@@ -34,7 +34,7 @@
 	   #:print-program-script #:install-program
 	   #:define-isr-table #:merge-isr-tables
 	   #:fvm-id #:get-fvm-id #:strcmp #:local-variable
-	   #:local #:local@ #:local!
+	   #:local #:local@ #:local! #:shmem
 	   ))
 	   
    

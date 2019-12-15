@@ -189,6 +189,8 @@
   (push r6))
 (defword bos ()
   variable *bottom-of-stack*)
+(defword shmem ()
+  #x900)
 (defword zero! () ;; (addr --)
   (pop r0)
   (sti r0 0))

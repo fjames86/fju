@@ -361,13 +361,14 @@
   local@ fred 1 + dup dumpdec cr local! fred
   loop)
 
-(defword argresultstest () ;; (str n -- str2 n2)
-  #x0900 @ 0 do
-  #x0901 write-output
+(defword argresultstest () 
+  shmem @ 0 do
+  shmem 1+ write-output
   loop
-  #x0900 "fred" 5 memcpy)
+  shmem "fred" 5 memcpy)
 
-  
+
+
 ;; --------------------------------------
 
 (defparameter *build-programs* '(test test-msg test-logmsg))

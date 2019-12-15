@@ -367,8 +367,13 @@
   loop
   shmem "fred" 5 memcpy)
 
-
-
+(defvariable *catbuf* 0 32)
+(defword catbuf () variable *catbuf*)
+(defword cattest (:gensyms (start buf))
+  "hello " catbuf strcat
+  "world" catbuf strcat
+  catbuf dumpstr)
+	 
 ;; --------------------------------------
 
 (defparameter *build-programs* '(test test-msg test-logmsg))

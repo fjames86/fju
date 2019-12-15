@@ -612,7 +612,8 @@ BODY ::= word definition. List of words or inline assembly.
 				 `(let ((,glist ,(cadr wrd)))
 				    (if (listp ,glist) ,glist (list ,glist)))))
 			      (t 
-			       `(list ',wrd))))
+			       `(list ',(mapcar (lambda (w) (or (cdr (assoc w gensyms)) w))
+						wrd)))))
 			  body))))))
 
 (defparameter *variables* nil)

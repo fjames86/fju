@@ -318,8 +318,29 @@
   0 dumpdecchr
   then)
 
-  
 
+;; (defword sprintf (:gensyms (fmt dst)) ;; (...args... fmt dst -- )
+;;   ;; decalre some local variables for the format string and destionation buffer 
+;;   local-variable fmt
+;;   local-variable dst
+;;   ;; store format and dst in local variables 
+;;   local! dst
+;;   local! fmt 
+
+;;   begin
+;;   local fmt @ ;; get next pair of format characters
+  
+;;     dup #\% =
+;;   if    ;; this ia a control character
+  
+;;   else  ;; this is a normal character
+;;     local dst ! ;; store the char in dest buffer
+;;     ;; increment fmt and dst pointers 
+;;     local fmt 1+ local! fmt 
+;;     local dst 1+ local! dst 
+;;   then
+;;   true until)
+  
   
 (defword tick-count () ;; ( -- x)
   #xfe03 @)
@@ -477,7 +498,23 @@
   (ldr r2 r0 1) ;; high word 
   (push r2)
   (push r1))
-  
+
+(defword ceiling2 (:inline t) ;; (x -- y)
+  dup ;; (x x)
+  2 / ;; (x x/2)
+  swap 2 mod ;; (x/2 x%2)
+  +)
+
+;; XXX TODO 
+;; (defword strcat () ;; (src1 dst)
+;;   dup strlen  ;; (src1 dst dstlen)
+;;   dup / 2 swap 2 mod ;; (src1 dst dstlen/2 dstlen%2)
+
+;;   ceiling2 + ;; (src1 dst+len)
+;;   swap dup strlen ;; (dst+len src1 src1len)
+;;   memcpy)
+
+
 ;; -----------------------------------
 
 ;; send command to rpc device 

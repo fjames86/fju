@@ -457,7 +457,8 @@
        
        ,gdone))))
   
-  
+(defword strcpy () ;; (dst src --)
+  dup strlen 1+ memcpy)
 
 (defword sleep () ;; (ms --)
   #xfe08 !)

@@ -312,108 +312,54 @@ static struct loaded_fvm *lf_by_id( uint32_t id ) {
     return lf;
 }
 
-#define FVM_RPC_ARGTYPE_INT 0
-#define FVM_RPC_ARGTYPE_STRING 1
+static int fvm_proc_shmemread( struct rpc_inc *inc ) {
+    int handle, sts, len, offset;
+    char shmem[1024];
+    struct loaded_fvm *lf;
+    uint32_t id;
+    
+    sts = xdr_decode_uint32( &inc->xdr, &id );
+    if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&len );
+    if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&offset );
+    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-static int fvm_proc_stackpush( struct rpc_inc *inc ) {
-  int handle, sts, b;
-  struct loaded_fvm *lf;
-  uint32_t id, u32, argtype;
-  uint16_t bos;
-  char str[1024];
-  
-  sts = xdr_decode_uint32( &inc->xdr, &id );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-  sts = xdr_decode_boolean( &inc->xdr, &b );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-
-  lf = lf_by_id( id );
-  if( lf && !(lf->fvm.flags & FVM_FLAG_RUNNING) ) {
-    bos = lf->fvm.bos;
-    lf->fvm.reg[FVM_REG_SP] = 0xfdff;  /* reset stack pointer */
-    while( b ) {
-      sts = xdr_decode_uint32( &inc->xdr, &argtype );
-      if( sts ) break;
-      switch( argtype ) {
-      case FVM_RPC_ARGTYPE_INT:
-	sts = xdr_decode_uint32( &inc->xdr, &u32 );
-	if( sts ) break;
-	lf->fvm.mem[lf->fvm.reg[FVM_REG_SP]] = (uint16_t)u32;
-	lf->fvm.reg[FVM_REG_SP]--;
-	break;
-      case FVM_RPC_ARGTYPE_STRING:
-	sts = xdr_decode_string( &inc->xdr, str, sizeof(str) );
-	if( sts ) break;
-	memcpy( &lf->fvm.mem[bos], str, strlen( str ) + 1 );
-	lf->fvm.mem[lf->fvm.reg[FVM_REG_SP]] = bos;
-	lf->fvm.reg[FVM_REG_SP]--;
-	bos += (strlen( str ) + 1) / 2 + ((strlen( str ) + 1) % 2);
-	break;
-      default:
-	break;
-      }
-      if( sts ) break;
-    }
-
-    sts = xdr_decode_boolean( &inc->xdr, &b );
-  }
-
-  
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  rpc_complete_accept_reply( inc, handle );
-  
-  return 0;
+    lf = lf_by_id( id );
+    if( lf ) fvm_shmem_read( &lf->fvm, shmem, len, offset );
+    
+    rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+    xdr_encode_boolean( &inc->xdr, lf ? 1 : 0 );
+    if( lf ) xdr_encode_opaque( &inc->xdr, (uint8_t *)shmem, len );
+    rpc_complete_accept_reply( inc, handle );
+    
+    return 0;
 }
 
-static int fvm_proc_stackpop( struct rpc_inc *inc ) {
-  int handle, sts, b, i, nres;
-  struct loaded_fvm *lf;
-  uint32_t id;
-  uint16_t bos, res[32];
-  uint32_t restypes[32];
-  
-  sts = xdr_decode_uint32( &inc->xdr, &id );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-  sts = xdr_decode_boolean( &inc->xdr, &b );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-
-  nres = 0;
-  lf = lf_by_id( id );
-  if( lf && !(lf->fvm.flags & FVM_FLAG_RUNNING) && (lf->fvm.flags & FVM_FLAG_DONE) ) {
-    bos = lf->fvm.bos;
-    while( b ) {
-      sts = xdr_decode_uint32( &inc->xdr, &restypes[nres] );
-      if( sts ) break;
-      lf->fvm.reg[FVM_REG_SP]++;
-      res[nres] = lf->fvm.mem[lf->fvm.reg[FVM_REG_SP]];
-      nres++;
-      if( nres >= 32 ) break;
-      
-      sts = xdr_decode_boolean( &inc->xdr, &b );
-      if( sts ) break;
+static int fvm_proc_shmemwrite( struct rpc_inc *inc ) {
+    int handle, sts, len, interruptp, offset;
+    char shmem[1024];
+    struct loaded_fvm *lf;
+    uint32_t id;
+    
+    sts = xdr_decode_uint32( &inc->xdr, &id );
+    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    len = sizeof(shmem);
+    if( !sts ) sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&offset );
+    if( !sts ) sts = xdr_decode_opaque( &inc->xdr, (uint8_t *)shmem, &len );
+    if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &interruptp );
+    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    
+    lf = lf_by_id( id );
+    if( lf ) {
+	fvm_shmem_write( &lf->fvm, shmem, len, offset );
+	if( interruptp ) fvm_interrupt( &lf->fvm, FVM_INT_SMW, FVM_INT_SMW_PL );
     }
-  }
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-  
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  for( i = 0; i < nres; i++ ) {
-    xdr_encode_boolean( &inc->xdr, 1 );
-    xdr_encode_uint32( &inc->xdr, restypes[i] );
-    switch( restypes[i] ) {
-    case FVM_RPC_ARGTYPE_INT:
-      xdr_encode_uint32( &inc->xdr, res[i] );
-      break;
-    case FVM_RPC_ARGTYPE_STRING:
-      xdr_encode_string( &inc->xdr, (char *)&lf->fvm.mem[res[i]] );
-      break;
-    }
-  }
-  xdr_encode_boolean( &inc->xdr, 0 );    
-  rpc_complete_accept_reply( inc, handle );
-  
-  return 0;
+    
+    rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+    xdr_encode_boolean( &inc->xdr, lf ? 1 : 0 );
+    rpc_complete_accept_reply( inc, handle );
+    
+    return 0;
 }
-
 
 
 #if 0
@@ -530,8 +476,8 @@ static struct rpc_proc fvm_procs[] = {
   { 4, fvm_proc_pause },
   { 5, fvm_proc_interrupt },
   { 6, fvm_proc_msg },
-  { 7, fvm_proc_stackpush },
-  { 8, fvm_proc_stackpop },
+  { 7, fvm_proc_shmemread },
+  { 8, fvm_proc_shmemwrite },
   
 #if 0
   { 0, fvm_proc_read_dirty },

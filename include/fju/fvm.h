@@ -104,7 +104,10 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
 #define FVM_INT_DBZ       0x02    /* divide by zero */
 #define FVM_INT_DBZ_PL    FVM_INT_EXCEPTION       /* divide by zero level */
 #define FVM_INT_MSG       0x03    /* external message received */
-#define FVM_INT_MSG_PL    1 
+#define FVM_INT_MSG_PL    1
+#define FVM_INT_SMW       0x04    /* share memory write */
+#define FVM_INT_SMW_PL    1
+
 int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
 
 struct fvm_program_header {
@@ -122,6 +125,10 @@ struct fvm_dirty {
 };
 void fvm_dirty_reset( struct fvm_state *fvm );
 int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd );
+
+#define FVM_MAX_SHMEM 1024 /* max in bytes */
+int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset );
+int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset );
 
 /* ----------- rpcd only ---------- */
 

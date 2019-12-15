@@ -94,9 +94,10 @@ static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_msg_results( struct xdr_s *xdr );
 static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_push_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_pop_results( struct xdr_s *xdr );
-static void fvm_pop_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_shmemread_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_shmemread_results( struct xdr_s *xdr );
+static void fvm_shmemwrite_results( struct xdr_s *xdr );
+static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 
 
@@ -121,8 +122,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [cont|stop|reset]" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.msg", "id=ID msgid=ID msg=*" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_push_args, NULL, "fvm.push", "id=ID [int=*] [str=*]" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_pop_args, fvm_pop_results, "fvm.pop", "id=ID [int] [str]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_shmemread_args, fvm_shmemread_results, "fvm.read", "id=ID len=*" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_shmemwrite_args, fvm_shmemwrite_results, "fvm.write", "id=ID [int=*] [str=*] [buf=*]" },
     { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
     { 999999, 1, 2, cmdprog_event_args, NULL, "cmdprog.event", "category=* eventid=*" },
     { 0, 0, 0, NULL, NULL, NULL }
@@ -1222,76 +1223,94 @@ static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_opaque( xdr, (uint8_t *)bufp, buflen );
 }
 
-static void fvm_push_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+static void fvm_shmemread_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     char argname[64], *argval;
-    uint32_t u32;
-    
+    uint32_t id, len, offset;
+
+    len = 0;
+    offset = 0;
     while( i < argc ) {
 	argval_split( argv[i], argname, &argval );
 	if( strcmp( argname, "id" ) == 0 ) {
-	    u32 = strtoul( argval, NULL, 10 );
-	    xdr_encode_uint32( xdr, u32 );
-	} else if( strcmp( argname, "int" ) == 0 ) {
-	    xdr_encode_boolean( xdr, 1 );
-	    xdr_encode_uint32( xdr, 0 ); // argtype=int 
-	    u32 = strtoul( argval, NULL, 10 );
-	    xdr_encode_uint32( xdr, u32 );
-	} else if( strcmp( argname, "str" ) == 0 ) {
-	    xdr_encode_boolean( xdr, 1 );
-	    xdr_encode_uint32( xdr, 1 ); // argtype=str
-	    xdr_encode_string( xdr, argval );
+	    id = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "len" ) == 0 ) {
+	    len = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "offset" ) == 0 ) {
+	    offset = strtoul( argval, NULL, 10 );	    
 	} else usage( NULL );
 	i++;
     }
-    xdr_encode_boolean( xdr, 0 );
+    xdr_encode_uint32( xdr, id );
+    xdr_encode_uint32( xdr, len );
+    xdr_encode_uint32( xdr, offset );
 }
 
-static void fvm_pop_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    char argname[64], *argval;
-    uint32_t u32;
-    
-    while( i < argc ) {
-	argval_split( argv[i], argname, &argval );
-	if( strcmp( argname, "id" ) == 0 ) {
-	    u32 = strtoul( argval, NULL, 10 );
-	    xdr_encode_uint32( xdr, u32 );
-	} else if( strcmp( argname, "int" ) == 0 ) {
-	    xdr_encode_boolean( xdr, 1 );
-	    xdr_encode_uint32( xdr, 0 ); // argtype=int 
-	} else if( strcmp( argname, "str" ) == 0 ) {
-	    xdr_encode_boolean( xdr, 1 );
-	    xdr_encode_uint32( xdr, 1 ); // argtype=str
-	} else usage( NULL );
-	i++;
-    }
-    xdr_encode_boolean( xdr, 0 );
-}
+static void fvm_shmemread_results( struct xdr_s *xdr ) {
+    int sts, len, i, b;
+    char shmem[1024];
 
-static void fvm_pop_results( struct xdr_s *xdr ) {
-    int sts, b;
-    uint32_t u32, argtype;
-    char str[1024];
-    
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "xdr error" );
-    while( !sts && b ) {
-	sts = xdr_decode_uint32( xdr, &argtype );
+    if( b ) {
+	len = sizeof(shmem);
+	sts = xdr_decode_opaque( xdr, (uint8_t *)shmem, &len );
 	if( sts ) usage( "xdr error" );
-	switch( argtype ) {
-	case 0:
-	    sts = xdr_decode_uint32( xdr, &u32 );
-	    if( sts ) usage( "xdr error" );
-	    printf( "%u\n", u32 );
-	    break;
-	case 1:
-	    sts = xdr_decode_string( xdr, str, sizeof(str) );
-	    if( sts ) usage( "xdr error" );
-	    printf( "%s\n", str );
-	    break;
+	for( i = 0; i < len; i++ ) {
+	    printf( "%02x", (uint32_t)((uint8_t)shmem[i]) );
 	}
-
-	sts = xdr_decode_boolean( xdr, &b );
+	printf( "\n" );
+    } else {
+	printf( "Failed to read\n" );
     }
+
+}
+
+static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t id;
+    char shmem[1024];
+    int len, off = 0, offset = 0, interruptp = 0;
+    char tmp[4];
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "offset" ) == 0 ) {
+	    offset = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "interrupt" ) == 0 ) {
+	    interruptp = 1;
+	} else if( strcmp( argname, "int" ) == 0 ) {
+	    uint16_t u16 = strtoul( argval, NULL, 10 );
+	    memcpy( &shmem[off], &u16, 2 );
+	    off += 2;
+	} else if( strcmp( argname, "str" ) == 0 ) {
+	    len = strlen( argval );	    
+	    memcpy( &shmem[off], argval, len + 1 );
+	    off += len + 1 + ((len + 1) % 2);
+	} else if( strcmp( argname, "buf" ) == 0 ) {
+	    memset( tmp, 0, sizeof(tmp) );
+	    len = strlen( argval ) / 2;
+	    for( i = 0; len; i++ ) {
+		memcpy( tmp, &argval[2*i], 2 );
+		shmem[off] = strtoul( tmp, NULL, 16 );
+		off++;
+	    }
+	} else usage( NULL );
+	i++;
+    }
+    
+    xdr_encode_uint32( xdr, id );
+    xdr_encode_uint32( xdr, offset );
+    xdr_encode_opaque( xdr, (uint8_t *)shmem, off );
+    xdr_encode_boolean( xdr, interruptp );
+}
+
+static void fvm_shmemwrite_results( struct xdr_s *xdr ) {
+    int sts, b;
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
+    printf( "%s\n", b ? "Success" : "Failure" );
 }
 
 

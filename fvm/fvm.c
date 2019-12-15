@@ -45,7 +45,8 @@
  * Layout:
  * 0x0000 - 0x07ff word jump table 
  * 0x0800 - 0x08ff isr table 
- * 0x0900 - 0x0fff unused/reserved
+ * 0x0900 - 0x0aff shared memory area (512 words, 1024 bytes)
+ * 0x0b00 - 0x0fff unused/reserved
  * 0x1000 - 0x2fff return stack 
  * 0x3000 - 0xfdff user program code + data stack 
  * 0xfe00 - 0xffff device registers 
@@ -1131,3 +1132,18 @@ int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) 
     return 0;
 }
 #endif
+
+int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset ) {
+    int len = n;
+    if( offset > FVM_MAX_SHMEM ) return -1;
+    if( n >= (FVM_MAX_SHMEM - offset) ) n = FVM_MAX_SHMEM - offset;
+    memcpy( buf, &fvm->mem[0x0900], len );
+    return len;
+}
+int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
+    int len = n;
+    if( offset > FVM_MAX_SHMEM ) return -1;
+    if( n >= (FVM_MAX_SHMEM - offset) ) n = FVM_MAX_SHMEM - offset;    
+    memcpy( &fvm->mem[0x900], buf, n );
+    return len;
+}

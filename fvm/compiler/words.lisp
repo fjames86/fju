@@ -28,12 +28,12 @@
   (push r0)
   (push r1))
 (defword rot () ;; (a b c -- c a b)
-  (pop r0)
-  (pop r1)
-  (pop r2)
-  (push r0)
-  (push r1)
-  (push r2))
+  (pop r0) ;; c 
+  (pop r1) ;; b
+  (pop r2) ;; a
+  (push r0) ;; c 
+  (push r2) ;; a
+  (push r1)) ;; b
 (defword over () ;; (a b -- a b a)
   (pop r0)
   (pop r1)
@@ -500,39 +500,54 @@
   (push r1))
 
 (defword swap2 () ;; (a b c d -- c d a b)
-  >r rot  ;; (c a b ;R d)
-  r> rot)  ;; (c d a b)
+  (pop r0) ;; d
+  (pop r1) ;; c
+  (pop r2) ;; b
+  (pop r3) ;; a
+  (push r1) ;; c
+  (push r0) ;; d
+  (push r3) ;; a
+  (push r2)) ;; b
 
-;; XXX TODO 
-(defword strcat () ;; (src dst)
-  begin
-    dup2  ;; (src dst src dst)
-    1+ swap 1+ swap2 ;; (src1+ dst+1 src dst)
+(defword over2 () ;; (a b c -- a b c a)
+  (ldr r0 sp 3)
+  (push r0))
 
-    ;; get current word 
-    swap @ ;; (src+1 dst+1 dst [src])
-    
-    ;; get high word
-    2dup  ;; (src+1 dst+1 dst [src] [src] [src])
-    
-    8 / 8 / not ;; divide by 256 i.e. get high byte
+;; (defword strcat () ;; (src dst)
+;;   begin
+;;     dup2  ;; (src dst src dst)
+;;     1+ swap 1+ swap ;; (src dst src+1 dst+1)
+;;     swap2 ;; (src+1 dst+1 src dst)
 
-    ;; get low word
-    swap #xff and not  ;; (src+1 dst+1 dst [src] f)
+;;     ;; get current word 
+;;     swap @ ;; (src+1 dst+1 dst [src])
     
-    rot ;; src+1 dst+1 f dst [src]
-    swap ! ;; src+1 dst+1 f
+;;     ;; get high word
+;;     2dup ;; (src+1 dst+1 dst [src] [src] [src])
+
+;;     ;; get high byte and test if zero 
+;;     8 rshift ;; (src+1 dst+1 dst [src] [src] fH)
+
+;;     ;; get low word and test for zero
+;;     swap #xff and ;; (src+1 dst+1 dst [src] fH fL)
+
+;;     ;; combine flags, testing for either high/low byte being zero 
+;;     and ;; (src+1 dst+1 dst [src] f)
+
+;;     rot ;; (src+1 dst+1 f dst [src])
+;;     swap ! ;; (src+1 dst+1 f)
     
-    if
-      ;; hit a nul character. terminate the loop
-      false
-    else
-      ;; continue
-      true
-    then
+;;     if   
+;;       ;; continue
+;;       true    
+;;     else
+;;       ;; hit a nul character - terminate the loop
+;;       false
+;;     then
     
-  until
-  drop drop)
+;;   until
+;;   ;; drop the src/dst pointers 
+;;   drop drop)
 
 ;; -----------------------------------
 

@@ -489,6 +489,8 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       devrpc_writemem( state, val );
       break;
     }
+  } else if( offset < 0x0900 ) {
+      /* read only area - do nothing */
   } else {
       /* just write into memory */
       state->mem[offset] = val;

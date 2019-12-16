@@ -499,21 +499,40 @@
   (push r2)
   (push r1))
 
-(defword ceiling2 (:inline t) ;; (x -- y)
-  dup ;; (x x)
-  2 / ;; (x x/2)
-  swap 2 mod ;; (x/2 x%2)
-  +)
+(defword swap2 () ;; (a b c d -- c d a b)
+  >r rot  ;; (c a b ;R d)
+  r> rot)  ;; (c d a b)
 
 ;; XXX TODO 
-;; (defword strcat () ;; (src1 dst)
-;;   dup strlen  ;; (src1 dst dstlen)
-;;   dup / 2 swap 2 mod ;; (src1 dst dstlen/2 dstlen%2)
+(defword strcat () ;; (src dst)
+  begin
+    dup2  ;; (src dst src dst)
+    1+ swap 1+ swap2 ;; (src1+ dst+1 src dst)
 
-;;   ceiling2 + ;; (src1 dst+len)
-;;   swap dup strlen ;; (dst+len src1 src1len)
-;;   memcpy)
+    ;; get current word 
+    swap @ ;; (src+1 dst+1 dst [src])
+    
+    ;; get high word
+    2dup  ;; (src+1 dst+1 dst [src] [src] [src])
+    
+    8 / 8 / not ;; divide by 256 i.e. get high byte
 
+    ;; get low word
+    swap #xff and not  ;; (src+1 dst+1 dst [src] f)
+    
+    rot ;; src+1 dst+1 f dst [src]
+    swap ! ;; src+1 dst+1 f
+    
+    if
+      ;; hit a nul character. terminate the loop
+      false
+    else
+      ;; continue
+      true
+    then
+    
+  until
+  drop drop)
 
 ;; -----------------------------------
 

@@ -249,11 +249,11 @@
 (defword test-event-trigger ()
   (push r0) ;; event triggers receive length of parm data in r0
   "test-event-trigger data=" write-output
-  shmem swap write-output-binary)
+  shmem swap write-output-binary
+  shmem write-output)
 
 (defun test-event-trigger ()
-  (save-program "test-event-trigger.obj" 'test-event-trigger
-		:print-assembly t))
+  (save-program "test-event-trigger.obj" 'test-event-trigger))
 
 (defconstant +fjud-prog+ (+ #x2fff7770 7))
 (defrpc call-cmdprog-event (+fjud-prog+ 1 2)

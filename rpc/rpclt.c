@@ -463,7 +463,7 @@ static struct {
   { NLS_RPC_PROG, "nls" },
   { FREG_RPC_PROG, "freg" },
   { FVM_RPC_PROG, "fvm" },
-  { 100000, "rpcbind" },
+  { RPCBIND_RPC_PROG, "rpcbind" },
   { FJUD_RPC_PROG, "fjud" },
   { SVCTEST_RPC_PROG, "svctest" },
   { 0, NULL }

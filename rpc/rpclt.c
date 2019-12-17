@@ -1291,7 +1291,7 @@ static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr
 	} else if( strcmp( argname, "buf" ) == 0 ) {
 	    memset( tmp, 0, sizeof(tmp) );
 	    len = strlen( argval ) / 2;
-	    for( i = 0; len; i++ ) {
+	    for( i = 0; i < len; i++ ) {
 		memcpy( tmp, &argval[2*i], 2 );
 		shmem[off] = strtoul( tmp, NULL, 16 );
 		off++;

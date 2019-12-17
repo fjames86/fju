@@ -6,6 +6,7 @@
 
 #include <fju/rpc.h>
 #include <fju/log.h>
+#include <fju/programs.h>
 
 typedef enum {
 	      FVM_INST_BR = 0,      /* conditional branch */
@@ -132,8 +133,6 @@ int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset );
 
 /* ----------- rpcd only ---------- */
 
-#define FVM_RPC_PROG 0x27E1FB11
-#define FVM_RPC_VERS 1
 void fvm_register( void );
 
 #define FVM_RPC_AUTOUNLOAD 0x0001    /* unload program when finished, otherwise leaves it loaded */

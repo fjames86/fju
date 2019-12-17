@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
+#include <fju/programs.h>
 
 static int cmdprog_proc_null( struct rpc_inc *inc ) {
   int handle;
@@ -54,7 +55,7 @@ static struct rpc_version cmdprog_vers = {
 };
 
 static struct rpc_program cmdprog_prog = {
-  NULL, 999999, &cmdprog_vers
+  NULL, FJUD_RPC_PROG, &cmdprog_vers
 };
 
 int cmdprog_register( void ) {

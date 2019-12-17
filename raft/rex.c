@@ -417,6 +417,7 @@ static void rex_notify( raft_notify_t evt, struct raft_cluster *cl, void *cxt, v
     case RAFT_NOTIFY_SEND_PING:
 	/* resend data whenever we become leader or are sending raft ping messages */
 	rex_send_pings( cl );
+	break;
     default:
 	break;
     }

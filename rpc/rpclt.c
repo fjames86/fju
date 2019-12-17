@@ -48,6 +48,7 @@
 #include <fju/freg.h>
 #include <fju/sec.h>
 #include <fju/fvm.h>
+#include <fju/programs.h>
 
 struct clt_info {
     uint32_t prog;
@@ -124,8 +125,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.msg", "id=ID msgid=ID msg=*" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_shmemread_args, fvm_shmemread_results, "fvm.read", "id=ID len=*" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_shmemwrite_args, fvm_shmemwrite_results, "fvm.write", "id=ID [int=*] [str=*] [buf=*]" },
-    { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
-    { 999999, 1, 2, cmdprog_event_args, NULL, "cmdprog.event", "category=* eventid=*" },
+    { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
+    { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=*" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 

@@ -62,7 +62,8 @@
 			    (:reset 2))))))
 
 
-(defconstant +freg-prog+ #x27E1FB10)
+(defconstant +fju-prog+ #x2fff7770)
+(defconstant +freg-prog+ (+ +fju-prog+ 4))
 
 (drx:defxstruct freg-put-args ((:mode :list))
   (parentid :uint64)

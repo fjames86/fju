@@ -29,6 +29,7 @@
 
 #include <stdint.h>
 #include <fju/fdtab.h>
+#include <fju/programs.h>
 
 #define FREG_MAX_NAME 64
 
@@ -71,8 +72,6 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
 
 int freg_ensure( struct freg_s *freg, uint64_t parentid, char *path, uint32_t flags, char *buf, int len, uint64_t *id );
 
-#define FREG_RPC_PROG 0x27E1FB10
-#define FREG_RPC_VERS 1
 void freg_register( void );
 
 #endif

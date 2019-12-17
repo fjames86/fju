@@ -249,8 +249,8 @@
 (defword test-event-trigger ()
   (push r0) ;; event triggers receive length of parm data in r0
   "test-event-trigger data=" write-output
-  shmem swap write-output-binary
-  shmem write-output)
+  bos swap write-output-binary
+  bos write-output)
 
 (defun test-event-trigger ()
   (save-program "test-event-trigger.obj" 'test-event-trigger))

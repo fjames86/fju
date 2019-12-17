@@ -700,7 +700,7 @@ static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t 
     if( (ep->category == category) && (ep->eventid == id) ) {
       log_writef( NULL, LOG_LVL_INFO, "fvm_evt_cb category=%u eventid=%u program=%s", category, id, ep->name );
       lf = load_prog_by_name( ep->name );
-      fvm_shmem_write( &lf->fvm, parm, parmsize, 0 );
+      memcpy( &lf->fvm.mem[lf->fvm.bos], parm, parmsize );
       lf->fvm.reg[FVM_REG_R0] = (uint16_t)parmsize;
     }
     

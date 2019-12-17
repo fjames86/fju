@@ -457,15 +457,18 @@ static struct {
   uint32_t prog;
   char *name;
 } rpcbind_name_list[] = {
-			 { HRAUTH_RPC_PROG, "hrauth" },
-			 { RAFT_RPC_PROG, "raft" },
-			 { REX_RPC_PROG, "rex" },
-			 { NLS_RPC_PROG, "nls" },
-			 { FREG_RPC_PROG, "freg" },
-			 { FVM_RPC_PROG, "fvm" },
-			 { 100000, "rpcbind" },
-			 { 0, NULL }
+  { HRAUTH_RPC_PROG, "hrauth" },
+  { RAFT_RPC_PROG, "raft" },
+  { REX_RPC_PROG, "rex" },
+  { NLS_RPC_PROG, "nls" },
+  { FREG_RPC_PROG, "freg" },
+  { FVM_RPC_PROG, "fvm" },
+  { 100000, "rpcbind" },
+  { FJUD_RPC_PROG, "fjud" },
+  { SVCTEST_RPC_PROG, "svctest" },
+  { 0, NULL }
 };
+
 static char *rpcbind_name_by_prog( uint32_t prog ) {
   int i;
   i = 0;

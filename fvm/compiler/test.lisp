@@ -247,15 +247,18 @@
 ;; --------------
 
 (defword test-event-trigger ()
-  "test-event-trigger" write-output)
+  (push r0) ;; event triggers receive length of parm data in r0
+  "test-event-trigger data=" write-output
+  shmem swap write-output-binary)
 
 (defun test-event-trigger ()
-  (save-program "test-event-trigger.obj" 'test-event-trigger))
+  (save-program "test-event-trigger.obj" 'test-event-trigger
+		:print-assembly t))
 
-
-(defrpc call-cmdprog-event (999999 1 2)
+(defconstant +fjud-prog+ (+ #x2fff7770 7))
+(defrpc call-cmdprog-event (+fjud-prog+ 1 2)
   :arg-body ;; (eventid category --)
-  (xdr-encode-uint32 xdr-encode-uint32)
+  (xdr-encode-uint32 xdr-encode-uint32 0 0 xdr-encode-opaque)
   :result-body
   ("call-cmdprog-event success" dumpstr)
   :fail-body
@@ -280,13 +283,14 @@
 ;; loop infinitely waiting to service an incoming message 
 (defword test-msg-handler-loop ()
   begin
-  1000 sleep 
+    ;; just halt. interrupt will wake us to service it, then we go back to sleep
+    halt 
   true until)
 
 (defun test-msg ()
   (save-program "test-msg.obj" 'test-msg-handler-loop :isr-table *test-isr-table*))
 
-(defconstant +fvm-prog+ #x27E1FB11)
+(defconstant +fvm-prog+ (+ #x2fff7770 5))
 (defrpc call-send-msg (+fvm-prog+ 1 6)
   :arg-body (xdr-encode-uint32 xdr-encode-uint32 xdr-encode-string)
   :result-body ("call-send-msg success" dumpstr)

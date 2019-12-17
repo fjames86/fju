@@ -375,13 +375,13 @@
   (ld r3 -2)
   (str r3 r2 0)) ;; write 0 to #xfe07. val=0 implies write string 
 (defword write-output-binary () ;; (addr count -- )
-  (pop r1)
-  (pop r0)
-  (ldi r2 0)
+  (pop r1) ;; r1=count 
+  (pop r0) ;; r0=addr 
+  (ldi r2 1)
   (br-pnz 1)
   (.blkw #xfe07) ;; address of output data register 
   (ld r3 -2)
-  (str r3 r2 1)) ;; write 0 to #xfe07. val=1 implies write binary 
+  (str r3 r2 0)) ;; write to #xfe07. val=1 implies write binary 
 
 
 (let ((again (gensym)))

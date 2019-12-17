@@ -142,15 +142,20 @@ struct rpcd_subscriber;
 struct rpcd_subscriber {
     struct rpcd_subscriber *next;
 
-    uint32_t *category;     /* list of event categories. empty list implies all categories */
-    int ncategory;
+    uint32_t *category;     /* 0-terminated list of event categories. NULL implies all categories */
 
     /* callback and private data */
-    void (*cb)( struct rpcd_subscriber *sc, uint32_t category, uint32_t eventid, void *parm );
+    void (*cb)( struct rpcd_subscriber *sc, uint32_t category, uint32_t eventid, void *parm, int parmsize );
     void *prv;
 };
-    
-void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm );
+
+/*
+ * Publish an event to all subscribers. 
+ * parm must be a single contiguous buffer of parsize length. 
+ * If pointers are required, they must be encoded as offsets within this buffer.
+ * Actual layout of this structure is left unspecified. 
+ */
+void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int parmsize );
 void rpcd_event_subscribe( struct rpcd_subscriber *sc );
 int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc );
 

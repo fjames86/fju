@@ -540,7 +540,7 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
       timeout = 0;
       prev = lf;
     } else if( (lf->fvm.flags & FVM_FLAG_DONE) ) {
-	rpcd_event_publish( FVM_EVENT_CATEGORY, FVM_EVENT_PROGDONE, &lf->id );
+	rpcd_event_publish( FVM_EVENT_CATEGORY, FVM_EVENT_PROGDONE, &lf->id, sizeof(lf->id) );
 	if( lf->flags & FVM_RPC_AUTOUNLOAD ) {
 	    if( prev ) prev->next = next;
 	    else glob.progs = next;
@@ -686,18 +686,22 @@ static void load_startup_progs( void ) {
 }
 
 
-static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t id, void *parm ) {
+static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t id, void *parm, int parmsize ) {
   struct event_prog *ep;
   int i;
+  struct loaded_fvm *lf;
   
   (void)(parm); /* currently unused */
-
+  (void)(parmsize);
+  
   for( i = 0; i < glob.nevtprogs; i++ ) {
     ep = &glob.evtprogs[i];
     
     if( (ep->category == category) && (ep->eventid == id) ) {
       log_writef( NULL, LOG_LVL_INFO, "fvm_evt_cb category=%u eventid=%u program=%s", category, id, ep->name );
-      load_prog_by_name( ep->name );
+      lf = load_prog_by_name( ep->name );
+      fvm_shmem_write( &lf->fvm, parm, parmsize, 0 );
+      lf->fvm.reg[FVM_REG_R0] = (uint16_t)parmsize;
     }
     
   }

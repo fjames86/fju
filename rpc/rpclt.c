@@ -126,7 +126,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_shmemread_args, fvm_shmemread_results, "fvm.read", "id=ID len=*" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_shmemwrite_args, fvm_shmemwrite_results, "fvm.write", "id=ID [int=*] [str=*] [buf=*]" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
-    { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=*" },
+    { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -1178,9 +1178,13 @@ static void fvm_pause_results( struct xdr_s *xdr ) {
 static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
   uint32_t category, eventid;
+  uint8_t parm[1024];
+  int parmlen, j;
+  char tmp[4];
   
   category = 0;
   eventid = 0;
+  parmlen = 0;
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "category" ) == 0 ) {
@@ -1189,12 +1193,21 @@ static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr 
     } else if( strcmp( argname, "eventid" ) == 0 ) {
       if( !argval ) usage( "Need eventid" );
       eventid = strtoul( argval, NULL, 10 );
+    } else if( strcmp( argname, "parm" ) == 0 ) {
+	parmlen = strlen( argval ) / 2;
+	memset( tmp, 0, 4 );
+	for( j = 0; j < parmlen; j++ ) {
+	    tmp[0] = argval[2*j];
+	    tmp[1] = argval[2*j + 1];
+	    parm[j] = (uint8_t)strtoul( tmp, NULL, 16 );
+	}
     } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
 
   xdr_encode_uint32( xdr, category );
   xdr_encode_uint32( xdr, eventid );
+  xdr_encode_opaque( xdr, parm, parmlen );
 }
 
 static void fvm_msg_results( struct xdr_s *xdr ) {

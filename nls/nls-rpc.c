@@ -452,7 +452,7 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   /* Did we read all available messages? If not then continue */
   if( eof || nmsgs == 0 || seq == nlscxtp->seq ) {
     /* publish completion event */
-    rpcd_event_publish( NLS_RPC_PROG, NLS_EVENT_REMOTEAPPEND, &remote );
+    rpcd_event_publish( NLS_RPC_PROG, NLS_EVENT_REMOTEAPPEND, &remote, sizeof(remote) );
     goto done;
   }
 

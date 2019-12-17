@@ -28,14 +28,16 @@ static int cmdprog_proc_stop( struct rpc_inc *inc ) {
 }
 
 static int cmdprog_proc_event( struct rpc_inc *inc ) {
-  int handle, sts ;
+  int handle, sts, lenp;
   uint32_t category, eventid;
-  
+  char *bufp;
+      
   sts = xdr_decode_uint32( &inc->xdr, &category );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &eventid );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  rpcd_event_publish( category, eventid, NULL );
+  rpcd_event_publish( category, eventid, bufp, lenp );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   rpc_complete_accept_reply( inc, handle );

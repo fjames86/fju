@@ -704,7 +704,7 @@ static void rpc_poll( int timeout ) {
 					c->inc.xdr.count = c->cdata.count;
 					sts = rpc_process_incoming( &c->inc );
 					if( sts == 0 ) {
-					        rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL );
+					        rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
 
 					        c->cdata.count = c->inc.xdr.offset;
 						c->cdata.offset = 0;
@@ -920,7 +920,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       sts = rpc_process_incoming( &c->inc );
       rpc.flist = c;
       if( sts == 0 ) {
-        rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL );
+	rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       } else if( sts > 0 ) {
@@ -1306,23 +1306,25 @@ void rpcd_stop( void ) {
 }
 
 
-void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm ) {
+void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int parmsize ) {
     struct rpcd_subscriber *sc;
     int i, found;
     sc = rpc.rpcd_subcs;
     while( sc ) {
 	found = 0;
-	if( sc->ncategory == 0 ) found = 1;
+	if( sc->category == NULL ) found = 1;
 	else {
-	    for( i = 0; i < sc->ncategory; i++ ) {
+	    i = 0;
+	    while( sc->category[i] ) {
 		if( sc->category[i] == category ) {
 		    found = 1;
 		    break;
 		}
+		i++;
 	    }
 	}
-	if( found ) {
-	    sc->cb( sc, category, eventid, parm );
+	if( found && sc->cb ) {
+	    sc->cb( sc, category, eventid, parm, parmsize );
 	}
 	sc = sc->next;
     }

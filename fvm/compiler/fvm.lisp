@@ -493,11 +493,14 @@ assembled object code."
 		    ((eq wrd 'local-variable)
 		     ;; allocate local variable
 		     (setf body (cdr body))
-		     (let ((var-name (car body)))
+		     (let ((var-names (let ((n (car body)))
+					(if (listp n) n (list n)))))
 		       (setf body (cdr body))
-		       `((br-pnz 1)
-			 ,var-name
-			 (.blkw 0))))
+		       (append 
+			`((br-pnz ,(length var-names)))
+			(mapcan (lambda (var-name)
+				  (list var-name '(.blkw 0)))
+				var-names))))
 		    ((eq wrd 'local)
 		     (setf body (cdr body))
 		     (let ((var-name (car body)))

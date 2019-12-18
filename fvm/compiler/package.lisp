@@ -35,7 +35,7 @@
 	   #:define-isr-table #:merge-isr-tables
 	   #:fvm-id #:get-fvm-id #:strcmp #:local-variable
 	   #:local #:local@ #:local! #:shmem #:strcpy #:strcat
-	   #:swap2 #:over2 
+	   #:swap2 #:over2 #:nth #:char@ #:char! #:i+
 	   ))
 	   
    

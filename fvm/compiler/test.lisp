@@ -381,6 +381,27 @@
 ;; (defun cattest ()
 ;;   (save-program "cattest.obj" 'cattest :variables '(*catbuf*)))
 
+
+(defword chartest ()
+  "hello my little string"
+  "3rd char: " dumpstr
+  dup 3 ;; (addr addr 3)
+  char@ dumpchr cr  ;; (addr)
+  dup ;; (addr addr)
+  "xxx1: " dumpstr fvm::dumpstack cr  
+  #\L
+  "xxx2: " dumpstr fvm::dumpstack cr
+  swap 3
+  "xxx3: " dumpstr fvm::dumpstack cr
+  char! ;; (addr)
+  "3rd char: " dumpstr
+  dup dumpstr cr)
+
+(defword xxx ()
+  fvm::dumpstack cr
+  #\L fvm::dumpstack cr
+  dup fvm::dumpstack cr)
+
 ;; --------------------------------------
 
 (defparameter *build-programs* '(test test-msg test-logmsg))

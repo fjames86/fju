@@ -670,10 +670,14 @@
   (rpop r1)
   (add r1 r1 r0)
   (rpush r1))
-  
-  
 
+;; Set loop index. Only use from with a do/loop context.
+(defword i! (:inline t) ;; (n --)
+  (pop r0)
+  (rpop r1)
+  (rpush r0))
 
+  
 ;; ------------------ Interrupts --------------------
 
 (defisr privilege-exception-isr (*default-isr-table* #x00)

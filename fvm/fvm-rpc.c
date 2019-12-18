@@ -492,6 +492,51 @@ static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
 #endif
 
 
+static int fvm_proc_persist( struct rpc_inc *inc ) {
+    int sts, handle;
+    struct loaded_fvm *lf;
+    uint32_t id;
+    
+    sts = xdr_decode_uint32( &inc->xdr, &id );
+    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+    lf = lf_by_id( id );
+    if( lf ) {
+	fvm_persist( mmf_default_path( "fvm", lf->name, NULL ), &lf->fvm, NULL );
+    }
+    
+    rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+    xdr_encode_boolean( &inc->xdr, lf ? 1 : 0 );
+    rpc_complete_accept_reply( inc, handle );
+    
+    return 0;
+}
+
+static int fvm_proc_restore( struct rpc_inc *inc ) {
+    int sts, handle;
+    struct loaded_fvm *lf;
+    char name[256];
+    
+    /* decode args */
+    sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+    lf = load_prog_by_name( name );
+    sts = fvm_restore( mmf_default_path( "fvm", lf->name, NULL ), &lf->fvm, NULL );
+    if( sts ) {
+	lf->flags &= ~FVM_RPC_AUTOUNLOAD; /* ensure the program gets freed */
+	lf->fvm.flags |= FVM_FLAG_DONE;
+	lf = NULL;
+    }
+    
+    rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+    xdr_encode_boolean( &inc->xdr, lf ? 1 : 0 );
+    rpc_complete_accept_reply( inc, handle );
+    
+    return 0;
+}
+
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_load },
@@ -502,6 +547,8 @@ static struct rpc_proc fvm_procs[] = {
   { 6, fvm_proc_msg },
   { 7, fvm_proc_shmemread },
   { 8, fvm_proc_shmemwrite },
+  { 9, fvm_proc_persist },
+  { 10, fvm_proc_restore },
   
 #if 0
   { 0, fvm_proc_read_dirty },

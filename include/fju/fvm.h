@@ -155,6 +155,9 @@ int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd );
 int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset );
 int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset );
 
+int fvm_persist( char *path, struct fvm_state *fvm, void *reserved );
+int fvm_restore( char *path, struct fvm_state *fvm, void *reserved );
+
 /* ----------- rpcd only ---------- */
 
 void fvm_register( void );

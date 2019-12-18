@@ -232,4 +232,5 @@ fvm_dirty_reset
 fvm_dirty_regions
 fvm_shmem_read
 fvm_shmem_write
-
+fvm_persist
+fvm_restore

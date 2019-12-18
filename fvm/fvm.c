@@ -1157,3 +1157,116 @@ int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
     memcpy( &fvm->mem[0x900], buf, len );
     return len;
 }
+
+
+#define FVM_PERSIST_MAGIC 0xf491a91c
+#define FVM_PERSIST_VERSION 1
+
+static int fvm_encode_state( struct xdr_s *xdr, struct fvm_state *fvm ) {
+    int sts;
+    sts = xdr_encode_uint32( xdr, FVM_PERSIST_MAGIC );
+    if( sts ) return sts;
+    sts = xdr_encode_uint32( xdr, FVM_PERSIST_VERSION );
+    if( sts ) return sts;
+    sts = xdr_encode_fixed( xdr, (uint8_t *)fvm->reg, sizeof(fvm->reg) );
+    if( sts ) return sts;
+    sts = xdr_encode_fixed( xdr, (uint8_t *)fvm->mem, sizeof(fvm->mem) );
+    if( sts ) return sts;
+    sts = xdr_encode_uint32( xdr, fvm->flags );
+    if( sts ) return sts;
+    sts = xdr_encode_uint64( xdr, fvm->tickcount );
+    if( sts ) return sts;
+    sts = xdr_encode_uint64( xdr, fvm->inlogid );
+    if( sts ) return sts;
+    sts = xdr_encode_uint32( xdr, fvm->bos );
+    if( sts ) return sts;
+    sts = xdr_encode_uint32( xdr, fvm->rpc.timeout );
+    if( sts ) return sts;
+    sts = xdr_encode_uint32( xdr, fvm->rpc.service );
+    if( sts ) return sts;
+    sts = xdr_encode_uint64( xdr, fvm->rpc.hostid );
+    if( sts ) return sts;
+    sts = xdr_encode_fixed( xdr, fvm->rpc.rxtxbuf, sizeof(fvm->rpc.rxtxbuf) );
+    if( sts ) return sts;
+    sts = xdr_encode_uint32( xdr, fvm->rpc.buf.offset );
+    if( sts ) return sts;
+    sts = xdr_encode_uint32( xdr, fvm->rpc.buf.count );
+    if( sts ) return sts;
+    sts = xdr_encode_uint32( xdr, fvm->id );
+    return 0;
+}
+static int fvm_decode_state( struct xdr_s *xdr, struct fvm_state *fvm ) {
+    int sts;
+    uint32_t u32;
+
+    memset( fvm, 0, sizeof(*fvm) );
+    
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) return sts;
+    if( u32 != FVM_PERSIST_MAGIC ) return -1;
+    if( !sts ) sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) return sts;
+    if( u32 != FVM_PERSIST_VERSION ) return -1;
+    if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)fvm->reg, sizeof(fvm->reg) );
+    if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)fvm->mem, sizeof(fvm->mem) );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &fvm->flags );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &fvm->tickcount );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &fvm->inlogid );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) return sts;
+    fvm->bos = (uint16_t)u32;
+    if( !sts ) sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) return sts;
+    fvm->rpc.timeout = (uint16_t)u32;
+    if( !sts ) sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) return sts;
+    fvm->rpc.service = (uint16_t)u32;
+    if( !sts ) sts = xdr_decode_uint64( xdr, &fvm->rpc.hostid );
+    if( !sts ) sts = xdr_decode_fixed( xdr, fvm->rpc.rxtxbuf, sizeof(fvm->rpc.rxtxbuf) );
+    if( !sts ) sts = xdr_decode_uint32( xdr, (uint32_t *)&fvm->rpc.buf.offset );
+    if( !sts ) sts = xdr_decode_uint32( xdr, (uint32_t *)&fvm->rpc.buf.count );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &fvm->id );
+    return 0;    
+}
+
+int fvm_persist( char *path, struct fvm_state *fvm, void *reserved ) {
+    int sts;
+    struct mmf_s mmf;
+    struct xdr_s xdr;
+    
+    sts = mmf_open( path, &mmf );
+    if( sts ) return sts;
+
+    sts = mmf_remap( &mmf, 256*1024 );
+    if( sts ) {
+	mmf_close( &mmf );
+	return -1;
+    }
+
+    xdr_init( &xdr, mmf.file, 256*1024 );
+    fvm_encode_state( &xdr, fvm );
+    mmf_truncate( &mmf, xdr.offset );
+    
+    mmf_close( &mmf );
+
+    return 0;
+}
+
+int fvm_restore( char *path, struct fvm_state *fvm, void *reserved ) {
+    int sts;
+    struct mmf_s mmf;
+    struct xdr_s xdr;
+    
+    sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+    if( sts ) return sts;
+
+    mmf_remap( &mmf, mmf.fsize );
+    xdr_init( &xdr, mmf.file, mmf.fsize );
+
+    sts = fvm_decode_state( &xdr, fvm );
+
+    mmf_close( &mmf );
+
+    return sts;
+}
+

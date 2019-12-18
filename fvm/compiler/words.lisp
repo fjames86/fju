@@ -627,7 +627,7 @@
 
 (defword nth () ;; (n -- x) get stack item at depth n 
   (pop r1)
-  (sub r1 sp r1)
+  (add r1 sp r1)
   (add r1 r1 1)
   (ldr r0 r1 0)
   (push r0))
@@ -649,26 +649,20 @@
   loop
   drop)
     
-
 (defword char! () ;; (c addr i -- )
-  "start " dumpstr dumpstack cr 
   dup 2 / swap 2 mod ;; (c addr i/2 i%2)
-  "start2 " dumpstr dumpstack cr 
-  rot +   ;; (c i%2 addr+i/2)
-  "start3 " dumpstr dumpstack cr 
-  @ swap ;; (c srcchr i%2)
-  "if " dumpstr dumpstack cr
+  rot + dup @ ;; (c i%2 addr+i/2 srcchr)
+  >r rot r> ;; (addr+i/2 c i%2 srcchr)
+  swap ;; (addr+i/2 c srcchr i%2)
   if
-  ;; set low byte
-    "if true: " dumpstr dumpstack cr
-    #xff00 and or
+    ;; set low byte
+    #xff00 and or ;; (addr+i/2 dstchr)
   else
-  ;; set high byte
-  "if false: " dumpstr dumpstack cr 
-    #xff and swap 8 lshift or 
-    then
-    ;; todo: store updated word 
-  "end: " dumpstr dumpstack cr)
+    ;; set high byte
+    #xff and swap 8 lshift or ;; (addr+i/2 dstchr)
+  then
+  ;; store updated word
+  swap !)
 
 ;; Increment loop index. only use from within a do/loop context. 
 (defword i+ () ;; (n --)

@@ -383,16 +383,12 @@
 
 
 (defword chartest ()
-  "hello my little string"
-  "3rd char: " dumpstr
-  dup 3 ;; (addr addr 3)
-  char@ dumpchr cr  ;; (addr)
+  "hello my little string" dup "src str: " dumpstr dumpstr cr 
+  dup dup 3 ;; (addr addr 3)
+  "3rd char: " dumpstr char@ dumpchr cr  ;; (addr)
   dup ;; (addr addr)
-  "xxx1: " dumpstr fvm::dumpstack cr  
   #\L
-  "xxx2: " dumpstr fvm::dumpstack cr
   swap 3
-  "xxx3: " dumpstr fvm::dumpstack cr
   char! ;; (addr)
   "3rd char: " dumpstr
   dup dumpstr cr)

@@ -393,11 +393,17 @@
   "3rd char: " dumpstr
   dup dumpstr cr)
 
-(defword xxx ()
-  fvm::dumpstack cr
-  #\L fvm::dumpstack cr
-  dup fvm::dumpstack cr)
-
+(defword nth-test ()
+  10 0 
+  do
+   i
+  loop
+   
+  10 0 do
+  i nth dumphex cr
+  1 i+
+  loop)
+  
 ;; --------------------------------------
 
 (defparameter *build-programs* '(test test-msg test-logmsg))

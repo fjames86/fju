@@ -665,7 +665,7 @@
   swap !)
 
 ;; Increment loop index. only use from within a do/loop context. 
-(defword i+ () ;; (n --)
+(defword i+ (:inline t) ;; (n --)
   (pop r0)
   (rpop r1)
   (add r1 r1 r0)

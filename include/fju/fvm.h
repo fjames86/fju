@@ -95,8 +95,6 @@ struct fvm_state {
   uint64_t sleep_timeout;
   struct {
     struct xdr_s buf;
-#define FVM_RPC_MAXBUF               4096
-    uint8_t rxtxbuf[FVM_RPC_MAXBUF];
     uint16_t timeout;         /* rpc timeout */
     uint16_t service;       /* hrauth sevice level */
     uint64_t hostid;

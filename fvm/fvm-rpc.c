@@ -492,6 +492,7 @@ static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
 #endif
 
 
+#if 0
 static int fvm_proc_persist( struct rpc_inc *inc ) {
     int sts, handle;
     struct loaded_fvm *lf;
@@ -535,7 +536,7 @@ static int fvm_proc_restore( struct rpc_inc *inc ) {
     
     return 0;
 }
-
+#endif
 
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
@@ -547,8 +548,11 @@ static struct rpc_proc fvm_procs[] = {
   { 6, fvm_proc_msg },
   { 7, fvm_proc_shmemread },
   { 8, fvm_proc_shmemwrite },
-  { 9, fvm_proc_persist },
-  { 10, fvm_proc_restore },
+  
+#if 0
+  { 0, fvm_proc_persist },
+  { 0, fvm_proc_restore },
+#endif
   
 #if 0
   { 0, fvm_proc_read_dirty },

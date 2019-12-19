@@ -130,6 +130,7 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 #define FVM_RPCCMD_SETSERVICE   15 
 #define FVM_RPCCMD_GETHOSTID    16
 #define FVM_RPCCMD_SETHOSTID    17 
+#define FVM_RPCCMD_SETBUF       18
 
 void fvm_rpc_force_iter( void );
 
@@ -148,14 +149,14 @@ static void rpcdev_donecb( struct xdr_s *res, void *cxt ) {
 
   /* copy into fvm memory at bos */
   maxlen = res->count - res->offset;
-  if( maxlen > FVM_RPC_MAXBUF ) {
+  if( maxlen > fvm->rpc.buf.buf_size ) {
     /* not enough space! return error status */
     fvm->reg[FVM_REG_R0] = 0;
     return;
   }
 
   fvm->reg[FVM_REG_R0] = -1;
-  memcpy( fvm->rpc.rxtxbuf, res->buf + res->offset, maxlen );
+  memcpy( fvm->rpc.buf.buf, res->buf + res->offset, maxlen );
   fvm->rpc.buf.count = maxlen;
   fvm->rpc.buf.offset = 0;
 }
@@ -206,11 +207,11 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
 
     /* copy into buffer */
     maxlen = res.count - res.offset;
-    if( maxlen > FVM_RPC_MAXBUF ) {
+    if( maxlen > fvm->rpc.buf.buf_size ) {
       /* not enough space! return error status */
       return -1;
     } else {
-      memcpy( fvm->rpc.rxtxbuf, res.buf + res.offset, maxlen );
+      memcpy( fvm->rpc.buf.buf, res.buf + res.offset, maxlen );
       fvm->rpc.buf.count = maxlen;
       fvm->rpc.buf.offset = 0;
     }
@@ -389,7 +390,14 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 32;
       fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 48;
     }
-    break;            
+    break;
+  case FVM_RPCCMD_SETBUF:
+    {
+      uint16_t bufaddr, bufsize;
+      bufaddr = FVM_POP(fvm);
+      bufsize = FVM_POP(fvm);
+      xdr_init( &fvm->rpc.buf, (uint8_t *)&fvm->mem[bufaddr], bufsize );
+    }
   default:
     log_writef( NULL, LOG_LVL_INFO, "fvm rpcdev unknown command %u", val );
     sts = -1;
@@ -978,9 +986,16 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   fvm_reset( state );
   state->bos = bos;
 
-  xdr_init( &state->rpc.buf, state->rpc.rxtxbuf, FVM_RPC_MAXBUF );
-  state->rpc.service = -1; // default to no auth
+  /* 
+   * default to setting rpc device buffer at bottom of stack. Typically programs 
+   * should reset the buffer somewhere else.
+   */
+  xdr_init( &state->rpc.buf, (uint8_t *)&state->mem[bos], 1024 );
+
+  /* set other rpc parameters: default to no authentication and talking to local fjud */
+  state->rpc.service = -1; 
   state->rpc.hostid = hostreg_localid();
+  
 #ifdef FVM_USE_DIRTY
   fvm_dirty_reset( state );
 #endif
@@ -1158,6 +1173,7 @@ int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
     return len;
 }
 
+#if 0
 
 #define FVM_PERSIST_MAGIC 0xf491a91c
 #define FVM_PERSIST_VERSION 1
@@ -1185,8 +1201,6 @@ static int fvm_encode_state( struct xdr_s *xdr, struct fvm_state *fvm ) {
     sts = xdr_encode_uint32( xdr, fvm->rpc.service );
     if( sts ) return sts;
     sts = xdr_encode_uint64( xdr, fvm->rpc.hostid );
-    if( sts ) return sts;
-    sts = xdr_encode_fixed( xdr, fvm->rpc.rxtxbuf, sizeof(fvm->rpc.rxtxbuf) );
     if( sts ) return sts;
     sts = xdr_encode_uint32( xdr, fvm->rpc.buf.offset );
     if( sts ) return sts;
@@ -1222,7 +1236,6 @@ static int fvm_decode_state( struct xdr_s *xdr, struct fvm_state *fvm ) {
     if( sts ) return sts;
     fvm->rpc.service = (uint16_t)u32;
     if( !sts ) sts = xdr_decode_uint64( xdr, &fvm->rpc.hostid );
-    if( !sts ) sts = xdr_decode_fixed( xdr, fvm->rpc.rxtxbuf, sizeof(fvm->rpc.rxtxbuf) );
     if( !sts ) sts = xdr_decode_uint32( xdr, (uint32_t *)&fvm->rpc.buf.offset );
     if( !sts ) sts = xdr_decode_uint32( xdr, (uint32_t *)&fvm->rpc.buf.count );
     if( !sts ) sts = xdr_decode_uint32( xdr, &fvm->id );
@@ -1269,4 +1282,16 @@ int fvm_restore( char *path, struct fvm_state *fvm, void *reserved ) {
 
     return sts;
 }
+
+#else
+
+int fvm_persist( char *path, struct fvm_state *fvm, void *reserved ) {
+  return -1;
+}
+
+int fvm_restore( char *path, struct fvm_state *fvm, void *reserved ) {
+  return -1;
+}
+
+#endif
 

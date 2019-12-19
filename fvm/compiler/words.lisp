@@ -574,7 +574,8 @@
   (def-rpcdev-cmd get-rpc-service 14)   ;; ( -- sevice )
   (def-rpcdev-cmd set-rpc-service 15)  ;; (service --)
   (def-rpcdev-cmd get-rpc-hostid 16)   ;; ( -- sevice )
-  (def-rpcdev-cmd set-rpc-hostid 17)  ;; (service --)  
+  (def-rpcdev-cmd set-rpc-hostid 17)  ;; (service --)
+  (def-rpcdev-cmd set-rpc-buffer 18) ;; (count bufaddr --)
   )
 
 (defword xdr-encode-boolean (:inline t)

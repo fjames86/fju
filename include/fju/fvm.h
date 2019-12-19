@@ -94,6 +94,7 @@ struct fvm_state {
   uint16_t bos;
   uint64_t sleep_timeout;
   struct {
+    uint16_t bufaddr;
     struct xdr_s buf;
     uint16_t timeout;         /* rpc timeout */
     uint16_t service;       /* hrauth sevice level */
@@ -103,12 +104,10 @@ struct fvm_state {
      * Divide the program memory up into "pages" of 8 bytes (4 words).
      * Keep a bitmap storing when memory is written.
      */
-#ifdef FVM_USE_DIRTY
 #define FVM_PAGE_SIZE 4
     uint32_t dirty[(FVM_MAX_MEM / FVM_PAGE_SIZE) / 32];
-#endif
-    
-    uint32_t id;
+
+  uint32_t id;
 };
 
 int fvm_load( struct fvm_state *state, char *progdata, int proglen );

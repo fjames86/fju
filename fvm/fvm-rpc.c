@@ -385,9 +385,6 @@ static int fvm_proc_shmemwrite( struct rpc_inc *inc ) {
     return 0;
 }
 
-
-#if 0
-
 static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
   int handle, sts, nd, i;
   struct loaded_fvm *lf;
@@ -398,15 +395,8 @@ static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  
-  lf = glob.progs;
-  while( lf ) {
-    if( lf->id == id ) {
-	break;
-    }
-    lf = lf->next;    
-  }
-  
+
+  lf = lf_by_id( id );
   if( lf ) {
       xdr_encode_boolean( &inc->xdr, 1 );
       /* encode normal memory changes */
@@ -419,18 +409,8 @@ static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
       /* registers */
       xdr_encode_boolean( &inc->xdr, 1 );
       xdr_encode_uint32( &inc->xdr, 0x00010000 );
-      for( i = 0; i < FVM_MAX_MEM; i++ ) {
-	  xdr_encode_uint32( &inc->xdr, lf->fvm.reg[i] );
-      }
+      xdr_encode_opaque( &inc->xdr, (uint8_t *)lf->fvm.reg, sizeof(lf->fvm.reg) );
 
-      /* rpc device */
-      xdr_encode_boolean( &inc->xdr, 1 );
-      xdr_encode_uint32( &inc->xdr, 0x00020000 );
-      xdr_encode_opaque( &inc->xdr, lf->fvm.rpc.buf.buf, lf->fvm.rpc.buf.offset ); /* XXX */
-      /* TODO */
-
-
-      
       xdr_encode_boolean( &inc->xdr, 0 );
   } else {
       xdr_encode_boolean( &inc->xdr, 0 );
@@ -442,42 +422,45 @@ static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
 }
 
 static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
-  int handle, sts, nd;
+  int handle, sts;
   struct loaded_fvm *lf;
   uint32_t id, offset;
   char *bufp;
-  int lenp, i, b;
+  int lenp, b;
       
   sts = xdr_decode_uint32( &inc->xdr, &id );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  lf = glob.progs;
-  while( lf ) {
-    if( lf->id == id ) {
-	break;
-    }
-    lf = lf->next;    
-  }
+  lf = lf_by_id( id );
   if( lf ) {
       xdr_decode_boolean( &inc->xdr, &b );
       while( b ) {
 	  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &offset );
 	  if( sts ) break;
-	  if( offset >= 0 ) {
+	  if( offset <= 0xffff ) {
 	      /* memory */
 	      if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+	      if( sts ) break;
+	      if( lenp > (FVM_MAX_MEM - offset) ) sts = -1;
 	      if( !sts ) memcpy( &lf->fvm.mem[offset], bufp, lenp );
+	      if( sts ) break;
 	  } else if( offset == 0x00010000 ) {
-	      /* registesr */
-	  } else if( offset == 0x00020000 ) {
-	      /* rpc device */
+	      /* registers */
+	    sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&lenp );
+	      if( sts ) break;
+	      if( lenp != sizeof(lf->fvm.reg) ) sts = -1;
+	      
+	      sts = xdr_decode_fixed( &inc->xdr, (uint8_t *)lf->fvm.reg, lenp );
+	      if( sts ) break;
 	  } else {
 	      /* unknown device */
 	      sts = -1;
 	      break;
 	  }
+	  if( sts ) break;
 	  
-	  xdr_decode_boolean( &inc->xdr, b );
+	  sts = xdr_decode_boolean( &inc->xdr, &b );
+	  if( sts ) break;
       }
 
   }
@@ -489,7 +472,6 @@ static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
   
   return 0;
 }
-#endif
 
 
 #if 0
@@ -548,16 +530,14 @@ static struct rpc_proc fvm_procs[] = {
   { 6, fvm_proc_msg },
   { 7, fvm_proc_shmemread },
   { 8, fvm_proc_shmemwrite },
+  { 9, fvm_proc_read_dirty },
+  { 10, fvm_proc_write_dirty },
   
 #if 0
   { 0, fvm_proc_persist },
   { 0, fvm_proc_restore },
 #endif
   
-#if 0
-  { 0, fvm_proc_read_dirty },
-  { 0, fvm_proc_write_dirty },
-#endif 
   { 0, NULL }
 };
 

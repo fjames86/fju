@@ -99,6 +99,9 @@ static void fvm_shmemread_args( int argc, char **argv, int i, struct xdr_s *xdr 
 static void fvm_shmemread_results( struct xdr_s *xdr );
 static void fvm_shmemwrite_results( struct xdr_s *xdr );
 static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_dirty_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_dirty_read_results( struct xdr_s *xdr );
+
 
 
 
@@ -125,6 +128,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.msg", "id=ID msgid=ID msg=*" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_shmemread_args, fvm_shmemread_results, "fvm.read", "id=ID len=*" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_shmemwrite_args, fvm_shmemwrite_results, "fvm.write", "id=ID [int=*] [str=*] [buf=*]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 9, fvm_dirty_read_args, fvm_dirty_read_results, "fvm.dirty_read", "id=ID" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
     { 0, 0, 0, NULL, NULL, NULL }
@@ -1330,4 +1334,47 @@ static void fvm_shmemwrite_results( struct xdr_s *xdr ) {
     printf( "%s\n", b ? "Success" : "Failure" );
 }
 
+
+static void fvm_dirty_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t id;
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoul( argval, NULL, 10 );
+	} else usage( NULL );
+	i++;
+    }
+    
+    xdr_encode_uint32( xdr, id );
+}
+
+static void fvm_dirty_read_results( struct xdr_s *xdr ) {
+  int b, lenp, sts, i;
+  char *bufp;
+  uint32_t offset;
+
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  if( !b ) usage( "Invalid ID" );
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  while( b ) {
+    sts = xdr_decode_uint32( xdr, &offset );
+    if( sts ) usage( "xdr error" );
+    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
+    if( sts ) usage( "xdr error" );
+
+    printf( ";; 0x%04x: ", offset );
+    for( i = 0; i < lenp; i++ ) {
+      printf( "%02x", (uint32_t)(uint8_t)bufp[i] );
+    }
+    printf( "\n" );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
+  }
+}
 

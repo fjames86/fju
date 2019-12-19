@@ -56,6 +56,8 @@
 #define FVM_POP(fvm) (fvm->reg[FVM_REG_SP]++, fvm->mem[fvm->reg[FVM_REG_SP]])
 
 static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val );
+static void fvm_set_dirty_page( struct fvm_state *fvm, uint16_t page );
+static void fvm_set_dirty_region( struct fvm_state *fvm, uint16_t startpage, int npage );
 
 static uint16_t sign_extend( uint16_t x, int bit_count ) {
   if( (x >> (bit_count - 1)) & 1 ) {
@@ -136,7 +138,7 @@ void fvm_rpc_force_iter( void );
 
 static void rpcdev_donecb( struct xdr_s *res, void *cxt ) {
   struct fvm_state *fvm = (struct fvm_state *)cxt;
-  int maxlen;
+  int maxlen, startpage, npage;
 
   fvm->flags |= FVM_FLAG_RUNNING;
   fvm->flags &= ~FVM_FLAG_RPC;
@@ -157,6 +159,12 @@ static void rpcdev_donecb( struct xdr_s *res, void *cxt ) {
 
   fvm->reg[FVM_REG_R0] = -1;
   memcpy( fvm->rpc.buf.buf, res->buf + res->offset, maxlen );
+  
+  /* mark dirty pages */
+  startpage = fvm->rpc.bufaddr / FVM_PAGE_SIZE;
+  npage = (maxlen / FVM_PAGE_SIZE) + ((maxlen % FVM_PAGE_SIZE) ? 1 : 0);  
+  fvm_set_dirty_region( fvm, startpage, npage );
+
   fvm->rpc.buf.count = maxlen;
   fvm->rpc.buf.offset = 0;
 }
@@ -214,6 +222,10 @@ static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uin
       memcpy( fvm->rpc.buf.buf, res.buf + res.offset, maxlen );
       fvm->rpc.buf.count = maxlen;
       fvm->rpc.buf.offset = 0;
+
+      fvm_set_dirty_region( fvm,
+			    fvm->rpc.bufaddr / FVM_PAGE_SIZE,
+			    (maxlen / FVM_PAGE_SIZE) + ((maxlen % FVM_PAGE_SIZE) ? 1 : 0) );
     }
     free( opts.tmpbuf.buf );
   }
@@ -314,6 +326,7 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       char *str;
       len = FVM_POP(fvm);
       str = (char *)&fvm->mem[FVM_POP(fvm)];
+      /* TODO mark dirty pages */
       sts = xdr_decode_string( &fvm->rpc.buf, str, len );
       if( sts ) *str = 0;
     }
@@ -325,6 +338,7 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       uint8_t *ptr;
       len = FVM_POP(fvm);
       ptr = (uint8_t *)&fvm->mem[FVM_POP(fvm)];
+      /* TODO mark dirty pages */
       sts = xdr_decode_opaque( &fvm->rpc.buf, ptr, &len );
       FVM_PUSH(fvm, sts ? 0 : len);      
     }
@@ -336,6 +350,7 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       uint8_t *ptr;
       len = FVM_POP(fvm);
       ptr = (uint8_t *)&fvm->mem[FVM_POP(fvm)];
+      /* TODO mark dirty pages */
       sts = xdr_decode_fixed( &fvm->rpc.buf, ptr, len );
       if( sts ) memset( ptr, 0, len );
     }
@@ -397,6 +412,7 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       bufaddr = FVM_POP(fvm);
       bufsize = FVM_POP(fvm);
       xdr_init( &fvm->rpc.buf, (uint8_t *)&fvm->mem[bufaddr], bufsize );
+      fvm->rpc.bufaddr = bufaddr;
     }
   default:
     log_writef( NULL, LOG_LVL_INFO, "fvm rpcdev unknown command %u", val );
@@ -410,7 +426,7 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
 static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) {
   char *addr;
   uint32_t count;
-  int sts, ne;
+  int sts, ne, memaddr;
   struct log_entry entry;
   struct log_iov iov[1];
 	
@@ -428,7 +444,6 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
     case FVM_DEVICE_CDR:
       /* display data register - write character */
       printf( "%c", val & 0x7f );
-      state->mem[offset] = val & 0xff;
       return;
     case FVM_DEVICE_INLOG:
       /* Input register */
@@ -439,8 +454,9 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	  state->reg[FVM_REG_R0] = 0;
 	  return;
 	}
-      
-	addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
+
+	memaddr = state->reg[FVM_REG_R0];
+	addr = (char *)&state->mem[memaddr];
 	count = state->reg[FVM_REG_R1];
 	memset( &entry, 0, sizeof(entry) );
 	iov[0].buf = addr;
@@ -454,6 +470,9 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	} else {
 	  state->inlogid = entry.id;
 	  state->reg[FVM_REG_R0] = entry.msglen;
+	  fvm_set_dirty_region( state,
+			       memaddr / FVM_PAGE_SIZE,
+			       (count / FVM_PAGE_SIZE) + ((count % FVM_PAGE_SIZE) ? 1 : 0) );
 	}
 	break;
       case 1:
@@ -475,7 +494,6 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
 	  addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
 	  if( val == 0 ) count = strlen( addr );
 	  else count = state->reg[FVM_REG_R1];
-	  //printf( "writing %d bytes addr %d\n", (int)count, (int)state->reg[FVM_REG_R0]);
 	  
 	  memset( &entry, 0, sizeof(entry) );
 	  entry.flags = LOG_LVL_INFO|(val == 1 ? LOG_BINARY : 0);
@@ -503,15 +521,8 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       /* just write into memory */
       state->mem[offset] = val;
 
-#ifdef FVM_USE_DIRTY
       /* set dirty flag */
-      {
-	  uint32_t idx, off;
-	  idx = (offset / 4) / 32;
-	  off = (offset / 4) % 32;
-	  state->dirty[idx] |= (1 << off);
-      }
-#endif
+      fvm_set_dirty_page( state, offset / FVM_PAGE_SIZE );
   }  
 }
 
@@ -991,14 +1002,14 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
    * should reset the buffer somewhere else.
    */
   xdr_init( &state->rpc.buf, (uint8_t *)&state->mem[bos], 1024 );
-
+  state->rpc.bufaddr = bos;
+  
   /* set other rpc parameters: default to no authentication and talking to local fjud */
   state->rpc.service = -1; 
   state->rpc.hostid = hostreg_localid();
   
-#ifdef FVM_USE_DIRTY
   fvm_dirty_reset( state );
-#endif
+
   state->id = 0xffffffff;
 
   if( crc != hdr->crc32 ) {
@@ -1100,25 +1111,42 @@ int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, u
     return 0;
 }
 
+static void fvm_set_dirty_page( struct fvm_state *fvm, uint16_t page ) {
+  int idx, off;
+  idx = page / 32;
+  off = page % 32;
+  fvm->dirty[idx] |= (1 << off);
+}
 
-#ifdef FVM_USE_DIRTY
+static void fvm_set_dirty_region( struct fvm_state *fvm, uint16_t startpage, int npage ) {
+  int i;
+  for( i = 0; i < npage; i++ ) {
+    fvm_set_dirty_page( fvm, startpage + i );
+  }
+}
+
+static int fvm_is_dirty_page( struct fvm_state *fvm, uint16_t page ) {
+  int idx, off;
+  idx = page / 32;
+  off = page % 32;
+  return fvm->dirty[idx] & (1 << off);
+}
+
+
 void fvm_dirty_reset( struct fvm_state *fvm ) {
     memset( fvm->dirty, 0, sizeof(fvm->dirty) );
 }
 
 int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) {
-    int i, n, started;
-    uint32_t offset, idx, off;
+    int page, n, started;
 
     n = 0;
     started = 0;
-    for( i = 0; i < (FVM_MAX_MEM / FVM_PAGE_SIZE); i++ ) {
-	offset = i * FVM_PAGE_SIZE;
-	idx = i / 32;
-	off = i % 32;
+    for( page = 0; page < (FVM_MAX_MEM / FVM_PAGE_SIZE); page++ ) {      
+
 	
 	if( started ) {
-	    if( fvm->dirty[idx] & (1 << off) ) {
+  	    if( fvm_is_dirty_page( fvm, page ) ) {
 		/* currently reading a region, so append */
 		if( n < nd ) dirty[n].count += FVM_PAGE_SIZE;
 	    } else {
@@ -1127,11 +1155,11 @@ int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) 
 		started = 0;
 	    }
 	} else {
-	    if( fvm->dirty[idx] & (1 << off) ) {
+ 	    if( fvm_is_dirty_page( fvm, page ) ) {
 		/* start a new region */
 		started = 1;
 		if( n < nd ) {
-		    dirty[n].offset = offset;
+ 		    dirty[n].offset = page * FVM_PAGE_SIZE;
 		    dirty[n].count = FVM_PAGE_SIZE;
 		}
 	    } else {
@@ -1142,13 +1170,6 @@ int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) 
     
     return n;
 }
-#else
-void fvm_dirty_reset( struct fvm_state *fvm ) {
-}
-int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) {
-    return 0;
-}
-#endif
 
 int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset ) {
     int len;
@@ -1162,7 +1183,7 @@ int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset ) {
     return len;
 }
 int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
-    int len;
+    int len, startpage, npage, i;
     
     n &= 0x3ff;
     offset &= 0x3ff;
@@ -1170,6 +1191,13 @@ int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
     if( offset > FVM_MAX_SHMEM ) return -1;
     if( len >= (FVM_MAX_SHMEM - offset) ) len = FVM_MAX_SHMEM - offset;    
     memcpy( &fvm->mem[0x900], buf, len );
+
+    startpage = 0x0900 / FVM_PAGE_SIZE;
+    npage = (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0);
+    for( i = 0; i < npage; i++ ) {
+      fvm_set_dirty_page( fvm, startpage + i );
+    }
+    
     return len;
 }
 

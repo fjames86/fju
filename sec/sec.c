@@ -450,7 +450,7 @@ uint32_t sec_crc32( uint32_t crc, char *buf, int len ) {
        b = (uint32_t)((uint8_t)buf[i]);
        crc = crc ^ b;
        for( j = 0; j < 8; j++ ) {
-	   mask = -(crc & 1);
+	   mask = -(int32_t)((crc & 1));
 	   crc = (crc >> 1) ^ (0xEDB88320 & mask);
        }
    }

@@ -322,37 +322,48 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
   case FVM_RPCCMD_DECSTR:
     /* decode string. (addr len --) */
     {
-      int len;
+      int len, straddr;
       char *str;
       len = FVM_POP(fvm);
-      str = (char *)&fvm->mem[FVM_POP(fvm)];
-      /* TODO mark dirty pages */
+      straddr = FVM_POP(fvm);
+      str = (char *)&fvm->mem[straddr];
       sts = xdr_decode_string( &fvm->rpc.buf, str, len );
       if( sts ) *str = 0;
+
+      /* mark dirty pages */
+      len = strlen( str );
+      fvm_set_dirty_region( fvm, straddr / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0) );
     }
     break;
   case FVM_RPCCMD_DECOPQ:
     /* decode opaque (addr len -- len) */
     {
-      int len;
+      int len, straddr;
       uint8_t *ptr;
       len = FVM_POP(fvm);
-      ptr = (uint8_t *)&fvm->mem[FVM_POP(fvm)];
-      /* TODO mark dirty pages */
+      straddr = FVM_POP(fvm);
+      ptr = (uint8_t *)&fvm->mem[straddr];
       sts = xdr_decode_opaque( &fvm->rpc.buf, ptr, &len );
-      FVM_PUSH(fvm, sts ? 0 : len);      
+      FVM_PUSH(fvm, sts ? 0 : len);
+
+      /* set dirty pages */
+      len = sts ? 0 : len;
+      fvm_set_dirty_region( fvm, straddr / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0) );
     }
     break;
   case FVM_RPCCMD_DECFIX:
     /* decode fixed (addr len)*/
     {
-      int len;
+      int len, straddr;
       uint8_t *ptr;
       len = FVM_POP(fvm);
-      ptr = (uint8_t *)&fvm->mem[FVM_POP(fvm)];
-      /* TODO mark dirty pages */
+      straddr = FVM_POP(fvm);
+      ptr = (uint8_t *)&fvm->mem[straddr];
       sts = xdr_decode_fixed( &fvm->rpc.buf, ptr, len );
       if( sts ) memset( ptr, 0, len );
+
+      /* set dirty pages */
+      fvm_set_dirty_region( fvm, straddr / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0) );
     }
     break;
   case FVM_RPCCMD_CALL:

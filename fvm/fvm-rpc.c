@@ -421,6 +421,7 @@ static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
   return 0;
 }
 
+#if 0
 static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
   int handle, sts;
   struct loaded_fvm *lf;
@@ -432,7 +433,7 @@ static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   lf = lf_by_id( id );
-  if( lf ) {
+  if( lf && !(lf->fvm.flags & FVM_FLAG_RUNNING) ) {
       xdr_decode_boolean( &inc->xdr, &b );
       while( b ) {
 	  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &offset );
@@ -472,7 +473,7 @@ static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
   
   return 0;
 }
-
+#endif
 
 #if 0
 static int fvm_proc_persist( struct rpc_inc *inc ) {
@@ -531,9 +532,9 @@ static struct rpc_proc fvm_procs[] = {
   { 7, fvm_proc_shmemread },
   { 8, fvm_proc_shmemwrite },
   { 9, fvm_proc_read_dirty },
-  { 10, fvm_proc_write_dirty },
-  
+
 #if 0
+  { 0, fvm_proc_write_dirty },
   { 0, fvm_proc_persist },
   { 0, fvm_proc_restore },
 #endif

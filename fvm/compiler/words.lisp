@@ -513,42 +513,6 @@
   (ldr r0 sp 3)
   (push r0))
 
-;; (defword strcat () ;; (src dst)
-;;   begin
-;;     dup2  ;; (src dst src dst)
-;;     1+ swap 1+ swap ;; (src dst src+1 dst+1)
-;;     swap2 ;; (src+1 dst+1 src dst)
-
-;;     ;; get current word 
-;;     swap @ ;; (src+1 dst+1 dst [src])
-    
-;;     ;; get high word
-;;     2dup ;; (src+1 dst+1 dst [src] [src] [src])
-
-;;     ;; get high byte and test if zero 
-;;     8 rshift ;; (src+1 dst+1 dst [src] [src] fH)
-
-;;     ;; get low word and test for zero
-;;     swap #xff and ;; (src+1 dst+1 dst [src] fH fL)
-
-;;     ;; combine flags, testing for either high/low byte being zero 
-;;     and ;; (src+1 dst+1 dst [src] f)
-
-;;     rot ;; (src+1 dst+1 f dst [src])
-;;     swap ! ;; (src+1 dst+1 f)
-    
-;;     if   
-;;       ;; continue
-;;       true    
-;;     else
-;;       ;; hit a nul character - terminate the loop
-;;       false
-;;     then
-    
-;;   until
-;;   ;; drop the src/dst pointers 
-;;   drop drop)
-
 ;; -----------------------------------
 
 ;; send command to rpc device 
@@ -607,7 +571,7 @@
        ,@fail-body
        ,gend-label)))
 
-(defconstant +fvm-prog+ #x27E1FB11)
+(defconstant +fvm-prog+ (+ #x2fff7770 5))
 (defrpc get-fvm-id (+fvm-prog+ 1 3)   ;; (name -- idhigh idlow)
   :result-body
   (xdr-decode-boolean
@@ -626,12 +590,45 @@
    0 0)
   :fail-body (0 0))
 
+(defrpc fvm-pause (+fvm-prog+ 1 4) ;; (idlow idhigh --)
+  :arg-body (xdr-encode-uint32 uint32 1 xdr-encode-uint32))
+(defrpc fvm-continue (+fvm-prog+ 1 4) ;; (idlow idhigh --)
+  :arg-body (xdr-encode-uint32 uint32 0 xdr-encode-uint32))
+(defrpc fvm-reset (+fvm-prog+ 1 4) ;; (idlow idhigh --)
+  :arg-body (xdr-encode-uint32 uint32 2 xdr-encode-uint32))
+
+(defrpc fvm-msg (+fvm-prog+ 1 6) ;; (idL idH msgidL msgidH msg msglen --)
+  :arg-body (5 nth 4 nth xdr-encode-uint32 
+	     3 nth 2 nth xdr-encode-uint32
+	     xdr-encode-opaque
+	     (add sp sp 6))) ;; drop 4 items from stack
+
+(defrpc fvm-shmem-read (+fvm-prog+ 1 7) ;; (idL idH dstbuf len --)
+  :arg-body (3 nth 2 nth xdr-encode-uint32 0 xdr-encode-uint32
+	       >r >r (add sp sp 2) r> r>) ;; (dstbuf len)
+  :fail-body (drop)
+  :result-body (xdr-decode-boolean
+		if
+  		  xdr-decode-opaque drop
+		else
+  		  drop
+		then))
+	       
+
+	       
 (defword nth () ;; (n -- x) get stack item at depth n 
   (pop r1)
   (add r1 sp r1)
   (add r1 r1 1)
   (ldr r0 r1 0)
   (push r0))
+
+(defword nth! () ;; (n val --) store val at stack item n
+  (pop r1) ;; val
+  (pop r0) ;; n
+  (add r0 sp r0)
+  (add r0 r0 1) ;; get stack position
+  (str r0 r1 0)) ;; store at stack postion
 
 (defword char@ () ;; (addr i -- c)
   dup 2 / swap 2 mod ;; (addr i/2 i%2)
@@ -679,7 +676,16 @@
   (rpush r0))
 
 
+;; (defword alloca () ;; (count -- addr)
+;;   (pop r0) ;; count
+;;   (add r0 r0 -1) ;; off by one error.
+;;   (sub sp sp r0)
+;;   (push sp)
+;;   (add sp sp -1))
 
+;; (defword freea () ;; (count --)
+;;   (pop r0)
+;;   (add sp sp r0))
 
 
 ;; ------------------ Interrupts --------------------

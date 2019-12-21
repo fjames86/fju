@@ -807,7 +807,8 @@ Returns compiled bytecode."
 
 (defun pprint-assembly (word)
   "Pretty print assembly for WORD."
-  (let ((asms (word-assembly word)))
+  (let ((asms (word-assembly word))
+	(*package* #.*package*))
     (dolist (asm asms)
       (cond
 	((symbolp asm)

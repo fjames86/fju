@@ -1072,6 +1072,7 @@ int fvm_reset( struct fvm_state *fvm ) {
 }
 
 
+/* remove this? */
 int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, uint16_t *res, int nres ) {
     uint16_t regs[FVM_REG_MAX];
     int i;

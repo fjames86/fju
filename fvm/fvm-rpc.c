@@ -731,7 +731,8 @@ static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t 
   for( i = 0; i < glob.nevtprogs; i++ ) {
     ep = &glob.evtprogs[i];
     
-    if( (ep->category == category) && (ep->eventid == id) ) {
+    if( (ep->category == category) &&
+	((ep->eventid == -1) || (ep->eventid == id)) ) {
       log_writef( NULL, LOG_LVL_INFO, "fvm_evt_cb category=%u eventid=%u program=%s", category, id, ep->name );
       lf = load_prog_by_name( ep->name );
       if( lf ) {
@@ -769,7 +770,10 @@ static void reload_evtprogs( struct rpc_iterator *iter ) {
 
     i = glob.nevtprogs;
     sts = freg_get_by_name( NULL, tlentry.id, "category", FREG_TYPE_UINT32, (char *)&glob.evtprogs[i].category, sizeof(uint32_t), NULL );
-    if( !sts ) freg_get_by_name( NULL, tlentry.id, "eventid", FREG_TYPE_UINT32, (char *)&glob.evtprogs[i].eventid, sizeof(uint32_t), NULL );
+    if( !sts ) {
+	glob.evtprogs[i].eventid = -1;
+	freg_get_by_name( NULL, tlentry.id, "eventid", FREG_TYPE_UINT32, (char *)&glob.evtprogs[i].eventid, sizeof(uint32_t), NULL );
+    }
     strncpy( glob.evtprogs[i].name, tlentry.name, sizeof(glob.evtprogs[i].name) - 1 );
     
     if( sts ) {

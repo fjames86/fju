@@ -537,6 +537,13 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
   }  
 }
 
+int fvm_write_mem( struct fvm_state *fvm, char *buf, int len, int offset ) {
+    memcpy( &fvm->mem[offset], buf, len );
+    fvm_set_dirty_region( fvm, offset / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + (len % FVM_PAGE_SIZE) ? 1 : 0);
+    return 0;
+}
+
+
 static void set_pc( struct fvm_state *state, uint16_t val ) {
     if( val <= 0x2fff || val >= 0xfe00 ) {
 	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Attempt to set PC to invalid address %x\n", val );

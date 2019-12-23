@@ -40,6 +40,8 @@
 #include <fju/nls.h>
 #include <fju/freg.h>
 
+#include "fvm-private.h"
+
 struct loaded_fvm {
   struct loaded_fvm *next;
   uint32_t id;
@@ -310,7 +312,7 @@ static int fvm_proc_msg( struct rpc_inc *inc ) {
       log_writef( NULL, LOG_LVL_INFO, "fvm_proc_msg msglen=%d", buflen );
       
       if( buflen > 1024 ) buflen = 1024;
-      memcpy( &lf->fvm.mem[lf->fvm.bos], bufp, buflen );
+      fvm_write_mem( &lf->fvm, bufp, buflen, lf->fvm.bos );
       lf->fvm.reg[FVM_REG_R0] = msgid;         /* R0 = msgid */
       lf->fvm.reg[FVM_REG_R1] = lf->fvm.bos;   /* R1 = address of msg */
       lf->fvm.reg[FVM_REG_R2] = buflen;        /* R2 = length of msg */
@@ -732,8 +734,12 @@ static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t 
     if( (ep->category == category) && (ep->eventid == id) ) {
       log_writef( NULL, LOG_LVL_INFO, "fvm_evt_cb category=%u eventid=%u program=%s", category, id, ep->name );
       lf = load_prog_by_name( ep->name );
-      memcpy( &lf->fvm.mem[lf->fvm.bos], parm, parmsize );
-      lf->fvm.reg[FVM_REG_R0] = (uint16_t)parmsize;
+      if( lf ) {
+	  /* copy into memory and set dirty pages */
+	  fvm_write_mem( &lf->fvm, parm, parmsize, lf->fvm.bos );
+	  
+	  lf->fvm.reg[FVM_REG_R0] = (uint16_t)parmsize;
+      }
     }
     
   }

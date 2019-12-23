@@ -687,6 +687,11 @@
 ;;   (pop r0)
 ;;   (add sp sp r0))
 
+;; do nothing forever, waiting for an interrupt to service 
+(defword interrupt-service-loop (:inline t)  
+  begin
+    halt true
+  until)
 
 ;; ------------------ Interrupts --------------------
 

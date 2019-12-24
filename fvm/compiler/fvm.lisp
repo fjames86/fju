@@ -545,7 +545,12 @@ assembled object code."
 			 (push r0)
 			 (push r1)
 			 (push r2)
-			 (push r3))))	    
+			 (push r3))))
+		    ((eq wrd 'goto)
+		     (setf body (cdr body))
+		     (let ((jmplbl (car body)))
+		       (setf body (cdr body))
+		       `((br-pnz ,jmplbl))))
 		    (t (setf body (cdr body))
 		       (list wrd))))   ;; symbol but not a word, assume an assembly label
 		 ((integerp wrd)

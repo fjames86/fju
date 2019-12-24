@@ -404,6 +404,15 @@
   1 i+
   loop)
   
+(defword gototest ()
+  1234
+  dup 12 = if "=12" dumpstr cr goto done then
+  dup 13 = if "=13" dumpstr cr goto done then
+  dup 123 = if "=123" dumpstr cr goto done then
+  "something else=" dumpstr dup dumpdec goto done then
+  done
+  drop)
+
 
 (defword eventtest () ;; (catL catH eventidL eventidH)
   (push r0) >r ;; r0 receives parmsize 
@@ -413,7 +422,7 @@
   "ParmData: " dumpstr cr 
   r>
   0 do
-    bos i + @ dumphex
+    bos i + @ dumphex #\space dumpchr 
     i 16 % not if cr then 
   loop 
   cr)

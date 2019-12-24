@@ -38,7 +38,7 @@
 	   #:swap2 #:over2 #:nth #:char@ #:char! #:i+
 	   #:dumpstack #:i! #:set-rpc-buffer #:interrupt-service-loop
 	   #:nth! #:fvm-shmem-read #:fvm-msg #:fvm-reset #:fvm-continue
-	   #:fvm-pause 
+	   #:fvm-pause #:goto 
 	   ))
 	   
    

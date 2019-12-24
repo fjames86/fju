@@ -417,11 +417,11 @@
 (defword eventtest () ;; (catL catH eventidL eventidH)
   (push r0) >r ;; r0 receives parmsize 
   swap2
-  "Category: " dumpstr swap dumphex dumphex cr
-  "EventID: " dumpstr swap dumphex dumphex cr
+  "Category: " dumpstr dumphex dumphex cr
+  "EventID: " dumpstr dumphex dumphex cr
   "ParmData: " dumpstr cr 
   r>
-  0 do
+  2 / 0 do
     bos i + @ dumphex #\space dumpchr 
     i 16 % not if cr then 
   loop 

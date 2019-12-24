@@ -40,6 +40,8 @@
 #include <fju/hrauth.h>
 #include <fju/hostreg.h>
 
+#include "fvm-private.h"
+
 /*
  * Loosely modelled on the LC3 processor. 
  * Layout:
@@ -58,6 +60,10 @@
 static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val );
 static void fvm_set_dirty_page( struct fvm_state *fvm, uint16_t page );
 static void fvm_set_dirty_region( struct fvm_state *fvm, uint16_t startpage, int npage );
+
+void fvm_push_value( struct fvm_state *fvm, uint16_t val ) {
+    FVM_PUSH( fvm, val );
+}
 
 static uint16_t sign_extend( uint16_t x, int bit_count ) {
   if( (x >> (bit_count - 1)) & 1 ) {
@@ -774,8 +780,21 @@ static void fvm_inst_push( struct fvm_state *state, uint16_t opcode ) {
   if( opcode & 0x20 ) {
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPOP R%x = %x %sP = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, read_mem( state, state->reg[sp] + 1 ), sp == FVM_REG_RP ? "R" : "S", state->reg[sp] + 1 );
     state->reg[sp]++;
-    state->reg[reg] = read_mem( state, state->reg[sp] );
-    update_flags( state, state->reg[reg] );
+    if( (sp == FVM_REG_SP) && (state->reg[sp] > 0xfdff) ) {
+	/* attempt to set stack pointer out of range so reset */
+	state->reg[reg] = 0;
+	state->reg[sp] = 0xfdff;
+    } else if( (sp == FVM_REG_RP) && (state->reg[sp] > 0x2fff) ) {
+	/* 
+	 * Attempt to set return pointer out of range so reset. 
+	 * XXX This is more serious than data stack overflow - what to do here?
+	 */
+	state->reg[reg] = 0;
+	state->reg[sp] = 0x2fff;
+    } else {
+	state->reg[reg] = read_mem( state, state->reg[sp] );
+	update_flags( state, state->reg[reg] );
+    }
   } else {
     if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPUSH R%x = %x %sP = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, state->reg[reg], sp == FVM_REG_RP ? "R" : "S", state->reg[sp] );
     write_mem( state, state->reg[sp], state->reg[reg] );

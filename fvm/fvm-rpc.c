@@ -740,6 +740,10 @@ static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t 
 	  fvm_write_mem( &lf->fvm, parm, parmsize, lf->fvm.bos );
 	  
 	  lf->fvm.reg[FVM_REG_R0] = (uint16_t)parmsize;
+	  fvm_push_value( &lf->fvm, category & 0xffff );
+	  fvm_push_value( &lf->fvm, category >> 16 );
+	  fvm_push_value( &lf->fvm, id & 0xffff );
+	  fvm_push_value( &lf->fvm, id >> 16 );
       }
     }
     

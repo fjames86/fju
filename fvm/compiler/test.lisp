@@ -405,6 +405,18 @@
   loop)
   
 
+(defword eventtest () ;; (catL catH eventidL eventidH)
+  (push r0) >r ;; r0 receives parmsize 
+  swap2
+  "Category: " dumpstr swap dumphex dumphex cr
+  "EventID: " dumpstr swap dumphex dumphex cr
+  "ParmData: " dumpstr cr 
+  r>
+  0 do
+    bos i + @ dumphex
+    i 16 % not if cr then 
+  loop 
+  cr)
 
 ;; --------------------------------------
 

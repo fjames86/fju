@@ -75,6 +75,8 @@ static struct {
 
 	uint64_t connid;
         struct rpcd_subscriber *rpcd_subcs;
+
+        struct rpcd_active_conn aconn;
 } rpc;
 
 #ifdef WIN32
@@ -702,7 +704,12 @@ static void rpc_poll( int timeout ) {
 					/* msg complete - process */
 					xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
 					c->inc.xdr.count = c->cdata.count;
+					
+					rpc.aconn.listen = NULL;
+					rpc.aconn.conn = c;
 					sts = rpc_process_incoming( &c->inc );
+					memset( &rpc.aconn, 0, sizeof(rpc.aconn) );
+					
 					if( sts == 0 ) {
 					        rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
 
@@ -917,7 +924,12 @@ static void rpc_accept( struct rpc_listen *lis ) {
       mynet_ntop( lis->type, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len, ipstr );
       rpc_log( RPC_LOG_DEBUG, "UDP Incoming %s count=%d", ipstr, c->cdata.count );
       rpc.flist = rpc.flist->next;
+
+      rpc.aconn.listen = lis;
+      rpc.aconn.conn = NULL;
       sts = rpc_process_incoming( &c->inc );
+      memset( &rpc.aconn, 0, sizeof(rpc.aconn) );
+      
       rpc.flist = c;
       if( sts == 0 ) {
 	rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
@@ -1307,7 +1319,7 @@ void rpcd_stop( void ) {
 
 
 void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int parmsize ) {
-    struct rpcd_subscriber *sc;
+    struct rpcd_subscriber *sc, *next;
     int i, found;
     sc = rpc.rpcd_subcs;
     while( sc ) {
@@ -1323,10 +1335,15 @@ void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int pa
 		i++;
 	    }
 	}
+	
 	if( found && sc->cb ) {
+	    next = sc->next;
 	    sc->cb( sc, category, eventid, parm, parmsize );
+	    sc = next;
+	} else {
+	    sc = sc->next;
 	}
-	sc = sc->next;
+	
     }
 }
 
@@ -1351,3 +1368,7 @@ int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc ) {
     return -1;
 }
 
+int rpcd_active_conn( struct rpcd_active_conn *aconn ) {
+    *aconn = rpc.aconn;
+    return 0;
+}

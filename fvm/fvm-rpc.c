@@ -53,6 +53,8 @@ struct loaded_fvm {
   struct log_s outlog;
   uint64_t runtime;
   char name[64];
+  void (*donecb)( struct loaded_fvm *fvm );  /* completion callback */
+  void *donecxt;
 };
 
 struct event_prog {
@@ -523,6 +525,71 @@ static int fvm_proc_restore( struct rpc_inc *inc ) {
 }
 #endif
 
+struct proc_call_donecxt {
+    struct rpc_reply_data rdata;
+};
+
+static void fvm_proc_call_cb( struct loaded_fvm *fvm ) {
+    struct proc_call_donecxt *donecxt = (struct proc_call_donecxt *)fvm->donecxt;
+    
+    /* send reply message */
+    memset( &inc, 0, sizeof(inc) );
+    inc.pvr = donecxt->rdata.pvr;
+    inc.pcxt = donecxt->rdata.pcxt;
+    if( inc.pvr ) inc.pvr->rverf = donecxt->rdata.rverf;
+    buf = malloc( 512 + xdr->count );
+    xdr_init( &inc.xdr, (uint8_t *)buf, 512 + xdr->count );
+    rpc_init_accept_reply( &inc,
+			   donecxt->rdata.xid,
+			   RPC_ACCEPT_SUCCESS,
+			   NULL,
+			   &handle );
+    xdr_encode_fixed( &inc.xdr,
+		      xdr->buf + xdr->offset,
+		      xdr->count - xdr->offset );
+    rpc_complete_accept_reply( &inc, handle );
+    
+    listen = rpcd_listen_by_type( RPC_LISTEN_UDP );
+    if( listen ) sendto( listen->fd, inc.xdr.buf, inc.xdr.offset,
+			 0, (struct sockaddr *)&donecxt->rdata.raddr,
+			 donecxt->rdata.raddr_len );
+
+    /* free private data */
+    free( donecxt );
+}
+
+static int fvm_proc_call( struct rpc_inc *inc ) {
+    int sts, handle;
+    struct loaded_fvm *lf;
+    char name[256];
+    struct proc_call_donecxt *donecxt;
+    
+    /* decode args */
+    sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+    lf = load_prog_by_name( name );
+    if( !lf ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+    rpcd_active_conn( &aconn );
+    if( (aconn.listen == NULL) || aconn.conn ) {
+	/* we do not support sending replies if we are called via tcp */
+	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+	xdr_encode_boolean( &inc->xdr, lf ? 1 : 0 );
+	rpc_complete_accept_reply( inc, handle );
+	return 0;
+    }
+
+    /* if called via udp then defer sending reply until program completion */
+    lf->donecb = fvm_proc_call_cb;    
+    donecxt = malloc( sizeof(*donecxt) );
+    lf->donecxt = donecxt;
+    rpc_get_reply_data( inc, &donecxt->rdata );
+
+    /* defer reply until program completes */
+    return 1;
+}
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_load },
@@ -574,7 +641,13 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
       timeout = 0;
       prev = lf;
     } else if( (lf->fvm.flags & FVM_FLAG_DONE) ) {
+	/* invoke completion callback */
+	if( lf->donecb ) lf->donecb( lf );
+
+	/* publish completion event */
 	rpcd_event_publish( FVM_EVENT_CATEGORY, FVM_EVENT_PROGDONE, &lf->id, sizeof(lf->id) );
+
+	/* unload */
 	if( lf->flags & FVM_RPC_AUTOUNLOAD ) {
 	    if( prev ) prev->next = next;
 	    else glob.progs = next;
@@ -596,6 +669,46 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
   iter->timeout = timeout;
 }
 
+#if 0
+struct await_sc {
+    struct rpcd_subscriber sc;
+    uint32_t id;
+    void (*cb)( uint32_t id, void *prv );
+    void *prv;
+};
+
+static void fvm_await_prog_cb( struct rpcd_subscriber *sc, uint32_t cat, uint32_t evtid, void *parm, int parmsize ) {
+    if( evtid == FVM_EVENT_PROGDONE ) {
+	uint32_t id = *(uint32_t *)parm;
+
+	prv = (struct await_sc *)sc;
+	if( id == prv->id ) {
+	    prv->cb( id, prv->prv );
+	    rpcd_event_unsubscribe( sc );
+	    free( sc );
+	}
+    }
+	    
+}
+
+int fvm_await_prog( uint32_t id, void (*cb)( uint32_t id, void *prv ), void *prv ) {
+    static uint32_t category[] = { FVM_EVENT_CATEGORY, 0 };
+    
+    struct await_sc *sc;
+    
+    sc = malloc( sizeof(*sc) );
+    memset( sc, 0, sizeof(*sc) );
+    sc->sc.category = category;
+    sc->sc.cb = fvm_await_prog_cb;
+
+    sc->id = id;
+    sc->cb = cb;
+    sc->prv = prv;
+    rpcd_event_subscribe( sc );
+
+    return 0;
+}
+#endif
 
 /*
  * /fju/fvm/programs/NAME/

@@ -162,5 +162,11 @@ int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc );
 #define RPCD_EVENT_CATEGORY 0x00001000  /* event category for rpcd itself */
 #define RPCD_EVENT_RPCCALL  0           /* received an rpc call */
 
+struct rpcd_active_conn {
+    struct rpc_listen *listen;
+    struct rpc_conn *conn;
+};
+int rpcd_active_conn( struct rpcd_active_conn *aconn );
+
 #endif
 

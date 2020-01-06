@@ -234,3 +234,4 @@ fvm_shmem_read
 fvm_shmem_write
 fvm_persist
 fvm_restore
+rpcd_active_conn

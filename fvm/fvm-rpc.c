@@ -525,6 +525,7 @@ static int fvm_proc_restore( struct rpc_inc *inc ) {
 }
 #endif
 
+#if 0
 struct proc_call_donecxt {
     struct rpc_reply_data rdata;
 };
@@ -589,6 +590,7 @@ static int fvm_proc_call( struct rpc_inc *inc ) {
     /* defer reply until program completes */
     return 1;
 }
+#endif
 
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },

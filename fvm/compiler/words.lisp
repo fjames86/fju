@@ -540,6 +540,7 @@
   (def-rpcdev-cmd get-rpc-hostid 16)   ;; ( -- sevice )
   (def-rpcdev-cmd set-rpc-hostid 17)  ;; (service --)
   (def-rpcdev-cmd set-rpc-buffer 18) ;; (count bufaddr --)
+  (def-rpcdev-cmd get-rpc-offset 19) ;; ( -- offset)
   )
 
 (defword xdr-encode-boolean (:inline t)

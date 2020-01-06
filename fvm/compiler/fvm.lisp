@@ -64,6 +64,8 @@
 		(when (zerop (mod (length (cadr inst)) 2)) (incf offset))))
 	     (.BLKW ;; (.BLKW 123 ...)
 	      (incf offset (length (cdr inst))))
+	     (.ARRAY ;; (.ARRAY count)
+	      (incf offset (cadr inst)))
 	     (otherwise
 	      ;; all other commands just increment offset by 1 
 	      (incf offset)))))))))
@@ -269,6 +271,8 @@ assembled object code."
 		(dolist (x (cdr inst))
 		  (push (logand (label-offset x ltab 0 #xffff) #xffff) (cadr currobj))
 		  (incf offset)))
+	       (.ARRAY
+		(incf offset (cadr inst)))
 	       (.STRING
 		(let* ((octets (babel:string-to-octets (cadr inst)))
 		       (datalen (ceiling (length octets) 2)))
@@ -824,6 +828,8 @@ Returns compiled bytecode."
 	    (format t ";; ORIGIN #x~4,'0X~%" (cadr asm)))
 	   (.BLKW
 	    (format t ";; .BLKW       ~{~S~}~%" (cdr asm)))
+	   (.ARRAY
+	    (format t ";; .ARRAY      ~A~%" (cadr asm)))
 	   (.STRING
 	    (format t ";; .STRING     ~S~%" (cadr asm)))
 	   (otherwise

@@ -1,4 +1,4 @@
-/*
+#/*
  * MIT License
  * 
  * Copyright (c) 2019 Frank James
@@ -139,6 +139,7 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 #define FVM_RPCCMD_GETHOSTID    16
 #define FVM_RPCCMD_SETHOSTID    17 
 #define FVM_RPCCMD_SETBUF       18
+#define FVM_RPCCMD_GETOFFSET    19
 
 void fvm_rpc_force_iter( void );
 
@@ -431,6 +432,10 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       xdr_init( &fvm->rpc.buf, (uint8_t *)&fvm->mem[bufaddr], bufsize );
       fvm->rpc.bufaddr = bufaddr;
     }
+    break;
+  case FVM_RPCCMD_GETOFFSET:
+    FVM_PUSH( fvm, fvm->rpc.buf.offset );
+    break;
   default:
     log_writef( NULL, LOG_LVL_INFO, "fvm rpcdev unknown command %u", val );
     sts = -1;

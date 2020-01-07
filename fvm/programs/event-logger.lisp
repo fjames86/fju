@@ -1,6 +1,7 @@
 
 (defpackage #:event-logger
-  (:use #:cl #:fvm))
+  (:use #:cl #:fvm)
+  (:export #:event-logger))
 
 (in-package #:event-logger)
 
@@ -31,6 +32,6 @@
 
   bos get-xdr-offset write-output-opaque)
 
+(defun event-logger ()
+  (save-program "event-logger.fvm" 'main))
 
-  
-  

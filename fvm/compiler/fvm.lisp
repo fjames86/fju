@@ -272,7 +272,11 @@ assembled object code."
 		  (push (logand (label-offset x ltab 0 #xffff) #xffff) (cadr currobj))
 		  (incf offset)))
 	       (.ARRAY
-		(incf offset (cadr inst)))
+		;; complete current object and start a new one at the increased address
+		(when (cadr currobj)
+		  (push (obj-code currobj) ret))
+		(incf offset (cadr inst))
+		(setf currobj (list offset nil)))
 	       (.STRING
 		(let* ((octets (babel:string-to-octets (cadr inst)))
 		       (datalen (ceiling (length octets) 2)))
@@ -733,8 +737,8 @@ INITIAL-CONTENTS ::= integer, list of integers or string
 		    (list name ;; label for variable 
 			  (etypecase initial-contents 
 			    (integer
-			     (if size 
-				 `(.BLKW ,@(loop :for i :below size :collect initial-contents))
+			     (if size
+				 `(.ARRAY ,size)
 				 `(.BLKW ,initial-contents)))
 			    (string
 			     `(.STRING ,initial-contents))))))

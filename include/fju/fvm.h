@@ -165,6 +165,7 @@ void fvm_register( void );
 #define FVM_EVENT_CATEGORY FVM_RPC_PROG
 #define FVM_EVENT_PROGDONE 0        /* parm = &id */
 
+int fvm_proc_handler( char *progname, int timeout, struct rpc_inc *inc );
 
 #endif
 

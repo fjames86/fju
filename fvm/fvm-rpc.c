@@ -715,3 +715,34 @@ void fvm_register( void ) {
 
   rpc_iterator_register( &fvm_evtprog_iter );
 }
+
+int fvm_proc_handler( char *progname, int timeout, struct rpc_inc *inc ) {
+  int handle;
+  struct loaded_fvm *lf;
+  
+  lf = load_prog_by_name( progname );
+  if( !lf ) {
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  }
+
+  /* copy arg data into xdr buffer */
+  memcpy( lf->fvm.rpc.buf.buf, inc->xdr.buf + inc->xdr.offset, inc->xdr.count - inc->xdr.offset );
+  lf->fvm.rpc.buf.count = inc->xdr.count - inc->xdr.offset;
+  lf->fvm.rpc.buf.offset = 0;
+  
+  /* run until it halts (up to some timeout). no sleeps or rpcs allowed */
+  /* TODO: run asynchronosly and send reply on completion callback */
+  fvm_run_timeout( &lf->fvm, timeout ? timeout : 1000 );
+
+  /* reply with the generated xdr */
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  memcpy( inc->xdr.buf + inc->xdr.offset, lf->fvm.rpc.buf.buf, lf->fvm.rpc.buf.offset );
+  inc->xdr.offset += lf->fvm.rpc.buf.offset;
+  rpc_complete_accept_reply( inc, handle );
+  
+  /* make it get unloaded immediately */
+  lf->flags |= FVM_RPC_AUTOUNLOAD;
+  lf->fvm.flags |= FVM_FLAG_DONE;
+
+  return 0;
+}

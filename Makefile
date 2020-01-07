@@ -61,4 +61,4 @@ ${LIBFJU}: ${FJU_DEPS}
 	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive 
 
 fvm.core: fvm/compiler/package.lisp fvm/compiler/fvm.lisp fvm/compiler/words.lisp fvm/compiler/rpc.lisp
-	sbcl --load scripts/make-lisp-core.lisp
+	sbcl --noinform --non-interactive --load scripts/make-lisp-core.lisp

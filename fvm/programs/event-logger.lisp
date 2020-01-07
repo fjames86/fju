@@ -7,15 +7,10 @@
 
 ;; This program gets run when an event occurs and simply writes the event data to a log
 
-(defword buf (:gensyms (gdone))
-  (lea r0 5)
-  (push r0)
-  (br-pnz 1)
-  (.blkw gdone)
-  (ld r0 -2)
-  (jmp r0)
-  (.ARRAY 1024)
-  gdone)
+(defvariable *buf* 0 1024)
+
+(defword buf ()
+  variable *buf*)
 
 (defword main () ;; (categoryH categoryL idH idL)
   ;; bos contains parm data, r0 contains parmsiz
@@ -28,10 +23,10 @@
   swap2
   xdr-encode-uint32 ;; category 
   xdr-encode-uint32 ;; eventid 
-  bos >r xdr-encode-opaque ;; eventdata
+  bos r> xdr-encode-opaque ;; eventdata
 
   bos get-xdr-offset write-output-opaque)
 
 (defun event-logger ()
-  (save-program "event-logger.fvm" 'main))
+  (save-program "event-logger.fvm" 'main :variables '(*buf*)))
 

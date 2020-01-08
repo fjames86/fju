@@ -62,3 +62,4 @@ ${LIBFJU}: ${FJU_DEPS}
 
 fvm.core: fvm/compiler/package.lisp fvm/compiler/fvm.lisp fvm/compiler/words.lisp fvm/compiler/rpc.lisp
 	sbcl --noinform --non-interactive --load scripts/make-lisp-core.lisp
+

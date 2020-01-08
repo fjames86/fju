@@ -42,6 +42,9 @@
 
 #include "fvm-private.h"
 
+/* maximum number of concurrently running programs */
+#define FVM_MAX_PROGRAM 8
+
 struct loaded_fvm {
   struct loaded_fvm *next;
   uint32_t id;
@@ -64,7 +67,8 @@ struct event_prog {
 };
 
 static struct {
-  struct loaded_fvm *progs;
+  struct loaded_fvm *progs;  /* active programs */
+  struct loaded_fvm *flist;  /* freelist of program descriptors */
   struct rpcd_subscriber subsc;
   int nevtprogs;
 #define FVM_MAX_EVTPROGS 64
@@ -98,13 +102,17 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, uint32_t fla
     struct loaded_fvm *lf;
     struct nls_share nls;
     
-    lf = malloc( sizeof(*lf) );
+    lf = glob.flist;
+    if( !lf ) return NULL;
+    glob.flist = glob.flist->next;
+
     memset( lf, 0, sizeof(*lf) );
     lf->id = ++glob.idseq;
     strncpy( lf->name, name, sizeof(lf->name) - 1 );
     sts = fvm_load( &lf->fvm, (char *)bufp, buflen );
     if( sts ) {
-	free( lf );
+        lf->next = glob.flist;
+	glob.flist = lf;
 	return NULL;
     }
 
@@ -197,7 +205,11 @@ static int fvm_proc_unload( struct rpc_inc *inc ) {
 
       if( lf->inlogid ) log_close( &lf->inlog );
       if( lf->outlogid ) log_close( &lf->outlog );
-      free( lf );
+
+      /* push onto freelist */
+      lf->next = glob.flist;
+      glob.flist = lf;
+      
       break;
     }
     prev = lf;
@@ -481,7 +493,10 @@ static void fvm_iter_cb( struct rpc_iterator *iter ) {
 	    else glob.progs = next;
 	    if( lf->inlogid ) log_close( &lf->inlog );
 	    if( lf->outlogid ) log_close( &lf->outlog );
-	    free( lf );
+
+	    /* push onto freelist */
+	    lf->next = glob.flist;
+	    glob.flist = lf;
 	}
     } else if( lf->fvm.sleep_timeout && (rpc_now() >= lf->fvm.sleep_timeout) ) {
 	lf->fvm.flags |= FVM_FLAG_RUNNING;
@@ -706,6 +721,17 @@ static struct rpc_iterator fvm_evtprog_iter = {
 
 
 void fvm_register( void ) {
+  struct loaded_fvm *lf;
+  int i;
+  
+  /* allocate program descriptors */
+  lf = malloc( sizeof(*lf) * FVM_MAX_PROGRAM );
+  for( i = 0; i < FVM_MAX_PROGRAM; i++ ) {
+    memset( &lf[i], 0, sizeof(*lf) );
+    lf[i].next = glob.flist;
+    glob.flist = &lf[i];
+  }
+  
   rpc_program_register( &fvm_prog );
   rpc_iterator_register( &fvm_iter );
   load_startup_progs();
@@ -715,6 +741,17 @@ void fvm_register( void ) {
 
   rpc_iterator_register( &fvm_evtprog_iter );
 }
+
+#if 0
+
+/*
+ * Is this something that's actually useful? 
+ * Typically you will actually want an fvm program to be running before 
+ * it receives the rpc call so this probably won't be very useful. 
+ * It would be better / more useful to instead send a message (fvm_proc_msg) to a running 
+ * program and arrange for it to send an rpc back when it's done processing.
+ * But all this would have to be done from within the fvm program itself.
+ */
 
 int fvm_proc_handler( char *progname, int timeout, struct rpc_inc *inc ) {
   int handle;
@@ -729,9 +766,8 @@ int fvm_proc_handler( char *progname, int timeout, struct rpc_inc *inc ) {
   memcpy( lf->fvm.rpc.buf.buf, inc->xdr.buf + inc->xdr.offset, inc->xdr.count - inc->xdr.offset );
   lf->fvm.rpc.buf.count = inc->xdr.count - inc->xdr.offset;
   lf->fvm.rpc.buf.offset = 0;
-  
-  /* run until it halts (up to some timeout). no sleeps or rpcs allowed */
-  /* TODO: run asynchronosly and send reply on completion callback */
+
+  /* run until it halts (up to some timeout). no sleeps or rpcs allowed. need an asynchronous version for that */
   fvm_run_timeout( &lf->fvm, timeout ? timeout : 1000 );
 
   /* reply with the generated xdr */
@@ -746,3 +782,5 @@ int fvm_proc_handler( char *progname, int timeout, struct rpc_inc *inc ) {
 
   return 0;
 }
+
+#endif

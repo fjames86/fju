@@ -46,16 +46,12 @@ static void usage( char *fmt, ... ) {
   printf( "fvm program\n"
 	  "     [-v] [-n nsteps] [-t timeout]\n"
 	  "     [-i inlog-path] [-o outlog-path]\n"
-	  "     [-w word] [-wa arg]* [-wr int|string]\n"
 	  "\n"
 	  "  Where:\n"
 	  "     -v [-v]            Verbose mode\n"
 	  "     -n nsteps          Limit runtime by number of clock ticks.\n"
 	  "     -t timeout         Limit runtime by number of milliseconds.\n"
 	  "     -i inlog -o outlog Set in/out log files.\n"
-	  "     -w word            Start at a given word index\n"
-	  "     -wa arg            Push arg onto stack (use with -w)\n"
-	  "     -wr int|string     Pop result value from stack and print (use with -w)\n"
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -76,22 +72,12 @@ static struct {
   char *inlog;
   char *outlog;
   struct log_s logs[2];
-  int word;
-  int wordargtype[32];
-  uint16_t wordarg[32];
-  int nargs;
-  int wordrestype[32];
-  char *wordargdata[32];
-#define RES_INT 0
-#define RES_STR 1
-  uint16_t wordres[32];
-  int nres;
 } glob;
 
 int main( int argc, char **argv ) {
   char *path = NULL;
   struct mmf_s mmf;
-  int sts, i, len;
+  int sts, i;
   uint64_t start, end;
 
 #ifdef WIN32
@@ -132,36 +118,6 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       glob.outlog = argv[i];
-    } else if( strcmp( argv[i], "-w" ) == 0 ) {
-	i++;
-	if( i >= argc ) usage( NULL );
-	glob.word = strtoul( argv[i], NULL, 10 );
-	glob.word &= 0x07ff;
-	glob.word |= 0x8000;
-    } else if( strcmp( argv[i], "-wa" ) == 0 ) {
-        char *terminator;
-	i++;
-	if( i >= argc ) usage( NULL );
-	if( glob.nargs >= 32 ) usage( "Max args = 32" );
-	glob.wordargtype[i] = RES_INT;
-	glob.wordarg[glob.nargs] = strtoul( argv[i], &terminator, 10 );
-	if( *terminator ) {
-	  glob.wordarg[glob.nargs] = strtoul( argv[i], &terminator, 16 );
-	  if( *terminator ) {
-	    /* can't parse as base-10 or base-16 int so assume string. */
-	    glob.wordargtype[glob.nargs] = RES_STR;
-	    glob.wordargdata[glob.nargs] = argv[i];
-	  }
-	}
-	glob.nargs++;
-    } else if( strcmp( argv[i], "-wr" ) == 0 ) {
-	i++;
-	if( i >= argc ) usage( NULL );
-	if( glob.nres >= 32 ) usage( "Max results = 32" );
-	if( strcmp( argv[i], "int" ) == 0 ) glob.wordrestype[glob.nres] = RES_INT;
-	else if( strcmp( argv[i], "str" ) == 0 ) glob.wordrestype[glob.nres] = RES_STR;
-	else usage( "Result type must be int or str" );
-	glob.nres++;
     } else usage( NULL );
     i++;
   }
@@ -188,34 +144,7 @@ int main( int argc, char **argv ) {
   }
 
   start = rpc_now();
-  if( glob.word & 0x8000 ) {
-    for( i = 0; i < glob.nargs; i++ ) {
-      switch( glob.wordargtype[i] ) {
-      case RES_INT:
-	break;
-      case RES_STR:
-	/* copy the string into program memory at bottom of stack, set arg to address */
-	len = strlen( glob.wordargdata[i] ) + 1;
-	memcpy( (char *)&glob.fvm.mem[glob.fvm.bos], glob.wordargdata[i], len );
-	glob.wordarg[i] = glob.fvm.bos;
-	glob.fvm.bos += (len / 2) + (len % 2);
-	break;
-      }
-      
-      fvm_call_word( &glob.fvm, glob.word & ~0x8000, glob.wordarg, glob.nargs, glob.wordres, glob.nres );
-      for( i = 0; i < glob.nres; i++ ) {
-	switch( glob.wordrestype[i] ) {
-	case RES_INT:
-	  printf( "%04x\n", glob.wordres[i] );
-	  break;
-	case RES_STR:
-	  printf( "%s\n", (char *)&glob.fvm.mem[glob.wordres[i]] );
-	  break;
-	}
-      }
-    }
-  }
-  else if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
+  if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
   else if( glob.timeout ) fvm_run_timeout( &glob.fvm, glob.timeout );
   else {
       do {

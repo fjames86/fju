@@ -1104,58 +1104,6 @@ int fvm_reset( struct fvm_state *fvm ) {
   return 0;
 }
 
-
-/* remove this? */
-int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, uint16_t *res, int nres ) {
-    uint16_t regs[FVM_REG_MAX];
-    int i;
-
-    /* save registers */
-    for( i = 0; i < FVM_REG_MAX; i++ ) {
-	regs[i] = fvm->reg[i];
-    }
-
-    /* set pc to work */
-    fvm->reg[FVM_REG_PC] = fvm->mem[word & 0x07ff];
-
-    /* push args onto stack */
-    for( i = 0; i < nargs; i++ ) {
-	fvm->mem[fvm->reg[FVM_REG_SP]] = args[i];
-	fvm->reg[FVM_REG_SP]--;
-    }
-    /* push current address */
-    fvm->mem[fvm->reg[FVM_REG_RP]] = fvm->reg[FVM_REG_PC];
-    fvm->reg[FVM_REG_RP]--;
-    
-    /* 
-     * run until it returns. 
-     * detect by watching rp get back to where it started 
-     */
-    while( fvm->flags & FVM_FLAG_RUNNING ) {
-	fvm_step( fvm );
-
-	/* detect word returned by checking return stack */
-	if( fvm->reg[FVM_REG_RP] == regs[FVM_REG_RP] ) {
-	    fvm->flags &= ~FVM_FLAG_RUNNING;
-	    fvm->flags |= FVM_FLAG_DONE;	    
-	    break; 
-	}
-    }
-
-    /* extract results */
-    for( i = 0; i < nres; i++ ) {
-	fvm->reg[FVM_REG_SP]++;
-	res[(nres - 1) - i] = fvm->mem[fvm->reg[FVM_REG_SP]];
-    }
-    
-    /* restore registers */
-    for( i = 0; i < FVM_REG_MAX; i++ ) {
-	fvm->reg[i] = regs[i];
-    }
-
-    return 0;
-}
-
 static void fvm_set_dirty_page( struct fvm_state *fvm, uint16_t page ) {
   int idx, off;
   idx = page / 32;

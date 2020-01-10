@@ -116,7 +116,6 @@ int fvm_run( struct fvm_state *state );
 int fvm_run_nsteps( struct fvm_state *state, int nsteps );
 int fvm_run_timeout( struct fvm_state *state, int timeout );
 int fvm_reset( struct fvm_state *fvm );
-int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, uint16_t *res, int nres );
 
 #define FVM_INT_EXCEPTION 0x8000 
 #define FVM_INT_PME       0x00    /* privilege mode exception */

@@ -1006,6 +1006,8 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
 
   /* check header */
   if( hdr->magic != FVM_PROGRAM_MAGIC ) return -1;
+
+  fvm_dirty_reset( state );
   
   memset( state->mem, 0, sizeof(state->mem) );
   i = 0;
@@ -1034,6 +1036,8 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
 	  state->mem[offset + j] = program[i];
 	  i++;
       }
+      
+      fvm_set_dirty_region( state, offset / FVM_PAGE_SIZE, (count / FVM_PAGE_SIZE) + (count % FVM_PAGE_SIZE ? 1 : 0) );
   }
 
   fvm_reset( state );
@@ -1049,9 +1053,7 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   /* set other rpc parameters: default to no authentication and talking to local fjud */
   state->rpc.service = -1; 
   state->rpc.hostid = hostreg_localid();
-  
-  fvm_dirty_reset( state );
-
+ 
   state->id = 0xffffffff;
 
   if( crc != hdr->crc32 ) {

@@ -103,8 +103,12 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, uint32_t fla
     struct nls_share nls;
     
     lf = glob.flist;
-    if( !lf ) return NULL;
-    glob.flist = glob.flist->next;
+    if( !lf ) {
+      /* freelist exhausted - allocate new instance? */
+      lf = malloc( sizeof(*lf) );
+    } else {
+      glob.flist = glob.flist->next;
+    }
 
     memset( lf, 0, sizeof(*lf) );
     lf->id = ++glob.idseq;

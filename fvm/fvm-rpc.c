@@ -1,4 +1,4 @@
-/*
+ /*
  * MIT License
  * 
  * Copyright (c) 2019 Frank James
@@ -145,6 +145,13 @@ static struct loaded_fvm *fvm_load_prog( uint8_t *bufp, int buflen, uint32_t fla
 	    lf->fvm.outlog = &lf->outlog;
 	    lf->outlogid = outid;
 	}
+    } else {
+      /* use default log file otherwise */
+      sts = log_open( NULL, NULL, &lf->outlog );
+      if( !sts ) {
+	lf->fvm.outlog = &lf->outlog;
+	lf->outlogid = -1;
+      }
     }
     
     lf->flags = flags;

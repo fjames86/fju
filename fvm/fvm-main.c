@@ -39,6 +39,7 @@
 #include <fju/rpc.h>
 #include <fju/nls.h>
 #include <fju/hostreg.h>
+#include <fju/freg.h>
 
 static void usage( char *fmt, ... ) {
   va_list args;
@@ -52,6 +53,7 @@ static void usage( char *fmt, ... ) {
 	  "     -n nsteps          Limit runtime by number of clock ticks.\n"
 	  "     -t timeout         Limit runtime by number of milliseconds.\n"
 	  "     -i inlog -o outlog Set in/out log files.\n"
+	  "     -I [-r]            Install program, -r embed program in registry \n"	  
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -72,6 +74,10 @@ static struct {
   char *inlog;
   char *outlog;
   struct log_s logs[2];
+  int install;
+#define INSTALL_PATH 1
+#define INSTALL_REG  2
+  char *install_name;
 } glob;
 
 int main( int argc, char **argv ) {
@@ -118,10 +124,38 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       glob.outlog = argv[i];
+    } else if( strcmp( argv[i], "-I" ) == 0 ) {
+      glob.install = INSTALL_PATH;
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.install_name = argv[i];
+    } else if( strcmp( argv[i], "-r" ) == 0 ) {
+      if( glob.install ) glob.install = INSTALL_REG;
     } else usage( NULL );
     i++;
   }
   if( path == NULL ) usage( NULL );
+
+  if( glob.install ) {
+    uint64_t id;
+    sts = freg_subkey( NULL, 0, "/fju/fvm/programs", FREG_CREATE, &id );
+    if( sts ) usage( "Failed to get /fju/fvm/programs" );
+    sts = freg_subkey( NULL, id, glob.install_name, FREG_CREATE, &id );
+    if( sts ) usage( "Failed to create program entry" );
+    if( glob.install == INSTALL_PATH ) {
+      freg_put( NULL, id, "path", FREG_TYPE_STRING, path, strlen( path ), NULL );
+    } else if( glob.install == INSTALL_REG ) {
+      sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+      if( sts ) usage( "Failed to open program file \"%s\"", path );
+      sts = mmf_remap( &mmf, mmf.fsize );
+      if( sts ) usage( "Failed to map program" );
+      freg_put( NULL, id, "progdata", FREG_TYPE_OPAQUE, mmf.file, mmf.fsize, NULL );
+      mmf_close( &mmf );
+    }
+    exit( 0 );
+  }
+
+
   
   sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
   if( sts ) usage( "Failed to open program file \"%s\"", path );

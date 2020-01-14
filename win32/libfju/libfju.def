@@ -216,7 +216,6 @@ fvm_run
 fvm_run_nsteps
 fvm_run_timeout
 fvm_reset
-fvm_call_word
 fvm_register
 fvm_interrupt
 rpcdp

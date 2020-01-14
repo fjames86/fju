@@ -548,6 +548,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
   }  
 }
 
+/* private function only used in fvm-rpc.c */
 int fvm_write_mem( struct fvm_state *fvm, char *buf, int len, int offset ) {
     memcpy( &fvm->mem[offset], buf, len );
     fvm_set_dirty_region( fvm, offset / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + (len % FVM_PAGE_SIZE) ? 1 : 0);

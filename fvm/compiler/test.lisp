@@ -257,8 +257,8 @@
 
 (defconstant +fjud-prog+ (+ #x2fff7770 7))
 (defrpc call-cmdprog-event (+fjud-prog+ 1 2)
-  :arg-body ;; (eventid category --)
-  (xdr-encode-uint32 xdr-encode-uint32 0 0 xdr-encode-opaque)
+  :arg-body ;; (categoryH categoryL eventidH eventidL --)
+  (swap2 xdr-encode-uint32 xdr-encode-uint32 0 0 xdr-encode-opaque)
   :result-body
   ("call-cmdprog-event success" dumpstr)
   :fail-body

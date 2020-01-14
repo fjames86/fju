@@ -522,8 +522,8 @@
 (macrolet ((def-rpcdev-cmd (name cmd)
 	     `(defword ,name (:inline t) ,cmd rpcdev-cmd)))
   (def-rpcdev-cmd xdr-reset 0)         ;; ( -- )
-  (def-rpcdev-cmd xdr-encode-uint32 1) ;; ( low high --)
-  (def-rpcdev-cmd xdr-encode-uint64 2) ;; ( low ... high --)
+  (def-rpcdev-cmd xdr-encode-uint32 1) ;; ( high low --)
+  (def-rpcdev-cmd xdr-encode-uint64 2) ;; ( high ... low --)
   (def-rpcdev-cmd xdr-encode-string 3) ;; ( addr -- )
   (def-rpcdev-cmd xdr-encode-opaque 4) ;; ( addr len --)
   (def-rpcdev-cmd xdr-encode-fixed 5)  ;; ( addr len --)
@@ -539,9 +539,12 @@
   (def-rpcdev-cmd set-rpc-service 15)  ;; (service --)
   (def-rpcdev-cmd get-rpc-hostid 16)   ;; ( -- sevice )
   (def-rpcdev-cmd set-rpc-hostid 17)  ;; (service --)
-  (def-rpcdev-cmd set-rpc-buffer 18) ;; (count bufaddr --)
-  (def-rpcdev-cmd get-rpc-offset 19) ;; ( -- offset)
+  (def-rpcdev-cmd get-rpc-offset 18) ;; ( -- offset)
   )
+
+;; returns the address of the rpc buffer 
+(defword get-rpc-buffer () ;; (--addr)
+  #x1000)
 
 (defword xdr-encode-boolean (:inline t)
   0 swap xdr-encode-uint32)

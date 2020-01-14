@@ -53,7 +53,8 @@ static void usage( char *fmt, ... ) {
 	  "     -n nsteps          Limit runtime by number of clock ticks.\n"
 	  "     -t timeout         Limit runtime by number of milliseconds.\n"
 	  "     -i inlog -o outlog Set in/out log files.\n"
-	  "     -I [-r]            Install program, -r embed program in registry \n"	  
+	  "     -I name            Install program with given name\n"
+	  "     -I name [-r]       If installing, embed program in registry \n"	  
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -175,7 +176,12 @@ int main( int argc, char **argv ) {
     sts = log_open( glob.outlog, NULL, &glob.logs[1] );
     if( sts ) usage( "Failed to open outlog" );
     glob.fvm.outlog = &glob.logs[1];
+  } else {
+    sts = log_open( NULL, NULL, &glob.logs[1] );
+    if( sts ) usage( "Failed to open default log" );
+    glob.fvm.outlog = &glob.logs[1];
   }
+    
 
   start = rpc_now();
   if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );

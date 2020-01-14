@@ -603,7 +603,7 @@ static struct loaded_fvm *load_freg_prog( struct freg_entry *entry ) {
     freg_get_by_name( NULL, id, "outlog", FREG_TYPE_UINT64, (char *)&outlog, sizeof(outlog), NULL );
 
     lf = fvm_load_prog( (uint8_t *)progdata, proglen, flags, inlog, outlog, entry->name );
-    log_writef( NULL, LOG_LVL_INFO, "Loaded startup program \"%s\" len=%d flags=%x inlog=%"PRIx64" outlog=%"PRIx64"",
+    log_writef( NULL, LOG_LVL_INFO, "Loaded program \"%s\" len=%d flags=%x inlog=%"PRIx64" outlog=%"PRIx64"",
 		entry->name, proglen, flags, inlog, outlog );
     
     free( progdata );
@@ -651,9 +651,6 @@ static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t 
   int i;
   struct loaded_fvm *lf;
   
-  (void)(parm); /* currently unused */
-  (void)(parmsize);
-  
   for( i = 0; i < glob.nevtprogs; i++ ) {
     ep = &glob.evtprogs[i];
     
@@ -666,10 +663,10 @@ static void fvm_evt_cb( struct rpcd_subscriber *sc, uint32_t category, uint32_t 
 	  fvm_write_mem( &lf->fvm, parm, parmsize, lf->fvm.bos );
 	  
 	  lf->fvm.reg[FVM_REG_R0] = (uint16_t)parmsize;
-	  fvm_push_value( &lf->fvm, category & 0xffff );
 	  fvm_push_value( &lf->fvm, category >> 16 );
-	  fvm_push_value( &lf->fvm, id & 0xffff );
+	  fvm_push_value( &lf->fvm, category & 0xffff );
 	  fvm_push_value( &lf->fvm, id >> 16 );
+	  fvm_push_value( &lf->fvm, id & 0xffff );
       }
     }
     

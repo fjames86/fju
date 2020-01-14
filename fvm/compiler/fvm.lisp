@@ -533,8 +533,8 @@ assembled object code."
 		       (setf body (cdr body))
 		       `((br-pnz 2)
 			 (.blkw ,(logand (ash val -16) #xffff) ,(logand val #xffff))
-			 (ld r0 -3)
-			 (ld r1 -3)
+			 (ld r0 -3) ;; high 
+			 (ld r1 -3) ;; low 
 			 (push r0)
 			 (push r1))))
 		    ((eq wrd 'uint64)

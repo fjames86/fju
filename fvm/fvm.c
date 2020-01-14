@@ -48,11 +48,27 @@
  * 0x0000 - 0x07ff word jump table 
  * 0x0800 - 0x08ff isr table 
  * 0x0900 - 0x0aff shared memory area (512 words, 1024 bytes)
- * 0x0b00 - 0x0fff unused/reserved
- * 0x1000 - 0x2fff return stack 
+ * 0x0b00 - 0x0fff unused 
+ * 0x1000 - 0x17ff rpc buffer (2048 words, 4k bytes)
+ * 0x1800 - 0x27ff unused 
+ * 0x2800 - 0x2fff return stack 
  * 0x3000 - 0xfdff user program code + data stack 
  * 0xfe00 - 0xffff device registers 
  */
+
+#define FVM_ADDR_WORDTABLE  0x0000
+#define FVM_ADDR_ISRTABLE   0x0800
+#define FVM_ADDR_SHMEM      0x0900
+#define FVM_ADDR_SHMEMHIGH  0x0aff
+#define FVM_ADDR_RPCBUF     0x1000
+#define FVM_ADDR_RPCBUFHIGH 0x17ff 
+#define FVM_ADDR_RSTACKLOW  0x2800
+#define FVM_ADDR_RSTACKHIGH 0x2fff
+#define FVM_ADDR_USER       0x3000
+#define FVM_ADDR_DSTACKHIGH 0xfdff
+#define FVM_ADDR_DEVICE     0xfe00
+
+
 
 #define FVM_PUSH(fvm,val) do { write_mem( fvm, fvm->reg[FVM_REG_SP], val ); fvm->reg[FVM_REG_SP]--; } while( 0 )
 #define FVM_POP(fvm) (fvm->reg[FVM_REG_SP]++, fvm->mem[fvm->reg[FVM_REG_SP]])
@@ -94,7 +110,7 @@ static void update_flags( struct fvm_state *state, uint16_t x ) {
 #define FVM_DEVICE_IDHIGH 0xfe0b
 
 static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
-  if( offset >= 0xfe00 ) {
+  if( offset >= FVM_ADDR_DEVICE ) {
     /* memory mapped device registers */
     switch( offset ) {
     case FVM_DEVICE_MCR:
@@ -138,8 +154,7 @@ static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
 #define FVM_RPCCMD_SETSERVICE   15 
 #define FVM_RPCCMD_GETHOSTID    16
 #define FVM_RPCCMD_SETHOSTID    17 
-#define FVM_RPCCMD_SETBUF       18
-#define FVM_RPCCMD_GETOFFSET    19
+#define FVM_RPCCMD_GETOFFSET    18
 
 void fvm_rpc_force_iter( void );
 
@@ -254,8 +269,8 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       uint16_t words[2];
       uint32_t u32;
       
-      words[0] = FVM_POP(fvm);
-      words[1] = FVM_POP(fvm);
+      words[0] = FVM_POP(fvm); 
+      words[1] = FVM_POP(fvm); 
       u32 = ((uint32_t)words[1] << 16) | words[0];
       sts = xdr_encode_uint32( &fvm->rpc.buf, u32 );
     }
@@ -424,15 +439,6 @@ static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
       fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 48;
     }
     break;
-  case FVM_RPCCMD_SETBUF:
-    {
-      uint16_t bufaddr, bufsize;
-      bufaddr = FVM_POP(fvm);
-      bufsize = FVM_POP(fvm);
-      xdr_init( &fvm->rpc.buf, (uint8_t *)&fvm->mem[bufaddr], bufsize );
-      fvm->rpc.bufaddr = bufaddr;
-    }
-    break;
   case FVM_RPCCMD_GETOFFSET:
     FVM_PUSH( fvm, fvm->rpc.buf.offset );
     break;
@@ -452,7 +458,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
   struct log_entry entry;
   struct log_iov iov[1];
 	
-  if( offset >= 0xfe00 ) {
+  if( offset >= FVM_ADDR_DEVICE ) {
     /* write to memory mapped device registers */
     switch( offset ) {
     case FVM_DEVICE_MCR:
@@ -537,7 +543,7 @@ static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) 
       devrpc_writemem( state, val );
       break;
     }
-  } else if( offset < 0x0900 ) {
+  } else if( offset < FVM_ADDR_SHMEM ) {
       /* read only area - do nothing */
   } else {
       /* just write into memory */
@@ -557,7 +563,7 @@ int fvm_write_mem( struct fvm_state *fvm, char *buf, int len, int offset ) {
 
 
 static void set_pc( struct fvm_state *state, uint16_t val ) {
-    if( val <= 0x2fff || val >= 0xfe00 ) {
+    if( val <= FVM_ADDR_RSTACKHIGH || val >= FVM_ADDR_DEVICE ) {
 	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Attempt to set PC to invalid address %x\n", val );
 	//fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
 	//state->flags &= ~FVM_FLAG_RUNNING;
@@ -1026,9 +1032,7 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
       }
 
       if( (offset + count) > bos ) bos = offset + count;
-
-      crc = sec_crc32( crc, (char *)&program[i], 2 * count );
-      
+      crc = sec_crc32( crc, (char *)&program[i], 2 * count );      
       for( j = 0; j < count; j++ ) {
 	  if( i >= proglen ) {
 	      return -1;
@@ -1044,12 +1048,9 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   fvm_reset( state );
   state->bos = bos;
 
-  /* 
-   * default to setting rpc device buffer at bottom of stack. Typically programs 
-   * should reset the buffer somewhere else.
-   */
-  xdr_init( &state->rpc.buf, (uint8_t *)&state->mem[bos], 1024 );
-  state->rpc.bufaddr = bos;
+  /* set rpc buffer */
+  xdr_init( &state->rpc.buf, (uint8_t *)&state->mem[FVM_ADDR_RPCBUF], 4096 );
+  state->rpc.bufaddr = FVM_ADDR_RPCBUF;
   
   /* set other rpc parameters: default to no authentication and talking to local fjud */
   state->rpc.service = -1; 
@@ -1173,7 +1174,7 @@ int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset ) {
     len = n;
     if( offset > FVM_MAX_SHMEM ) return -1;
     if( len >= (FVM_MAX_SHMEM - offset) ) len = FVM_MAX_SHMEM - offset;
-    memcpy( buf, &fvm->mem[0x0900], len );
+    memcpy( buf, &fvm->mem[FVM_ADDR_SHMEM], len );
     return len;
 }
 int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
@@ -1186,7 +1187,7 @@ int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
     if( len >= (FVM_MAX_SHMEM - offset) ) len = FVM_MAX_SHMEM - offset;    
     memcpy( &fvm->mem[0x900], buf, len );
 
-    startpage = 0x0900 / FVM_PAGE_SIZE;
+    startpage = FVM_ADDR_SHMEM / FVM_PAGE_SIZE;
     npage = (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0);
     for( i = 0; i < npage; i++ ) {
       fvm_set_dirty_page( fvm, startpage + i );

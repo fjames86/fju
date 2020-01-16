@@ -99,8 +99,10 @@ static void fvm_shmemread_args( int argc, char **argv, int i, struct xdr_s *xdr 
 static void fvm_shmemread_results( struct xdr_s *xdr );
 static void fvm_shmemwrite_results( struct xdr_s *xdr );
 static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_dirty_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_dirty_read_results( struct xdr_s *xdr );
+static void fvm_read_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_read_dirty_results( struct xdr_s *xdr );
+static void fvm_write_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_write_dirty_results( struct xdr_s *xdr );
 
 
 
@@ -128,7 +130,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.msg", "id=ID msgid=ID msg=*" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_shmemread_args, fvm_shmemread_results, "fvm.read", "id=ID len=*" },
     { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_shmemwrite_args, fvm_shmemwrite_results, "fvm.write", "id=ID [int=*] [str=*] [buf=*]" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 9, fvm_dirty_read_args, fvm_dirty_read_results, "fvm.dirty_read", "id=ID" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 9, fvm_read_dirty_args, fvm_read_dirty_results, "fvm.read_dirty", "id=ID [path=*]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 10, fvm_write_dirty_args, fvm_write_dirty_results, "fvm.write_dirty", "id=ID path=*" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
     { 0, 0, 0, NULL, NULL, NULL }
@@ -1096,7 +1099,8 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 static void fvm_load_results( struct xdr_s *xdr ) {
   uint32_t id;
   xdr_decode_uint32( xdr, &id );
-  printf( "id=%u\n", id );
+  if( id == 0 ) printf( "Failed to load program" );
+  else printf( "id=%u\n", id );
 }
 
 static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
@@ -1334,8 +1338,11 @@ static void fvm_shmemwrite_results( struct xdr_s *xdr ) {
     printf( "%s\n", b ? "Success" : "Failure" );
 }
 
+static struct {
+  char *results_path;
+} dirty_read_prv;
 
-static void fvm_dirty_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+static void fvm_read_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     char argname[64], *argval;
     uint32_t id;
     
@@ -1343,6 +1350,8 @@ static void fvm_dirty_read_args( int argc, char **argv, int i, struct xdr_s *xdr
 	argval_split( argv[i], argname, &argval );
 	if( strcmp( argname, "id" ) == 0 ) {
 	    id = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "path" ) == 0 ) {
+  	    dirty_read_prv.results_path = argval;
 	} else usage( NULL );
 	i++;
     }
@@ -1350,14 +1359,25 @@ static void fvm_dirty_read_args( int argc, char **argv, int i, struct xdr_s *xdr
     xdr_encode_uint32( xdr, id );
 }
 
-static void fvm_dirty_read_results( struct xdr_s *xdr ) {
+static void fvm_read_dirty_results( struct xdr_s *xdr ) {
   int b, lenp, sts, i;
   char *bufp;
   uint32_t offset;
-
+  int save = 0;
+  struct mmf_s mmf;
+  int file_offset = 0;
+  
+  if( dirty_read_prv.results_path ) save = 1;
+  
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "xdr error" );
   if( !b ) usage( "Invalid ID" );
+
+  if( save ) {
+    sts = mmf_open( dirty_read_prv.results_path, &mmf );
+    if( sts ) usage( "Failed to open results file" );
+    mmf_truncate( &mmf, 0 );
+  }
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "xdr error" );
@@ -1367,14 +1387,77 @@ static void fvm_dirty_read_results( struct xdr_s *xdr ) {
     sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
     if( sts ) usage( "xdr error" );
 
-    printf( ";; 0x%04x: ", offset );
-    for( i = 0; i < lenp; i++ ) {
-      printf( "%02x", (uint32_t)(uint8_t)bufp[i] );
+    if( save ) {
+      mmf_write( &mmf, (char *)&offset, sizeof(offset), file_offset );
+      file_offset += 4;
+      mmf_write( &mmf, (char *)&lenp, sizeof(lenp), file_offset );
+      file_offset += 4;
+      
+      mmf_write( &mmf, bufp, lenp, file_offset );
+      file_offset += lenp;
+    } else {
+      printf( ";; 0x%04x: ", offset );
+      for( i = 0; i < lenp; i++ ) {
+	printf( "%02x", (uint32_t)(uint8_t)bufp[i] );
+      }
+      printf( "\n" );
     }
-    printf( "\n" );
     
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "xdr error" );
   }
+
+  if( save ) mmf_close( &mmf );
+}
+
+static void fvm_write_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t id = 0, off, len, sts, file_offset;
+    char *path = NULL;
+    char *buf;
+    struct mmf_s mmf;
+    
+    buf = malloc( 32*1024 );
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "path" ) == 0 ) {
+  	    path = argval;
+	} else usage( NULL );
+	i++;
+    }
+
+    if( !path ) usage( "Must provide path" );
+    
+    xdr_encode_uint32( xdr, id );
+    file_offset = 0;
+    
+    sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+    if( sts ) usage( "Failed to open" );
+    file_offset = 0;
+    while( file_offset < mmf.fsize ) {
+      xdr_encode_boolean( xdr, 1 );
+      
+      mmf_read( &mmf, (char *)&off, 4, file_offset );
+      file_offset += 4;
+      xdr_encode_uint32( xdr, off );
+      mmf_read( &mmf, (char *)&len, 4, file_offset );
+      file_offset += 4;
+      mmf_read( &mmf, buf, len, file_offset );
+      file_offset += len;
+      xdr_encode_opaque( xdr, (uint8_t *)buf, len );      
+    }
+    xdr_encode_boolean( xdr, 0 );
+    
+    mmf_close( &mmf );
+    free( buf );
+}
+
+static void fvm_write_dirty_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  
 }
 

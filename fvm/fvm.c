@@ -1006,43 +1006,46 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
   struct fvm_program_header *hdr;
   uint32_t crc;
 
-  hdr = (struct fvm_program_header *)progdata;
-  program = (uint16_t *)(progdata + sizeof(*hdr) );
-  proglen -= sizeof(*hdr);
-  proglen /= 2; /* convert to number of uint16_t */
-
-  /* check header */
-  if( hdr->magic != FVM_PROGRAM_MAGIC ) return -1;
-
-  fvm_dirty_reset( state );
-  
+  fvm_dirty_reset( state );  
   memset( state->mem, 0, sizeof(state->mem) );
-  i = 0;
-  crc = 0xffffffff;
-  while( i < proglen ) {
-      if( (i + 1) >= proglen ) {
-	  return -1;
-      }
 
+  hdr = NULL;
+  if( proglen >= sizeof(*hdr) ) {
+    hdr = (struct fvm_program_header *)progdata;
+    program = (uint16_t *)(progdata + sizeof(*hdr) );
+    proglen -= sizeof(*hdr);
+    proglen /= 2; /* convert to number of uint16_t */
+    
+    /* check header */
+    if( hdr->magic != FVM_PROGRAM_MAGIC ) return -1;
+    
+    i = 0;
+    crc = 0xffffffff;
+    while( i < proglen ) {
+      if( (i + 1) >= proglen ) {
+	return -1;
+      }
+      
       offset = program[i];
       count = program[i+1];
       i += 2;
       if( ((uint32_t)offset + (uint32_t)count) >= 0xffff ) {
-	  return -1;
+	return -1;
       }
-
+      
       if( (offset + count) > bos ) bos = offset + count;
       crc = sec_crc32( crc, (char *)&program[i], 2 * count );      
       for( j = 0; j < count; j++ ) {
-	  if( i >= proglen ) {
-	      return -1;
-	  }
-	  
-	  state->mem[offset + j] = program[i];
-	  i++;
+	if( i >= proglen ) {
+	  return -1;
+	}
+	
+	state->mem[offset + j] = program[i];
+	i++;
       }
       
       fvm_set_dirty_region( state, offset / FVM_PAGE_SIZE, (count / FVM_PAGE_SIZE) + (count % FVM_PAGE_SIZE ? 1 : 0) );
+    }
   }
 
   fvm_reset( state );
@@ -1058,7 +1061,7 @@ int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
  
   state->id = 0xffffffff;
 
-  if( crc != hdr->crc32 ) {
+  if( hdr && (crc != hdr->crc32) ) {
       printf( ";; crc32 mismatch hdr=0x%08x calculated=0x%08x\n", hdr->crc32, crc );
       return -1;
   }

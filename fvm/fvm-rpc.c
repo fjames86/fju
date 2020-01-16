@@ -186,10 +186,10 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
     return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   }
 
-  if( buflen == 0 ) {
-    lf = load_prog_by_name( name );
-  } else {
+  lf = load_prog_by_name( name );
+  if( !lf ) {
     lf = fvm_load_prog( (uint8_t *)bufp, buflen, flags, inid, outid, name );
+    if( lf && (buflen == 0) ) lf->fvm.flags &= ~FVM_FLAG_RUNNING;
   }
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -437,7 +437,21 @@ static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
       xdr_encode_boolean( &inc->xdr, 1 );
       xdr_encode_uint32( &inc->xdr, 0x00010000 );
       xdr_encode_opaque( &inc->xdr, (uint8_t *)lf->fvm.reg, sizeof(lf->fvm.reg) );
-
+      /* other state */
+      xdr_encode_boolean( &inc->xdr, 1 );
+      xdr_encode_uint32( &inc->xdr, 0x00020000 );
+      xdr_encode_uint32( &inc->xdr, 52 );
+      xdr_encode_uint32( &inc->xdr, lf->fvm.flags );
+      xdr_encode_uint64( &inc->xdr, lf->fvm.tickcount );
+      xdr_encode_uint32( &inc->xdr, lf->fvm.bos );
+      xdr_encode_uint64( &inc->xdr, lf->fvm.sleep_timeout );
+      xdr_encode_uint32( &inc->xdr, lf->fvm.rpc.bufaddr );
+      xdr_encode_uint32( &inc->xdr, lf->fvm.rpc.buf.offset );
+      xdr_encode_uint32( &inc->xdr, lf->fvm.rpc.buf.count );
+      xdr_encode_uint32( &inc->xdr, lf->fvm.rpc.timeout );
+      xdr_encode_uint32( &inc->xdr, lf->fvm.rpc.service );
+      xdr_encode_uint64( &inc->xdr, lf->fvm.rpc.hostid );
+	
       xdr_encode_boolean( &inc->xdr, 0 );
   } else {
       xdr_encode_boolean( &inc->xdr, 0 );
@@ -447,6 +461,82 @@ static int fvm_proc_read_dirty( struct rpc_inc *inc ) {
   
   return 0;
 }
+
+static int fvm_proc_write_dirty( struct rpc_inc *inc ) {
+  int handle, sts;
+  int lenp, b, offset;
+  uint32_t id;
+  char *bufp;
+  struct loaded_fvm *lf;
+  
+  sts = xdr_decode_uint32( &inc->xdr, &id );
+  if( sts ) goto badargs;
+
+  lf = lf_by_id( id );
+  if( !lf ) goto badargs;
+  
+  sts = xdr_decode_boolean( &inc->xdr, &b );
+  if( sts ) goto badargs;
+  while( b ) {
+    sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&offset );
+    if( sts ) goto badargs;
+
+    switch( offset ) {
+    case 0x00010000:
+      /* registers */
+      lenp = sizeof(lf->fvm.reg);
+      sts = xdr_decode_opaque( &inc->xdr, (uint8_t *)lf->fvm.reg, &lenp );
+      if( sts ) goto badargs;
+      break;
+    case 0x00020000:
+      /* misc state */
+      sts = xdr_decode_uint32( &inc->xdr, (uint32_t *)&lenp );
+      if( lenp != 52 ) goto badargs;
+
+      xdr_decode_uint32( &inc->xdr, &lf->fvm.flags );
+      xdr_decode_uint64( &inc->xdr, &lf->fvm.tickcount );
+      xdr_decode_uint32( &inc->xdr, (uint32_t *)&lenp );
+      lf->fvm.bos = lenp;
+      xdr_decode_uint64( &inc->xdr, &lf->fvm.sleep_timeout );
+      xdr_decode_uint32( &inc->xdr, (uint32_t *)&lenp );
+      lf->fvm.rpc.bufaddr = lenp;  
+      xdr_decode_uint32( &inc->xdr, (uint32_t *)&lf->fvm.rpc.buf.offset );
+      xdr_decode_uint32( &inc->xdr, (uint32_t *)&lf->fvm.rpc.buf.count );
+      xdr_decode_uint32( &inc->xdr, (uint32_t *)&lenp );
+      lf->fvm.rpc.timeout = lenp;
+      xdr_decode_uint32( &inc->xdr, (uint32_t *)&lenp );
+      lf->fvm.rpc.service = lenp;
+      xdr_decode_uint64( &inc->xdr, &lf->fvm.rpc.hostid );
+			 
+      break;
+    default:
+      /* memory */
+      sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+      if( sts ) goto badargs;
+
+      fvm_write_mem( &lf->fvm, bufp, lenp, offset );
+      
+      break;
+    }
+    
+    sts = xdr_decode_boolean( &inc->xdr, &b );
+    if( sts ) goto badargs;
+  }
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, 1 );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+
+ badargs:
+  return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+}
+
+  
+
+
+
 
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
@@ -458,7 +548,8 @@ static struct rpc_proc fvm_procs[] = {
   { 6, fvm_proc_msg },
   { 7, fvm_proc_shmemread },
   { 8, fvm_proc_shmemwrite },
-  { 9, fvm_proc_read_dirty },  
+  { 9, fvm_proc_read_dirty },
+  { 10, fvm_proc_write_dirty },  
   { 0, NULL }
 };
 

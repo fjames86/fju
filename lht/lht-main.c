@@ -22,7 +22,12 @@
  * SOFTWARE.
  * 
 */
- 
+
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>

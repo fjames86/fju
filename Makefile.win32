@@ -18,7 +18,8 @@ libs += ${LIBDIR}/librpc.a
 libs += ${LIBDIR}/libftab.a
 libs += ${LIBDIR}/libfdtab.a
 libs += ${LIBDIR}/libfreg.a
-libs += ${LIBDIR}/libfvm.a 
+libs += ${LIBDIR}/libfvm.a
+libs += ${LIBDIR}/liblht.a 
 
 progs += ${BINDIR}/fjlog.exe
 progs += ${BINDIR}/hostreg.exe
@@ -32,7 +33,8 @@ progs += ${BINDIR}/fdtab.exe
 progs += ${BINDIR}/freg.exe
 progs += ${BINDIR}/ecdh.exe
 progs += ${BINDIR}/shamir.exe
-progs += ${BINDIR}/fvm.exe 
+progs += ${BINDIR}/fvm.exe
+progs += ${BINDIR}/lht.exe 
 
 .PHONY: all clean strip 
 
@@ -93,6 +95,10 @@ ${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-rpc.c
 	gcc -c ${CFLAGS} fvm/fvm.c fvm/fvm-rpc.c 
 	ar rcs ${LIBDIR}/libfvm.a fvm.o fvm-rpc.o 
 
+${LIBDIR}/liblht.a: lht/lht.c 
+	gcc -c ${CFLAGS} lht/lht.c
+	ar rcs ${LIBDIR}/liblht.a lht.o 
+
 ${BINDIR}/fjlog.exe: log/fjlog.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -lfju 
 
@@ -138,6 +144,9 @@ ${BINDIR}/shamir.exe: sec/shamir.c ${LIBDIR}/libfju.dll
 ${BINDIR}/fvm.exe: fvm/fvm-main.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/fvm.exe ${CFLAGS} fvm/fvm-main.c -L${LIBDIR} -lfju -lws2_32 
 
+${BINDIR}/lht.exe: lht/lht-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/lht.exe ${CFLAGS} lht/lht-main.c -L${LIBDIR} -lfju
+
 FJU_DEPS += ${LIBDIR}/libmmf.a
 FJU_LIBS += -lmmf
 FJU_DEPS += ${LIBDIR}/liblog.a
@@ -164,6 +173,8 @@ FJU_DEPS += ${LIBDIR}/libfreg.a
 FJU_LIBS += -lfreg
 FJU_DEPS += ${LIBDIR}/libfvm.a
 FJU_LIBS += -lfvm
+FJU_DEPS += ${LIBDIR}/liblht.a
+FJU_LIBS += -llht
 
 ${LIBDIR}/libfju.dll: ${FJU_DEPS}
 	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive -luuid -lole32 -lbcrypt -lws2_32 -liphlpapi

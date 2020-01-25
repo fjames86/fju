@@ -1,4 +1,9 @@
 
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

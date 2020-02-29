@@ -15,10 +15,10 @@
   (push r1))
 (defword drop (:inline t)
   (pop r0))
-(defword dup ()
+(defword dup (:inline t)
   (ldr r0 sp 1)
   (push r0))
-(defword 2dup ()
+(defword 2dup (:inline t)
   (ldr r0 sp 1)
   (push r0)
   (push r0))
@@ -28,12 +28,12 @@
   (push r0)
   (push r1))
 (defword rot () ;; (a b c -- c a b)
-  (pop r0)
-  (pop r1)
-  (pop r2)
-  (push r0)
-  (push r1)
-  (push r2))
+  (pop r0) ;; c 
+  (pop r1) ;; b
+  (pop r2) ;; a
+  (push r0) ;; c 
+  (push r2) ;; a
+  (push r1)) ;; b
 (defword over () ;; (a b -- a b a)
   (pop r0)
   (pop r1)
@@ -82,29 +82,29 @@
 (defword zero (:inline t)
   (ldi r0 0)
   (push r0))
-(defword 1+ ()
+(defword 1+ (:inline t)
   (pop r0)
   (add r0 r0 1)
   (push r0))
-(defword 1- ()
+(defword 1- (:inline t)
   (pop r0)
   (add r0 r0 -1)
   (push r0))
-(defword 2+ ()
+(defword 2+ (:inline t)
   (pop r0)
   (add r0 r0 2)
   (push r0))
-(defword 2- ()
+(defword 2- (:inline t)
   (pop r0)
   (add r0 r0 -2)
   (push r0))
-(defword r> ()
+(defword r> (:inline t)  ;; pop return stack onto data stack
   (rpop r0)
   (push r0))
-(defword r< ()
+(defword >r (:inline t)  ;; pop stack stack onto return stack
   (pop r0)
   (rpush r0))
-(defword r@ ()
+(defword r@ (:inline t)  ;; fetch return stack to data stack 
   (ldr r0 r6 1)
   (push r0))
 
@@ -150,6 +150,9 @@
 (defword i (:inline t)   ;; get current loop index 
   (ldr r0 rp 1) ;; r0=[rp+1]
   (push r0))
+(defword j (:inline t)    ;; get current outer loop index
+  (ldr r0 rp 4)
+  (push r0))
 (defword dumpchr () ;; ( char -- )
   (lisp +console-data-register+) !)
 (defword true (:inline t)
@@ -182,10 +185,12 @@
   drop)
 (defword cr ()
   10 dumpchr)
-(defword tos ()
+(defword tos (:inline t)
   (push r6))
 (defword bos ()
   variable *bottom-of-stack*)
+(defword shmem ()
+  #x900)
 (defword zero! () ;; (addr --)
   (pop r0)
   (sti r0 0))
@@ -299,6 +304,44 @@
   loop
   drop)
 
+(defword dumpdecchr () ;; (x -- )
+  10 mod #\0 + dumpchr)
+
+(defword dumpdec () ;; (x -- )
+  dup if 
+  dup 10000 / dup if dumpdecchr else drop then
+  dup 1000 / dup if dumpdecchr else drop then
+  dup 100 / dup if dumpdecchr else drop then
+  dup 10 / dup if dumpdecchr else drop then
+  dumpdecchr
+  else
+  0 dumpdecchr
+  then)
+
+
+;; (defword sprintf (:gensyms (fmt dst)) ;; (...args... fmt dst -- )
+;;   ;; decalre some local variables for the format string and destionation buffer 
+;;   local-variable fmt
+;;   local-variable dst
+;;   ;; store format and dst in local variables 
+;;   local! dst
+;;   local! fmt 
+
+;;   begin
+;;   local fmt @ ;; get next pair of format characters
+  
+;;     dup #\% =
+;;   if    ;; this ia a control character
+  
+;;   else  ;; this is a normal character
+;;     local dst ! ;; store the char in dest buffer
+;;     ;; increment fmt and dst pointers 
+;;     local fmt 1+ local! fmt 
+;;     local dst 1+ local! dst 
+;;   then
+;;   true until)
+  
+  
 (defword tick-count () ;; ( -- x)
   #xfe03 @)
 
@@ -324,30 +367,346 @@
 (defword reset-input () ;; ( -- )
   1 #xfe06 !)
 
-(defword write-output () ;; (addr count -- )
-  (pop r1)
+(defword write-output () ;; (addr -- )
   (pop r0)
   (ldi r2 0)
   (br-pnz 1)
   (.blkw #xfe07) ;; address of output data register 
   (ld r3 -2)
-  (str r3 r2 0)) ;; write 0 to #xfe07
+  (str r3 r2 0)) ;; write 0 to #xfe07. val=0 implies write string 
+(defword write-output-binary () ;; (addr count -- )
+  (pop r1) ;; r1=count 
+  (pop r0) ;; r0=addr 
+  (ldi r2 1)
+  (br-pnz 1)
+  (.blkw #xfe07) ;; address of output data register 
+  (ld r3 -2)
+  (str r3 r2 0)) ;; write to #xfe07. val=1 implies write binary 
+
+
+(let ((again (gensym)))
+  (defword memcpy () ;; (dest-addr src-addr count --)
+    (pop r0) ;; count
+    (pop r1) ;; src-addr
+    (pop r2) ;; dest-addr
+    (ldi r4 0) ;; loop index 
+    (lisp again) ;; start label
+    (ldr r3 r1 0)
+    (str r2 r3 0) ;; copy value
+    (add r1 r1 1)
+    (add r2 r2 1) ;; increment addresses
+    (add r4 r4 1) ;; increment loop index 
+    (cmp r5 r4 r0) ;; test index
+    (lisp `((br-pn ,again)))))
+
+(let ((again (gensym)))
+  (defword memset () ;; (dest-addr val count --)
+    (pop r0) ;; count
+    (pop r1) ;; val
+    (pop r2) ;; dest-addr
+    (ldi r4 0) ;; loop index 
+    (lisp again) ;; start label
+    (str r2 r1 0) ;; copy value
+    (add r2 r2 1) ;; increment address
+    (add r4 r4 1) ;; increment loop index 
+    (cmp r5 r4 r0) ;; test index
+    (lisp `((br-pn ,again)))))
+
+(let ((again (gensym))
+      (done (gensym)))
+  (defword strlen () ;; (addr --len)
+    (pop r0)   ;; addr 
+    (ldi r1 0) ;; len
+    (lisp again)
+    (ldr r2 r0 0) ;; get char
+    (add r0 r0 1) ;; increment address
+    (ldi r3 16)     ;; load 16
+
+    ;; lshift 8 and test
+    (mul r4 r2 r3)  
+    (mul r4 r4 r3)  
+    (lisp `((br-z ,done)))
+    (add r1 r1 1)
+
+    ;; rshift 8 and test
+    (div r4 r2 r3)
+    (div r4 r4 r3)
+    (lisp `((br-z ,done)))
+    (add r1 r1 1)
+
+    (lisp `((br-pnz ,again)))
+    (lisp done)
+    (push r1)))
+
+(let ((gagain (gensym))
+      (gfirstzero (gensym))
+      (gsecondzero (gensym))
+      (gdone (gensym))
+      (gsuccess (gensym)))	
+  (defword strcmp () ;; (str1 str2 -- f)
+    (lisp 
+     `((pop r1)  ;; str2
+       (pop r0)  ;; str1
+       ,gagain
+       ;; fetch chars
+       (ldr r2 r0 0)
+       (ldr r3 r1 0)
+       ;; test first char
+       (add r2 r2 0) 
+       (br-z ,gfirstzero)
+       ;; test second char 
+       (add r3 r3 0)
+       (br-z ,gsecondzero)
+       ;; both are non-zero - increment addresses and loop 
+       (add r0 r0 1)
+       (add r1 r1 1)
+       (br-pnz ,gagain)
+       
+       ,gfirstzero
+       (add r3 r3 0)
+       (br-z ,gsuccess)
+       ;; fallthrough 
+       ,gsecondzero
+       ;; one is zero but other is non-zero 
+       (ldi r4 0)
+       (push r4)
+       (br-pnz ,gdone)
+       
+       ,gsuccess
+       (ldi r4 -1)
+       (push r4)
+       
+       ,gdone))))
+  
+(defword strcpy () ;; (dst src --)
+  dup strlen 1+ memcpy)
+
+(defword sleep () ;; (ms --)
+  #xfe08 !)
+
+;; must not be used from with any do/loops, will break the return stack.
+;; can be used from within begin/until because this doesn't use return stack.
+(defword return (:inline t)
+  (ret))
+
+;; get this program's id 
+(defword fvm-id () ;; (-- idhigh idlow)
+  (br-pnz 1)
+  (.blkw #xfe0a)
+  (ld r0 -2)
+  (ldr r1 r0 0) ;; get low word 
+  (ldr r2 r0 1) ;; high word 
+  (push r2)
+  (push r1))
+
+(defword swap2 () ;; (a b c d -- c d a b)
+  (pop r0) ;; d
+  (pop r1) ;; c
+  (pop r2) ;; b
+  (pop r3) ;; a
+  (push r1) ;; c
+  (push r0) ;; d
+  (push r3) ;; a
+  (push r2)) ;; b
+
+(defword over2 () ;; (a b c -- a b c a)
+  (ldr r0 sp 3)
+  (push r0))
+
+;; -----------------------------------
+
+;; send command to rpc device 
+(defword rpcdev-cmd () ;; (cmd)
+  #xfe09 !)
+
+(macrolet ((def-rpcdev-cmd (name cmd)
+	     `(defword ,name (:inline t) ,cmd rpcdev-cmd)))
+  (def-rpcdev-cmd xdr-reset 0)         ;; ( -- )
+  (def-rpcdev-cmd xdr-encode-uint32 1) ;; ( high low --)
+  (def-rpcdev-cmd xdr-encode-uint64 2) ;; ( high ... low --)
+  (def-rpcdev-cmd xdr-encode-string 3) ;; ( addr -- )
+  (def-rpcdev-cmd xdr-encode-opaque 4) ;; ( addr len --)
+  (def-rpcdev-cmd xdr-encode-fixed 5)  ;; ( addr len --)
+  (def-rpcdev-cmd xdr-decode-uint32 6) ;; ( -- high low)
+  (def-rpcdev-cmd xdr-decode-uint64 7) ;; ( -- high .. low)
+  (def-rpcdev-cmd xdr-decode-string 8) ;; ( addr len -- )
+  (def-rpcdev-cmd xdr-decode-opaque 9) ;; ( addr len -- len)
+  (def-rpcdev-cmd xdr-decode-fixed 10) ;; ( addr len --)
+  (def-rpcdev-cmd rpc-call 11)         ;; ( prog-high prog-low vers proc -- sts )
+  (def-rpcdev-cmd get-rpc-timeout 12)  ;; ( -- timeout )
+  (def-rpcdev-cmd set-rpc-timeout 13)  ;; ( timeout -- )
+  (def-rpcdev-cmd get-rpc-service 14)   ;; ( -- sevice )
+  (def-rpcdev-cmd set-rpc-service 15)  ;; (service --)
+  (def-rpcdev-cmd get-rpc-hostid 16)   ;; ( -- sevice )
+  (def-rpcdev-cmd set-rpc-hostid 17)  ;; (service --)
+  (def-rpcdev-cmd get-rpc-offset 18) ;; ( -- offset)
+  )
+
+;; returns the address of the rpc buffer 
+(defword get-rpc-buffer () ;; (--addr)
+  #x1000)
+
+(defword xdr-encode-boolean (:inline t)
+  0 swap xdr-encode-uint32)
+(defword xdr-decode-boolean (:inline t)
+  xdr-decode-uint32 swap drop)
+(defword xdr-encode-uint32* (:inline t)
+  0 swap xdr-encode-uint32)
+(defword xdr-decode-uint32* (:inlint t)
+  xdr-decode-uint32 swap drop)
+
+(defmacro defrpc (name (program version proc &rest options) &key arg-body result-body fail-body)
+  (let ((gfail-label (gensym))
+	(gend-label (gensym)))
+    `(defword ,name ,options
+       xdr-reset
+       ,@arg-body
+       (lisp (list (logand (ash ,program -16) #xffff)
+		   (logand ,program #xffff)
+		   (logand ,version #xffff)
+		   (logand ,proc #xffff)))
+       rpc-call
+       (pop r0)
+       (br-z ,gfail-label)
+       ,@result-body
+       xdr-reset
+       (br-pnz ,gend-label)
+       ,gfail-label
+       ,@fail-body
+       ,gend-label)))
+
+(defconstant +fvm-prog+ (+ #x2fff7770 5))
+(defrpc get-fvm-id (+fvm-prog+ 1 3)   ;; (name -- idhigh idlow)
+  :result-body
+  (xdr-decode-boolean
+   begin
+   xdr-decode-uint32                     ;; id
+   xdr-decode-uint32 (add sp sp 2) ;; drop drop           ;; flags
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; tickcount
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; runtime
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; inlogid
+   xdr-decode-uint64 (add sp sp 4) ;; drop drop drop drop ;; outlogid
+   over ;; (nameaddr id nameaddr)
+   bos 1024 xdr-decode-string bos ;; name ( nameaddr id nameaddr name)
+   strcmp if swap drop return then
+   xdr-decode-boolean
+   until
+   0 0)
+  :fail-body (0 0))
+
+(defrpc fvm-pause (+fvm-prog+ 1 4) ;; (idlow idhigh --)
+  :arg-body (xdr-encode-uint32 uint32 1 xdr-encode-uint32))
+(defrpc fvm-continue (+fvm-prog+ 1 4) ;; (idlow idhigh --)
+  :arg-body (xdr-encode-uint32 uint32 0 xdr-encode-uint32))
+(defrpc fvm-reset (+fvm-prog+ 1 4) ;; (idlow idhigh --)
+  :arg-body (xdr-encode-uint32 uint32 2 xdr-encode-uint32))
+
+(defrpc fvm-msg (+fvm-prog+ 1 6) ;; (idL idH msgidL msgidH msg msglen --)
+  :arg-body (5 nth 4 nth xdr-encode-uint32 
+	     3 nth 2 nth xdr-encode-uint32
+	     xdr-encode-opaque
+	     (add sp sp 6))) ;; drop 4 items from stack
+
+(defrpc fvm-shmem-read (+fvm-prog+ 1 7) ;; (idL idH dstbuf len --)
+  :arg-body (3 nth 2 nth xdr-encode-uint32 0 xdr-encode-uint32
+	       >r >r (add sp sp 2) r> r>) ;; (dstbuf len)
+  :fail-body (drop)
+  :result-body (xdr-decode-boolean
+		if
+  		  xdr-decode-opaque drop
+		else
+  		  drop
+		then))
+	       
+
+	       
+(defword nth () ;; (n -- x) get stack item at depth n 
+  (pop r1)
+  (add r1 sp r1)
+  (add r1 r1 1)
+  (ldr r0 r1 0)
+  (push r0))
+
+(defword nth! () ;; (n val --) store val at stack item n
+  (pop r1) ;; val
+  (pop r0) ;; n
+  (add r0 sp r0)
+  (add r0 r0 1) ;; get stack position
+  (str r0 r1 0)) ;; store at stack postion
+
+(defword char@ () ;; (addr i -- c)
+  dup 2 / swap 2 mod ;; (addr i/2 i%2)
+  rot + ;; (i%2 addr+i/2)
+  @ swap ;; (char i%2)
+  if
+    #xff and
+  else
+    8 rshift
+  then)
+
+(defword dumpstack ()
+  (add r0 sp 1) (push r0) dup dumphex ": " dumpstr
+  16 0 do
+    dup i + @ dumphex #\space dumpchr
+  loop
+  drop)
+    
+(defword char! () ;; (c addr i -- )
+  dup 2 / swap 2 mod ;; (c addr i/2 i%2)
+  rot + dup @ ;; (c i%2 addr+i/2 srcchr)
+  >r rot r> ;; (addr+i/2 c i%2 srcchr)
+  swap ;; (addr+i/2 c srcchr i%2)
+  if
+    ;; set low byte
+    #xff00 and or ;; (addr+i/2 dstchr)
+  else
+    ;; set high byte
+    #xff and swap 8 lshift or ;; (addr+i/2 dstchr)
+  then
+  ;; store updated word
+  swap !)
+
+;; Increment loop index. only use from within a do/loop context. 
+(defword i+ (:inline t) ;; (n --)
+  (pop r0)
+  (rpop r1)
+  (add r1 r1 r0)
+  (rpush r1))
+
+;; Set loop index. Only use from with a do/loop context.
+(defword i! (:inline t) ;; (n --)
+  (pop r0)
+  (rpop r1)
+  (rpush r0))
+
+
+;; (defword alloca () ;; (count -- addr)
+;;   (pop r0) ;; count
+;;   (add r0 r0 -1) ;; off by one error.
+;;   (sub sp sp r0)
+;;   (push sp)
+;;   (add sp sp -1))
+
+;; (defword freea () ;; (count --)
+;;   (pop r0)
+;;   (add sp sp r0))
+
+;; do nothing forever, waiting for an interrupt to service 
+(defword interrupt-service-loop (:inline t)  
+  begin
+    halt true
+  until)
 
 ;; ------------------ Interrupts --------------------
 
-(defword default-isr ()
-  halt)
-
-(defword privilege-exception-isr ()
+(defisr privilege-exception-isr (*default-isr-table* #x00)
   "PrivilegeException" dumpstr cr
   halt)
-(defisr privilege-exception-isr #x00)
 
-(defword illegal-opcode-isr ()
+(defisr illegal-opcode-isr (*default-isr-table* #x01)  
   "IllegalOpcode" dumpstr cr)
-(defisr illegal-opcode-isr #x01)
 
-(defword divide-by-zero-isr ()
-  "DivideByZero" dumpstr cr
-  halt)
-(defisr divide-by-zero-isr #x02)
+(defisr divide-by-zero-isr (*default-isr-table* #x02)
+   "DivideByZero" dumpstr cr
+   halt)
+

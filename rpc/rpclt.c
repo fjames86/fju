@@ -47,6 +47,8 @@
 #include <fju/nls.h>
 #include <fju/freg.h>
 #include <fju/sec.h>
+#include <fju/fvm.h>
+#include <fju/programs.h>
 
 struct clt_info {
     uint32_t prog;
@@ -83,6 +85,27 @@ static void freg_put_results( struct xdr_s *xdr );
 static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void freg_rem_results( struct xdr_s *xdr );
 static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_load_results( struct xdr_s *xdr );
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_unload_results( struct xdr_s *xdr );
+static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_list_results( struct xdr_s *xdr );
+static void fvm_pause_results( struct xdr_s *xdr );
+static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_msg_results( struct xdr_s *xdr );
+static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_shmemread_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_shmemread_results( struct xdr_s *xdr );
+static void fvm_shmemwrite_results( struct xdr_s *xdr );
+static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_read_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_read_dirty_results( struct xdr_s *xdr );
+static void fvm_write_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_write_dirty_results( struct xdr_s *xdr );
+
+
+
 
 static struct clt_info clt_procs[] = {
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
@@ -98,9 +121,19 @@ static struct clt_info clt_procs[] = {
     { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
-    { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS [u32=*] [u64=*] [str=*] [opaque-file=*]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
-    { 999999, 1, 1, NULL, NULL, "cmdprog.stop", NULL },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH [autounload=false] [start=no] [inlog=INLOGID] [outlog=OUTLOGID]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 2, fvm_unload_args, fvm_unload_results, "fvm.unload", "id=ID" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [cont|stop|reset]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.msg", "id=ID msgid=ID msg=*" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_shmemread_args, fvm_shmemread_results, "fvm.read", "id=ID len=*" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_shmemwrite_args, fvm_shmemwrite_results, "fvm.write", "id=ID [int=*] [str=*] [buf=*]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 9, fvm_read_dirty_args, fvm_read_dirty_results, "fvm.read_dirty", "id=ID [path=*]" },
+    { FVM_RPC_PROG, FVM_RPC_VERS, 10, fvm_write_dirty_args, fvm_write_dirty_results, "fvm.write_dirty", "id=ID path=*" },
+    { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
+    { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -321,13 +354,14 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   struct hrauth_call hcall;
   struct xdr_s args, res;
   struct hrauth_call_opts opts;
-  char argbuf[1024];
+  char *argbuf;
   int sts;
   struct rpc_call_pars pars;
   struct sockaddr_in *sinp;
   uint64_t tstart, tend;
-      
-  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+
+  argbuf = malloc( 32 * 1024 );
+  xdr_init( &args, (uint8_t *)argbuf, 32*1024 );
   xdr_init( &res, NULL, 0 );
   
   if( glob.hostid ) {
@@ -371,6 +405,7 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
   if( sts ) usage( "RPC call failed" );
   if( glob.reporttime ) printf( ";; Time: %dms\n", (int)(tend - tstart) );
   if( info->results ) info->results( &res );
+  free( argbuf );
 }
 
 static void clt_broadcast_cb( struct rpc_inc *inc, void *cxt ) {
@@ -429,14 +464,18 @@ static struct {
   uint32_t prog;
   char *name;
 } rpcbind_name_list[] = {
-			 { HRAUTH_RPC_PROG, "hrauth" },
-			 { RAFT_RPC_PROG, "raft" },
-			 { REX_RPC_PROG, "rex" },
-			 { NLS_RPC_PROG, "nls" },
-			 { FREG_RPC_PROG, "freg" },
-			 { 100000, "rpcbind" },
-			 { 0, NULL }
+  { HRAUTH_RPC_PROG, "hrauth" },
+  { RAFT_RPC_PROG, "raft" },
+  { REX_RPC_PROG, "rex" },
+  { NLS_RPC_PROG, "nls" },
+  { FREG_RPC_PROG, "freg" },
+  { FVM_RPC_PROG, "fvm" },
+  { RPCBIND_RPC_PROG, "rpcbind" },
+  { FJUD_RPC_PROG, "fjud" },
+  { SVCTEST_RPC_PROG, "svctest" },
+  { 0, NULL }
 };
+
 static char *rpcbind_name_by_prog( uint32_t prog ) {
   int i;
   i = 0;
@@ -450,10 +489,8 @@ static char *rpcbind_name_by_prog( uint32_t prog ) {
 
 static void rpcbind_results( struct xdr_s *xdr ) {
   int sts, b;
-  int i;
   uint32_t prog, vers, prot, port;
   
-  i = 0;
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) goto bad;
   while( b ) {
@@ -543,8 +580,10 @@ static void rex_write_results( struct xdr_s *xdr ) {
   uint64_t leaderid;
 
   sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
   sts = xdr_decode_uint64( xdr, &leaderid );
-
+  if( sts ) usage( "xdr error" );
+  
   printf( "Success=%s Leader=%"PRIx64"\n", b ? "True" : "False", leaderid );
 }
 
@@ -846,6 +885,7 @@ static void freg_list_results( struct xdr_s *xdr ) {
     uint64_t id;
     
     sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
     while( b ) {
 	xdr_decode_uint64( xdr, &id );
 	xdr_decode_string( xdr, name, sizeof(name) );
@@ -923,6 +963,7 @@ static void freg_get_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 static void freg_put_results( struct xdr_s *xdr ) {
   int sts, b;
   sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
   printf( "%s\n", b ? "Success" : "Failure" );
 }
 
@@ -930,7 +971,10 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
   uint64_t parentid = 0;
   char *name = NULL;
-  uint32_t flags;
+  uint32_t flags, u32;
+  uint64_t u64;
+  char *bufp = NULL;
+  int len = 0;
   
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
@@ -939,7 +983,30 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     } else if( strcmp( argname, "name" ) == 0 ) {
       name = argval;
     } else if( strcmp( argname, "flags" ) == 0 ) {
-      flags = strtoul( argval, NULL, 16 );      
+      flags = strtoul( argval, NULL, 16 );
+    } else if( strcmp( argname, "u32" ) == 0 ) {
+      u32 = strtoul( argval, NULL, 10 );
+      bufp = (char *)&u32;
+      len = 4;
+    } else if( strcmp( argname, "u64" ) == 0 ) {
+      u64 = strtoull( argval, NULL, 16 );
+      bufp = (char *)&u64;
+      len = 8;
+    } else if( strcmp( argname, "str" ) == 0 ) {
+      bufp = argval;
+      len = strlen( argval );
+    } else if( strcmp( argname, "opaque-file" ) == 0 ) {
+      struct mmf_s mmf;
+      int sts;
+      
+      sts = mmf_open2( argval, &mmf, MMF_OPEN_EXISTING );
+      if( sts ) usage( "Failed to open file \"%s\"", argval );
+      sts = mmf_remap( &mmf, mmf.fsize );
+      if( sts ) usage( "Failed to map file" );
+      bufp = malloc( mmf.fsize );
+      len = mmf.fsize;
+      memcpy( bufp, mmf.file, mmf.fsize );
+      mmf_close( &mmf );
     } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
@@ -948,12 +1015,13 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_uint64( xdr, parentid );
   xdr_encode_string( xdr, name );
   xdr_encode_uint32( xdr, flags );
-  xdr_encode_opaque( xdr, NULL, 0 );
+  xdr_encode_opaque( xdr, (uint8_t *)bufp, len );
 }
 
 static void freg_rem_results( struct xdr_s *xdr ) {
   int sts, b;
   sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
   printf( "%s\n", b ? "Success" : "Failure" );  
 }
 
@@ -974,3 +1042,422 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_uint64( xdr, parentid );  
   xdr_encode_uint64( xdr, id );  
 }
+
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  int sts;
+  uint32_t flags;
+  uint64_t inlog_id, outlog_id;
+  char *filepath;
+  struct mmf_s mmf;
+  char name[64];
+
+  filepath = NULL;
+  flags = FVM_RPC_AUTOUNLOAD|FVM_RPC_START;
+  inlog_id = 0;
+  outlog_id = 0;
+  strcpy( name, "" );
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "program" ) == 0 ) {
+      if( !argval ) usage( "Need file path" );
+      filepath = argval;
+    } else if( strcmp( argname, "start" ) == 0 ) {
+      if( argval && (strcmp( argval, "no" ) == 0) ) flags &= ~FVM_RPC_START;
+    } else if( strcmp( argname, "autounload" ) == 0 ) {
+      if( argval && (strcmp( argval, "false" ) == 0) ) flags &= ~0x0001;
+    } else if( strcmp( argname, "inlog" ) == 0 ) {
+      if( !argval ) usage( "Need inlog value" );
+      inlog_id = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "outlog" ) == 0 ) {
+      if( !argval ) usage( "Need outlog value" );
+      outlog_id = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "name" ) == 0 ) {
+      if( !argval ) usage( "Need name value" );
+      strncpy( name, argval, sizeof(name) - 1 );
+    } else usage( "Unknown arg \"%s\"", argname );    
+    i++;
+  }
+
+  if( filepath ) {
+    sts = mmf_open2( filepath, &mmf, MMF_OPEN_EXISTING );
+    if( sts ) usage( "Failed to open program" );
+    sts = mmf_remap( &mmf, mmf.fsize );
+    if( sts ) usage( "Failed to map program" );
+    xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
+    mmf_close( &mmf );
+  } else {
+    xdr_encode_opaque( xdr, NULL, 0 );
+  }
+  
+  xdr_encode_uint32( xdr, flags );
+  xdr_encode_uint64( xdr, inlog_id );
+  xdr_encode_uint64( xdr, outlog_id );
+  xdr_encode_string( xdr, name );  
+}
+
+static void fvm_load_results( struct xdr_s *xdr ) {
+  uint32_t id;
+  xdr_decode_uint32( xdr, &id );
+  if( id == 0 ) printf( "Failed to load program" );
+  else printf( "id=%u\n", id );
+}
+
+static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint32_t id = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "id" ) == 0 ) {
+      if( !argval ) usage( "Need id" );
+      id = strtoul( argval, NULL, 10 );
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+  if( !id ) usage( "Need id" );
+  xdr_encode_uint32( xdr, id );
+}
+
+static void fvm_unload_results( struct xdr_s *xdr ) {
+}
+
+static void fvm_list_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint32_t id, flags;
+  uint64_t tickcount, inlog_id, outlog_id, runtime;
+  char name[64];
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  while( b ) {
+    sts = xdr_decode_uint32( xdr, &id );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &tickcount );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &runtime );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &inlog_id );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &outlog_id );
+    if( !sts ) sts = xdr_decode_string( xdr, name, sizeof(name) );
+    
+    if( sts ) usage( "XDR error" );
+    printf( "name=%s id=%u Flags=%s%s (%x) ticks=%"PRIu64" runtime=%"PRIu64"ms inlog=%"PRIx64" outlog=%" PRIx64 "\n",
+	    name,
+	    id,
+	    flags & FVM_FLAG_RUNNING ? "Running" : "",
+	    flags & FVM_FLAG_DONE ? "Done" : "",
+	    flags,
+	    tickcount, runtime,
+	    inlog_id,
+	    outlog_id );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "XDR error" );
+  }
+}
+
+static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  int stop;
+  uint32_t id;
+  
+  stop = 0;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "id" ) == 0 ) {
+      if( !argval ) usage( "Need ID" );
+      id = strtoul( argval, NULL, 10 );
+    } else if( strcmp( argname, "cont" ) == 0 ) {
+      stop = 0;
+    } else if( strcmp( argname, "stop" ) == 0 ) {
+      stop = 1;
+    } else if( strcmp( argname, "reset" ) == 0 ) {
+      stop = 2;
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+
+  xdr_encode_uint32( xdr, id );
+  xdr_encode_boolean( xdr, stop );
+}
+
+static void fvm_pause_results( struct xdr_s *xdr ) {
+}
+
+static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint32_t category, eventid;
+  uint8_t parm[1024];
+  int parmlen, j;
+  char tmp[4];
+  
+  category = 0;
+  eventid = 0;
+  parmlen = 0;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "category" ) == 0 ) {
+      if( !argval ) usage( "Need category" );
+      category = strtoul( argval, NULL, 10 );
+    } else if( strcmp( argname, "eventid" ) == 0 ) {
+      if( !argval ) usage( "Need eventid" );
+      eventid = strtoul( argval, NULL, 10 );
+    } else if( strcmp( argname, "parm" ) == 0 ) {
+	parmlen = strlen( argval ) / 2;
+	memset( tmp, 0, 4 );
+	for( j = 0; j < parmlen; j++ ) {
+	    tmp[0] = argval[2*j];
+	    tmp[1] = argval[2*j + 1];
+	    parm[j] = (uint8_t)strtoul( tmp, NULL, 16 );
+	}
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+
+  xdr_encode_uint32( xdr, category );
+  xdr_encode_uint32( xdr, eventid );
+  xdr_encode_opaque( xdr, parm, parmlen );
+}
+
+static void fvm_msg_results( struct xdr_s *xdr ) {
+}
+
+static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint32_t id, msgid;
+  char *bufp = "";
+  int buflen = 1;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "id" ) == 0 ) {
+      if( !argval ) usage( "Need id" );
+      id = strtoul( argval, NULL, 10 );
+    } else if( strcmp( argname, "msgid" ) == 0 ) {
+      if( !argval ) usage( "Need msgid" );
+      msgid = strtoul( argval, NULL, 10 );
+    } else if( strcmp( argname, "msg" ) == 0 ) {
+      if( !argval ) usage( "Need msg" );
+      bufp = argval;
+      buflen = strlen( argval ) + 1;
+    } else usage( "Unknown arg \"%s\"", argname );
+    i++;
+  }
+
+  xdr_encode_uint32( xdr, id );
+  xdr_encode_uint32( xdr, msgid );
+  xdr_encode_opaque( xdr, (uint8_t *)bufp, buflen );
+}
+
+static void fvm_shmemread_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t id, len, offset;
+
+    len = 0;
+    offset = 0;
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "len" ) == 0 ) {
+	    len = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "offset" ) == 0 ) {
+	    offset = strtoul( argval, NULL, 10 );	    
+	} else usage( NULL );
+	i++;
+    }
+    xdr_encode_uint32( xdr, id );
+    xdr_encode_uint32( xdr, len );
+    xdr_encode_uint32( xdr, offset );
+}
+
+static void fvm_shmemread_results( struct xdr_s *xdr ) {
+    int sts, len, i, b;
+    char shmem[1024];
+
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
+    if( b ) {
+	len = sizeof(shmem);
+	sts = xdr_decode_opaque( xdr, (uint8_t *)shmem, &len );
+	if( sts ) usage( "xdr error" );
+	for( i = 0; i < len; i++ ) {
+	    printf( "%02x", (uint32_t)((uint8_t)shmem[i]) );
+	}
+	printf( "\n" );
+    } else {
+	printf( "Failed to read\n" );
+    }
+
+}
+
+static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t id;
+    char shmem[1024];
+    int len, off = 0, offset = 0, interruptp = 0;
+    char tmp[4];
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "offset" ) == 0 ) {
+	    offset = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "interrupt" ) == 0 ) {
+	    interruptp = 1;
+	} else if( strcmp( argname, "int" ) == 0 ) {
+	    uint16_t u16 = strtoul( argval, NULL, 10 );
+	    memcpy( &shmem[off], &u16, 2 );
+	    off += 2;
+	} else if( strcmp( argname, "str" ) == 0 ) {
+	    len = strlen( argval );	    
+	    memcpy( &shmem[off], argval, len + 1 );
+	    off += len + 1 + ((len + 1) % 2);
+	} else if( strcmp( argname, "buf" ) == 0 ) {
+	    memset( tmp, 0, sizeof(tmp) );
+	    len = strlen( argval ) / 2;
+	    for( i = 0; i < len; i++ ) {
+		memcpy( tmp, &argval[2*i], 2 );
+		shmem[off] = strtoul( tmp, NULL, 16 );
+		off++;
+	    }
+	} else usage( NULL );
+	i++;
+    }
+    
+    xdr_encode_uint32( xdr, id );
+    xdr_encode_uint32( xdr, offset );
+    xdr_encode_opaque( xdr, (uint8_t *)shmem, off );
+    xdr_encode_boolean( xdr, interruptp );
+}
+
+static void fvm_shmemwrite_results( struct xdr_s *xdr ) {
+    int sts, b;
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
+    printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static struct {
+  char *results_path;
+} dirty_read_prv;
+
+static void fvm_read_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t id;
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "path" ) == 0 ) {
+  	    dirty_read_prv.results_path = argval;
+	} else usage( NULL );
+	i++;
+    }
+    
+    xdr_encode_uint32( xdr, id );
+}
+
+static void fvm_read_dirty_results( struct xdr_s *xdr ) {
+  int b, lenp, sts, i;
+  char *bufp;
+  uint32_t offset;
+  int save = 0;
+  struct mmf_s mmf;
+  int file_offset = 0;
+  
+  if( dirty_read_prv.results_path ) save = 1;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  if( !b ) usage( "Invalid ID" );
+
+  if( save ) {
+    sts = mmf_open( dirty_read_prv.results_path, &mmf );
+    if( sts ) usage( "Failed to open results file" );
+    mmf_truncate( &mmf, 0 );
+  }
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  while( b ) {
+    sts = xdr_decode_uint32( xdr, &offset );
+    if( sts ) usage( "xdr error" );
+    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
+    if( sts ) usage( "xdr error" );
+
+    if( save ) {
+      mmf_write( &mmf, (char *)&offset, sizeof(offset), file_offset );
+      file_offset += 4;
+      mmf_write( &mmf, (char *)&lenp, sizeof(lenp), file_offset );
+      file_offset += 4;
+      
+      mmf_write( &mmf, bufp, lenp, file_offset );
+      file_offset += lenp;
+    } else {
+      printf( ";; 0x%04x: ", offset );
+      for( i = 0; i < lenp; i++ ) {
+	printf( "%02x", (uint32_t)(uint8_t)bufp[i] );
+      }
+      printf( "\n" );
+    }
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
+  }
+
+  if( save ) mmf_close( &mmf );
+}
+
+static void fvm_write_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+    char argname[64], *argval;
+    uint32_t id = 0, off, len, sts, file_offset;
+    char *path = NULL;
+    char *buf;
+    struct mmf_s mmf;
+    
+    buf = malloc( 32*1024 );
+    
+    while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "id" ) == 0 ) {
+	    id = strtoul( argval, NULL, 10 );
+	} else if( strcmp( argname, "path" ) == 0 ) {
+  	    path = argval;
+	} else usage( NULL );
+	i++;
+    }
+
+    if( !path ) usage( "Must provide path" );
+    
+    xdr_encode_uint32( xdr, id );
+    file_offset = 0;
+    
+    sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+    if( sts ) usage( "Failed to open" );
+    file_offset = 0;
+    while( file_offset < mmf.fsize ) {
+      xdr_encode_boolean( xdr, 1 );
+      
+      mmf_read( &mmf, (char *)&off, 4, file_offset );
+      file_offset += 4;
+      xdr_encode_uint32( xdr, off );
+      mmf_read( &mmf, (char *)&len, 4, file_offset );
+      file_offset += 4;
+      mmf_read( &mmf, buf, len, file_offset );
+      file_offset += len;
+      xdr_encode_opaque( xdr, (uint8_t *)buf, len );      
+    }
+    xdr_encode_boolean( xdr, 0 );
+    
+    mmf_close( &mmf );
+    free( buf );
+}
+
+static void fvm_write_dirty_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  
+}
+

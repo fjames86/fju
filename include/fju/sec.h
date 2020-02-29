@@ -64,4 +64,7 @@ struct sec_shamir_share {
 int sec_shamir_split( uint8_t *secret, int secretlen, struct sec_shamir_share *share, int nshares, int k );
 int sec_shamir_join( uint8_t *secret, int secretlen, struct sec_shamir_share *share, int nshares );
 
+/* Set crc=0xffffffff on first use, pass result in to continue */
+uint32_t sec_crc32( uint32_t crc, char *buf, int len );
+
 #endif

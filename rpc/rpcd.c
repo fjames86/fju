@@ -49,6 +49,7 @@ static struct {
 	int foreground;
 	int no_rpcregister;
 	int quiet;
+        int rpcdp;
 	volatile int exiting;
 	char *pidfile;
   
@@ -73,6 +74,9 @@ static struct {
 	uint8_t buftab[RPC_MAX_CONN][RPC_MAX_BUF];
 
 	uint64_t connid;
+        struct rpcd_subscriber *rpcd_subcs;
+
+        struct rpcd_active_conn aconn;
 } rpc;
 
 #ifdef WIN32
@@ -221,6 +225,7 @@ int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 #ifndef WIN32
 	struct sigaction sa;
 #endif
+	rpc.rpcdp = 1;
 	
 	freg_open( NULL, NULL );
 	
@@ -295,10 +300,15 @@ int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 	  unlink( rpc.pidfile );
 	}
 #endif
+
+	rpc.rpcdp = 0;
 	
 	return 0;
 }
 
+int rpcdp( void ) {
+    return rpc.rpcdp;
+}
 
 #ifdef WIN32
 static void WINAPI rpcd_svc_ctrl( DWORD req ) {
@@ -335,6 +345,14 @@ static void WINAPI rpcd_svc( DWORD argc, char **argv ) {
 
 
 
+int rpcd_get_default_port( void ) {
+    int sts;
+    uint32_t port;
+    sts = freg_get_by_name( NULL, 0,
+			    "/fju/rpc/port", FREG_TYPE_UINT32,
+			    (char *)&port, sizeof(port), NULL );
+    return sts ? 0 : port;
+}
 
 static void rpc_init_listen( void ) {
 	int i, sts, j;
@@ -352,11 +370,8 @@ static void rpc_init_listen( void ) {
 	}
 
 	if( !rpc.nlisten ) {
-	    uint32_t port;
-	    sts = freg_get_by_name( NULL, 0,
-				    "/fju/rpc/port", FREG_TYPE_UINT32,
-				    (char *)&port, sizeof(port), NULL );
-	    if( !sts ) {
+	    uint32_t port = rpcd_get_default_port();
+	    if( port ) {
 		rpc.listen[0].type = RPC_LISTEN_UDP;
 		rpc.listen[0].addr.sin.sin_family = AF_INET;
 		rpc.listen[0].addr.sin.sin_port = htons( port );
@@ -689,10 +704,16 @@ static void rpc_poll( int timeout ) {
 					/* msg complete - process */
 					xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
 					c->inc.xdr.count = c->cdata.count;
+					
+					rpc.aconn.listen = NULL;
+					rpc.aconn.conn = c;
 					sts = rpc_process_incoming( &c->inc );
+					memset( &rpc.aconn, 0, sizeof(rpc.aconn) );
+					
 					if( sts == 0 ) {
+					        rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
 
-						c->cdata.count = c->inc.xdr.offset;
+					        c->cdata.count = c->inc.xdr.offset;
 						c->cdata.offset = 0;
 						c->cstate = RPC_CSTATE_SENDLEN;
 						c->nstate = RPC_NSTATE_SEND;
@@ -903,9 +924,15 @@ static void rpc_accept( struct rpc_listen *lis ) {
       mynet_ntop( lis->type, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len, ipstr );
       rpc_log( RPC_LOG_DEBUG, "UDP Incoming %s count=%d", ipstr, c->cdata.count );
       rpc.flist = rpc.flist->next;
+
+      rpc.aconn.listen = lis;
+      rpc.aconn.conn = NULL;
       sts = rpc_process_incoming( &c->inc );
+      memset( &rpc.aconn, 0, sizeof(rpc.aconn) );
+      
       rpc.flist = c;
       if( sts == 0 ) {
+	rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       } else if( sts > 0 ) {
@@ -973,7 +1000,7 @@ static void rpcd_run( void ) {
 		rpc.evt = WSACreateEvent();
 	}
 #endif
-		
+
 	/* register programs and initialize */
 	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_INIT, NULL, rpc.main_cxt );
 
@@ -1288,4 +1315,60 @@ static void rpcd_load_services( void ) {
 
 void rpcd_stop( void ) {
     rpc.exiting = 1;
+}
+
+
+void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int parmsize ) {
+    struct rpcd_subscriber *sc, *next;
+    int i, found;
+    sc = rpc.rpcd_subcs;
+    while( sc ) {
+	found = 0;
+	if( sc->category == NULL ) found = 1;
+	else {
+	    i = 0;
+	    while( sc->category[i] ) {
+		if( sc->category[i] == category ) {
+		    found = 1;
+		    break;
+		}
+		i++;
+	    }
+	}
+	
+	if( found && sc->cb ) {
+	    next = sc->next;
+	    sc->cb( sc, category, eventid, parm, parmsize );
+	    sc = next;
+	} else {
+	    sc = sc->next;
+	}
+	
+    }
+}
+
+void rpcd_event_subscribe( struct rpcd_subscriber *sc ) {
+    sc->next = rpc.rpcd_subcs;
+    rpc.rpcd_subcs = sc;
+}
+
+int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc ) {
+    struct rpcd_subscriber *sc, *prev;
+    sc = rpc.rpcd_subcs;
+    prev = NULL;
+    while( sc ) {
+	if( sc == subsc ) {
+	    if( prev ) prev->next = sc->next;
+	    else rpc.rpcd_subcs = sc->next;
+	    return 0;
+	}
+	prev = sc;
+	sc = sc->next;
+    }
+    return -1;
+}
+
+int rpcd_active_conn( struct rpcd_active_conn *aconn ) {
+    *aconn = rpc.aconn;
+    return 0;
 }

@@ -388,7 +388,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* derive common key */
     sts = hrauth_common( auth.u.full.id, sa->key );
     if( sts ) {
-      hrauth_log( LOG_LVL_DEBUG, "hrauth: unknown host %"PRIx64"", auth.u.full.id );
+      hrauth_log( LOG_LVL_DEBUG, "hrauth_common failed: host=%"PRIx64"", auth.u.full.id );
       return sts;
     }
     hrauth_decrypt( tmpx.buf, tmpx.count, sa->key, sa->cipher );
@@ -1055,12 +1055,12 @@ static int hrauth_call( int tcp, struct hrauth_call *hcall, struct xdr_s *args, 
     sin.sin_family = AF_INET;
     sin.sin_port = htons( port );
 
-    if( hcall->hostid ) {
-      sts = hostreg_host_by_id( hcall->hostid, &host );
-      if( sts ) return sts;   
-      sin.sin_addr.s_addr = host.addr[0];
+    if( (hcall->hostid == 0) || (hcall->hostid == hostreg_localid()) ) {
+	sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
     } else {
-      sin.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
+	sts = hostreg_host_by_id( hcall->hostid, &host );
+	if( sts ) return sts;   
+	sin.sin_addr.s_addr = host.addr[0];
     }      
 
     memset( &pars, 0, sizeof(pars) );

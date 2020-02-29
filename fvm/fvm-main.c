@@ -36,14 +36,26 @@
 #include <fju/mmf.h>
 #include <fju/fvm.h>
 #include <fju/log.h>
+#include <fju/rpc.h>
+#include <fju/nls.h>
+#include <fju/hostreg.h>
+#include <fju/freg.h>
 
 static void usage( char *fmt, ... ) {
   va_list args;
   
-  printf( "fvm -p program\n"
+  printf( "fvm program\n"
 	  "     [-v] [-n nsteps] [-t timeout]\n"
 	  "     [-i inlog-path] [-o outlog-path]\n"
-	  "     [-w word] [-wa arg]* [-wr nres]\n" );
+	  "\n"
+	  "  Where:\n"
+	  "     -v [-v]            Verbose mode\n"
+	  "     -n nsteps          Limit runtime by number of clock ticks.\n"
+	  "     -t timeout         Limit runtime by number of milliseconds.\n"
+	  "     -i inlog -o outlog Set in/out log files.\n"
+	  "     -I name            Install program with given name\n"
+	  "     -I name [-r]       If installing, embed program in registry \n"	  
+	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
     printf( "Error: " );
@@ -63,27 +75,40 @@ static struct {
   char *inlog;
   char *outlog;
   struct log_s logs[2];
-  int word;
-    uint16_t wordargs[32];
-    int nargs;
-    uint16_t wordres[32];
-    int nres;
+  int install;
+#define INSTALL_PATH 1
+#define INSTALL_REG  2
+  char *install_name;
 } glob;
 
 int main( int argc, char **argv ) {
   char *path = NULL;
   struct mmf_s mmf;
-  int sts;
-  int i;
+  int sts, i;
+  uint64_t start, end;
+
+#ifdef WIN32
+  {
+      WSADATA wsadata;
+      WSAStartup( MAKEWORD( 2, 2 ), &wsadata );
+  }
+#endif
+
+  nls_open();
+  hostreg_open();
   
   i = 1;
+  if( i >= argc ) usage( NULL );
+  if( (strcmp( argv[i], "-h" ) == 0) ||
+      (strcmp( argv[i], "--help" ) == 0) ) {
+    usage( NULL );
+  }
+  
+  path = argv[i];
+  i++;
   while( i < argc ) {
-    if( strcmp( argv[i], "-p" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      path = argv[i];
-    } else if( strcmp( argv[i], "-v" ) == 0 ) {
-      glob.verbose = 1;
+    if( strcmp( argv[i], "-v" ) == 0 ) {
+      glob.verbose++;
     } else if( strcmp( argv[i], "-n" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );      
@@ -100,35 +125,46 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       glob.outlog = argv[i];
-    } else if( strcmp( argv[i], "-w" ) == 0 ) {
-	i++;
-	if( i >= argc ) usage( NULL );
-	glob.word = strtoul( argv[i], NULL, 10 );
-	glob.word &= 0x07ff;
-	glob.word |= 0x8000;
-    } else if( strcmp( argv[i], "-wa" ) == 0 ) {
-	i++;
-	if( i >= argc ) usage( NULL );
-	if( glob.nargs >= 32 ) usage( "Max args = 32" );
-	glob.wordargs[glob.nargs] = strtoul( argv[i], NULL, 10 );
-	glob.nargs++;
-    } else if( strcmp( argv[i], "-wr" ) == 0 ) {
-	i++;
-	if( i >= argc ) usage( NULL );
-	glob.nres = strtoul( argv[i], NULL, 10 );
-	if( glob.nres > 32 ) usage( "Max results = 32" );
+    } else if( strcmp( argv[i], "-I" ) == 0 ) {
+      glob.install = INSTALL_PATH;
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.install_name = argv[i];
+    } else if( strcmp( argv[i], "-r" ) == 0 ) {
+      if( glob.install ) glob.install = INSTALL_REG;
     } else usage( NULL );
     i++;
   }
   if( path == NULL ) usage( NULL );
-	
-  sts = mmf_open( path, &mmf );
-  if( sts ) usage( "Failed to open program" );
+
+  if( glob.install ) {
+    uint64_t id;
+    sts = freg_subkey( NULL, 0, "/fju/fvm/programs", FREG_CREATE, &id );
+    if( sts ) usage( "Failed to get /fju/fvm/programs" );
+    sts = freg_subkey( NULL, id, glob.install_name, FREG_CREATE, &id );
+    if( sts ) usage( "Failed to create program entry" );
+    if( glob.install == INSTALL_PATH ) {
+      freg_put( NULL, id, "path", FREG_TYPE_STRING, path, strlen( path ), NULL );
+    } else if( glob.install == INSTALL_REG ) {
+      sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+      if( sts ) usage( "Failed to open program file \"%s\"", path );
+      sts = mmf_remap( &mmf, mmf.fsize );
+      if( sts ) usage( "Failed to map program" );
+      freg_put( NULL, id, "progdata", FREG_TYPE_OPAQUE, mmf.file, mmf.fsize, NULL );
+      mmf_close( &mmf );
+    }
+    exit( 0 );
+  }
+
+
+  
+  sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) usage( "Failed to open program file \"%s\"", path );
   sts = mmf_remap( &mmf, mmf.fsize );
   if( sts ) usage( "Failed to map program" );
-  sts = fvm_load( &glob.fvm, mmf.file, mmf.fsize / 2 );
+  sts = fvm_load( &glob.fvm, mmf.file, mmf.fsize );
   if( sts ) usage( "Failed to load program\n" );
-  if( glob.verbose ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
+  if( glob.verbose > 1 ) glob.fvm.flags |= FVM_FLAG_VERBOSE;
   mmf_close( &mmf );
 
   if( glob.inlog ) {
@@ -140,19 +176,41 @@ int main( int argc, char **argv ) {
     sts = log_open( glob.outlog, NULL, &glob.logs[1] );
     if( sts ) usage( "Failed to open outlog" );
     glob.fvm.outlog = &glob.logs[1];
+  } else {
+    sts = log_open( NULL, NULL, &glob.logs[1] );
+    if( sts ) usage( "Failed to open default log" );
+    glob.fvm.outlog = &glob.logs[1];
   }
+    
 
-  if( glob.word & 0x8000 ) {
-      fvm_call_word( &glob.fvm, glob.word & ~0x8000, glob.wordargs, glob.nargs, glob.wordres, glob.nres );
-      for( i = 0; i < glob.nres; i++ ) {
-	  printf( "%04x\n", glob.wordres[i] );
+  start = rpc_now();
+  if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
+  else if( glob.timeout ) fvm_run_timeout( &glob.fvm, glob.timeout );
+  else {
+      do {
+	  fvm_run( &glob.fvm );
+	  if( glob.fvm.sleep_timeout ) {
+	      uint64_t now;
+	      now = rpc_now();
+#ifdef WIN32
+	      if( glob.fvm.sleep_timeout > now ) Sleep( glob.fvm.sleep_timeout - now );
+#else
+	      if( glob.fvm.sleep_timeout > now ) usleep( (glob.fvm.sleep_timeout - now) * 1000 );
+#endif
+	      glob.fvm.sleep_timeout = 0;
+	      glob.fvm.flags |= FVM_FLAG_RUNNING;
+	  }	  
+      } while( glob.fvm.flags & FVM_FLAG_RUNNING );
+      
+      if( (glob.fvm.flags & FVM_FLAG_VERBOSE) && (!(glob.fvm.flags & FVM_FLAG_DONE)) && (!(glob.fvm.flags & FVM_FLAG_RUNNING)) ) {
+	  printf( ";; Stopped running but not done\n" );
       }
   }
-  else if( glob.nsteps ) fvm_run_nsteps( &glob.fvm, glob.nsteps );
-  else if( glob.timeout ) fvm_run_timeout( &glob.fvm, glob.timeout );
-  else fvm_run( &glob.fvm );
-
+  end = rpc_now();
+      
   if( glob.verbose ) {
+    struct fvm_dirty *dirty;
+    int nd;
     printf( ";; R0 %x R1 %x R2 %x R3 %x R4 %x R5 %x R6 %x R7 %x PC %x\n",
 	    glob.fvm.reg[0], glob.fvm.reg[1],
 	    glob.fvm.reg[2], glob.fvm.reg[3], 
@@ -160,8 +218,18 @@ int main( int argc, char **argv ) {
 	    glob.fvm.reg[6], glob.fvm.reg[7],
 	    glob.fvm.reg[8] );
     printf( ";; TickCount %d\n", (int)glob.fvm.tickcount );
+    printf( ";; ElapsedTime %dms\n", (int)(end - start) );
+
+    nd = fvm_dirty_regions( &glob.fvm, NULL, 0 );
+    dirty = malloc( sizeof(*dirty) * nd );
+    fvm_dirty_regions( &glob.fvm, dirty, nd );
+    for( i = 0; i < nd; i++ ) {
+	printf( ";; Dirty 0x%04x - 0x%04x\n", (uint32_t)dirty[i].offset, (uint32_t)(dirty[i].offset + dirty[i].count - 1) );
+    }
+	
   }
 
+  
   if( glob.inlog ) log_close( &glob.logs[0] );
   if( glob.outlog ) log_close( &glob.logs[1] );
   

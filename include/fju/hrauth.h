@@ -28,10 +28,9 @@
 
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
+#include <fju/programs.h>
 
 #define RPC_AUTH_HRAUTH 0x27E1DAF0
-#define HRAUTH_RPC_PROG  0x27E1FAF0
-#define HRAUTH_RPC_VERS  1
 
 struct hrauth_context {
   uint64_t remoteid;                /* remote host id */  

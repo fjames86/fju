@@ -2,6 +2,7 @@
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
 #include <fju/log.h>
+#include <fju/programs.h>
 
 /*
  * Add the following freg entries
@@ -32,7 +33,7 @@ static struct rpc_version fred_vers = {
 };
 
 static struct rpc_program fred_prog = {
-  NULL, 1231231, &fred_vers
+  NULL, SVCTEST_RPC_PROG, &fred_vers
 };
 
 void fred_register( void ) {

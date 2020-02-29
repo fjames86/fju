@@ -300,10 +300,10 @@ static int rex_proc_write( struct rpc_inc *inc ) {
   xdr_encode_boolean( &inc->xdr, 1 );
   xdr_encode_uint64( &inc->xdr, cl.leaderid );
 #else
-  /* save reply data */
+  /* save reply data so we can send the reply later */
   rpc_get_reply_data( inc, &rdata );
 
-  /* send pings and wait for them all to complete, or timeout */
+  /* TODO: send pings and wait for them all to complete, or timeout */
 #endif
   
  done:
@@ -417,6 +417,7 @@ static void rex_notify( raft_notify_t evt, struct raft_cluster *cl, void *cxt, v
     case RAFT_NOTIFY_SEND_PING:
 	/* resend data whenever we become leader or are sending raft ping messages */
 	rex_send_pings( cl );
+	break;
     default:
 	break;
     }

@@ -27,6 +27,7 @@
 #define RAFT_H
 
 #include <stdint.h>
+#include <fju/programs.h>
 
 struct raft_member {
     uint64_t clid;                     /* cluster id */
@@ -99,18 +100,16 @@ int raft_member_set( struct raft_member *member );
 int raft_member_rem( uint64_t clid, uint64_t hostid );
 int raft_member_clear_voted( uint64_t clid );
 
-#define RAFT_RPC_PROG 0x27E1FAEF
-#define RAFT_RPC_VERS 1
 void raft_register( void );
 
 typedef enum {
-    RAFT_NOTIFY_FOLLOWER = 1,
-    RAFT_NOTIFY_CANDIDATE = 2,
-    RAFT_NOTIFY_LEADER = 3,
-    RAFT_NOTIFY_SEND_PING = 4,
-    RAFT_NOTIFY_SEND_VOTE = 5,
-    RAFT_NOTIFY_RECV_PING = 6,
-    RAFT_NOTIFY_RECV_VOTE = 7,
+    RAFT_NOTIFY_FOLLOWER = 1,    /* we are now a follower */
+    RAFT_NOTIFY_CANDIDATE = 2,   /* we are now a candidate */
+    RAFT_NOTIFY_LEADER = 3,      /* we are now a leader */
+    RAFT_NOTIFY_SEND_PING = 4,   /* (leader) time to send a ping */
+    RAFT_NOTIFY_SEND_VOTE = 5,   /* (candidate) time to send a vote */
+    RAFT_NOTIFY_RECV_PING = 6,   /* (follower/candidate) received a ping from leader */
+    RAFT_NOTIFY_RECV_VOTE = 7,   /* (candidate) received a vote */
 } raft_notify_t;
 
 typedef void (*raft_notify_cb_t)( raft_notify_t evt, struct raft_cluster *cl, void *cxt, void *reserved );

@@ -201,7 +201,7 @@ int freg_next( struct freg_s *freg, uint64_t parentid, uint64_t id, struct freg_
     
     nentry = etry.len / sizeof(uint64_t);
     if( nentry < 0 ) return -1;  
-    if( !nentry ) return 0;
+    if( !nentry ) return -1;
     
     idx = 0;
     getnext = id ? 0 : 1;    
@@ -281,6 +281,14 @@ int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, stru
     }
     
     return -1;
+}
+
+uint64_t freg_id_by_name( struct freg_s *freg, char *name, uint64_t *parentidp ) {
+  int sts;
+  struct freg_entry entry;
+  sts = freg_entry_by_name( freg, 0, name, &entry, parentidp );
+  if( sts ) return 0;
+  return entry.id;
 }
 
 int freg_get( struct freg_s *freg, uint64_t id, uint32_t *flags, char *buf, int len, int *lenp ) {

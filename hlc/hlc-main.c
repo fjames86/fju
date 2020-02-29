@@ -1,4 +1,9 @@
 
+#ifdef WIN32
+#include <Winsock2.h>
+#include <Windows.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +19,7 @@ static struct {
 #define CMD_LIST 4
   char *path;
   struct hlc_s hlc;
+  uint64_t id;
 } glob;
 
 static void usage( char *fmt, ... ) {
@@ -31,6 +37,7 @@ static void usage( char *fmt, ... ) {
 }
 static void cmd_list( void );
 static void cmd_write( void );
+static void cmd_read( void );
 
 int main( int argc, char **argv ) {
   int i;
@@ -44,6 +51,11 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       glob.path = argv[i];
+    } else if( strcmp( argv[i], "-r" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.id = strtoull( argv[i], NULL, 16 );
+      glob.cmd = CMD_READ;
     } else usage( NULL );
     i++;
   }
@@ -56,6 +68,7 @@ int main( int argc, char **argv ) {
     cmd_list();
     break;
   case CMD_READ:
+    cmd_read();
     break;
   case CMD_WRITE:
     cmd_write();
@@ -109,6 +122,26 @@ static void cmd_list( void ) {
   } while( 1 );
 
   free( buf );
+}
+
+static void cmd_read( void ) {
+  int sts, ne;
+  struct hlc_entry entry;
+
+  memset( &entry, 0, sizeof(entry) );
+  entry.id = glob.id;
+  entry.buf = malloc( 32 * 1024 );
+  entry.len = 32 * 1024;
+  sts = hlc_read( &glob.hlc, glob.id, &entry, 1, &ne );
+  if( sts || ne == 0 ) usage( "Unknown entry" );
+
+#ifdef WIN32
+  WriteFile( GetStdHandle( STD_OUTPUT_HANDLE ), entry.buf, entry.len, NULL, NULL );
+#else
+  write( STDOUT_FILENO, entry.buf, entry.len );
+#endif
+  
+  free( entry.buf );
 }
 
 static void cmd_write( void ) {

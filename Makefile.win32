@@ -18,7 +18,9 @@ libs += ${LIBDIR}/librpc.a
 libs += ${LIBDIR}/libftab.a
 libs += ${LIBDIR}/libfdtab.a
 libs += ${LIBDIR}/libfreg.a
-libs += ${LIBDIR}/libfvm.a 
+libs += ${LIBDIR}/libfvm.a
+libs += ${LIBDIR}/liblht.a
+libs += ${LIBDIR}/libhlc.a 
 
 progs += ${BINDIR}/fjlog.exe
 progs += ${BINDIR}/hostreg.exe
@@ -32,14 +34,16 @@ progs += ${BINDIR}/fdtab.exe
 progs += ${BINDIR}/freg.exe
 progs += ${BINDIR}/ecdh.exe
 progs += ${BINDIR}/shamir.exe
-progs += ${BINDIR}/fvm.exe 
+progs += ${BINDIR}/fvm.exe
+progs += ${BINDIR}/lht.exe
+progs += ${BINDIR}/hlc.exe 
 
 .PHONY: all clean strip 
 
-all: ${libs} ${progs} ${LIBDIR}/libfju.dll ${LIBDIR}/libsvctest.dll ${LIBDIR}/libcmdprog.dll
+all: ${libs} ${progs} ${LIBDIR}/libfju.dll ${LIBDIR}/libsvctest.dll ${LIBDIR}/libcmdprog.dll fvm.core
 
 clean:
-	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm.core
 
 ${LIBDIR}/libmmf.a: mmf/mmf.c
 	gcc -c ${CFLAGS} mmf/mmf.c
@@ -89,9 +93,17 @@ ${LIBDIR}/libfreg.a: freg/freg.c freg/freg-rpc.c
 	gcc -c ${CFLAGS} freg/freg.c freg/freg-rpc.c
 	ar rcs ${LIBDIR}/libfreg.a freg.o freg-rpc.o 
 
-${LIBDIR}/libfvm.a: fvm/fvm.c
-	gcc -c ${CFLAGS} fvm/fvm.c
-	ar rcs ${LIBDIR}/libfvm.a fvm.o
+${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-rpc.c 
+	gcc -c ${CFLAGS} fvm/fvm.c fvm/fvm-rpc.c 
+	ar rcs ${LIBDIR}/libfvm.a fvm.o fvm-rpc.o 
+
+${LIBDIR}/liblht.a: lht/lht.c 
+	gcc -c ${CFLAGS} lht/lht.c
+	ar rcs ${LIBDIR}/liblht.a lht.o 
+
+${LIBDIR}/libhlc.a: hlc/hlc.c 
+	gcc -c ${CFLAGS} hlc/hlc.c
+	ar rcs ${LIBDIR}/libhlc.a hlc.o 
 
 ${BINDIR}/fjlog.exe: log/fjlog.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/fjlog.exe ${CFLAGS} log/fjlog.c -L${LIBDIR} -lfju 
@@ -136,7 +148,13 @@ ${BINDIR}/shamir.exe: sec/shamir.c ${LIBDIR}/libfju.dll
 	gcc -o ${BINDIR}/shamir.exe ${CFLAGS} sec/shamir.c -L${LIBDIR} -lfju
 
 ${BINDIR}/fvm.exe: fvm/fvm-main.c ${LIBDIR}/libfju.dll
-	gcc -o ${BINDIR}/fvm.exe ${CFLAGS} fvm/fvm-main.c -L${LIBDIR} -lfju 
+	gcc -o ${BINDIR}/fvm.exe ${CFLAGS} fvm/fvm-main.c -L${LIBDIR} -lfju -lws2_32 
+
+${BINDIR}/lht.exe: lht/lht-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/lht.exe ${CFLAGS} lht/lht-main.c -L${LIBDIR} -lfju
+
+${BINDIR}/hlc.exe: hlc/hlc-main.c ${LIBDIR}/libfju.dll
+	gcc -o ${BINDIR}/hlc.exe ${CFLAGS} hlc/hlc-main.c -L${LIBDIR} -lfju
 
 FJU_DEPS += ${LIBDIR}/libmmf.a
 FJU_LIBS += -lmmf
@@ -164,6 +182,10 @@ FJU_DEPS += ${LIBDIR}/libfreg.a
 FJU_LIBS += -lfreg
 FJU_DEPS += ${LIBDIR}/libfvm.a
 FJU_LIBS += -lfvm
+FJU_DEPS += ${LIBDIR}/liblht.a
+FJU_LIBS += -llht
+FJU_DEPS += ${LIBDIR}/libhlc.a
+FJU_LIBS += -lhlc
 
 ${LIBDIR}/libfju.dll: ${FJU_DEPS}
 	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive -luuid -lole32 -lbcrypt -lws2_32 -liphlpapi
@@ -171,4 +193,7 @@ ${LIBDIR}/libfju.dll: ${FJU_DEPS}
 
 strip:
 	strip -s bin/*
-	
+
+
+fvm.core: fvm/compiler/package.lisp fvm/compiler/fvm.lisp fvm/compiler/words.lisp fvm/compiler/rpc.lisp
+	sbcl --load scripts/make-lisp-core.lisp

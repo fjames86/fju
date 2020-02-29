@@ -1,10 +1,36 @@
+/*
+ * MIT License
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+*/
 
 #ifndef FVM_H
 #define FVM_H
 
 #include <stdint.h>
 
+#include <fju/rpc.h>
 #include <fju/log.h>
+#include <fju/programs.h>
 
 typedef enum {
 	      FVM_INST_BR = 0,      /* conditional branch */
@@ -22,7 +48,7 @@ typedef enum {
 	      FVM_INST_JMP = 12,    /* unconditional jump / return */
 	      FVM_INST_MUL = 13,    /* mul/div/mod/cmp */
 	      FVM_INST_LEA = 14,    /* load effective address */
-	      FVM_INST_RES3 = 15,   /* reserved opcode 3 */
+	      FVM_INST_RES = 15,    /* reserved opcode  */
 } fvm_inst_t;
 
 typedef enum {
@@ -57,20 +83,90 @@ struct fvm_state {
   uint16_t reg[FVM_REG_MAX];
   uint16_t mem[FVM_MAX_MEM];
   uint32_t flags;
-#define FVM_FLAG_RUNNING 0x0001
-#define FVM_FLAG_VERBOSE 0x0002
+#define FVM_FLAG_RUNNING 0x0001        /* program currently executing */
+#define FVM_FLAG_VERBOSE 0x0002        /* print debug info to console */
+#define FVM_FLAG_DONE    0x0004        /* program finished running */
+#define FVM_FLAG_RPC     0x0008        /* rpc in flight, awaiting reply */
   uint64_t tickcount;
   struct log_s *inlog;
-  uint64_t inlog_id;
+  uint64_t inlogid;
   struct log_s *outlog;
+  uint16_t bos;
+  uint64_t sleep_timeout;
+  struct {
+    uint16_t bufaddr;
+    struct xdr_s buf;
+    uint16_t timeout;         /* rpc timeout */
+    uint16_t service;       /* hrauth sevice level */
+    uint64_t hostid;
+  } rpc;
+    /* 
+     * Divide the program memory up into "pages" of 8 bytes (4 words).
+     * Keep a bitmap storing when memory is written.
+     */
+#define FVM_PAGE_SIZE 4
+    uint32_t dirty[(FVM_MAX_MEM / FVM_PAGE_SIZE) / 32];
+
+  uint32_t id;
 };
 
-int fvm_load( struct fvm_state *state, uint16_t *program, int proglen );
+int fvm_load( struct fvm_state *state, char *progdata, int proglen );
+int fvm_load_freg( struct fvm_state *fvm, uint64_t hreg );
 int fvm_run( struct fvm_state *state );
 int fvm_run_nsteps( struct fvm_state *state, int nsteps );
 int fvm_run_timeout( struct fvm_state *state, int timeout );
 int fvm_reset( struct fvm_state *fvm );
-int fvm_call_word( struct fvm_state *fvm, int word, uint16_t *args, int nargs, uint16_t *res, int nres );
+
+#define FVM_INT_EXCEPTION 0x8000 
+#define FVM_INT_PME       0x00    /* privilege mode exception */
+#define FVM_INT_PME_PL    FVM_INT_EXCEPTION       /* pme priority level */
+#define FVM_INT_IOC       0x01    /* illegal opcode exception */
+#define FVM_INT_IOC_PL    FVM_INT_EXCEPTION       /* ioc priority level */
+#define FVM_INT_DBZ       0x02    /* divide by zero */
+#define FVM_INT_DBZ_PL    FVM_INT_EXCEPTION       /* divide by zero level */
+#define FVM_INT_MSG       0x03    /* external message received */
+#define FVM_INT_MSG_PL    1
+#define FVM_INT_SMW       0x04    /* share memory write */
+#define FVM_INT_SMW_PL    1
+
+int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority );
+
+struct fvm_program_header {
+  uint32_t magic;
+#define FVM_PROGRAM_MAGIC 0x204D5646 /* header magic identifier "FVM " */
+  uint32_t version;
+  uint32_t crc32;
+  
+  uint32_t spare[29];
+};
+
+struct fvm_dirty {
+    uint16_t offset;
+    uint16_t count;
+};
+void fvm_dirty_reset( struct fvm_state *fvm );
+int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd );
+
+#define FVM_MAX_SHMEM 1024 /* max in bytes */
+int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset );
+int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset );
+
+int fvm_persist( char *path, struct fvm_state *fvm, void *reserved );
+int fvm_restore( char *path, struct fvm_state *fvm, void *reserved );
+
+/* ----------- rpcd only ---------- */
+
+void fvm_register( void );
+
+#define FVM_RPC_AUTOUNLOAD 0x0001    /* unload program when finished, otherwise leaves it loaded */
+#define FVM_RPC_START      0x0002    /* start immediately, otherwise loads in paused state */
+
+#define FVM_EVENT_CATEGORY FVM_RPC_PROG
+#define FVM_EVENT_PROGDONE 0        /* parm = &id */
+
+/* Maybe remove this proc 
+int fvm_proc_handler( char *progname, int timeout, struct rpc_inc *inc );
+*/
 
 #endif
 

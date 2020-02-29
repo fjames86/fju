@@ -1,18 +1,18 @@
 /*
  * MIT License
- *
- * Copyright (c) 2018 Frank James
- *
+ * 
+ * Copyright (c) 2019 Frank James
+ * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- *
+ * 
  * The above copyright notice and this permission notice shall be included in all
  * copies or substantial portions of the Software.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -20,50 +20,46 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
+ * 
+*/
+
+#ifndef FJU_PROGRAMS_H
+#define FJU_PROGRAMS_H
+
+#define RPCBIND_RPC_PROG 100000
+#define RPCBIND_RPC_VERS 1
+
+/*
+ * Base RPC program number, chosen from user defined range 
+ * All other fju programs should come sequentially after this.
+ * This file serves as program registry. Any new fju programs 
+ * should be listed here.
  */
+#define FJU_BASE_PROG 0x2FFF7770 
 
-#ifndef MMF_H
-#define MMF_H
+#define NLS_RPC_PROG (FJU_BASE_PROG + 0)
+#define NLS_RPC_VERS 1
 
-#ifdef WIN32
-#include <WinSock2.h>
-#include <Windows.h>
-#else
-#include <unistd.h>
-#endif
+#define RAFT_RPC_PROG (FJU_BASE_PROG + 1)
+#define RAFT_RPC_VERS 1
 
-#include <stdarg.h>
-#include <stdint.h>
+#define HRAUTH_RPC_PROG (FJU_BASE_PROG + 2)
+#define HRAUTH_RPC_VERS 1
 
-#define MMF_DEFAULT_PREFIX "fju"
+#define REX_RPC_PROG (FJU_BASE_PROG + 3)
+#define REX_RPC_VERS 1
 
-struct mmf_s {
-#ifdef WIN32
-	HANDLE fd;
-	HANDLE mapping;
-#else
-	int fd;
-#endif
-	int msize;
-	void *file;
-	int fsize;
-};
+#define FREG_RPC_PROG (FJU_BASE_PROG + 4)
+#define FREG_RPC_VERS 1
 
-int mmf_open( char *path, struct mmf_s *mmf );
-#define MMF_OPEN_ALWAYS   0x0000
-#define MMF_OPEN_EXISTING 0x0001
-int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags );
-int mmf_close( struct mmf_s *mmf );
-int mmf_lock( struct mmf_s *mmf );
-int mmf_unlock( struct mmf_s *mmf );
-int mmf_remap( struct mmf_s *mmf, int size );
-int mmf_sync( struct mmf_s *mmf, int sync );
-char *mmf_default_path( char *filename, ... );
-int mmf_ensure_dir( char *path );
-int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset );
-int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset );
-int mmf_truncate( struct mmf_s *mmf, int size );
+#define FVM_RPC_PROG (FJU_BASE_PROG + 5)
+#define FVM_RPC_VERS 1
+
+#define SVCTEST_RPC_PROG (FJU_BASE_PROG + 6)
+#define SVCTEST_RPC_VERS 1
+
+#define FJUD_RPC_PROG (FJU_BASE_PROG + 7)
+#define FJUD_RPC_VERS 1
 
 #endif
 

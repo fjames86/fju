@@ -10,6 +10,7 @@
   :components
   ((:file "package")
    (:file "fvm")
-   (:file "words"))
-  :depends-on (:babel :nibbles))
+   (:file "words")
+   (:file "rpc"))
+  :depends-on (:babel :nibbles :frpc2 :flexi-streams))
 

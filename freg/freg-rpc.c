@@ -16,9 +16,16 @@ static int freg_proc_null( struct rpc_inc *inc ) {
 
 static int freg_check_auth = 1;
 static int freg_authenticated( struct rpc_inc *inc ) {
-    if( !freg_check_auth ) return 1;
-    if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) return 0;
+  if( !freg_check_auth ) {
+    log_writef( NULL, LOG_LVL_INFO, "freg_authenticated freg_check_auth=true ignoring auth" );
     return 1;
+  }
+  if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
+    log_writef( NULL, LOG_LVL_INFO, "freg_authenticated flavour=%d rejecting", inc->msg.u.call.auth.flavour );
+    return 0;
+  }
+  log_writef( NULL, LOG_LVL_INFO, "freg_authencticated allowing" );
+  return 1;
 }
 
 static int freg_proc_list( struct rpc_inc *inc ) {
@@ -154,7 +161,11 @@ static int freg_proc_put( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&buf, &len );  
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  sts = freg_put( NULL, parentid, name, flags, buf, len, &id );
+  if( (flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+    sts = freg_subkey( NULL, parentid, name, FREG_CREATE, &id );
+  } else {
+    sts = freg_put( NULL, parentid, name, flags, buf, len, &id );
+  }
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   if( sts ) {
@@ -187,12 +198,77 @@ static int freg_proc_rem( struct rpc_inc *inc ) {
   return 0;
 }
 
+
+static int freg_proc_get_by_name( struct rpc_inc *inc ) {
+  int sts, handle, len, i;
+  uint32_t flags;
+  char path[256];
+  char *buf = NULL;
+  struct freg_entry entry;
+
+  if( !freg_authenticated( inc ) ) return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+
+  sts = xdr_decode_string( &inc->xdr, path, sizeof(path) );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  sts = freg_get_by_name( NULL, 0, path, flags, NULL, 0, &len );
+  if( sts ) {
+    xdr_encode_boolean( &inc->xdr, 0 );
+    goto done;
+  }
+
+  buf = malloc( len );
+  sts = freg_get_by_name( NULL, 0, path, flags, buf, len, NULL );
+  if( sts ) {
+    xdr_encode_boolean( &inc->xdr, 0 );
+    goto done;
+  }
+
+  sts = freg_entry_by_name( NULL, 0, path, &entry, NULL );
+
+  xdr_encode_boolean( &inc->xdr, 1 );
+  xdr_encode_uint64( &inc->xdr, entry.id );
+  xdr_encode_uint32( &inc->xdr, flags );
+
+  switch( flags & FREG_TYPE_MASK ) {
+  case FREG_TYPE_UINT32:
+    xdr_encode_uint32( &inc->xdr, *(uint32_t *)buf );
+    break;
+  case FREG_TYPE_UINT64:
+    xdr_encode_uint64( &inc->xdr, *(uint64_t *)buf ); 
+    break;
+  case FREG_TYPE_KEY:
+    xdr_encode_uint32( &inc->xdr, len / sizeof(uint64_t) );
+    for( i = 0; i < (len / sizeof(uint64_t)); i++ ) {
+      xdr_encode_uint64( &inc->xdr, ((uint64_t *)buf)[i] );
+    }
+    break;
+  case FREG_TYPE_STRING:
+    xdr_encode_string( &inc->xdr, buf );
+    break;
+  case FREG_TYPE_OPAQUE:
+    xdr_encode_opaque( &inc->xdr, (uint8_t *)buf, len );
+    break;
+  }
+
+ done:
+  if( buf ) free( buf );
+  
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
+
 static struct rpc_proc freg_procs[] = {
   { 0, freg_proc_null },
   { 1, freg_proc_list },
   { 2, freg_proc_get },
   { 3, freg_proc_put },
   { 4, freg_proc_rem },
+  { 5, freg_proc_get_by_name },
   { 0, NULL }
 };
 

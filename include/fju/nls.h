@@ -36,6 +36,7 @@
 
 #include <stdint.h>
 #include <fju/log.h>
+#include <fju/programs.h>
 
 #define NLS_MAX_COOKIE 16
 
@@ -114,9 +115,9 @@ int nls_notify_rem( uint64_t tag );
 int nls_notify_set( struct nls_notify *entry );
 
 
-#define NLS_RPC_PROG 0x27E1FAEE
-#define NLS_RPC_VERS 1
 void nls_register( void );
+
+#define NLS_EVENT_REMOTEAPPEND 0   /* remote log had some messages appened parm=&remote */
 
 #endif
 

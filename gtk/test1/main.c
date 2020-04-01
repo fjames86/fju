@@ -78,3 +78,12 @@ void fjrpc_button2_clicked( GtkButton *wnd, gpointer data ) {
   fju_messagebox_error( globs.wndmain, "You clicked %d", sts );
   
 }
+
+void fju_menuitem_about_activate( GtkButton *wnd, gpointer data ) {
+  gtk_show_about_dialog( globs.wndmain,
+			 "program-name", "fj test",
+			 "title", "about test",
+			 "comments", "hello this is my comment",
+			 NULL );
+}
+

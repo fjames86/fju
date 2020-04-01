@@ -59,7 +59,20 @@ static void main_destroy( GtkWidget *wnd, gpointer data ) {
   gtk_main_quit();
 }
 
+static void test_dialog_click( GtkDialog *hdlg, gint id, gpointer data ) {
+  printf( "Dialog clicked %d\n", id );
+  gtk_widget_destroy( GTK_WIDGET(hdlg) );
+}
+
 static void test_button_click( GtkWidget *hwnd, gpointer data ) {
+  GtkWidget *hdlg;
+  
   printf( "click\n" );
+
+  hdlg = gtk_message_dialog_new( GTK_WINDOW(gtk_widget_get_toplevel( hwnd )), GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK_CANCEL, "message" );
+  //  gtk_dialog_add_buttons( GTK_DIALOG(hdlg), "OK", 12, "Cancell?", 13, NULL );
+  g_signal_connect( GTK_DIALOG(hdlg), "response", G_CALLBACK(test_dialog_click), NULL );
+  gtk_dialog_run( GTK_DIALOG(hdlg) );
+
 }
 

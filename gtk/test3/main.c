@@ -25,7 +25,7 @@ int main( int argc, char **argv ) {
 
   /* build main window */
   hmain = gtk_window_new( GTK_WINDOW_TOPLEVEL );
-  fjgtk_register( hmain, "main", NULL );  
+  fjgtk_register( hmain, "main" );  
   g_signal_connect( hmain, "destroy", G_CALLBACK(main_destroy), NULL );
   g_signal_connect( hmain, "check-resize", G_CALLBACK(main_resize), NULL );
   
@@ -34,18 +34,18 @@ int main( int argc, char **argv ) {
   
   /* add fixed container */
   fixed = gtk_fixed_new();
-  fjgtk_register( fixed, "fixed", NULL );
+  fjgtk_register( fixed, "fixed" );
   gtk_container_add( GTK_CONTAINER(hmain), fixed );
 
   /* add some buttons to the window */
-  button = gtk_button_new_with_label( "Button1" );
+  button = gtk_button_new_with_label( "Add item" );
   gtk_fixed_put( GTK_FIXED(fixed), button, 150, 65 );
-  fjgtk_register( button, "button1", NULL );
+  fjgtk_register( button, "button1" );
   g_signal_connect( G_OBJECT(button), "clicked", G_CALLBACK(button1_click), NULL );
   
-  button = gtk_button_new_with_label( "Button2" );
+  button = gtk_button_new_with_label( "Clear items" );
   gtk_fixed_put( GTK_FIXED(fixed), button, 150, 100 );
-  fjgtk_register( button, "button2", NULL );
+  fjgtk_register( button, "button2" );
   g_signal_connect( G_OBJECT(button), "clicked", G_CALLBACK(button2_click), NULL );
   
   /* add menu */
@@ -54,12 +54,12 @@ int main( int argc, char **argv ) {
   /* add a label and text box */
   hwnd = gtk_label_new( "My little label" );
   gtk_fixed_put( GTK_FIXED(fixed), hwnd, 25, 30 );
-  fjgtk_register( hwnd, "label", NULL );
+  fjgtk_register( hwnd, "label" );
   
   hwnd = gtk_entry_new();
   gtk_widget_set_size_request( hwnd, 100, 10 );
   gtk_fixed_put( GTK_FIXED(fixed), hwnd, 150, 25 );
-  fjgtk_register( hwnd, "entry", NULL );  
+  fjgtk_register( hwnd, "entry" );  
   g_signal_connect( G_OBJECT(hwnd), "activate", G_CALLBACK(entry_activate), NULL );
   g_signal_connect( G_OBJECT(hwnd), "changed", G_CALLBACK(entry_changed), NULL );
 
@@ -87,6 +87,8 @@ static void main_resize( GtkWidget *hmain, gpointer data ) {
   gtk_window_get_size( GTK_WINDOW(hmain), &w, &h );
 
   fixed = (GtkFixed *)fjgtk_get( "fixed" );
+  gtk_fixed_move( fixed, fjgtk_get( "button1" ), w / 2, 150 );
+  gtk_fixed_move( fixed, fjgtk_get( "button2" ), w / 2, 100 );
 
 }
 
@@ -95,11 +97,11 @@ static void add_menubar( void ) {
   
   /* add menu */
   menubar = gtk_menu_bar_new();
-  fjgtk_register( menubar, "menubar", NULL );
+  fjgtk_register( menubar, "menubar" );
   gtk_fixed_put( GTK_FIXED(fjgtk_get("fixed")), menubar, 0, 0 );
   
   submenu = fjgtk_add_submenu( menubar, "File" );
-  fjgtk_register( submenu, "filemenu", NULL );
+  fjgtk_register( submenu, "filemenu" );
 
   submenu = fjgtk_add_submenu( submenu, "New" );
   fjgtk_add_menu_item( submenu, "x", NULL, NULL );
@@ -124,7 +126,7 @@ static void entry_activate( GtkWidget *hwnd, gpointer data ) {
 }
 
 static void entry_changed( GtkEntry *hwnd, gpointer data ) {
-  printf( "entry changed: %s\n", gtk_entry_get_text( hwnd ) );
+
 }
 
 static void add_listview_item( GtkWidget *listview, char *itemtext ) {
@@ -143,7 +145,7 @@ static void add_treeview( void ) {
   GtkTreeViewColumn *column;
   
   list = gtk_tree_view_new();
-  fjgtk_register( list, "treelist", NULL );
+  fjgtk_register( list, "treelist" );
   gtk_tree_view_set_headers_visible( GTK_TREE_VIEW(list), TRUE );
   gtk_fixed_put( GTK_FIXED(fjgtk_get( "fixed" )), list, 25, 100 );
   gtk_widget_set_size_request( list, 50, 100 );
@@ -162,7 +164,9 @@ static void add_treeview( void ) {
 }
 
 static void button1_click( GtkWidget *hwnd, gpointer data ) {
-  add_listview_item( fjgtk_get( "treelist" ), "newitem" );
+  char *str;
+  str = gtk_entry_get_text( GTK_ENTRY(fjgtk_get( "entry" )) );
+  add_listview_item( fjgtk_get( "treelist" ), str );
 }
 
 static void button2_click( GtkWidget *hwnd, gpointer data ) {

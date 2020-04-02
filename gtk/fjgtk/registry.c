@@ -19,15 +19,15 @@ static struct {
   struct entry etab[FJGTK_MAX_ENTRY];
 } glob;
 
-void fjgtk_register( GtkWidget *hwnd, char *name, int *id ) {
+int fjgtk_register( GtkWidget *hwnd, char *name ) {
   struct entry *e = &glob.etab[glob.idx];
   e->id = glob.idx;
   glob.idx++;
   e->hwnd = hwnd;
   e->name = name;
-  if( id ) *id = e->id;
   e->next = glob.entry;
   glob.entry = e;
+  return e->id;
 }
   
 GtkWidget *fjgtk_get( char *name ) {

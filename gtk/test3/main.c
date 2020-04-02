@@ -12,6 +12,9 @@ static void main_resize( GtkWidget *hwnd, gpointer data );
 static void add_menubar( void );
 static void entry_activate( GtkWidget *hwnd, gpointer data );
 static void entry_changed( GtkEntry *hwnd, gpointer data );
+static void add_treeview( void );
+static void button1_click( GtkWidget *hwnd, gpointer data );
+static void button2_click( GtkWidget *hwnd, gpointer data );
 
 int main( int argc, char **argv ) {
   GtkWidget *hmain, *fixed, *button, *hwnd;
@@ -26,7 +29,7 @@ int main( int argc, char **argv ) {
   g_signal_connect( hmain, "destroy", G_CALLBACK(main_destroy), NULL );
   g_signal_connect( hmain, "check-resize", G_CALLBACK(main_resize), NULL );
   
-  gtk_window_set_default_size( GTK_WINDOW(hmain), 300, 200 );
+  gtk_window_set_default_size( GTK_WINDOW(hmain), 400, 200 );
   gtk_container_set_border_width( GTK_CONTAINER(hmain), 0 );
   
   /* add fixed container */
@@ -36,16 +39,19 @@ int main( int argc, char **argv ) {
 
   /* add some buttons to the window */
   button = gtk_button_new_with_label( "Button1" );
-  gtk_fixed_put( GTK_FIXED(fixed), button, 50, 50 );
+  gtk_fixed_put( GTK_FIXED(fixed), button, 150, 65 );
   fjgtk_register( button, "button1", NULL );
-
+  g_signal_connect( G_OBJECT(button), "clicked", G_CALLBACK(button1_click), NULL );
+  
   button = gtk_button_new_with_label( "Button2" );
-  gtk_fixed_put( GTK_FIXED(fixed), button, 100, 50 );
+  gtk_fixed_put( GTK_FIXED(fixed), button, 150, 100 );
   fjgtk_register( button, "button2", NULL );
-
+  g_signal_connect( G_OBJECT(button), "clicked", G_CALLBACK(button2_click), NULL );
+  
   /* add menu */
   add_menubar();
 
+  /* add a label and text box */
   hwnd = gtk_label_new( "My little label" );
   gtk_fixed_put( GTK_FIXED(fixed), hwnd, 25, 30 );
   fjgtk_register( hwnd, "label", NULL );
@@ -53,10 +59,14 @@ int main( int argc, char **argv ) {
   hwnd = gtk_entry_new();
   gtk_widget_set_size_request( hwnd, 100, 10 );
   gtk_fixed_put( GTK_FIXED(fixed), hwnd, 150, 25 );
-  fjgtk_register( hwnd, "entry", NULL );
-  
+  fjgtk_register( hwnd, "entry", NULL );  
   g_signal_connect( G_OBJECT(hwnd), "activate", G_CALLBACK(entry_activate), NULL );
   g_signal_connect( G_OBJECT(hwnd), "changed", G_CALLBACK(entry_changed), NULL );
+
+  /* add tree view */
+  add_treeview();
+  
+
   
   gtk_widget_show_all( hmain );
   gtk_main();
@@ -77,11 +87,6 @@ static void main_resize( GtkWidget *hmain, gpointer data ) {
   gtk_window_get_size( GTK_WINDOW(hmain), &w, &h );
 
   fixed = (GtkFixed *)fjgtk_get( "fixed" );
-  hwnd = fjgtk_get( "button1" );
-  gtk_fixed_move( fixed, hwnd, w / 3, h / 3 );
-
-  hwnd = fjgtk_get( "button1" );
-  gtk_fixed_move( fixed, hwnd, (2 * w) / 3, (2 * h) / 3 );
 
 }
 
@@ -120,5 +125,49 @@ static void entry_activate( GtkWidget *hwnd, gpointer data ) {
 
 static void entry_changed( GtkEntry *hwnd, gpointer data ) {
   printf( "entry changed: %s\n", gtk_entry_get_text( hwnd ) );
+}
+
+static void add_listview_item( GtkWidget *listview, char *itemtext ) {
+  GtkListStore *store;
+  GtkTreeIter iter;
+  
+  store = GTK_LIST_STORE(gtk_tree_view_get_model( GTK_TREE_VIEW(listview) ));
+  gtk_list_store_append( store, &iter );
+  gtk_list_store_set( store, &iter, 0, itemtext, -1 );
+}
+
+static void add_treeview( void ) {
+  GtkWidget *list;
+  GtkCellRenderer *renderer;
+  GtkListStore *store;
+  GtkTreeViewColumn *column;
+  
+  list = gtk_tree_view_new();
+  fjgtk_register( list, "treelist", NULL );
+  gtk_tree_view_set_headers_visible( GTK_TREE_VIEW(list), TRUE );
+  gtk_fixed_put( GTK_FIXED(fjgtk_get( "fixed" )), list, 25, 100 );
+  gtk_widget_set_size_request( list, 50, 100 );
+  
+  renderer = gtk_cell_renderer_text_new();
+  column = gtk_tree_view_column_new_with_attributes( "List items", GTK_CELL_RENDERER(renderer), "text", 0, NULL );
+  gtk_tree_view_append_column( GTK_TREE_VIEW(list), GTK_TREE_VIEW_COLUMN(column) );
+  store = gtk_list_store_new( 1, G_TYPE_STRING );
+  gtk_tree_view_set_model( GTK_TREE_VIEW(list), GTK_TREE_MODEL(store) );
+  g_object_unref( store );
+
+  add_listview_item( list, "item 1" );
+  add_listview_item( list, "item 2" );
+  add_listview_item( list, "item 3" );
+  
+}
+
+static void button1_click( GtkWidget *hwnd, gpointer data ) {
+  add_listview_item( fjgtk_get( "treelist" ), "newitem" );
+}
+
+static void button2_click( GtkWidget *hwnd, gpointer data ) {
+  GtkListStore *store;
+  store = GTK_LIST_STORE(gtk_tree_view_get_model( GTK_TREE_VIEW(fjgtk_get( "treelist" )) ));
+  gtk_list_store_clear( store );
 }
 

@@ -10,9 +10,11 @@
 static void main_destroy( GtkWidget *wnd, gpointer data );
 static void main_resize( GtkWidget *hwnd, gpointer data );
 static void add_menubar( void );
+static void entry_activate( GtkWidget *hwnd, gpointer data );
+static void entry_changed( GtkEntry *hwnd, gpointer data );
 
 int main( int argc, char **argv ) {
-  GtkWidget *hmain, *fixed, *button;
+  GtkWidget *hmain, *fixed, *button, *hwnd;
   GtkWidget *menubar, *submenu, *mitem, *mitem2;
   
   /* always call this first */
@@ -44,6 +46,17 @@ int main( int argc, char **argv ) {
   /* add menu */
   add_menubar();
 
+  hwnd = gtk_label_new( "My little label" );
+  gtk_fixed_put( GTK_FIXED(fixed), hwnd, 25, 30 );
+  fjgtk_register( hwnd, "label", NULL );
+  
+  hwnd = gtk_entry_new();
+  gtk_widget_set_size_request( hwnd, 100, 10 );
+  gtk_fixed_put( GTK_FIXED(fixed), hwnd, 150, 25 );
+  fjgtk_register( hwnd, "entry", NULL );
+  
+  g_signal_connect( G_OBJECT(hwnd), "activate", G_CALLBACK(entry_activate), NULL );
+  g_signal_connect( G_OBJECT(hwnd), "changed", G_CALLBACK(entry_changed), NULL );
   
   gtk_widget_show_all( hmain );
   gtk_main();
@@ -71,7 +84,6 @@ static void main_resize( GtkWidget *hmain, gpointer data ) {
   gtk_fixed_move( fixed, hwnd, (2 * w) / 3, (2 * h) / 3 );
 
 }
-
 
 static void add_menubar( void ) {
   GtkWidget *menubar, *submenu;
@@ -101,3 +113,12 @@ static void add_menubar( void ) {
   fjgtk_add_menu_item( submenu, "Paste", NULL, NULL );
 
 }
+
+static void entry_activate( GtkWidget *hwnd, gpointer data ) {
+  printf( "entry activate\n" );
+}
+
+static void entry_changed( GtkEntry *hwnd, gpointer data ) {
+  printf( "entry changed: %s\n", gtk_entry_get_text( hwnd ) );
+}
+

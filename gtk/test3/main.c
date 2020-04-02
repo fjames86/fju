@@ -8,6 +8,7 @@
 
 static void main_destroy( GtkWidget *wnd, gpointer data );
 static void main_resize( GtkWidget *hwnd, gpointer data );
+static void add_menubar( void );
 
 struct hentry {
   struct hentry *next;
@@ -70,18 +71,8 @@ int main( int argc, char **argv ) {
   register_widget( button, "button2" );
 
   /* add menu */
-  menubar = gtk_menu_bar_new();
-  register_widget( menubar, "menubar" );
-  gtk_fixed_put( GTK_FIXED(fixed), menubar, 0, 0 );
-  
-  submenu = gtk_menu_new();
-  mitem = gtk_menu_item_new_with_label( "File" );
-  mitem2 = gtk_menu_item_new_with_label( "Quit" );
-  g_signal_connect( G_OBJECT(mitem2), "activate", G_CALLBACK(main_destroy), NULL );
-  
-  gtk_menu_item_set_submenu( GTK_MENU_ITEM(mitem), submenu );
-  gtk_menu_shell_append( GTK_MENU_SHELL(submenu), mitem2 );
-  gtk_menu_shell_append( GTK_MENU_SHELL(menubar), mitem );
+  add_menubar();
+
   
   gtk_widget_show_all( hmain );
   gtk_main();
@@ -110,3 +101,50 @@ static void main_resize( GtkWidget *hmain, gpointer data ) {
 
 }
 
+
+static void add_menu_item( GtkWidget *hmenu, char *name, void (*cb)(), void *data ) {
+  GtkWidget *item;
+
+  item = name == "-" ? gtk_separator_menu_item_new() : gtk_menu_item_new_with_label( name );
+  if( cb ) g_signal_connect( G_OBJECT(item), "activate", G_CALLBACK(cb), data );
+  gtk_menu_shell_append( GTK_MENU_SHELL(hmenu), item );
+  
+}
+
+static GtkWidget *add_submenu( GtkWidget *hmenu, char *name ) {
+  GtkWidget *submenu, *mitem;
+  submenu = gtk_menu_new();
+  mitem = gtk_menu_item_new_with_label( name );
+  gtk_menu_item_set_submenu( GTK_MENU_ITEM(mitem), submenu );
+  gtk_menu_shell_append( GTK_MENU_SHELL(hmenu), mitem );
+  return submenu;
+}
+
+static void add_menubar( void ) {
+  GtkWidget *menubar, *submenu;
+  
+  /* add menu */
+  menubar = gtk_menu_bar_new();
+  register_widget( menubar, "menubar" );
+  gtk_fixed_put( GTK_FIXED(get_widget("fixed")), menubar, 0, 0 );
+  
+  submenu = add_submenu( menubar, "File" );
+  register_widget( submenu, "filemenu" );
+
+  submenu = add_submenu( submenu, "New" );
+  add_menu_item( submenu, "x", NULL, NULL );
+  add_menu_item( submenu, "y", NULL, NULL );
+  
+  submenu = get_widget( "filemenu" );
+  add_menu_item( submenu, "Open", NULL, NULL );
+  add_menu_item( submenu, "-", NULL, NULL );
+  add_menu_item( submenu, "Close", NULL, NULL );
+  add_menu_item( submenu, "-", NULL, NULL );
+  add_menu_item( submenu, "Quit", main_destroy, NULL );
+  
+  submenu = add_submenu( menubar, "Edit" );
+  add_menu_item( submenu, "Copy", NULL, NULL );
+  add_menu_item( submenu, "Cut", NULL, NULL );
+  add_menu_item( submenu, "Paste", NULL, NULL );
+
+}

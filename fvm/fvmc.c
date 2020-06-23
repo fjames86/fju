@@ -33,6 +33,11 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
 static void emit_header( FILE *f );
 
+static uint32_t u32be( uint32_t u ) {
+  uint8_t *u8 = (uint8_t *)&u;
+  return ((uint32_t)u8[3] << 24) | ((uint32_t)u8[2] << 16) | ((uint32_t)u8[1] << 8) | (uint32_t)u8[0];
+}
+
 struct label {
   char name[64];
   uint32_t addr;
@@ -63,13 +68,12 @@ static uint32_t getlabel( char *name ) {
 }
 
 static int datasize;
-static uint8_t datasection[4096];
 
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
-  char buf[256], directive[64];
+  char buf[256];
   uint32_t opcode;
-  char *filename, *outfilename;
+  char *outfilename;
   int i, j, starti;
   char *p, *q;
   uint32_t addr;
@@ -92,8 +96,9 @@ int main( int argc, char **argv ) {
   if( !outfile ) usage( "Failed to open outfile" );
   addr = 0;
 
-  printf( "\n ------ first phase ------- \n" );
+  printf( "\n ------ first pass ------- \n" );
 
+  /* first pass collects labels and computes offets. does not emit opcodes */
   starti = i;
   while( i < argc ) {
     f = fopen( argv[i], "r" );  
@@ -128,11 +133,13 @@ int main( int argc, char **argv ) {
   for( j = 0; j < nlabels; j++ ) {
     printf( ";; Label %-4d %-16s = 0x%08x\n", j, labels[j].name, labels[j].addr );
   }
-  printf( "\n ------ second phase ------- \n" );
+  printf( "\n ------ second pass ------- \n" );
 
-  // write header
-  emit_header( outfile );
+  /* second pass emits output */
   
+  /* write header */
+  emit_header( outfile );
+
   i = starti;
   while( i < argc ) {
     f = fopen( argv[i], "r" );  
@@ -181,6 +188,7 @@ int main( int argc, char **argv ) {
       //      printf( ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, 0, 0 ) != -1 ) {
 	printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
+	opcode = u32be( opcode );
 	fwrite( &opcode, 4, 1, outfile );
       }
     }
@@ -262,6 +270,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  uint32_t s = size - 4;
 	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
 	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
+	    s = u32be( s );
 	    fwrite( &s, 4, 1, f );
 	    fwrite( startp, 1, s, f );
 	  }
@@ -269,7 +278,8 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       } else {
 	/* integer or label always 4 bytes */
 	char numstr[64];
-	  
+        int isarray = 0;
+
 	memset( numstr, 0, sizeof(numstr) );
 	q = numstr;
 	while( *p != ' ' && *p != '\t' && *p != '\0' ) {
@@ -277,8 +287,24 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  p++;
 	  q++;
 	}
+
+	if( strcasecmp( numstr, "ARRAY" ) == 0 ) {
+	  memset( numstr, 0, sizeof(numstr) );
+	  p++;
+	  while( *p == ' ' || *p == '\t' || *p == '\0' ) p++;
+	  
+	  q = numstr;
+	  while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+	    *q = *p;
+	    p++;
+	    q++;
+	  }
+	  size = strtoul( numstr, NULL, 0 );
+          isarray = 1;
+	} else {	
+	  size = 4;
+	}
 	
-	size = 4;
 	if( f != NULL ) {
 	  char *term;
 	  uint32_t x;
@@ -291,7 +317,15 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
 	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
 	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
-	    fwrite( &x, 4, 1, f );
+            if( isarray ) {
+              char *b = malloc( size );
+              memset( b, 0, size );
+              fwrite( b, 1, size, f );
+              free( b );
+             } else {
+  	       x = u32be( x );
+	       fwrite( &x, 4, 1, f );
+             }
 	  }
 	  
 	}
@@ -306,6 +340,32 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       }
     }
     return 0;
+  } else if( strcasecmp( directive, ".CONST" ) == 0 ) {
+    char str[64];
+
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) return 0;
+    
+    memset( name, 0, sizeof(name) );
+    q = name;
+    while( *p != ' ' && *p != '\t' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) return 0;
+    
+    memset( str, 0, sizeof(str) );
+    q = str;
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+    if( f == NULL ) addlabel( name, strtoul( str, NULL, 0 ) );
+
   } else {
     /* unknown directive */
     printf( ";; unknown directive %s\n", directive );
@@ -327,9 +387,49 @@ static struct {
 	{ "LD",   0x01, 0x00020000 },   /* LD RX RY */
 	{ "LD",   0x01, 0x00020002 },   /* LD RX constant */
 	{ "ST",   0x02, 0x00020000 },   /* ST RX RY */
-	{ "LDI",  0x03, 0x00020002 },   /* LDI RX constant */ 
-	{ "STI",  0x04, 0x00020002 },   /* STI RX constant */
+	{ "ST",   0x02, 0x00020002 },   /* ST RX const */
+	{ "LDI",  0x03, 0x00020002 },   /* LDI RX constant */
+	{ "RESERVED",  0x04, 0x00000000 },   /* unused */
 	{ "LEA",  0x05, 0x00020002 },   /* LEA RX constant */
+	{ "PUSH", 0x06, 0x00010000 },   /* PUSH RX */
+	{ "PUSH", 0x06, 0x00010001 },   /* PUSH const */
+	{ "POP",  0x07, 0x00010000 },   /* POP RX */
+	{ "RET",  0x08, 0x00000000 },   /* RET */
+	{ "CALL", 0x09, 0x00010000 },   /* CALL RX */
+	{ "CALL", 0x09, 0x00010001 },   /* CALL const */
+	{ "JMP",  0x0a, 0x00010000 },   /* JMP RX */
+	{ "JMP",  0x0a, 0x00010001 },   /* JMP const */
+	{ "JZ",   0x0b, 0x00010000 },   /* JZ RX */
+	{ "JZ",   0x0b, 0x00010001 },   /* JZ const */
+	{ "JP",   0x0c, 0x00010000 },   /* JP RX */
+	{ "JP",   0x0c, 0x00010001 },   /* JP const */
+	{ "JN",   0x0d, 0x00010000 },   /* JN RX */
+	{ "JN",   0x0d, 0x00010001 },   /* JN const */
+	{ "JPZ",  0x0e, 0x00010000 },   /* JPZ RX */
+	{ "JPZ",  0x0e, 0x00010001 },   /* JPZ const */
+	{ "JPN",  0x0f, 0x00010000 },   /* JPN RX */
+	{ "JPN",  0x0f, 0x00010001 },   /* JPN const */
+	{ "JNZ",  0x10, 0x00010000 },   /* JNZ RX */
+	{ "JNZ",  0x10, 0x00010001 },   /* JNZ const */
+	{ "ADD",  0x11, 0x00020000 },   /* ADD RX RY */
+	{ "ADD",  0x11, 0x00020002 },   /* ADD RX const */
+	{ "SUB",  0x12, 0x00020000 },   /* SUB RX RY */
+	{ "SUB",  0x12, 0x00020002 },   /* SUB RX const */
+	{ "MUL",  0x13, 0x00020000 },   /* MUL RX RY */
+	{ "MUL",  0x13, 0x00020002 },   /* MUL RX const */
+	{ "DIV",  0x14, 0x00020000 },   /* DIV RX RY */
+	{ "DIV",  0x14, 0x00020002 },   /* DIV RX const */
+	{ "MOD",  0x15, 0x00020000 },   /* MOD RX RY */
+	{ "MOD",  0x15, 0x00020002 },   /* MOD RX const */
+	{ "AND",  0x16, 0x00020000 },   /* AND RX RY */
+	{ "AND",  0x16, 0x00020002 },   /* AND RX const */
+	{ "OR",   0x17, 0x00020000 },   /* OR RX RY */
+	{ "OR",   0x17, 0x00020002 },   /* OR RX const */
+	{ "XOR",  0x18, 0x00020000 },   /* XOR RX RY */
+	{ "XOR",  0x18, 0x00020002 },   /* XOR RX const */
+	{ "NOT",  0x19, 0x00010000 },   /* NOT RX */
+
+
 	{ NULL, 0, 0 }
 	  
 };
@@ -460,7 +560,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 	      }
 	    }
 	  }
-	  //printf( ";; constant = %x str=%s\n", j, arg );
+	  printf( ";; constant = %x str=%s\n", j, arg );
 	  *opcode |= j & 0xffff;
 	  break;
 	}

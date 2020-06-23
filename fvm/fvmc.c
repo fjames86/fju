@@ -41,6 +41,8 @@ static uint32_t u32be( uint32_t u ) {
 struct label {
   char name[64];
   uint32_t addr;
+  uint32_t flags;
+#define LABEL_EXPORT 0x01
 };
 
 static int nlabels;
@@ -49,7 +51,7 @@ static int addlabel( char *name, uint32_t addr ) {
   int i ;
   for( i = 0; i < nlabels; i++ ) {
     if( strcasecmp( labels[i].name, name ) == 0 ) {
-      printf( ";; duplicate label %s\n", name );
+      //printf( ";; duplicate label %s\n", name );
       return -1;
     }
   }
@@ -65,6 +67,16 @@ static uint32_t getlabel( char *name ) {
     if( strcasecmp( labels[i].name, name ) == 0 ) return labels[i].addr;
   }
   return 0;
+}
+static int exportlabel( char *name ) {
+  int i;
+  for( i = 0; i < nlabels; i++ ) {
+    if( strcasecmp( labels[i].name, name ) == 0 ) {
+      labels[i].flags |= LABEL_EXPORT;
+      return 0;
+    }
+  }
+  return -1;
 }
 
 static int datasize;
@@ -96,7 +108,7 @@ int main( int argc, char **argv ) {
   if( !outfile ) usage( "Failed to open outfile" );
   addr = 0;
 
-  printf( "\n ------ first pass ------- \n" );
+  //  printf( "\n ------ first pass ------- \n" );
 
   /* first pass collects labels and computes offets. does not emit opcodes */
   starti = i;
@@ -118,7 +130,7 @@ int main( int argc, char **argv ) {
 
       if( parse_directive( buf, &addr, NULL, 0 ) == 0 ) continue;
       
-      printf( ";; attempting to encode line \"%s\"\n", buf );
+      //printf( ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, ADDR_TEXT + addr, 1 ) != -1 ) {
 	addr += 4;
       }
@@ -129,11 +141,11 @@ int main( int argc, char **argv ) {
   }
 
   
-  printf( "\n ------ label table ------- \n" );
+  //printf( "\n ------ label table ------- \n" );
   for( j = 0; j < nlabels; j++ ) {
-    printf( ";; Label %-4d %-16s = 0x%08x\n", j, labels[j].name, labels[j].addr );
+    //printf( ";; Label %-4d %-16s = 0x%08x\n", j, labels[j].name, labels[j].addr );
   }
-  printf( "\n ------ second pass ------- \n" );
+  //printf( "\n ------ second pass ------- \n" );
 
   /* second pass emits output */
   
@@ -187,7 +199,7 @@ int main( int argc, char **argv ) {
 
       //      printf( ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, 0, 0 ) != -1 ) {
-	printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
+	//printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
 	opcode = u32be( opcode );
 	fwrite( &opcode, 4, 1, outfile );
       }
@@ -366,9 +378,23 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     }
     if( f == NULL ) addlabel( name, strtoul( str, NULL, 0 ) );
 
+  } else if( strcasecmp( directive, ".EXPORT" ) == 0 ) {
+
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) return 0;
+    
+    memset( name, 0, sizeof(name) );
+    q = name;
+    while( *p != ' ' && *p != '\t' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+
+    if( exportlabel( name ) ) usage( "Unknown label \"%s\"", name );
   } else {
     /* unknown directive */
-    printf( ";; unknown directive %s\n", directive );
+    usage( "Unknown directive \"%s\"", directive );
     return -1;
   }
 }
@@ -428,8 +454,18 @@ static struct {
 	{ "XOR",  0x18, 0x00020000 },   /* XOR RX RY */
 	{ "XOR",  0x18, 0x00020002 },   /* XOR RX const */
 	{ "NOT",  0x19, 0x00010000 },   /* NOT RX */
-
-
+	{ "SHL",  0x1a, 0x00020000 },   /* SHL RX RY */
+	{ "SHL",  0x1a, 0x00020002 },   /* SHL RX const */
+	{ "SHR",  0x1b, 0x00020000 },   /* SHR RX RY */
+	{ "SHR",  0x1b, 0x00020002 },   /* SHR RX const */
+	{ "ROL",  0x1c, 0x00020000 },   /* ROL RX RY */
+	{ "ROL",  0x1c, 0x00020002 },   /* ROL RX const */
+	{ "ROR",  0x1d, 0x00020000 },   /* ROR RX RY */
+	{ "ROR",  0x1d, 0x00020002 },   /* ROR RX const */
+	{ "CALLVIRT", 0x1e, 0x00030000 }, /* CALLVIRT RX RY RZ. call a function in a remote module. rx=module name, ry=function. rz=argsize */
+	{ "LDVIRT", 0x1f, 0x00030000 },   /* LDVIRT RX RY RZ. load from remote module. rx=module name, ry=symbol rz=receives value */
+	{ "STVIRT", 0x20, 0x00030000 },   /* STVIRT RX RY RZ. store into remote module. rx=module, ry=symbol rz=value */
+	
 	{ NULL, 0, 0 }
 	  
 };
@@ -455,7 +491,7 @@ static struct {
 
 static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass ) {
   char *p, *q, *startargs;
-  char inst[64], arg[64];;
+  char inst[64], arg[64];
   int i, nargs, j, k;
   
   p = str;
@@ -500,7 +536,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
       for( k = 0; k < nargs; k++ ) {
 	while( *p == ' ' || *p == '\t' ) p++;
 	if( *p == '\0' || *p == '\n' ) {
-	  printf( ";; empty line 3\n" );
+	  //printf( ";; empty line 3\n" );
 	  goto cont;
 	}
 
@@ -525,8 +561,8 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 	    if( strcasecmp( registers[j].reg, arg ) == 0 ) {
 	      if( k == 0 ) *opcode |= registers[j].regid << 20;
 	      else {
-		*opcode |= 0x00010000; // flag indicating 2nd arg is a register
-		*opcode |= registers[j].regid;
+		*opcode |= (0x0001000 << (k - 1)); // flag indicating 2nd arg is a register
+		*opcode |= (registers[j].regid << ((k - 1) * 4));
 	      }
 	      break;
 	    }
@@ -555,12 +591,12 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 		}
 	      }
 	      if( !b ) {
-		printf( ";; bad constant or unknown label %s\n", arg );
+		usage( "Bad constant or unknown label \"%s\"", arg );
 		return -1;
 	      }
 	    }
 	  }
-	  printf( ";; constant = %x str=%s\n", j, arg );
+	  //printf( ";; constant = %x str=%s\n", j, arg );
 	  *opcode |= j & 0xffff;
 	  break;
 	}
@@ -574,7 +610,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
     i++;
   }
 
-  printf( ";; unknown opcode \"%s\"\n", inst ); 
+  usage( "Unknown opcode \"%s\"", inst ); 
   return -1;
 }
 
@@ -582,14 +618,37 @@ struct header {
   uint32_t magic;
   uint32_t version;
   uint32_t datasize;
-  uint32_t spare[13];
+  uint32_t nsyms;
+  uint32_t spare[12];
 };
 static void emit_header( FILE *f ) {
   struct header header;
+  int nsyms, i;
+
+  nsyms = 0;
+  for( i = 0; i < nlabels; i++ ) {
+    if( labels[i].flags & LABEL_EXPORT ) nsyms++;
+  }
+  
   memset( &header, 0, sizeof(header) );
   header.magic = 0x12341234;
   header.version = 1;
   header.datasize = datasize;
+  header.nsyms = nsyms;
   
   fwrite( &header, sizeof(header), 1, f );
+
+  for( i = 0; i < nlabels; i++ ) {
+    if( labels[i].flags & LABEL_EXPORT ) {
+      struct {
+	char name[64];
+	uint32_t addr;
+      } l;
+      memset( &l, 0, sizeof(l) );
+      strcpy( l.name, labels[i].name );
+      l.addr = labels[i].addr;
+      fwrite( &l, sizeof(l), 1, f );
+    }
+  }
+  
 }

@@ -5,6 +5,11 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#define ADDR_RESERVED 0x0000  /* 4k bytes of reserved address space */
+#define ADDR_DATA     0x1000  /* 16k reserved for data segment */
+#define ADDR_TEXT     0x5000  /* 28k reserved for text segment */
+#define ADDR_STACK    0xc000  /* 16k reserved for stack */
+
 static void usage( char *fmt, ... ) {
   va_list args;
   
@@ -25,6 +30,8 @@ static void usage( char *fmt, ... ) {
 }
 
 static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass );
+static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
+static void emit_header( FILE *f );
 
 struct label {
   char name[64];
@@ -33,14 +40,38 @@ struct label {
 
 static int nlabels;
 static struct label labels[1024];
+static int addlabel( char *name, uint32_t addr ) {
+  int i ;
+  for( i = 0; i < nlabels; i++ ) {
+    if( strcasecmp( labels[i].name, name ) == 0 ) {
+      printf( ";; duplicate label %s\n", name );
+      return -1;
+    }
+  }
+    
+  strcpy( labels[nlabels].name, name );
+  labels[nlabels].addr = addr;
+  nlabels++;
+  return 0;
+}
+static uint32_t getlabel( char *name ) {
+  int i;
+  for( i = 0; i < nlabels; i++ ) {
+    if( strcasecmp( labels[i].name, name ) == 0 ) return labels[i].addr;
+  }
+  return 0;
+}
+
+static int datasize;
+static uint8_t datasection[4096];
 
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
-  char buf[256];
+  char buf[256], directive[64];
   uint32_t opcode;
   char *filename, *outfilename;
-  int i, j;
-  char *p;
+  int i, j, starti;
+  char *p, *q;
   uint32_t addr;
   
   outfilename = "out.fvm";
@@ -60,12 +91,14 @@ int main( int argc, char **argv ) {
   outfile = fopen( outfilename, "w" );
   if( !outfile ) usage( "Failed to open outfile" );
   addr = 0;
-  
+
+  printf( "\n ------ first phase ------- \n" );
+
+  starti = i;
   while( i < argc ) {
     f = fopen( argv[i], "r" );  
     if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
-
-    printf( "\n ------ first phase ------- \n" );
+    
     memset( buf, 0, sizeof(buf) );
     while( fgets( buf, sizeof(buf) - 1, f ) ) {
       p = buf;
@@ -73,18 +106,37 @@ int main( int argc, char **argv ) {
 	if( *p == '\n' ) *p = '\0';
 	p++;
       }
-      //      printf( ";; attempting to encode line \"%s\"\n", buf );
-      if( encode_inst( buf, &opcode, addr, 1 ) != -1 ) {
+
+      p = buf;
+      while( *p == ' ' || *p == '\t' ) p++;
+      if( *p == '\0' ) continue;
+
+      if( parse_directive( buf, &addr, NULL, 0 ) == 0 ) continue;
+      
+      printf( ";; attempting to encode line \"%s\"\n", buf );
+      if( encode_inst( buf, &opcode, ADDR_TEXT + addr, 1 ) != -1 ) {
 	addr += 4;
       }
     }
-    fseek( f, 0, SEEK_SET );
+    
+    fclose( f );
+    i++;
+  }
 
-    printf( "\n ------ label table ------- \n" );
-    for( j = 0; j < nlabels; j++ ) {
-      printf( ";; Label %-4d %-16s = 0x%08x\n", j, labels[j].name, labels[j].addr );
-    }
-    printf( "\n ------ second phase ------- \n" );
+  
+  printf( "\n ------ label table ------- \n" );
+  for( j = 0; j < nlabels; j++ ) {
+    printf( ";; Label %-4d %-16s = 0x%08x\n", j, labels[j].name, labels[j].addr );
+  }
+  printf( "\n ------ second phase ------- \n" );
+
+  // write header
+  emit_header( outfile );
+  
+  i = starti;
+  while( i < argc ) {
+    f = fopen( argv[i], "r" );  
+    if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
     
     memset( buf, 0, sizeof(buf) );
     addr = 0;
@@ -94,6 +146,38 @@ int main( int argc, char **argv ) {
 	if( *p == '\n' ) *p = '\0';
 	p++;
       }
+      
+      p = buf;
+      while( *p == ' ' || *p == '\t' ) p++;
+      if( *p == '\0' ) continue;
+      
+      if( parse_directive( buf, &addr, outfile, 1 ) == 0 ) continue;
+    }
+    
+    fclose( f );
+    i++;
+  }
+  
+  i = starti;
+  while( i < argc ) {
+    f = fopen( argv[i], "r" );  
+    if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
+    
+    memset( buf, 0, sizeof(buf) );
+    addr = 0;
+    while( fgets( buf, sizeof(buf) - 1, f ) ) {
+      p = buf;
+      while( *p != '\0' ) {
+	if( *p == '\n' ) *p = '\0';
+	p++;
+      }
+      
+      p = buf;
+      while( *p == ' ' || *p == '\t' ) p++;
+      if( *p == '\0' ) continue;
+      
+      if( parse_directive( buf, &addr, outfile, 0 ) == 0 ) continue;
+
       //      printf( ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, 0, 0 ) != -1 ) {
 	printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
@@ -109,6 +193,126 @@ int main( int argc, char **argv ) {
     
   return 0;
 }
+
+static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment ) {
+  char *p;
+  char directive[64], name[64];
+  uint32_t size;
+  char *q;
+  
+  p = buf;
+  while( *p == ' ' || *p == '\t' ) p++;
+  if( *p == '\0' ) return -1;
+  if( *p != '.' ) return -1;
+  
+  /* assembler directive */
+  memset( directive, 0, sizeof(directive) );
+  q = directive;
+  while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+    *q = *p;
+    p++;
+    q++;
+  }
+  
+  if( (strcasecmp( directive, ".data" ) == 0) ||
+      (strcasecmp( directive, ".text" ) == 0) ) {
+    /* reserve some bytes in the data/text segment */
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) return 0;
+    
+    memset( name, 0, sizeof(name) );
+    q = name;
+    while( *p != ' ' && *p != '\t' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+    
+    if( f == NULL ) addlabel( name, strcasecmp( directive, ".data" ) == 0 ? ADDR_DATA + datasize : ADDR_TEXT + *addr );
+
+    while( 1 ) {
+      /* data can be either a space separated list of numbers or a string */
+      while( *p == ' ' || *p == '\t' ) p++;
+      if( *p == '\0' ) return 0;
+
+      size = 0;
+      if( *p == '"' ) {
+	p++;
+	char *startp = p;
+	
+	/* string */
+	size = 4; /* string length header */
+	while( *p != '"' ) {
+	  if( *p == '\0' ) break;
+	  if( *p == '\\' ) {
+	    p++;
+	    size++;
+	    if( *p == '"' ) {
+	      p++;
+	      size++;
+	    }	    
+	  }
+	  
+	  p++;
+	  size++;
+	}
+	p--;
+	
+	if( f != NULL ) {	  
+	  uint32_t s = size - 4;
+	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
+	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
+	    fwrite( &s, 4, 1, f );
+	    fwrite( startp, 1, s, f );
+	  }
+	}
+      } else {
+	/* integer or label always 4 bytes */
+	char numstr[64];
+	  
+	memset( numstr, 0, sizeof(numstr) );
+	q = numstr;
+	while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+	  *q = *p;
+	  p++;
+	  q++;
+	}
+	
+	size = 4;
+	if( f != NULL ) {
+	  char *term;
+	  uint32_t x;
+	  
+	  x = strtoul( numstr, &term, 0 );
+	  if( *term ) {
+	    // not a number, try a label 
+	    x = getlabel( numstr );
+	  }
+
+	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
+	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
+	    fwrite( &x, 4, 1, f );
+	  }
+	  
+	}
+      }
+
+      if( f == NULL ) {
+	if( strcasecmp( directive, ".data" ) == 0 ) {
+	  datasize += size;
+	} else {
+	  *addr = *addr + size;
+	}
+      }
+    }
+    return 0;
+  } else {
+    /* unknown directive */
+    printf( ";; unknown directive %s\n", directive );
+    return -1;
+  }
+}
+
 
 static struct {
   char *inst;
@@ -169,8 +373,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
   q = inst;
   while( *p != ' ' && *p != '\t' && *p != '\n' ) {
     if( *p == '\0' || *p == '\n' ) {
-      printf( ";; empty line 2\n" );
-      return -1;
+      break;
     }
     *q = *p;
     p++;
@@ -182,16 +385,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
     /* last character is a : means this is a label identifier */
     *(q - 1)= '\0';
 
-    for( i = 0; i < nlabels; i++ ) {
-      if( strcmp( labels[i].name, inst ) == 0 ) {
-	printf( ";; duplicate label %s\n", inst );
-	return -1;
-      }
-    }
-    
-    strcpy( labels[nlabels].name, inst );
-    labels[nlabels].addr = addr;
-    nlabels++;
+    addlabel( inst, addr );
     return -1;
   }
         
@@ -282,4 +476,20 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 
   printf( ";; unknown opcode \"%s\"\n", inst ); 
   return -1;
+}
+
+struct header {
+  uint32_t magic;
+  uint32_t version;
+  uint32_t datasize;
+  uint32_t spare[13];
+};
+static void emit_header( FILE *f ) {
+  struct header header;
+  memset( &header, 0, sizeof(header) );
+  header.magic = 0x12341234;
+  header.version = 1;
+  header.datasize = datasize;
+  
+  fwrite( &header, sizeof(header), 1, f );
 }

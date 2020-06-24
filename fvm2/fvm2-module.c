@@ -50,6 +50,33 @@ int fvm2_module_load( char *filename ) {
   return sts;
 }
 
+int fvm2_module_register( char *buf, int size ) {
+  struct fvm2_header header;
+  struct fvm2_module *m;
+  
+  memcpy( &header, buf, sizeof(header) );
+  if( header.magic != FVM2_MAGIC ) return -1;
+  if( header.version != FVM2_VERSION ) return -1;
+  if( size != (sizeof(header) + header.symcount*sizeof(struct fvm2_symbol) + header.datasize + header.textsize) ) {
+    return -1;
+  }
+  
+  m = malloc( sizeof(*m) + header.symcount*sizeof(struct fvm2_symbol) + header.datasize + header.textsize );
+  m->header = header;
+  m->symbols = (struct fvm2_symbol *)(((char *)m) + sizeof(*m));
+  m->data = (uint8_t *)(((char *)m->symbols) + header.symcount*sizeof(struct fvm2_symbol));
+  m->text = (uint8_t *)(((char *)m->data) + header.datasize);
+
+  memcpy( (char *)m->symbols, buf + sizeof(struct fvm2_header), sizeof(struct fvm2_symbol) * header.symcount );
+  memcpy( (char *)m->data, buf + sizeof(header) + header.symcount * sizeof(struct fvm2_symbol), header.datasize );
+  memcpy( (char *)m->text, buf + sizeof(header) + header.symcount * sizeof(struct fvm2_symbol) + header.datasize, header.textsize );
+
+  m->next = modules;
+  modules = m;
+  
+  return 0;
+}
+
 int fvm2_module_unload( char *name ) {
   struct fvm2_module *m, *prev;
 

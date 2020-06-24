@@ -66,6 +66,7 @@ int fvm2_native_unregister( char *name );
 
 
 int fvm2_module_load( char *filename );
+int fvm2_module_register( char *buf, int size );
 int fvm2_module_unload( char *name );
 int fvm2_module_list( struct fvm2_module_info *minfo, int n );
 int fvm2_module_symbols( char *name, struct fvm2_symbol *sym, int n );

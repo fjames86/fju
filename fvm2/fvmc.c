@@ -502,6 +502,7 @@ static struct {
 	{ "LEASP", 0x37, 0x00020002 },   /* LDEASP RX const. load address from stack pointer with offset */
 	{ "ALLOCA", 0x38, 0x00010000 },  /* ALLOCA RX */
 	{ "ALLOCA", 0x39, 0x00010001 },  /* ALLOCA const. adjust on stack. +ve allocate, -ve frees. */
+	{ "MOV", 0x3a, 0x00020000 }, /* MOV RX RY. copy register */
 
 	
 	{ NULL, 0, 0 }

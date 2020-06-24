@@ -430,6 +430,11 @@ static int opcode_allocaconst( struct fvm2_s *state, uint32_t flags, uint32_t re
   return 0;
 }
 
+static int opcode_movreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  state->reg[reg] = state->reg[data & 0x7];
+  return 0;
+}
+
 
 
 static fvm2_opcode_fn opcodes[FVM2_MAX_OPCODE] =
@@ -492,7 +497,7 @@ static fvm2_opcode_fn opcodes[FVM2_MAX_OPCODE] =
    opcode_leasp,
    opcode_allocareg,
    opcode_allocaconst,
-
+   opcode_movreg,
 
   };
 

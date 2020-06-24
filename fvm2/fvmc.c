@@ -5,6 +5,8 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#include "fvm2-private.h"
+
 #define ADDR_RESERVED 0x0000  /* 4k bytes of reserved address space */
 #define ADDR_DATA     0x1000  /* 16k reserved for data segment */
 #define ADDR_TEXT     0x5000  /* 28k reserved for text segment */
@@ -100,6 +102,8 @@ int main( int argc, char **argv ) {
       outfilename = argv[i];
     } else if( strcmp( argv[i], "-h" ) == 0 ) {
       usage( NULL );
+    } else if( strcmp( argv[i], "--help" ) == 0 ) {
+      usage( NULL );      
     } else break;
     i++;
   }
@@ -411,60 +415,63 @@ static struct {
 } opcodes[] = {
 	{ "NOP",  0x00, 0x00000000 },
 	{ "LD",   0x01, 0x00020000 },   /* LD RX RY */
-	{ "LD",   0x01, 0x00020002 },   /* LD RX constant */
-	{ "ST",   0x02, 0x00020000 },   /* ST RX RY */
-	{ "ST",   0x02, 0x00020002 },   /* ST RX const */
-	{ "LDI",  0x03, 0x00020002 },   /* LDI RX constant */
-	{ "RESERVED",  0x04, 0x00000000 },   /* unused */
-	{ "LEA",  0x05, 0x00020002 },   /* LEA RX constant */
-	{ "PUSH", 0x06, 0x00010000 },   /* PUSH RX */
-	{ "PUSH", 0x06, 0x00010001 },   /* PUSH const */
-	{ "POP",  0x07, 0x00010000 },   /* POP RX */
-	{ "RET",  0x08, 0x00000000 },   /* RET */
-	{ "CALL", 0x09, 0x00010000 },   /* CALL RX */
-	{ "CALL", 0x09, 0x00010001 },   /* CALL const */
-	{ "JMP",  0x0a, 0x00010000 },   /* JMP RX */
-	{ "JMP",  0x0a, 0x00010001 },   /* JMP const */
-	{ "JZ",   0x0b, 0x00010000 },   /* JZ RX */
-	{ "JZ",   0x0b, 0x00010001 },   /* JZ const */
-	{ "JP",   0x0c, 0x00010000 },   /* JP RX */
-	{ "JP",   0x0c, 0x00010001 },   /* JP const */
-	{ "JN",   0x0d, 0x00010000 },   /* JN RX */
-	{ "JN",   0x0d, 0x00010001 },   /* JN const */
-	{ "JPZ",  0x0e, 0x00010000 },   /* JPZ RX */
-	{ "JPZ",  0x0e, 0x00010001 },   /* JPZ const */
-	{ "JPN",  0x0f, 0x00010000 },   /* JPN RX */
-	{ "JPN",  0x0f, 0x00010001 },   /* JPN const */
-	{ "JNZ",  0x10, 0x00010000 },   /* JNZ RX */
-	{ "JNZ",  0x10, 0x00010001 },   /* JNZ const */
-	{ "ADD",  0x11, 0x00020000 },   /* ADD RX RY */
-	{ "ADD",  0x11, 0x00020002 },   /* ADD RX const */
-	{ "SUB",  0x12, 0x00020000 },   /* SUB RX RY */
-	{ "SUB",  0x12, 0x00020002 },   /* SUB RX const */
-	{ "MUL",  0x13, 0x00020000 },   /* MUL RX RY */
-	{ "MUL",  0x13, 0x00020002 },   /* MUL RX const */
-	{ "DIV",  0x14, 0x00020000 },   /* DIV RX RY */
-	{ "DIV",  0x14, 0x00020002 },   /* DIV RX const */
-	{ "MOD",  0x15, 0x00020000 },   /* MOD RX RY */
-	{ "MOD",  0x15, 0x00020002 },   /* MOD RX const */
-	{ "AND",  0x16, 0x00020000 },   /* AND RX RY */
-	{ "AND",  0x16, 0x00020002 },   /* AND RX const */
-	{ "OR",   0x17, 0x00020000 },   /* OR RX RY */
-	{ "OR",   0x17, 0x00020002 },   /* OR RX const */
-	{ "XOR",  0x18, 0x00020000 },   /* XOR RX RY */
-	{ "XOR",  0x18, 0x00020002 },   /* XOR RX const */
-	{ "NOT",  0x19, 0x00010000 },   /* NOT RX */
-	{ "SHL",  0x1a, 0x00020000 },   /* SHL RX RY */
-	{ "SHL",  0x1a, 0x00020002 },   /* SHL RX const */
-	{ "SHR",  0x1b, 0x00020000 },   /* SHR RX RY */
-	{ "SHR",  0x1b, 0x00020002 },   /* SHR RX const */
-	{ "ROL",  0x1c, 0x00020000 },   /* ROL RX RY */
-	{ "ROL",  0x1c, 0x00020002 },   /* ROL RX const */
-	{ "ROR",  0x1d, 0x00020000 },   /* ROR RX RY */
-	{ "ROR",  0x1d, 0x00020002 },   /* ROR RX const */
-	{ "CALLVIRT", 0x1e, 0x00030000 }, /* CALLVIRT RX RY RZ. call a function in a remote module. rx=module name, ry=function. rz=argsize */
-	{ "LDVIRT", 0x1f, 0x00030000 },   /* LDVIRT RX RY RZ. load from remote module. rx=module name, ry=symbol rz=receives value */
-	{ "STVIRT", 0x20, 0x00030000 },   /* STVIRT RX RY RZ. store into remote module. rx=module, ry=symbol rz=value */
+	{ "LD",   0x02, 0x00020002 },   /* LD RX constant */
+	{ "ST",   0x03, 0x00020000 },   /* ST RX RY */
+	{ "ST",   0x04, 0x00020002 },   /* ST RX const */
+	{ "LDI",  0x05, 0x00020002 },   /* LDI RX constant */
+	{ "LEA",  0x06, 0x00020002 },   /* LEA RX constant */
+	{ "PUSH", 0x07, 0x00010000 },   /* PUSH RX */
+	{ "PUSH", 0x08, 0x00010001 },   /* PUSH const */
+	{ "POP",  0x09, 0x00010000 },   /* POP RX */
+	{ "RET",  0x0a, 0x00000000 },   /* RET */
+	{ "CALL", 0x0b, 0x00010000 },   /* CALL RX */
+	{ "CALL", 0x0c, 0x00010001 },   /* CALL const */
+	{ "JMP",  0x0d, 0x00010000 },   /* JMP RX */
+	{ "JMP",  0x0e, 0x00010001 },   /* JMP const */
+	{ "JZ",   0x0f, 0x00010000 },   /* JZ RX */
+	{ "JZ",   0x10, 0x00010001 },   /* JZ const */
+	{ "JP",   0x11, 0x00010000 },   /* JP RX */
+	{ "JP",   0x12, 0x00010001 },   /* JP const */
+	{ "JN",   0x13, 0x00010000 },   /* JN RX */
+	{ "JN",   0x14, 0x00010001 },   /* JN const */
+	{ "JPZ",  0x15, 0x00010000 },   /* JPZ RX */
+	{ "JPZ",  0x16, 0x00010001 },   /* JPZ const */
+	{ "JPN",  0x17, 0x00010000 },   /* JPN RX */
+	{ "JPN",  0x18, 0x00010001 },   /* JPN const */
+	{ "JNZ",  0x19, 0x00010000 },   /* JNZ RX */
+	{ "JNZ",  0x1a, 0x00010001 },   /* JNZ const */
+	{ "ADD",  0x1b, 0x00020000 },   /* ADD RX RY */
+	{ "ADD",  0x1c, 0x00020002 },   /* ADD RX const */
+	{ "SUB",  0x1d, 0x00020000 },   /* SUB RX RY */
+	{ "SUB",  0x1e, 0x00020002 },   /* SUB RX const */
+	{ "MUL",  0x1f, 0x00020000 },   /* MUL RX RY */
+	{ "MUL",  0x20, 0x00020002 },   /* MUL RX const */
+	{ "DIV",  0x21, 0x00020000 },   /* DIV RX RY */
+	{ "DIV",  0x22, 0x00020002 },   /* DIV RX const */
+	{ "MOD",  0x23, 0x00020000 },   /* MOD RX RY */
+	{ "MOD",  0x24, 0x00020002 },   /* MOD RX const */
+	{ "AND",  0x25, 0x00020000 },   /* AND RX RY */
+	{ "AND",  0x26, 0x00020002 },   /* AND RX const */
+	{ "OR",   0x27, 0x00020000 },   /* OR RX RY */
+	{ "OR",   0x28, 0x00020002 },   /* OR RX const */
+	{ "XOR",  0x29, 0x00020000 },   /* XOR RX RY */
+	{ "XOR",  0x2a, 0x00020002 },   /* XOR RX const */
+	{ "NOT",  0x2b, 0x00010000 },   /* NOT RX */
+	{ "SHL",  0x2c, 0x00020000 },   /* SHL RX RY */
+	{ "SHL",  0x2d, 0x00020002 },   /* SHL RX const */
+	{ "SHR",  0x2e, 0x00020000 },   /* SHR RX RY */
+	{ "SHR",  0x2f, 0x00020002 },   /* SHR RX const */
+	{ "ROL",  0x30, 0x00020000 },   /* ROL RX RY */
+	{ "ROL",  0x31, 0x00020002 },   /* ROL RX const */
+	{ "ROR",  0x32, 0x00020000 },   /* ROR RX RY */
+	{ "ROR",  0x33, 0x00020002 },   /* ROR RX const */
+	{ "CALLVIRT", 0x34, 0x00030000 }, /* CALLVIRT RX RY RZ. call a function in a remote module. rx=module name, ry=function. rz=argsize */
+	{ "LDVIRT", 0x35, 0x00030000 },   /* LDVIRT RX RY RZ. load from remote module. rx=module name, ry=symbol rz=receives value */
+	{ "STVIRT", 0x36, 0x00030000 },   /* STVIRT RX RY RZ. store into remote module. rx=module, ry=symbol rz=value */
+	{ "LEASP", 0x37, 0x00020002 },   /* LDEASP RX const. load address from stack pointer with offset */
+	{ "ALLOCA", 0x38, 0x00010000 },  /* ALLOCA RX */
+	{ "ALLOCA", 0x39, 0x00010001 },  /* ALLOCA const. adjust on stack. +ve allocate, -ve frees. */
+
 	
 	{ NULL, 0, 0 }
 	  
@@ -482,9 +489,11 @@ static struct {
        { "R5", 5 },
        { "R6", 6 },
        { "R7", 7 },
+#if 0
        { "SP", 8 },
        { "PC", 9 },
        { "FLAGS", 10 },
+#endif
        { NULL, 0 }
 };
 
@@ -561,7 +570,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 	    if( strcasecmp( registers[j].reg, arg ) == 0 ) {
 	      if( k == 0 ) *opcode |= registers[j].regid << 20;
 	      else {
-		*opcode |= (0x0001000 << (k - 1)); // flag indicating 2nd arg is a register
+		//*opcode |= (0x0001000 << (k - 1)); // flag indicating 2nd arg is a register
 		*opcode |= (registers[j].regid << ((k - 1) * 4));
 	      }
 	      break;
@@ -614,15 +623,8 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
   return -1;
 }
 
-struct header {
-  uint32_t magic;
-  uint32_t version;
-  uint32_t datasize;
-  uint32_t nsyms;
-  uint32_t spare[12];
-};
 static void emit_header( FILE *f ) {
-  struct header header;
+  struct fvm2_header header;
   int nsyms, i;
 
   nsyms = 0;
@@ -631,23 +633,21 @@ static void emit_header( FILE *f ) {
   }
   
   memset( &header, 0, sizeof(header) );
-  header.magic = 0x12341234;
-  header.version = 1;
+  header.magic = FVM2_MAGIC;
+  header.version = FVM2_VERSION;
   header.datasize = datasize;
-  header.nsyms = nsyms;
+  header.textsize = addr;
+  header.symcount = nsyms;
   
   fwrite( &header, sizeof(header), 1, f );
 
   for( i = 0; i < nlabels; i++ ) {
     if( labels[i].flags & LABEL_EXPORT ) {
-      struct {
-	char name[64];
-	uint32_t addr;
-      } l;
-      memset( &l, 0, sizeof(l) );
-      strcpy( l.name, labels[i].name );
-      l.addr = labels[i].addr;
-      fwrite( &l, sizeof(l), 1, f );
+      struct fvm2_symbol symbol;
+      memset( &symbol, 0, sizeof(symbol) );
+      strcpy( symbol.name, labels[i].name );
+      symbol.addr = labels[i].addr;
+      fwrite( &symbol, sizeof(symbol), 1, f );
     }
   }
   

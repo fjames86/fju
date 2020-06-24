@@ -7,7 +7,7 @@
 static struct fvm2_module *modules;
 
 int fvm2_module_load( char *filename ) {
-  int sts, i;
+  int sts;
   struct mmf_s mmf;
   struct fvm2_header header;
   struct fvm2_module *m;
@@ -119,5 +119,101 @@ uint32_t fvm2_symbol_addr( struct fvm2_module *m, char *name ) {
     if( strcasecmp( m->symbols[i].name, name ) == 0 ) return m->symbols[i].addr;
   }
   return 0;
+}
+
+
+/* -------------------------- */
+
+static struct fvm2_native_module *native_modules;
+
+int fvm2_native_register( struct fvm2_native_module *module ) {
+  module->next = native_modules;
+  native_modules = module;
+  return 0;
+}
+
+int fvm2_native_unregister( char *name ) {
+  struct fvm2_native_module *m, *prev;
+
+  prev = NULL;
+  m = native_modules;
+  while( m ) {
+    if( strcasecmp( m->name, name ) == 0 ) {
+      if( prev ) prev->next = m->next;
+      else native_modules = m->next;
+      return 0;
+    }
+    prev = m;
+    m = m->next;
+  }
+
+  return -1;
+}
+
+static struct fvm2_native_module *fvm2_native_by_name( char *name ) {
+  struct fvm2_native_module *m;
+  m = native_modules;
+  while( m ) {
+    if( strcasecmp( m->name, name ) == 0 ) {
+      return m;
+    }
+    m = m->next;
+  }
+  return NULL;
+}
+
+static struct fvm2_native_symbol *fvm2_native_symbol_by_name( struct fvm2_native_module *m, char *name ) {
+  int i;
+  for( i = 0; i < m->symcount; i++ ) {
+    if( strcasecmp( m->symbols[i].name, name ) == 0 ) {
+      return &m->symbols[i];
+    }
+  }
+  return NULL;
+}
+
+int fvm2_native_readvar( char *mname, char *sname, char *buf, int size ) {
+  struct fvm2_native_module *m;
+  struct fvm2_native_symbol *s;
+  
+  m = fvm2_native_by_name( mname );
+  if( !m ) return -1;
+
+  s = fvm2_native_symbol_by_name( m, sname );
+  if( !s ) return -1;
+
+  if( s->type != FVM2_NATIVE_VAR ) return -1;
+    
+  return s->readvar( buf, size );
+}
+
+int fvm2_native_writevar( char *mname, char *sname, char *buf, int size ) {
+  struct fvm2_native_module *m;
+  struct fvm2_native_symbol *s;
+  
+  m = fvm2_native_by_name( mname );
+  if( !m ) return -1;
+
+  s = fvm2_native_symbol_by_name( m, sname );
+  if( !s ) return -1;
+
+  if( s->type != FVM2_NATIVE_VAR ) return -1;
+  
+  return s->writevar( buf, size );
+}
+
+int fvm2_native_invoke( char *mname, char *sname, char *args, int argsize, char *res, int *ressize ) {
+  struct fvm2_native_module *m;
+  struct fvm2_native_symbol *s;
+  
+  m = fvm2_native_by_name( mname );
+  if( !m ) return -1;
+
+  s = fvm2_native_symbol_by_name( m, sname );
+  if( !s ) return -1;
+
+  if( s->type != FVM2_NATIVE_FUNC ) return -1;
+
+  return s->func( args, argsize, res, ressize );
 }
 

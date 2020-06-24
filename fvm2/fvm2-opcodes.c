@@ -121,7 +121,6 @@ static int opcode_popreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, ui
 }
 
 static int opcode_ret( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  uint32_t addr;
   /* RET */
   state->reg[FVM2_REG_SP] -= 4;
   state->reg[FVM2_REG_PC] = ntohl(mem_read( state, state->reg[FVM2_REG_SP] ));
@@ -407,6 +406,12 @@ static int opcode_rorconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 
 
 static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* CALLVIRT RX RY RZ */
+  /* RX points to a string naming the module. 
+   * RY points to a string naming the function. 
+   * RZ contains arg length, receives result length. arg/res on stack 
+   */
+  
   return 0;
 }
 
@@ -419,14 +424,20 @@ static int opcode_stvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, ui
 }
 
 static int opcode_leasp( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* LEASP RX const */
+  state->reg[reg] = htonl( state->reg[FVM2_REG_SP] + sign_extend( data ) );
   return 0;
 }
 
 static int opcode_allocareg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* ALLOCA RX */
+  state->reg[FVM2_REG_SP] += ntohl( state->reg[reg] );
   return 0;
 }
 
 static int opcode_allocaconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* ALLOCA const */
+  state->reg[FVM2_REG_SP] += sign_extend( data );
   return 0;
 }
 

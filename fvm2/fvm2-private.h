@@ -55,5 +55,9 @@ typedef enum {
 struct fvm2_module *fvm2_module_by_name( char *name );
 uint32_t fvm2_symbol_addr( struct fvm2_module *m, char *name );
 
+int fvm2_native_readvar( char *mname, char *sname, char *buf, int size );
+int fvm2_native_writevar( char *mname, char *sname, char *buf, int size );
+int fvm2_native_invoke( char *mname, char *sname, char *args, int argsize, char *res, int *ressize );
+
 #endif
 

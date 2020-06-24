@@ -1,6 +1,7 @@
 
 #include "fvm2-private.h"
 
+#include <arpa/inet.h>
 
 static uint32_t mem_read( struct fvm2_s *state, uint32_t addr ) {
   uint32_t u;
@@ -12,7 +13,7 @@ static uint32_t mem_read( struct fvm2_s *state, uint32_t addr ) {
     if( (state->datasize - FVM2_ADDR_DATA - addr) < n ) n = (state->datasize - FVM2_ADDR_DATA - addr);
     memcpy( &u, state->data + addr - FVM2_ADDR_DATA, n );
     return u;
-  } else if( addr >= FVM2_ADDR_TEXT && addr < (FVM2_ADDR_TEXT + state->textsize) ) {
+  } else if( (addr >= FVM2_ADDR_TEXT) && (addr < (FVM2_ADDR_TEXT + state->textsize)) ) {
     n = 4;
     if( (state->textsize - FVM2_ADDR_TEXT - addr) < n ) n = (state->textsize - FVM2_ADDR_TEXT - addr);
     memcpy( &u, state->text + addr - FVM2_ADDR_TEXT, n );
@@ -82,19 +83,19 @@ static int opcode_streg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uin
 
 static int opcode_stconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ST RX const */
-  mem_write( state, state->reg[reg], data & 0xffff );
+  mem_write( state, state->reg[reg], htonl(data & 0xffff) );
   return 0;
 }
 
 static int opcode_ldi( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LDI RX const */
-  state->reg[reg] = sign_extend( data );
+  state->reg[reg] = htonl(sign_extend( data ));
   return 0;
 }
 
 static int opcode_lea( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LEA RX const */
-  state->reg[reg] = state->reg[FVM2_REG_PC] + sign_extend( data );
+  state->reg[reg] = htonl(ntohl(state->reg[FVM2_REG_PC]) + sign_extend( data ));
   return 0;
 }
 
@@ -107,7 +108,7 @@ static int opcode_pushreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, u
 
 static int opcode_pushconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* PUSH const */
-  mem_write( state, state->reg[FVM2_REG_SP], sign_extend( data ) );
+  mem_write( state, state->reg[FVM2_REG_SP], htonl(sign_extend( data )) );
   state->reg[FVM2_REG_SP] += 4;
   return 0;
 }
@@ -123,22 +124,21 @@ static int opcode_ret( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint3
   uint32_t addr;
   /* RET */
   state->reg[FVM2_REG_SP] -= 4;
-  addr = mem_read( state, state->reg[FVM2_REG_SP] );
-  state->reg[FVM2_REG_PC] = addr;
+  state->reg[FVM2_REG_PC] = ntohl(mem_read( state, state->reg[FVM2_REG_SP] ));
   state->frame--;
   return 0;
 }
 
 static int opcode_callreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  mem_write( state, state->reg[FVM2_REG_SP], state->reg[FVM2_REG_PC] );
+  mem_write( state, state->reg[FVM2_REG_SP], htonl(state->reg[FVM2_REG_PC]) );
   state->reg[FVM2_REG_SP] += 4;
-  state->reg[FVM2_REG_PC] = state->reg[reg];
+  state->reg[FVM2_REG_PC] = ntohl(state->reg[reg]);
   state->frame++;
   return 0;
 }
 
 static int opcode_callconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  mem_write( state, state->reg[FVM2_REG_SP], state->reg[FVM2_REG_PC] );
+  mem_write( state, state->reg[FVM2_REG_SP], htonl(state->reg[FVM2_REG_PC]) );
   state->reg[FVM2_REG_SP] += 4;
   state->reg[FVM2_REG_PC] = data & 0xffff;
   state->frame++;
@@ -147,7 +147,7 @@ static int opcode_callconst( struct fvm2_s *state, uint32_t flags, uint32_t reg,
 
 
 static int opcode_jmpreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  state->reg[FVM2_REG_PC] = state->reg[reg];
+  state->reg[FVM2_REG_PC] = ntohl(state->reg[reg]);
   return 0;
 }
 static int opcode_jmpconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
@@ -158,7 +158,7 @@ static int opcode_jmpconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 
 static int opcode_jzreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM2_REG_FLAGS] & FVM2_FLAG_ZERO ) {
-    state->reg[FVM2_REG_PC] = state->reg[reg];
+    state->reg[FVM2_REG_PC] = ntohl(state->reg[reg]);
   }  
   return 0;
 }
@@ -171,7 +171,7 @@ static int opcode_jzconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, u
 
 static int opcode_jpreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM2_REG_FLAGS] & FVM2_FLAG_POS ) {
-    state->reg[FVM2_REG_PC] = state->reg[reg];
+    state->reg[FVM2_REG_PC] = ntohl(state->reg[reg]);
   }  
   return 0;
 }
@@ -184,7 +184,7 @@ static int opcode_jpconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, u
 
 static int opcode_jnreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM2_REG_FLAGS] & FVM2_FLAG_NEG ) {
-    state->reg[FVM2_REG_PC] = state->reg[reg];
+    state->reg[FVM2_REG_PC] = ntohl(state->reg[reg]);
   }  
   return 0;
 }
@@ -198,7 +198,7 @@ static int opcode_jnconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, u
 
 static int opcode_jpzreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM2_REG_FLAGS] & (FVM2_FLAG_POS|FVM2_FLAG_ZERO) ) {
-    state->reg[FVM2_REG_PC] = state->reg[reg];
+    state->reg[FVM2_REG_PC] = ntohl(state->reg[reg]);
   }  
   return 0;
 }
@@ -211,7 +211,7 @@ static int opcode_jpzconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 
 static int opcode_jpnreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM2_REG_FLAGS] & (FVM2_FLAG_POS|FVM2_FLAG_NEG) ) {
-    state->reg[FVM2_REG_PC] = state->reg[reg];
+    state->reg[FVM2_REG_PC] = ntohl(state->reg[reg]);
   }  
   return 0;
 }
@@ -224,7 +224,7 @@ static int opcode_jpnconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 
 static int opcode_jnzreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM2_REG_FLAGS] & (FVM2_FLAG_NEG|FVM2_FLAG_ZERO) ) {
-    state->reg[FVM2_REG_PC] = state->reg[reg];
+    state->reg[FVM2_REG_PC] = ntohl(state->reg[reg]);
   }  
   return 0;
 }
@@ -238,166 +238,170 @@ static int opcode_jnzconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 
 static int opcode_addreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ADD RX RY */
-  state->reg[reg] += state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) + ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_addconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ADD RX const */
-  state->reg[reg] += sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) + sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_subreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* SUB RX RY */
-  state->reg[reg] -= state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) - ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_subconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* SUB RX const */
-  state->reg[reg] -= sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) - sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_mulreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* MUL RX RY */
-  state->reg[reg] *= state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) * ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_mulconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* MUL RX const */
-  state->reg[reg] *= sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) * sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_divreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* DIV RX RY */
-  if( state->reg[data & 0x7] == 0 ) return -1;
-  state->reg[reg] /= state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  if( htonl(state->reg[data & 0x7]) == 0 ) return -1;
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) / ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_divconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* DIV RX const */
   if( data == 0 ) return -1;
-  state->reg[reg] /= sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) / sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_modreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* MOD RX RY */
-  if( state->reg[data & 0x7] == 0 ) return -1;
-  state->reg[reg] = state->reg[reg] % state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  if( ntohl(state->reg[data & 0x7]) == 0 ) return -1;
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) % ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_modconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* MOD RX const */
   if( data == 0 ) return -1;
-  state->reg[reg] = state->reg[reg] % sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) % sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 
 static int opcode_andreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* AND RX RY */
-  state->reg[reg] &= state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) & ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_andconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* AND RX const */
-  state->reg[reg] &= sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) & sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_orreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* OR RX RY */
-  state->reg[reg] |= state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) | ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_orconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* OR RX const */
-  state->reg[reg] |= sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) | sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_xorreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* XOR RX RY */
-  state->reg[reg] ^= state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) ^ ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_xorconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* XOR RX const */
-  state->reg[reg] ^= sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) ^ sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg] ));
   return 0;
 }
 static int opcode_notreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   state->reg[reg] = ~state->reg[reg];
-  setflags( state, state->reg[reg] );
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 
 static int opcode_shlreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* SHL RX RY */
-  state->reg[reg] <<= state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) << ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_shlconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* SHL RX const */
-  state->reg[reg] <<= sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) << sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_shrreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* SHR RX RY */
-  state->reg[reg] >>= state->reg[data & 0x7];
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) >> ntohl(state->reg[data & 0x7]));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_shrconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* SHR RX const */
-  state->reg[reg] >>= sign_extend( data );
-  setflags( state, state->reg[reg] );
+  state->reg[reg] = htonl(ntohl(state->reg[reg]) >> sign_extend( data ));
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 
 static int opcode_rolreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ROL RX RY */
-  uint32_t bit = (state->reg[reg] & 0x8000000) ? 1 : 0;
-  state->reg[reg] <<= state->reg[data & 0x7];
-  state->reg[reg] |= bit;
-  setflags( state, state->reg[reg] );
+  uint32_t r, bit;
+  r = ntohl(state->reg[reg]);
+  bit = (r & 0x8000000) ? 1 : 0;
+  state->reg[reg] = htonl((r << ntohl(state->reg[data & 0x7])) | bit);
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_rolconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ROL RX const */
-  uint32_t bit = (state->reg[reg] & 0x8000000) ? 1 : 0;
-  state->reg[reg] <<= sign_extend( data );
-  state->reg[reg] |= bit;
-  setflags( state, state->reg[reg] );
+  uint32_t r, bit;
+  r = ntohl(state->reg[reg]);
+  bit = (r & 0x8000000) ? 1 : 0;
+  state->reg[reg] = htonl((r << data) | bit);
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_rorreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ROL RX RY */
-  uint32_t bit = (state->reg[reg] & 0x0000001) ? 0x8000000 : 0;
-  state->reg[reg] >>= state->reg[data & 0x7];
-  state->reg[reg] |= bit;
-  setflags( state, state->reg[reg] );
+  uint32_t r, bit;
+  r = ntohl(state->reg[reg]);
+  bit = (r & 0x0000001) ? 0x8000000 : 0;
+  state->reg[reg] = htonl((r >> ntohl(state->reg[data & 0x7])) | bit);
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 static int opcode_rorconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ROL RX const */
-  uint32_t bit = (state->reg[reg] & 0x0000001) ? 0x8000000 : 0;
-  state->reg[reg] >>= sign_extend( data );
-  state->reg[reg] |= bit;
-  setflags( state, state->reg[reg] );
+  uint32_t r, bit;
+  r = ntohl(state->reg[reg]);
+  bit = (r & 0x0000001) ? 0x8000000 : 0;
+  state->reg[reg] = htonl((r >> data) | bit);
+  setflags( state, ntohl(state->reg[reg]) );
   return 0;
 }
 
@@ -499,11 +503,25 @@ int fvm2_step( struct fvm2_s *state ) {
   fvm2_opcode_fn fn;
   uint32_t opcode;
   
-  opcode = mem_read( state, state->reg[FVM2_REG_PC] );
+  opcode = ntohl(mem_read( state, state->reg[FVM2_REG_PC] ));
   fn = opcodes[(opcode >> 24) & 0xff];
   if( !fn ) return -1;
+
+  printf( "Frame %u R0 %x R1 %x R2 %x R3 %x R4 %x R5 %x R6 %x R7 %x SP %x PC %x : 0x%08x\n",
+	  state->frame,
+	  ntohl(state->reg[FVM2_REG_R0]),
+	  ntohl(state->reg[FVM2_REG_R1]),
+	  ntohl(state->reg[FVM2_REG_R2]),
+	  ntohl(state->reg[FVM2_REG_R3]),
+	  ntohl(state->reg[FVM2_REG_R4]),
+	  ntohl(state->reg[FVM2_REG_R5]),
+	  ntohl(state->reg[FVM2_REG_R6]),
+	  ntohl(state->reg[FVM2_REG_R7]),
+	  state->reg[FVM2_REG_SP],
+    	  state->reg[FVM2_REG_PC],
+	  opcode );
   
-  state->reg[FVM2_REG_PC]++;  
+  state->reg[FVM2_REG_PC] += 4;  
   return fn( state, (opcode & 0x00f00000) >> 20, (opcode & 0x000f0000) >> 16, opcode & 0x0000ffff );
 }
 

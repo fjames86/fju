@@ -13,6 +13,10 @@ int fvm2_state_init( char *module, char *fname, char *args, int argsize, struct 
 
   memset( state, 0, sizeof(*state) );
   state->module = m;
+  state->datasize = m->header.datasize;
+  state->textsize = m->header.textsize;
+  state->data = m->data;
+  state->text = m->text;
   state->reg[FVM2_REG_PC] = addr;
   state->reg[FVM2_REG_SP] = FVM2_ADDR_STACK;
   
@@ -20,10 +24,10 @@ int fvm2_state_init( char *module, char *fname, char *args, int argsize, struct 
 }
 
 int fvm2_run( struct fvm2_s *state, int nsteps ) {
-  int i, sts;
+  int i, sts = 0;
 
   i = 0;
-  while( i < nsteps && state->frame >= 0 ) {
+  while( (nsteps == -1 || i < nsteps) && state->frame >= 0 ) {
     sts = fvm2_step( state );
     if( sts ) break;
     i++;

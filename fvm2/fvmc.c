@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <arpa/inet.h>
 
 #include "fvm2-private.h"
 
@@ -18,7 +19,7 @@ static void usage( char *fmt, ... ) {
   printf( "fvmc OPTIONS file...\n"
 	  "\n"
 	  "\n OPTIONS:\n"
-	  "   -o outfile\n" 
+	  "   -o outfile\n"
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -31,14 +32,11 @@ static void usage( char *fmt, ... ) {
   exit( 1 );
 }
 
+static char modulename[64] = "default";
+
 static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass );
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
 static void emit_header( FILE *f, uint32_t addr );
-
-static uint32_t u32be( uint32_t u ) {
-  uint8_t *u8 = (uint8_t *)&u;
-  return ((uint32_t)u8[3] << 24) | ((uint32_t)u8[2] << 16) | ((uint32_t)u8[1] << 8) | (uint32_t)u8[0];
-}
 
 struct label {
   char name[64];
@@ -57,7 +55,8 @@ static int addlabel( char *name, uint32_t addr ) {
       return -1;
     }
   }
-    
+
+  printf( "adding label %s addr %x\n", name, addr );
   strcpy( labels[nlabels].name, name );
   labels[nlabels].addr = addr;
   nlabels++;
@@ -204,8 +203,8 @@ int main( int argc, char **argv ) {
       //      printf( ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, 0, 0 ) != -1 ) {
 	//printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
-	opcode = u32be( opcode );
-	fwrite( &opcode, 4, 1, outfile );
+	opcode = htonl( opcode );
+	fwrite( &opcode, 1, 4, outfile );
       }
     }
     
@@ -286,9 +285,15 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  uint32_t s = size - 4;
 	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
 	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
-	    s = u32be( s );
-	    fwrite( &s, 4, 1, f );
-	    fwrite( startp, 1, s, f );
+	    s = htonl( s );
+	    fwrite( &s, 1, 4, f );
+	    fwrite( startp, 1, size - 4, f );
+	    if( size % 4 ) {
+	      uint8_t tmp[4];
+	      memset( tmp, 0, 4 );
+	      fwrite( tmp, 1, 4 - (size % 4), f );
+	      size += 4 - (size % 4);
+	    }
 	  }
 	}
       } else {
@@ -337,10 +342,15 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
               char *b = malloc( size );
               memset( b, 0, size );
               fwrite( b, 1, size, f );
-              free( b );
+	      free( b );
+	      if( size % 4 ) {
+		char tmp[4];
+		memset( tmp, 0, sizeof(tmp) );
+		fwrite( tmp, 1, 4 - (size % 4), f );
+	      }
              } else {
-  	       x = u32be( x );
-	       fwrite( &x, 4, 1, f );
+  	       x = htonl( x );
+	       fwrite( &x, 1, 4, f );
              }
 	  }
 	  
@@ -351,6 +361,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	if( strcasecmp( directive, ".data" ) == 0 ) {
 	  datasize += size;
 	} else {
+	  if( size % 4 ) size += 4 - (size % 4);
 	  *addr = *addr + size;
 	}
       }
@@ -396,6 +407,24 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     }
 
     if( exportlabel( name ) ) usage( "Unknown label \"%s\"", name );
+
+    return 0;
+  } else if( strcasecmp( directive, ".MODULE" ) == 0 ) {
+
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) return 0;
+    
+    memset( name, 0, sizeof(name) );
+    q = name;
+    while( *p != ' ' && *p != '\t' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+
+    strcpy( modulename, name );
+
+    return 0;    
   } else {
     /* unknown directive */
     usage( "Unknown directive \"%s\"", directive );
@@ -640,8 +669,8 @@ static void emit_header( FILE *f, uint32_t addr ) {
   header.datasize = datasize;
   header.textsize = addr;
   header.symcount = nsyms;
-  
-  fwrite( &header, sizeof(header), 1, f );
+  strcpy( header.name, modulename );
+  fwrite( &header, 1, sizeof(header), f );
 
   for( i = 0; i < nlabels; i++ ) {
     if( labels[i].flags & LABEL_EXPORT ) {
@@ -649,7 +678,7 @@ static void emit_header( FILE *f, uint32_t addr ) {
       memset( &symbol, 0, sizeof(symbol) );
       strcpy( symbol.name, labels[i].name );
       symbol.addr = labels[i].addr;
-      fwrite( &symbol, sizeof(symbol), 1, f );
+      fwrite( &symbol, 1, sizeof(symbol), f );
     }
   }
   

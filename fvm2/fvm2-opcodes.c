@@ -522,7 +522,7 @@ int fvm2_step( struct fvm2_s *state ) {
 	  opcode );
   
   state->reg[FVM2_REG_PC] += 4;  
-  return fn( state, (opcode & 0x00f00000) >> 20, (opcode & 0x000f0000) >> 16, opcode & 0x0000ffff );
+  return fn( state, (opcode & 0x000f0000) >> 16, (opcode & 0x00f00000) >> 20, opcode & 0x0000ffff );
 }
 
 

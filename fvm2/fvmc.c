@@ -33,7 +33,7 @@ static void usage( char *fmt, ... ) {
 
 static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass );
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
-static void emit_header( FILE *f );
+static void emit_header( FILE *f, uint32_t addr );
 
 static uint32_t u32be( uint32_t u ) {
   uint8_t *u8 = (uint8_t *)&u;
@@ -89,7 +89,7 @@ int main( int argc, char **argv ) {
   uint32_t opcode;
   char *outfilename;
   int i, j, starti;
-  char *p, *q;
+  char *p;
   uint32_t addr;
   
   outfilename = "out.fvm";
@@ -154,7 +154,7 @@ int main( int argc, char **argv ) {
   /* second pass emits output */
   
   /* write header */
-  emit_header( outfile );
+  emit_header( outfile, addr );
 
   i = starti;
   while( i < argc ) {
@@ -401,6 +401,8 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     usage( "Unknown directive \"%s\"", directive );
     return -1;
   }
+
+  return -1;
 }
 
 
@@ -623,7 +625,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
   return -1;
 }
 
-static void emit_header( FILE *f ) {
+static void emit_header( FILE *f, uint32_t addr ) {
   struct fvm2_header header;
   int nsyms, i;
 

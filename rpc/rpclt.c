@@ -106,6 +106,8 @@ static void fvm_write_dirty_results( struct xdr_s *xdr );
 static void fvm2_list_results( struct xdr_s *xdr );
 static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm2_load_results( struct xdr_s *xdr );
+static void fvm2_register_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm2_register_results( struct xdr_s *xdr );
 
 
 
@@ -138,6 +140,7 @@ static struct clt_info clt_procs[] = {
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
     { FVM2_RPC_PROG, 1, 1, NULL, fvm2_list_results, "fvm2.list", NULL },
     { FVM2_RPC_PROG, 1, 2, fvm2_load_args, fvm2_load_results, "fvm2.load", "filename=*" },
+    { FVM2_RPC_PROG, 1, 4, fvm2_register_args, fvm2_register_results, "fvm2.register", "name=*" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -1528,6 +1531,33 @@ static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 }
 
 static void fvm2_load_results( struct xdr_s *xdr ) {
+  int b;
+  
+  xdr_decode_boolean( xdr, &b );
+  printf( "%s\n", b ? "failure" : "success" );
+}
+
+
+static void fvm2_register_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  char name[64];
+
+  memset( name, 0, sizeof(name) );
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "name" ) == 0 ) {
+      strncpy( name, argval, 63 );
+    } else usage( NULL );
+    i++;
+  }
+
+  if( !name[0] ) usage( "Need name" );
+  
+  xdr_encode_string( xdr, name );
+}
+
+static void fvm2_register_results( struct xdr_s *xdr ) {
   int b;
   
   xdr_decode_boolean( xdr, &b );

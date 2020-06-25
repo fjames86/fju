@@ -58,7 +58,12 @@ struct fvm2_module *fvm2_module_by_name( char *name );
 struct fvm2_module *fvm2_module_by_progid( uint32_t progid );
 uint32_t fvm2_symbol_addr( struct fvm2_module *m, char *name );
 uint32_t fvm2_symbol_by_index( struct fvm2_module *m, uint32_t index );
-int fvm2_native_call( uint32_t procid, char *args, int argsize, char *res, int *ressize );
+int fvm2_native_call( struct fvm2_s *state, uint32_t procid );
+void fvm2_push( struct fvm2_s *state, uint32_t val );
+uint32_t fvm2_pop( struct fvm2_s *state );
+char *fvm2_getaddr( struct fvm2_s *state, uint32_t addr );
+uint32_t fvm2_read( struct fvm2_s *state, uint32_t addr );
+void fvm2_write( struct fvm2_s *state, uint32_t addr, uint32_t val );
 
 #endif
 

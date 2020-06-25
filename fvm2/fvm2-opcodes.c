@@ -28,6 +28,10 @@ static uint32_t mem_read( struct fvm2_s *state, uint32_t addr ) {
   return 0;
 }
 
+uint32_t fvm2_read( struct fvm2_s *state, uint32_t addr ) {
+  return mem_read( state, addr );
+}
+
 static void mem_write( struct fvm2_s *state, uint32_t addr, uint32_t val ) {
   int n;
   
@@ -40,6 +44,10 @@ static void mem_write( struct fvm2_s *state, uint32_t addr, uint32_t val ) {
     if( (FVM2_MAX_STACK - FVM2_ADDR_DATA - addr) < n ) n = (FVM2_MAX_STACK - FVM2_ADDR_DATA - addr);
     memcpy( state->stack + addr - FVM2_ADDR_STACK, &val, n );
   }
+}
+
+void fvm2_write( struct fvm2_s *state, uint32_t addr, uint32_t val ) {
+  mem_write( state, addr, val );
 }
 
 static uint32_t sign_extend( uint32_t x ) {
@@ -55,6 +63,19 @@ static void setflags( struct fvm2_s *state, uint32_t val ) {
   if( i32 > 0) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_POS;
   if( i32 < 0 ) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_NEG;
   if( i32 == 0 ) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_ZERO;
+}
+
+char *fvm2_getaddr( struct fvm2_s *state, uint32_t addr ) {
+  if( addr >= FVM2_ADDR_DATA && addr < (FVM2_ADDR_DATA + state->datasize) ) {
+    return (char *)&state->data[addr - FVM2_ADDR_DATA];
+  }
+  if( addr >= FVM2_ADDR_TEXT && addr < (FVM2_ADDR_TEXT + state->textsize) ) {
+    return (char *)&state->text[addr - FVM2_ADDR_TEXT];
+  }
+  if( addr >= FVM2_ADDR_STACK && addr < (FVM2_ADDR_STACK + FVM2_MAX_STACK) ) {
+    return (char *)&state->stack[addr - FVM2_ADDR_STACK];
+  }
+  return NULL;
 }
 
 
@@ -98,6 +119,19 @@ static int opcode_lea( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint3
   /* LEA RX const */
   state->reg[reg] = htonl(ntohl(state->reg[FVM2_REG_PC]) + sign_extend( data ));
   return 0;
+}
+
+void fvm2_push( struct fvm2_s *state, uint32_t val ) {
+  /* PUSH RX */
+  if( state->reg[FVM2_REG_SP] >= (FVM2_ADDR_STACK + FVM2_MAX_STACK) ) return;
+  mem_write( state, state->reg[FVM2_REG_SP], val );
+  state->reg[FVM2_REG_SP] += 4;  
+}
+
+uint32_t fvm2_pop( struct fvm2_s *state ) {
+  if( state->reg[FVM2_REG_SP] <= FVM2_ADDR_STACK ) return -1;
+  state->reg[FVM2_REG_SP] -= 4;
+  return mem_read( state, state->reg[FVM2_REG_SP] );  
 }
 
 static int opcode_pushreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
@@ -443,14 +477,14 @@ static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 
   if( ntohl( state->reg[rx] ) == 0 ) {
     /* special code for standard libary call */
-    printf( "callvirt native\n" );
-    sts = fvm2_native_call( ntohl( state->reg[ry] ), args, argsize, res, &ressize );
+    printf( "callvirt native %u\n", ntohl( state->reg[ry] ) );
+    sts = fvm2_native_call( state, ntohl( state->reg[ry] ) );
     if( sts ) {
       state->reg[rz] = htonl( -1 );
       return 0;
     }
-    state->reg[rz] = htonl( ressize );
-    state->reg[FVM2_REG_SP] = sp + ressize;
+    state->reg[rz] = 0;
+    state->reg[FVM2_REG_SP] = sp;
     return 0;
   }
   

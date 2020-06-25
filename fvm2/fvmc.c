@@ -275,7 +275,8 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	    if( *p == '"' ) {
 	      p++;
 	      size++;
-	    }	    
+	    } // TODO: escaped control characters
+	      
 	  }
 	  
 	  p++;

@@ -30,6 +30,17 @@ int fvm2_module_load( char *filename ) {
     sts = -1;
     goto done;
   }      
+
+  if( fvm2_module_by_name( header.name ) ) {
+    sts = -1;
+    goto done;
+  }
+
+  if( fvm2_module_by_progid( header.progid ) ) {
+    sts = -1;
+    goto done;
+  }
+  
   
   m = malloc( sizeof(*m) + header.symcount*sizeof(struct fvm2_symbol) + header.datasize + header.textsize );
   m->header = header;
@@ -60,6 +71,9 @@ int fvm2_module_register( char *buf, int size ) {
   if( size != (sizeof(header) + header.symcount*sizeof(struct fvm2_symbol) + header.datasize + header.textsize) ) {
     return -1;
   }
+  if( fvm2_module_by_name( header.name ) ) return -1;
+  if( fvm2_module_by_progid( header.progid ) ) return -1;
+
   
   m = malloc( sizeof(*m) + header.symcount*sizeof(struct fvm2_symbol) + header.datasize + header.textsize );
   m->header = header;
@@ -110,6 +124,8 @@ int fvm2_module_list( struct fvm2_module_info *minfo, int n ) {
       memcpy( (char *)minfo[i].checksum, (char *)m->header.checksum, sizeof(m->header.checksum) );
       minfo[i].datasize = m->header.datasize;
       minfo[i].textsize = m->header.textsize;
+      minfo[i].progid = m->header.progid;
+      minfo[i].versid = m->header.versid;
     }
     i++;
     m = m->next;
@@ -123,6 +139,16 @@ struct fvm2_module *fvm2_module_by_name( char *name ) {
   m = modules;
   while( m ) {
     if( strcasecmp( m->header.name, name ) == 0 ) return m;
+    m = m->next;
+  }
+  return NULL;
+}
+
+struct fvm2_module *fvm2_module_by_progid( uint32_t progid ) {
+  struct fvm2_module *m;
+  m = modules;
+  while( m ) {
+    if( m->header.progid == progid ) return m;
     m = m->next;
   }
   return NULL;
@@ -148,99 +174,8 @@ uint32_t fvm2_symbol_addr( struct fvm2_module *m, char *name ) {
   return 0;
 }
 
-
-/* -------------------------- */
-
-static struct fvm2_native_module *native_modules;
-
-int fvm2_native_register( struct fvm2_native_module *module ) {
-  module->next = native_modules;
-  native_modules = module;
-  return 0;
+uint32_t fvm2_symbol_by_index( struct fvm2_module *m, uint32_t index ) {
+  return (index < m->header.symcount) ? m->symbols[index].addr : 0;
 }
 
-int fvm2_native_unregister( char *name ) {
-  struct fvm2_native_module *m, *prev;
-
-  prev = NULL;
-  m = native_modules;
-  while( m ) {
-    if( strcasecmp( m->name, name ) == 0 ) {
-      if( prev ) prev->next = m->next;
-      else native_modules = m->next;
-      return 0;
-    }
-    prev = m;
-    m = m->next;
-  }
-
-  return -1;
-}
-
-static struct fvm2_native_module *fvm2_native_by_name( char *name ) {
-  struct fvm2_native_module *m;
-  m = native_modules;
-  while( m ) {
-    if( strcasecmp( m->name, name ) == 0 ) {
-      return m;
-    }
-    m = m->next;
-  }
-  return NULL;
-}
-
-static struct fvm2_native_symbol *fvm2_native_symbol_by_name( struct fvm2_native_module *m, char *name ) {
-  int i;
-  for( i = 0; i < m->symcount; i++ ) {
-    if( strcasecmp( m->symbols[i].name, name ) == 0 ) {
-      return &m->symbols[i];
-    }
-  }
-  return NULL;
-}
-
-int fvm2_native_readvar( char *mname, char *sname, char *buf, int size ) {
-  struct fvm2_native_module *m;
-  struct fvm2_native_symbol *s;
-  
-  m = fvm2_native_by_name( mname );
-  if( !m ) return -1;
-
-  s = fvm2_native_symbol_by_name( m, sname );
-  if( !s ) return -1;
-
-  if( s->type != FVM2_NATIVE_VAR ) return -1;
-    
-  return s->readvar( buf, size );
-}
-
-int fvm2_native_writevar( char *mname, char *sname, char *buf, int size ) {
-  struct fvm2_native_module *m;
-  struct fvm2_native_symbol *s;
-  
-  m = fvm2_native_by_name( mname );
-  if( !m ) return -1;
-
-  s = fvm2_native_symbol_by_name( m, sname );
-  if( !s ) return -1;
-
-  if( s->type != FVM2_NATIVE_VAR ) return -1;
-  
-  return s->writevar( buf, size );
-}
-
-int fvm2_native_invoke( char *mname, char *sname, char *args, int argsize, char *res, int *ressize ) {
-  struct fvm2_native_module *m;
-  struct fvm2_native_symbol *s;
-  
-  m = fvm2_native_by_name( mname );
-  if( !m ) return -1;
-
-  s = fvm2_native_symbol_by_name( m, sname );
-  if( !s ) return -1;
-
-  if( s->type != FVM2_NATIVE_FUNC ) return -1;
-
-  return s->func( args, argsize, res, ressize );
-}
 

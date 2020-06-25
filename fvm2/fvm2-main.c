@@ -33,9 +33,11 @@ int main( int argc, char **argv ) {
   static struct fvm2_s state;
     
   int i, sts;
-  char *mname = "default";
-  char *sname = "main";
+  char mname[64], sname[64];
   int nsteps = -1;
+
+  memset( mname, 0, sizeof(mname) );
+  memset( sname, 0, sizeof(sname) );
   
   i = 1;
   if( i >= argc ) usage( NULL );
@@ -48,11 +50,11 @@ int main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-m" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      mname = argv[i];
+      strncpy( mname, argv[i], 63 );
     } else if( strcmp( argv[i], "-s" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      sname = argv[i];
+      strncpy( sname, argv[i], 63 );
     } else if( strcmp( argv[i], "-n" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -73,19 +75,22 @@ int main( int argc, char **argv ) {
     struct fvm2_module_info *minfo;
     int n, m;
 
-    printf( "------------ Modules ------------\n" );
+    printf( "-------------- Modules --------------\n" );
     n = fvm2_module_list( NULL, 0 );
     if( n < 0 ) usage( "Failed to get modules" );
     minfo = malloc( sizeof(*minfo) * n );
     m = fvm2_module_list( minfo, n );
     if( m < n ) m = n;
     for( m = 0; m < n; m++ ) {
-      printf( "Module %s DataSize %u TextSize %u\n", minfo[m].name, minfo[m].datasize, minfo[m].textsize );
+      printf( "Module %s %u:%u DataSize %u TextSize %u\n", minfo[m].name, minfo[m].progid, minfo[m].versid, minfo[m].datasize, minfo[m].textsize );
+      if( !mname[0] ) strcpy( mname, minfo[m].name );
     }
     free( minfo );
+    printf( "--------------------------------------\n" );
   }
 
-  printf( "Initializing to module %s function %s\n", mname, sname );
+  if( !mname[0] ) usage( "No module" );
+  printf( "Initializing to module %s\n", mname );
 
   {
     struct fvm2_symbol *sym;
@@ -100,11 +105,17 @@ int main( int argc, char **argv ) {
       m = fvm2_module_symbols( mname, sym, n );
       if( m < n ) n = m;
       for( m = 0; m < n; m++ ) {
-	printf( "Symbol %-16s = %04x\n", sym[m].name, sym[m].addr );
+	printf( "%-2u %-16s = 0x%04x\n", m, sym[m].name, sym[m].addr );
+	if( !sname[0] ) strcpy( sname, sym[m].name );
       }
       free( sym );
     }
+
+    printf( " ------------------------------------ \n" );
   }
+  
+  if( !sname[0] ) usage( "No function" );
+  printf( "Calling function %s\n", sname );
   
   sts = fvm2_state_init( mname, sname, NULL, 0, &state );
   if( sts ) usage( "Failed to initialize" );

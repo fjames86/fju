@@ -1,5 +1,6 @@
 
-	.MODULE helloworld
+	.MODULE 	helloworld
+	.PROGRAM	123412	1
 	
 	.TEXT 	hello	"Hello, World!"
 MAIN:	

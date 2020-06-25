@@ -33,6 +33,8 @@ static void usage( char *fmt, ... ) {
 }
 
 static char modulename[64] = "default";
+static uint32_t modprogid;
+static uint32_t modversid;
 
 static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass );
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
@@ -424,7 +426,35 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
     strcpy( modulename, name );
 
-    return 0;    
+    return 0;
+  } else if( strcasecmp( directive, ".PROGRAM" ) == 0 ) {
+
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) return 0;
+    
+    memset( name, 0, sizeof(name) );
+    q = name;
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+
+    modprogid = strtoul( name, NULL, 0 );
+
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) return 0;
+    
+    memset( name, 0, sizeof(name) );
+    q = name;
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+    modversid = strtoul( name, NULL, 0 );
+    
+    return 0;        
   } else {
     /* unknown directive */
     usage( "Unknown directive \"%s\"", directive );
@@ -671,6 +701,8 @@ static void emit_header( FILE *f, uint32_t addr ) {
   header.textsize = addr;
   header.symcount = nsyms;
   strcpy( header.name, modulename );
+  header.progid = modprogid;
+  header.versid = modversid;
   fwrite( &header, 1, sizeof(header), f );
 
   for( i = 0; i < nlabels; i++ ) {

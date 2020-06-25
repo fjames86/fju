@@ -50,10 +50,11 @@ static uint32_t sign_extend( uint32_t x ) {
 }
 
 static void setflags( struct fvm2_s *state, uint32_t val ) {
+  int32_t i32 = (int32_t)val;
   state->reg[FVM2_REG_FLAGS] = 0;
-  if( val > 0) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_POS;
-  if( val & 0x80000000 ) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_NEG;
-  if( val == 0 ) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_ZERO;
+  if( i32 > 0) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_POS;
+  if( i32 < 0 ) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_NEG;
+  if( i32 == 0 ) state->reg[FVM2_REG_FLAGS] |= FVM2_FLAG_ZERO;
 }
 
 
@@ -65,7 +66,7 @@ static int opcode_nop( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint3
 
 static int opcode_ldreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LD RX RY */
-  state->reg[reg] = mem_read( state, state->reg[data & 0x7] );
+  state->reg[reg] = mem_read( state, ntohl( state->reg[data & 0x7] ) );
   return 0;
 }
 
@@ -77,13 +78,13 @@ static int opcode_ldconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, u
 
 static int opcode_streg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ST RX RY */
-  mem_write( state, state->reg[reg], state->reg[data & 0x7] );
+  mem_write( state, state->reg[reg], ntohl( state->reg[data & 0x7] ) );
   return 0;
 }
 
 static int opcode_stconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ST RX const */
-  mem_write( state, state->reg[reg], htonl(data & 0xffff) );
+  mem_write( state, ntohl( state->reg[reg] ), htonl(sign_extend( data & 0xffff) ) );
   return 0;
 }
 
@@ -101,6 +102,8 @@ static int opcode_lea( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint3
 
 static int opcode_pushreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* PUSH RX */
+  if( state->reg[FVM2_REG_SP] >= (FVM2_ADDR_STACK + FVM2_MAX_STACK) ) return -1;
+  
   mem_write( state, state->reg[FVM2_REG_SP], state->reg[reg] );
   state->reg[FVM2_REG_SP] += 4;
   return 0;
@@ -108,6 +111,8 @@ static int opcode_pushreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, u
 
 static int opcode_pushconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* PUSH const */
+  if( state->reg[FVM2_REG_SP] >= (FVM2_ADDR_STACK + FVM2_MAX_STACK) ) return -1;
+  
   mem_write( state, state->reg[FVM2_REG_SP], htonl(sign_extend( data )) );
   state->reg[FVM2_REG_SP] += 4;
   return 0;
@@ -115,6 +120,7 @@ static int opcode_pushconst( struct fvm2_s *state, uint32_t flags, uint32_t reg,
 
 static int opcode_popreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* POP RX */
+  if( state->reg[FVM2_REG_SP] <= FVM2_ADDR_STACK ) return -1;
   state->reg[FVM2_REG_SP] -= 4;
   state->reg[reg] = mem_read( state, state->reg[FVM2_REG_SP] );
   return 0;
@@ -122,8 +128,10 @@ static int opcode_popreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, ui
 
 static int opcode_ret( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* RET */
-  state->reg[FVM2_REG_SP] -= 4;
-  state->reg[FVM2_REG_PC] = ntohl(mem_read( state, state->reg[FVM2_REG_SP] ));
+  if( state->reg[FVM2_REG_SP] >= (FVM2_ADDR_STACK + 4) ) {
+    state->reg[FVM2_REG_SP] -= 4;
+    state->reg[FVM2_REG_PC] = ntohl(mem_read( state, state->reg[FVM2_REG_SP] ));
+  }
   state->frame--;
   return 0;
 }
@@ -404,14 +412,91 @@ static int opcode_rorconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
   return 0;
 }
 
-
 static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* CALLVIRT RX RY RZ */
-  /* RX points to a string naming the module. 
-   * RY points to a string naming the function. 
+  /* RX contains progid. RY contains proc index (index into symbol table).
    * RZ contains arg length, receives result length. arg/res on stack 
    */
+  uint32_t addr; 
+  int sts;
+  struct fvm2_module *m;
+  uint32_t rx, ry, rz;
+  struct fvm2_s state2;
+  char *args, *res;
+  int argsize, ressize;
+  uint32_t sp;
   
+  rx = reg;
+  ry = data & 0x7;
+  rz = (data >> 4) & 0x7;
+
+  argsize = ntohl( state->reg[rz] );
+  if( (argsize > (state->reg[FVM2_REG_SP] - FVM2_ADDR_STACK)) ) {
+    printf( "args too large %d > %u \n", argsize, state->reg[FVM2_REG_SP] - FVM2_ADDR_STACK );
+    return -1;
+  }
+  
+  sp = state->reg[FVM2_REG_SP] - argsize;
+  args = (char *)&state->stack[sp - FVM2_ADDR_STACK];
+  res = (char *)&state->stack[sp - FVM2_ADDR_STACK];
+  ressize = FVM2_MAX_STACK - (sp - FVM2_ADDR_STACK);
+
+  if( ntohl( state->reg[rx] ) == 0 ) {
+    /* special code for standard libary call */
+    printf( "callvirt native\n" );
+    sts = fvm2_native_call( ntohl( state->reg[ry] ), args, argsize, res, &ressize );
+    if( sts ) {
+      state->reg[rz] = htonl( -1 );
+      return 0;
+    }
+    state->reg[rz] = htonl( ressize );
+    state->reg[FVM2_REG_SP] = sp + ressize;
+    return 0;
+  }
+  
+  m = fvm2_module_by_progid( ntohl( state->reg[rx] ) );
+  if( !m ) {
+    printf( "callvirt unknown progid %u\n", ntohl( state->reg[rx] ) );
+    state->reg[rz] = htonl( -1 );
+    return 0;
+  }
+
+  addr = fvm2_symbol_by_index( m, ntohl( state->reg[ry] ) );
+  if( addr == 0 ) {
+    printf( "callvirt unknown procid %u\n", ntohl( state->reg[ry] ) );
+    state->reg[rz] = htonl( -1 );
+    return 0;
+  }
+
+  memset( &state2, 0, sizeof(state2) );
+  state2.module = m;
+  state2.datasize = m->header.datasize;
+  state2.textsize = m->header.textsize;
+  state2.data = m->data;
+  state2.text = m->text;
+  state2.reg[FVM2_REG_PC] = addr;
+  /* copy args onto stack */
+  memcpy( state2.stack, args, argsize );
+  state2.reg[FVM2_REG_R0] = htonl( argsize );
+  state2.reg[FVM2_REG_SP] = FVM2_ADDR_STACK + argsize;
+  sts = fvm2_run( &state2, -1 ); // TODO: put limit on step count 
+  if( sts ) {
+    printf( "callvirt run failed\n" );
+    state->reg[rz] = htonl( -1 );
+    return 0;
+  }
+
+  /* extract result data. Calling convention is R0 contains result length.  */
+  ressize = ntohl( state2.reg[FVM2_REG_R0] );
+  if( ressize == -1 ) {
+    printf( "callvirt return failure\n" );
+    state->reg[rz] = htonl( -1 );
+    return 0;
+  }
+
+  memcpy( res, state2.stack, ressize );
+  state->reg[rz] = htonl( ressize );
+  printf( "callvirt success\n" );
   return 0;
 }
 
@@ -447,68 +532,72 @@ static int opcode_movreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, ui
 }
 
 
-
-static fvm2_opcode_fn opcodes[FVM2_MAX_OPCODE] =
+struct opcode_def {
+  fvm2_opcode_fn fn;
+  char *name;
+};
+ 
+static struct opcode_def opcodes[FVM2_MAX_OPCODE] =
   {
-   opcode_nop,
-   opcode_ldreg,
-   opcode_ldconst,
-   opcode_streg,
-   opcode_stconst,
-   opcode_ldi,
-   opcode_lea,
-   opcode_pushreg,
-   opcode_pushconst,
-   opcode_popreg,
-   opcode_ret,
-   opcode_callreg,
-   opcode_callconst,
-   opcode_jmpreg,
-   opcode_jmpconst,
-   opcode_jzreg,
-   opcode_jzconst,
-   opcode_jpreg,
-   opcode_jpconst,
-   opcode_jnreg,
-   opcode_jnconst,
-   opcode_jpzreg,
-   opcode_jpzconst,
-   opcode_jpnreg,
-   opcode_jpnconst,
-   opcode_jnzreg,
-   opcode_jnzconst,
-   opcode_addreg,
-   opcode_addconst,
-   opcode_subreg,
-   opcode_subconst,
-   opcode_mulreg,
-   opcode_mulconst,
-   opcode_divreg,
-   opcode_divconst,
-   opcode_modreg,
-   opcode_modconst,
-   opcode_andreg,
-   opcode_andconst,
-   opcode_orreg,
-   opcode_orconst,
-   opcode_xorreg,
-   opcode_xorconst,
-   opcode_notreg,
-   opcode_shlreg,
-   opcode_shlconst,
-   opcode_shrreg,
-   opcode_shrconst,
-   opcode_rolreg,
-   opcode_rolconst,
-   opcode_rorreg,
-   opcode_rorconst,
-   opcode_callvirt,
-   opcode_ldvirt,
-   opcode_stvirt,
-   opcode_leasp,
-   opcode_allocareg,
-   opcode_allocaconst,
-   opcode_movreg,
+   { opcode_nop, "NOP" },
+   { opcode_ldreg, "LD" },
+   { opcode_ldconst, "LD" },
+   { opcode_streg, "ST" },
+   { opcode_stconst, "ST" },
+   { opcode_ldi, "LDI" },
+   { opcode_lea, "LEA" },
+   { opcode_pushreg, "PUSH" },
+   { opcode_pushconst, "PUSH" },
+   { opcode_popreg, "POP" },
+   { opcode_ret, "RET" },
+   { opcode_callreg, "CALL" },
+   { opcode_callconst, "CALL" },
+   { opcode_jmpreg, "JMP" },
+   { opcode_jmpconst, "JMP" },
+   { opcode_jzreg, "JZ" },
+   { opcode_jzconst, "JZ" },
+   { opcode_jpreg, "JP" },
+   { opcode_jpconst, "JP" },
+   { opcode_jnreg, "JN" },
+   { opcode_jnconst, "JN" },
+   { opcode_jpzreg, "JPZ" },
+   { opcode_jpzconst, "JPZ" },
+   { opcode_jpnreg, "JPN" },
+   { opcode_jpnconst, "JPN" },
+   { opcode_jnzreg, "JNZ" },
+   { opcode_jnzconst, "JNZ" },
+   { opcode_addreg, "ADD" },
+   { opcode_addconst, "ADD" },
+   { opcode_subreg, "SUB" },
+   { opcode_subconst, "SUB" },
+   { opcode_mulreg, "MUL" },
+   { opcode_mulconst, "MUL" },
+   { opcode_divreg, "DIV" },
+   { opcode_divconst, "DIV" },
+   { opcode_modreg, "MOD" },
+   { opcode_modconst, "MOD" },
+   { opcode_andreg, "AND" },
+   { opcode_andconst, "AND" },
+   { opcode_orreg, "OR" },
+   { opcode_orconst, "OR" },
+   { opcode_xorreg, "XOR" },
+   { opcode_xorconst, "XOR" },
+   { opcode_notreg, "NOT" },
+   { opcode_shlreg, "SHL" },
+   { opcode_shlconst, "SHL" },
+   { opcode_shrreg, "SHR" },
+   { opcode_shrconst, "SHR" },
+   { opcode_rolreg, "ROL" },
+   { opcode_rolconst, "ROL" },
+   { opcode_rorreg, "ROR" },
+   { opcode_rorconst, "ROR" },
+   { opcode_callvirt, "CALLVIRT" },
+   { opcode_ldvirt, "LDVIRT" },
+   { opcode_stvirt, "STVIRT" },
+   { opcode_leasp, "LEASP" },
+   { opcode_allocareg, "ALLOCA" },
+   { opcode_allocaconst, "ALLOCA" },
+   { opcode_movreg, "MOV" },
 
   };
 
@@ -516,14 +605,18 @@ static fvm2_opcode_fn opcodes[FVM2_MAX_OPCODE] =
 
 int fvm2_step( struct fvm2_s *state ) {
   /* fetch next instruction */
-  fvm2_opcode_fn fn;
-  uint32_t opcode;
+  struct opcode_def *def;
+  uint32_t opcode, pc;
+
+  pc = state->reg[FVM2_REG_PC];
+  if( !(pc >= FVM2_ADDR_TEXT && pc < (FVM2_ADDR_TEXT + FVM2_MAX_TEXT)) ) return -1;
   
   opcode = ntohl(mem_read( state, state->reg[FVM2_REG_PC] ));
-  fn = opcodes[(opcode >> 24) & 0xff];
-  if( !fn ) return -1;
+  def = &opcodes[(opcode >> 24) & 0xff];
+  if( !def->fn ) return -1;
 
-  printf( "Frame %u R0 %x R1 %x R2 %x R3 %x R4 %x R5 %x R6 %x R7 %x SP %x PC %x : 0x%08x\n",
+  printf( "%-16s Frame %-2u R0 %-4x R1 %-4x R2 %-4x R3 %-4x R4 %-4x R5 %-4x R6 %-4x R7 %-4x SP %-4x PC %-4x : %08x %-6s R%u 0x%04x (%d)\n",
+	  state->module->header.name,
 	  state->frame,
 	  ntohl(state->reg[FVM2_REG_R0]),
 	  ntohl(state->reg[FVM2_REG_R1]),
@@ -535,10 +628,14 @@ int fvm2_step( struct fvm2_s *state ) {
 	  ntohl(state->reg[FVM2_REG_R7]),
 	  state->reg[FVM2_REG_SP],
     	  state->reg[FVM2_REG_PC],
-	  opcode );
+	  opcode,
+	  def->name,
+	  (opcode & 0x00700000) >> 20,
+	  opcode & 0xffff,
+	  sign_extend( opcode & 0xffff ) );
   
   state->reg[FVM2_REG_PC] += 4;  
-  return fn( state, (opcode & 0x000f0000) >> 16, (opcode & 0x00f00000) >> 20, opcode & 0x0000ffff );
+  return def->fn( state, (opcode & 0x000f0000) >> 16, (opcode & 0x00700000) >> 20, opcode & 0x0000ffff );
 }
 
 

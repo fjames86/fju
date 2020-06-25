@@ -1,0 +1,13 @@
+
+	.MODULE 	test2
+	.PROGRAM	10001 	1
+
+MAIN:
+	POP		R1
+	ADD		R1	1
+	PUSH		R1
+	LDI		R0	4
+	RET
+
+	.EXPORT		MAIN
+	

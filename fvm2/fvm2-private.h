@@ -25,8 +25,10 @@ struct fvm2_header {
   uint32_t textsize;
   char name[FVM2_MAX_NAME];
   uint8_t checksum[20]; /* sha1 hash of text segment */
-
-  uint32_t spare[5];
+  uint32_t progid;
+  uint32_t versid;
+  
+  uint32_t spare[3];
 };
 
 struct fvm2_module {
@@ -53,11 +55,10 @@ typedef enum {
 } fvm2_reg_t;
 
 struct fvm2_module *fvm2_module_by_name( char *name );
+struct fvm2_module *fvm2_module_by_progid( uint32_t progid );
 uint32_t fvm2_symbol_addr( struct fvm2_module *m, char *name );
-
-int fvm2_native_readvar( char *mname, char *sname, char *buf, int size );
-int fvm2_native_writevar( char *mname, char *sname, char *buf, int size );
-int fvm2_native_invoke( char *mname, char *sname, char *args, int argsize, char *res, int *ressize );
+uint32_t fvm2_symbol_by_index( struct fvm2_module *m, uint32_t index );
+int fvm2_native_call( uint32_t procid, char *args, int argsize, char *res, int *ressize );
 
 #endif
 

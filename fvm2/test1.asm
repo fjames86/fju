@@ -1,6 +1,6 @@
 
 	.MODULE		test1
-	.PROGRAM	10000	1
+	.PROGRAM	5555	1
 
 	.TEXT		hello	"Hello, world!\n"
 	.TEXT		helloend

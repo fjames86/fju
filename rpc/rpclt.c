@@ -108,7 +108,7 @@ static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm2_load_results( struct xdr_s *xdr );
 static void fvm2_register_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm2_register_results( struct xdr_s *xdr );
-
+static void test1_results( struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -140,7 +140,11 @@ static struct clt_info clt_procs[] = {
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
     { FVM2_RPC_PROG, 1, 1, NULL, fvm2_list_results, "fvm2.list", NULL },
     { FVM2_RPC_PROG, 1, 2, fvm2_load_args, fvm2_load_results, "fvm2.load", "filename=*" },
+    { FVM2_RPC_PROG, 1, 3, fvm2_register_args, fvm2_register_results, "fvm2.unload", "name=*" },
     { FVM2_RPC_PROG, 1, 4, fvm2_register_args, fvm2_register_results, "fvm2.register", "name=*" },
+    { FVM2_RPC_PROG, 1, 5, fvm2_register_args, fvm2_register_results, "fvm2.unregister", "name=*" },
+    
+    { 2333333, 0, 1, NULL, test1_results, "test1", NULL },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -1563,3 +1567,13 @@ static void fvm2_register_results( struct xdr_s *xdr ) {
   xdr_decode_boolean( xdr, &b );
   printf( "%s\n", b ? "failure" : "success" );
 }
+
+static void test1_results( struct xdr_s *xdr ) {
+  char name[64];
+  int sts;
+  
+  sts = xdr_decode_string( xdr, name, sizeof(name) );
+  if( sts ) usage( "xdr error" );
+  printf( "%s\n", name );
+}
+

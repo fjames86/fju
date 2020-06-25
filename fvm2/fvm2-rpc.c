@@ -4,6 +4,7 @@
 #include <fju/rpcd.h>
 #include <arpa/inet.h>
 #include <fju/programs.h>
+#include <fju/log.h>
 
 /* rpc interface */
 
@@ -49,19 +50,24 @@ static int fvm2_rpc_proc( struct rpc_inc *inc ) {
   prog = inc->msg.u.call.prog;
   proc = inc->msg.u.call.proc;
 
+  log_writef( NULL, LOG_LVL_INFO, "fvm2_rpc_log progid=%u proc=%u", prog, proc );
+  
   /* initialize state */
   sts = fvm2_state_init( &state, prog, proc );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   /* copy args onto fvm stack and set r0 to length */
   arglength = inc->xdr.count - inc->xdr.offset;
+  log_writef( NULL, LOG_LVL_INFO, "fvm2_rpc_log arglength = %u", arglength );
+  
   memcpy( &state.stack, inc->xdr.buf + inc->xdr.offset, arglength );
   state.reg[FVM2_REG_R0] = htonl( arglength );
   sts = fvm2_run( &state, fvm2_max_steps( 0 ) );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
+  log_writef( NULL, LOG_LVL_INFO, "success reply %d", ntohl( state.reg[FVM2_REG_R0] ) );
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  sts = xdr_encode_fixed( &inc->xdr, state.stack, state.reg[FVM2_REG_R0] );
+  sts = xdr_encode_fixed( &inc->xdr, state.stack, ntohl( state.reg[FVM2_REG_R0] ) );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   rpc_complete_accept_reply( inc, handle );
   

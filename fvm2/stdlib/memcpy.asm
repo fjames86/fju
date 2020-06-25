@@ -2,12 +2,10 @@
 ;;; memcpy routine
 	
 MEMCPY:
-	LEASP 		R0	-4 	; count
-	LD		R0	R0
-	LEASP		R1	-8	; dest pointer
-	LD		R1	R1
-	LEASP		R2	-12	; source pointer
-	LD		R2 	R2
+	POP		R7	   ; save return address
+	POP 		R0	   ; count
+	POP		R1	   ; dest
+	POP		R2	   ; source
 	ADD		R0 	0 	; test count 
 	JZ		MEMCPY-DONE
 MEMCPY-START:	
@@ -18,7 +16,7 @@ MEMCPY-START:
 	SUB		R0	4
 	JP		MEMCPY-START
 MEMCPY-DONE:
-	ALLOCA		-12		; clean stack
+	PUSH		R7
 	RET
 
 	

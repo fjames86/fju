@@ -597,7 +597,7 @@ static struct {
 	{ "CALLVIRT", 0x34, 0x00030000 }, /* CALLVIRT RX RY RZ. call a function in a remote module. rx=module name, ry=function. rz=argsize */
 	{ "LDVIRT", 0x35, 0x00030000 },   /* LDVIRT RX RY RZ. load from remote module. rx=module name, ry=symbol rz=receives value */
 	{ "STVIRT", 0x36, 0x00030000 },   /* STVIRT RX RY RZ. store into remote module. rx=module, ry=symbol rz=value */
-	{ "LEASP", 0x37, 0x00020002 },   /* LDEASP RX const. load address from stack pointer with offset */
+	{ "LEASP", 0x37, 0x00020002 },   /* LEASP RX const. load address from stack pointer with offset */
 	{ "ALLOCA", 0x38, 0x00010000 },  /* ALLOCA RX */
 	{ "ALLOCA", 0x39, 0x00010001 },  /* ALLOCA const. adjust on stack. +ve allocate, -ve frees. */
 	{ "MOV", 0x3a, 0x00020000 }, /* MOV RX RY. copy register */

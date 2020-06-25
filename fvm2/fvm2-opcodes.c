@@ -3,6 +3,8 @@
 
 #include <arpa/inet.h>
 
+static uint32_t default_maxsteps = -1;
+
 static uint32_t mem_read( struct fvm2_s *state, uint32_t addr ) {
   uint32_t u;
   int n;
@@ -513,7 +515,7 @@ static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
   memcpy( state2.stack, args, argsize );
   state2.reg[FVM2_REG_R0] = htonl( argsize );
   state2.reg[FVM2_REG_SP] = FVM2_ADDR_STACK + argsize;
-  sts = fvm2_run( &state2, -1 ); // TODO: put limit on step count 
+  sts = fvm2_run( &state2, default_maxsteps ); 
   if( sts ) {
     fvm2_printf( "callvirt run failed\n" );
     state->reg[rz] = htonl( -1 );
@@ -535,10 +537,38 @@ static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 }
 
 static int opcode_ldvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  uint32_t rx, ry, rz;
+  struct fvm2_s state2;
+  int sts;
+  
+  rx = reg;
+  ry = data & 0x7;
+  rz = (data >> 4) & 0x7;
+
+  sts = fvm2_state_init2( &state2, ntohl( state->reg[rx] ), ntohl( state->reg[ry] ) );
+  if( sts ) {
+    fvm2_printf( "ldvirt failed to init\n" );
+  }
+  
+  state->reg[rz] = fvm2_read( &state2, state2.reg[FVM2_REG_PC] );
   return 0;
 }
 
 static int opcode_stvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  uint32_t rx, ry, rz;
+  struct fvm2_s state2;
+  int sts;
+  
+  rx = reg;
+  ry = data & 0x7;
+  rz = (data >> 4) & 0x7;
+
+  sts = fvm2_state_init2( &state2, ntohl( state->reg[rx] ), ntohl( state->reg[ry] ) );
+  if( sts ) {
+    fvm2_printf( "ldvirt failed to init\n" );
+  }
+
+  fvm2_write( &state2, state2.reg[FVM2_REG_PC], state->reg[rz] );
   return 0;
 }
 
@@ -675,3 +705,9 @@ int fvm2_step( struct fvm2_s *state ) {
 
 
 
+
+uint32_t fvm2_max_steps( uint32_t n ) {
+  uint32_t old = default_maxsteps;
+  if( n ) default_maxsteps = n;
+  return old;
+}

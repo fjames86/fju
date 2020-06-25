@@ -25,6 +25,28 @@ int fvm2_state_init( char *module, char *fname, char *args, int argsize, struct 
   return 0;
 }
 
+int fvm2_state_init2( struct fvm2_s *state, uint32_t progid, uint32_t procid ) {
+  struct fvm2_module *m;
+  uint32_t addr;
+  
+  m = fvm2_module_by_progid( progid );  
+  if( !m ) return -1;
+
+  addr = fvm2_symbol_by_index( m, procid );
+  if( !addr ) return -1;
+
+  memset( state, 0, sizeof(*state) );
+  state->module = m;
+  state->datasize = m->header.datasize;
+  state->textsize = m->header.textsize;
+  state->data = m->data;
+  state->text = m->text;
+  state->reg[FVM2_REG_PC] = addr;
+  state->reg[FVM2_REG_SP] = FVM2_ADDR_STACK;
+  
+  return 0;
+}
+
 int fvm2_run( struct fvm2_s *state, int nsteps ) {
   int i, sts = 0;
 

@@ -54,6 +54,8 @@ int fvm2_module_symbols( char *name, struct fvm2_symbol *sym, int n );
 
 /* initialize runtime state */
 int fvm2_state_init( char *module, char *fname, char *args, int argsize, struct fvm2_s *state );
+int fvm2_state_init2( struct fvm2_s *state, uint32_t progid, uint32_t procid );
+
 /* exeucute a single step */
 int fvm2_step( struct fvm2_s *state );
 /* execute until termination up to a maximum number of steps */

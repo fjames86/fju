@@ -53,21 +53,15 @@ int fvm2_module_list( struct fvm2_module_info *minfo, int n );
 int fvm2_module_symbols( char *name, struct fvm2_symbol *sym, int n );
 
 /* initialize runtime state */
-int fvm2_state_init( char *module, char *fname, char *args, int argsize, struct fvm2_s *state );
-int fvm2_state_init2( struct fvm2_s *state, uint32_t progid, uint32_t procid );
+int fvm2_state_init( struct fvm2_s *state, uint32_t progid, uint32_t procid );
 
 /* exeucute a single step */
 int fvm2_step( struct fvm2_s *state );
 /* execute until termination up to a maximum number of steps */
 int fvm2_run( struct fvm2_s *state, int nsteps );
-/* extract execution results from stack */
-int fvm2_results( struct fvm2_s *state, char *results, int size, int *rsize );
 
-/* read/write an exported symbol */
-int fvm2_read_var( char *module, char *vname, char *buf, int size );
-int fvm2_write_var( char *module, char *vname, char *buf, int size );
-
-
+/* register this module as an rpc program */
+int fvm2_register_program( char *mname );
 
 
 #endif

@@ -38,6 +38,7 @@ int main( int argc, char **argv ) {
   int i, sts;
   char mname[64], sname[64];
   int nsteps = -1;
+  uint32_t progid = 0, procid = 0;
   
   memset( mname, 0, sizeof(mname) );
   memset( sname, 0, sizeof(sname) );
@@ -89,6 +90,7 @@ int main( int argc, char **argv ) {
     for( m = 0; m < n; m++ ) {
       fvm2_printf( "Module %s %u:%u DataSize %u TextSize %u\n", minfo[m].name, minfo[m].progid, minfo[m].versid, minfo[m].datasize, minfo[m].textsize );
       if( !mname[0] ) strcpy( mname, minfo[m].name );
+      if( strcasecmp( mname, minfo[m].name ) == 0 ) progid = minfo[m].progid;
     }
     free( minfo );
     fvm2_printf( "--------------------------------------\n" );
@@ -112,6 +114,7 @@ int main( int argc, char **argv ) {
       for( m = 0; m < n; m++ ) {
 	fvm2_printf( "%-2u %-16s = 0x%04x\n", m, sym[m].name, sym[m].addr );
 	if( !sname[0] ) strcpy( sname, sym[m].name );
+	if( strcasecmp( sym[m].name, sname ) == 0 ) procid = m;
       }
       free( sym );
     }
@@ -120,9 +123,9 @@ int main( int argc, char **argv ) {
   }
   
   if( !sname[0] ) usage( "No function" );
-  fvm2_printf( "Calling function %s\n", sname );
+  fvm2_printf( "Calling function %s procid %u\n", sname, procid );
   
-  sts = fvm2_state_init( mname, sname, NULL, 0, &state );
+  sts = fvm2_state_init( &state, progid, procid );
   if( sts ) usage( "Failed to initialize" );
   
   sts = fvm2_run( &state, nsteps );

@@ -2,9 +2,9 @@
 
 fvm2: ${BINDIR}/fvmc ${LIBDIR}/libfvm2.a ${BINDIR}/fvm2 
 
-${LIBDIR}/libfvm2.a: fvm2/fvm2-module.c fvm2/fvm2-state.c fvm2/fvm2-opcodes.c include/fju/fvm2.h fvm2/fvm2-native.c 
-	${CC} -c -g fvm2/fvm2-module.c fvm2/fvm2-state.c fvm2/fvm2-opcodes.c fvm2/fvm2-native.c ${CFLAGS} 
-	${AR} rcs $@ fvm2-module.o fvm2-state.o fvm2-opcodes.o fvm2-native.o 
+${LIBDIR}/libfvm2.a: fvm2/fvm2-module.c fvm2/fvm2-state.c fvm2/fvm2-opcodes.c include/fju/fvm2.h fvm2/fvm2-native.c fvm2/fvm2-private.h fvm2/fvm2-rpc.c 
+	${CC} -c -g fvm2/fvm2-module.c fvm2/fvm2-state.c fvm2/fvm2-opcodes.c fvm2/fvm2-native.c fvm2/fvm2-rpc.c ${CFLAGS} 
+	${AR} rcs $@ fvm2-module.o fvm2-state.o fvm2-opcodes.o fvm2-native.o fvm2-rpc.o 
 
 fvmc_deps+=
 ${BINDIR}/fvmc: fvm2/fvmc.c

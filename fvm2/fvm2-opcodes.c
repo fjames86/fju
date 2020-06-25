@@ -545,7 +545,7 @@ static int opcode_ldvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, ui
   ry = data & 0x7;
   rz = (data >> 4) & 0x7;
 
-  sts = fvm2_state_init2( &state2, ntohl( state->reg[rx] ), ntohl( state->reg[ry] ) );
+  sts = fvm2_state_init( &state2, ntohl( state->reg[rx] ), ntohl( state->reg[ry] ) );
   if( sts ) {
     fvm2_printf( "ldvirt failed to init\n" );
   }
@@ -563,7 +563,7 @@ static int opcode_stvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, ui
   ry = data & 0x7;
   rz = (data >> 4) & 0x7;
 
-  sts = fvm2_state_init2( &state2, ntohl( state->reg[rx] ), ntohl( state->reg[ry] ) );
+  sts = fvm2_state_init( &state2, ntohl( state->reg[rx] ), ntohl( state->reg[ry] ) );
   if( sts ) {
     fvm2_printf( "ldvirt failed to init\n" );
   }
@@ -595,6 +595,19 @@ static int opcode_movreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, ui
   return 0;
 }
 
+static int opcode_cmpreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  uint32_t x;
+  x = ntohl( state->reg[reg] )  - ntohl( state->reg[data & 0x7] );
+  setflags( state, x );
+  return 0;
+}
+
+static int opcode_cmpconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  uint32_t x;
+  x = ntohl( state->reg[reg] )  - sign_extend( data );
+  setflags( state, x );
+  return 0;
+}
 
 struct opcode_def {
   fvm2_opcode_fn fn;
@@ -662,7 +675,8 @@ static struct opcode_def opcodes[FVM2_MAX_OPCODE] =
    { opcode_allocareg, "ALLOCA" },
    { opcode_allocaconst, "ALLOCA" },
    { opcode_movreg, "MOV" },
-
+   { opcode_cmpreg, "CMP" },
+   { opcode_cmpconst, "CMP" },
   };
 
 

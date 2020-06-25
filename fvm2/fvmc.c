@@ -601,6 +601,8 @@ static struct {
 	{ "ALLOCA", 0x38, 0x00010000 },  /* ALLOCA RX */
 	{ "ALLOCA", 0x39, 0x00010001 },  /* ALLOCA const. adjust on stack. +ve allocate, -ve frees. */
 	{ "MOV", 0x3a, 0x00020000 }, /* MOV RX RY. copy register */
+	{ "CMP", 0x3b, 0x00020000 }, /* CMP RX RY. compare register */
+	{ "CMP", 0x3c, 0x00020002 }, /* CMP RX const. compare with const */
 
 	
 	{ NULL, 0, 0 }

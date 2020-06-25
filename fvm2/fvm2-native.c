@@ -25,7 +25,7 @@ static int native_puts( struct fvm2_s *state ) {
   str = fvm2_getaddr( state, sp + 4 );
   if( !str ) return -1;
 
-  printf( "%.*s\n", len, str );
+  printf( "%.*s", len, str );
   return 0;
 }
 

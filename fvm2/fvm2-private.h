@@ -65,5 +65,8 @@ char *fvm2_getaddr( struct fvm2_s *state, uint32_t addr );
 uint32_t fvm2_read( struct fvm2_s *state, uint32_t addr );
 void fvm2_write( struct fvm2_s *state, uint32_t addr, uint32_t val );
 
+void fvm2_debug( int enable );
+void fvm2_printf( char *fmt, ... );
+
 #endif
 

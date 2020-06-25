@@ -2,7 +2,7 @@
 	.MODULE		test1
 	.PROGRAM	10000	1
 
-	.TEXT		hello	"Hello, world!"
+	.TEXT		hello	"Hello, world!\n"
 	.TEXT		helloend
 	
 MAIN:	
@@ -13,8 +13,8 @@ MAIN:
 	CALLVIRT	R0	R1	R2
 	POP		R4
 
-	LDI		R0	0
-	LDI		R1	1
+	LDI		R0	MODULE-NATIVE
+	LDI		R1	NATIVE-PUTS
 	LDI		R2	0
 	PUSH		hello
 	CALLVIRT	R0	R1	R2

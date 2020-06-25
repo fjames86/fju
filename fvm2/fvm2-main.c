@@ -8,6 +8,8 @@
 
 #include <fju/fvm2.h>
 
+#include "fvm2-private.h"
+
 static void usage( char *fmt, ... ) {
   va_list args;
   
@@ -17,6 +19,7 @@ static void usage( char *fmt, ... ) {
 	  "   -m      module\n"
 	  "   -s      start symbol\n"
 	  "   -n      max steps\n"
+	  "   -v      Verbose\n"
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -35,7 +38,7 @@ int main( int argc, char **argv ) {
   int i, sts;
   char mname[64], sname[64];
   int nsteps = -1;
-
+  
   memset( mname, 0, sizeof(mname) );
   memset( sname, 0, sizeof(sname) );
   
@@ -59,13 +62,15 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       nsteps = strtoul( argv[i], NULL, 10 );
+    } else if( strcmp( argv[i], "-v" ) == 0 ) {
+      fvm2_debug( 1 );
     } else break;
     
     i++;
   }
   
   while( i < argc ) {
-    printf( "Loading module %s\n", argv[i] );
+    fvm2_printf( "Loading module %s\n", argv[i] );
     sts = fvm2_module_load( argv[i] );
     if( sts ) usage( "Failed to load module \"%s\"", argv[i] );
     i++;
@@ -75,28 +80,28 @@ int main( int argc, char **argv ) {
     struct fvm2_module_info *minfo;
     int n, m;
 
-    printf( "-------------- Modules --------------\n" );
+    fvm2_printf( "-------------- Modules --------------\n" );
     n = fvm2_module_list( NULL, 0 );
     if( n < 0 ) usage( "Failed to get modules" );
     minfo = malloc( sizeof(*minfo) * n );
     m = fvm2_module_list( minfo, n );
     if( m < n ) m = n;
     for( m = 0; m < n; m++ ) {
-      printf( "Module %s %u:%u DataSize %u TextSize %u\n", minfo[m].name, minfo[m].progid, minfo[m].versid, minfo[m].datasize, minfo[m].textsize );
+      fvm2_printf( "Module %s %u:%u DataSize %u TextSize %u\n", minfo[m].name, minfo[m].progid, minfo[m].versid, minfo[m].datasize, minfo[m].textsize );
       if( !mname[0] ) strcpy( mname, minfo[m].name );
     }
     free( minfo );
-    printf( "--------------------------------------\n" );
+    fvm2_printf( "--------------------------------------\n" );
   }
 
   if( !mname[0] ) usage( "No module" );
-  printf( "Initializing to module %s\n", mname );
+  fvm2_printf( "Initializing to module %s\n", mname );
 
   {
     struct fvm2_symbol *sym;
     int n, m;
 
-    printf( " ------------- Symbols -------------- \n" );
+    fvm2_printf( " ------------- Symbols -------------- \n" );
     
     n = fvm2_module_symbols( mname, NULL, 0 );
     if( n < 0 ) usage( "Failed to get module symbols" );
@@ -105,17 +110,17 @@ int main( int argc, char **argv ) {
       m = fvm2_module_symbols( mname, sym, n );
       if( m < n ) n = m;
       for( m = 0; m < n; m++ ) {
-	printf( "%-2u %-16s = 0x%04x\n", m, sym[m].name, sym[m].addr );
+	fvm2_printf( "%-2u %-16s = 0x%04x\n", m, sym[m].name, sym[m].addr );
 	if( !sname[0] ) strcpy( sname, sym[m].name );
       }
       free( sym );
     }
 
-    printf( " ------------------------------------ \n" );
+    fvm2_printf( " ------------------------------------ \n" );
   }
   
   if( !sname[0] ) usage( "No function" );
-  printf( "Calling function %s\n", sname );
+  fvm2_printf( "Calling function %s\n", sname );
   
   sts = fvm2_state_init( mname, sname, NULL, 0, &state );
   if( sts ) usage( "Failed to initialize" );

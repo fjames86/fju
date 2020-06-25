@@ -466,7 +466,7 @@ static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 
   argsize = ntohl( state->reg[rz] );
   if( (argsize > (state->reg[FVM2_REG_SP] - FVM2_ADDR_STACK)) ) {
-    printf( "args too large %d > %u \n", argsize, state->reg[FVM2_REG_SP] - FVM2_ADDR_STACK );
+    fvm2_printf( "args too large %d > %u \n", argsize, state->reg[FVM2_REG_SP] - FVM2_ADDR_STACK );
     return -1;
   }
   
@@ -477,7 +477,7 @@ static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
 
   if( ntohl( state->reg[rx] ) == 0 ) {
     /* special code for standard libary call */
-    printf( "callvirt native %u\n", ntohl( state->reg[ry] ) );
+    fvm2_printf( "callvirt native %u\n", ntohl( state->reg[ry] ) );
     sts = fvm2_native_call( state, ntohl( state->reg[ry] ) );
     if( sts ) {
       state->reg[rz] = htonl( -1 );
@@ -490,14 +490,14 @@ static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
   
   m = fvm2_module_by_progid( ntohl( state->reg[rx] ) );
   if( !m ) {
-    printf( "callvirt unknown progid %u\n", ntohl( state->reg[rx] ) );
+    fvm2_printf( "callvirt unknown progid %u\n", ntohl( state->reg[rx] ) );
     state->reg[rz] = htonl( -1 );
     return 0;
   }
 
   addr = fvm2_symbol_by_index( m, ntohl( state->reg[ry] ) );
   if( addr == 0 ) {
-    printf( "callvirt unknown procid %u\n", ntohl( state->reg[ry] ) );
+    fvm2_printf( "callvirt unknown procid %u\n", ntohl( state->reg[ry] ) );
     state->reg[rz] = htonl( -1 );
     return 0;
   }
@@ -515,7 +515,7 @@ static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
   state2.reg[FVM2_REG_SP] = FVM2_ADDR_STACK + argsize;
   sts = fvm2_run( &state2, -1 ); // TODO: put limit on step count 
   if( sts ) {
-    printf( "callvirt run failed\n" );
+    fvm2_printf( "callvirt run failed\n" );
     state->reg[rz] = htonl( -1 );
     return 0;
   }
@@ -523,14 +523,14 @@ static int opcode_callvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
   /* extract result data. Calling convention is R0 contains result length.  */
   ressize = ntohl( state2.reg[FVM2_REG_R0] );
   if( ressize == -1 ) {
-    printf( "callvirt return failure\n" );
+    fvm2_printf( "callvirt return failure\n" );
     state->reg[rz] = htonl( -1 );
     return 0;
   }
 
   memcpy( res, state2.stack, ressize );
   state->reg[rz] = htonl( ressize );
-  printf( "callvirt success\n" );
+  fvm2_printf( "callvirt success\n" );
   return 0;
 }
 
@@ -649,7 +649,7 @@ int fvm2_step( struct fvm2_s *state ) {
   def = &opcodes[(opcode >> 24) & 0xff];
   if( !def->fn ) return -1;
 
-  printf( "%-16s Frame %-2u R0 %-4x R1 %-4x R2 %-4x R3 %-4x R4 %-4x R5 %-4x R6 %-4x R7 %-4x SP %-4x PC %-4x : %08x %-6s R%u 0x%04x (%d)\n",
+  fvm2_printf( "%-16s Frame %-2u R0 %-4x R1 %-4x R2 %-4x R3 %-4x R4 %-4x R5 %-4x R6 %-4x R7 %-4x SP %-4x PC %-4x : %08x %-6s R%u 0x%04x (%d)\n",
 	  state->module->header.name,
 	  state->frame,
 	  ntohl(state->reg[FVM2_REG_R0]),

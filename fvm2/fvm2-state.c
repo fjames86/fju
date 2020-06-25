@@ -1,5 +1,7 @@
 
 #include "fvm2-private.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 int fvm2_state_init( char *module, char *fname, char *args, int argsize, struct fvm2_s *state ) {
   struct fvm2_module *m;
@@ -71,3 +73,17 @@ int fvm2_write_var( char *module, char *vname, char *buf, int size ) {
   return 0;
 }
 
+static int debugenabled = 0;
+void fvm2_debug( int enabled ) {
+  debugenabled = enabled;
+}
+
+void fvm2_printf( char *fmt, ... ) {
+  va_list args;
+
+  if( !debugenabled ) return;
+  
+  va_start( args, fmt );
+  vprintf( fmt, args );
+  va_end( args );
+}

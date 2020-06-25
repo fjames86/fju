@@ -58,7 +58,7 @@ static int addlabel( char *name, uint32_t addr ) {
     }
   }
 
-  printf( "adding label %s addr %x\n", name, addr );
+  //printf( "adding label %s addr %x\n", name, addr );
   strcpy( labels[nlabels].name, name );
   labels[nlabels].addr = addr;
   nlabels++;
@@ -86,13 +86,13 @@ static int datasize;
 
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
+  char *outfilename;
   char buf[256];
   uint32_t opcode;
-  char *outfilename;
   int i, j, starti;
   char *p;
   uint32_t addr;
-  
+
   outfilename = "out.fvm";
   
   i = 1;
@@ -108,7 +108,7 @@ int main( int argc, char **argv ) {
     } else break;
     i++;
   }
-  
+
   outfile = fopen( outfilename, "w" );
   if( !outfile ) usage( "Failed to open outfile" );
   addr = 0;
@@ -271,16 +271,23 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  if( *p == '\0' ) break;
 	  if( *p == '\\' ) {
 	    p++;
-	    size++;
-	    if( *p == '"' ) {
-	      p++;
+	    switch( *p ) {
+	    case 'o':
+	      // octal
+	      size += 3;
+	      break;
+	    case 'x':
+	      // hex 
+	      size += 2;
+	      break;
+	    default:
 	      size++;
-	    } // TODO: escaped control characters
-	      
+	    }
+	  } else {
+	    size++;
 	  }
 	  
 	  p++;
-	  size++;
 	}
 	p--;
 	
@@ -288,9 +295,68 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  uint32_t s = size - 4;
 	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
 	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
+	    char *qq;
+	    
 	    s = htonl( s );
 	    fwrite( &s, 1, 4, f );
-	    fwrite( startp, 1, size - 4, f );
+
+	    qq = startp;
+	    while( *qq != '"' && *qq != '\0' ) {
+	      if( *qq == '\\' ) {
+		char c;
+		qq++;
+		c = *qq;
+		switch( c ) {
+		case '0':
+		  c = '\0'; break;
+		case 'a':
+		  c = '\a'; break;
+		case 'b':
+		  c = '\b'; break;
+		case 'f':
+		  c = '\f'; break;
+		case 'n':
+		  c = '\n'; break;
+		case 'r':
+		  c = '\r'; break;
+		case 't':
+		  c = '\t'; break;
+		case 'v':
+		  c = '\v'; break;
+		case 'o':
+		  // octal
+		  qq++;
+		  c = (*qq - '0');
+		  qq++;
+		  c <<= 3; 
+		  c |= (*qq - '0');
+		  qq++;
+		  c <<= 3;
+		  c |= (*qq - '0');
+		  break;
+		case 'x':
+		  // hex
+		  qq++;
+		  c = 0;
+		  if( *qq >= 'a' && *qq <= 'f' ) c = 10 + *qq - 'a';
+		  else if ( *qq >= 'A' && *qq <= 'F' ) c = 10 + *qq - 'A';
+		  else if ( *qq >= '0' && *qq <= '9' ) c = *qq - '0';
+		  qq++;
+		  c <<= 4;
+		  if( *qq >= 'a' && *qq <= 'f' ) c |= 10 + *qq - 'a';
+		  else if ( *qq >= 'A' && *qq <= 'F' ) c |= 10 + *qq - 'A';
+		  else if ( *qq >= '0' && *qq <= '9' ) c |= *qq - '0';		  
+		  break;
+		}
+		fwrite( &c, 1, 1, f );
+	      } else {
+		fwrite( qq, 1, 1, f );
+	      }
+	      qq++;
+	    }
+	      
+	    
+	    //	    fwrite( startp, 1, size - 4, f );
 	    if( size % 4 ) {
 	      uint8_t tmp[4];
 	      memset( tmp, 0, 4 );
@@ -378,7 +444,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     
     memset( name, 0, sizeof(name) );
     q = name;
-    while( *p != ' ' && *p != '\t' ) {
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
       *q = *p;
       p++;
       q++;
@@ -395,7 +461,8 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       q++;
     }
     if( f == NULL ) addlabel( name, strtoul( str, NULL, 0 ) );
-
+    
+    return 0;    
   } else if( strcasecmp( directive, ".EXPORT" ) == 0 ) {
 
     while( *p == ' ' || *p == '\t' ) p++;    
@@ -403,7 +470,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     
     memset( name, 0, sizeof(name) );
     q = name;
-    while( *p != ' ' && *p != '\t' ) {
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
       *q = *p;
       p++;
       q++;
@@ -419,7 +486,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     
     memset( name, 0, sizeof(name) );
     q = name;
-    while( *p != ' ' && *p != '\t' ) {
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
       *q = *p;
       p++;
       q++;

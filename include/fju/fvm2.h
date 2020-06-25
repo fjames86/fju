@@ -62,7 +62,9 @@ int fvm2_run( struct fvm2_s *state, int nsteps );
 
 /* register this module as an rpc program */
 int fvm2_register_program( char *mname );
+int fvm2_unregister_program( char *mname );
 
+void fvm2_rpc_register( void );
 
 #endif
 

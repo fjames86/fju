@@ -38,6 +38,7 @@
 #include <fju/nls.h>
 #include <fju/freg.h>
 #include <fju/fvm.h>
+#include <fju/fvm2.h>
 
 #include "rpc-private.h"
 
@@ -58,6 +59,7 @@ static void init_cb( void ) {
   nls_register();
   freg_register();
   fvm_register();
+  fvm2_rpc_register();
 }
 
 /* -------- Setup logging ---------------- */

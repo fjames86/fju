@@ -103,7 +103,9 @@ static void fvm_read_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr
 static void fvm_read_dirty_results( struct xdr_s *xdr );
 static void fvm_write_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_write_dirty_results( struct xdr_s *xdr );
-
+static void fvm2_list_results( struct xdr_s *xdr );
+static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm2_load_results( struct xdr_s *xdr );
 
 
 
@@ -134,6 +136,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, FVM_RPC_VERS, 10, fvm_write_dirty_args, fvm_write_dirty_results, "fvm.write_dirty", "id=ID path=*" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
+    { FVM2_RPC_PROG, 1, 1, NULL, fvm2_list_results, "fvm2.list", NULL },
+    { FVM2_RPC_PROG, 1, 2, fvm2_load_args, fvm2_load_results, "fvm2.load", "filename=*" },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -1456,8 +1460,76 @@ static void fvm_write_dirty_args( int argc, char **argv, int i, struct xdr_s *xd
 }
 
 static void fvm_write_dirty_results( struct xdr_s *xdr ) {
+  int b;
+  xdr_decode_boolean( xdr, &b );
+
+}
+
+static void fvm2_list_results( struct xdr_s *xdr ) {
   int sts, b;
+  char name[64];
+  uint32_t progid, versid, datasize, textsize;
+  int c;
+  
   sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  while( b ) {
+    sts = xdr_decode_string( xdr, name, sizeof(name) );
+    sts = xdr_decode_uint32( xdr, &progid );
+    sts = xdr_decode_uint32( xdr, &versid );
+    sts = xdr_decode_uint32( xdr, &datasize );
+    sts = xdr_decode_uint32( xdr, &textsize );
+    printf( "%-32s Program %u:%u Data %u Text %u\n",
+	    name, progid, versid, datasize, textsize );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
+    c = 0;
+    while( b ) {
+      sts = xdr_decode_string( xdr, name, sizeof(name) );
+      printf( "  %-4u %-32s\n", c, name );
+      c++;
+      
+      sts = xdr_decode_boolean( xdr, &b );
+      if( sts ) usage( "xdr error" );
+    }
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );
+  }
   
 }
 
+static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char *filename = NULL;
+  struct mmf_s mmf;
+  char *buf;
+  int sts;
+  char argname[64], *argval;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "filename" ) == 0 ) {
+      filename = argval;
+    } else usage( NULL );
+    i++;
+  }
+
+  if( !filename ) usage( NULL );
+
+  sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) usage( "Failed to open file" );
+
+  buf = malloc( mmf.fsize );
+  mmf_read( &mmf, buf, mmf.fsize, 0 );
+  xdr_encode_opaque( xdr, (uint8_t *)buf, mmf.fsize );
+
+  mmf_close( &mmf );
+}
+
+static void fvm2_load_results( struct xdr_s *xdr ) {
+  int b;
+  
+  xdr_decode_boolean( xdr, &b );
+  printf( "%s\n", b ? "failure" : "success" );
+}

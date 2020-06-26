@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <fju/programs.h>
 #include <fju/log.h>
+#include <fju/freg.h>
 
 /* rpc interface */
 
@@ -267,5 +268,52 @@ static struct rpc_program fvm_prog = {
 };
 
 void fvm_rpc_register( void ) {
+  int sts;
+  uint32_t nsteps;
+  uint64_t key;
+  struct freg_entry entry;
+  char path[256];
+  char name[FVM_MAX_NAME];
+
+  /* load all these modules on startup */
+  sts = freg_subkey( NULL, 0, "/fju/fvm/modules", FREG_CREATE, &key );
+  if( !sts ) {
+    sts = freg_next( NULL, key, 0, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ) {
+	sts = freg_get( NULL, entry.id, NULL, path, sizeof(path), NULL );
+	if( !sts ) {
+	  log_writef( NULL, LOG_LVL_INFO, "FVM loading module %s", path );
+	  fvm_module_load( path, name );
+	}
+      }
+      sts = freg_next( NULL, key, entry.id, &entry );
+    }
+  }
+
+  /* register all these modules as rpc programs on startup */
+  sts = freg_subkey( NULL, 0, "/fju/fvm/programs", FREG_CREATE, &key );
+  if( !sts ) {
+    sts = freg_next( NULL, key, 0, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ) {
+	sts = freg_get( NULL, entry.id, NULL, name, sizeof(name), NULL );
+	if( !sts ) {
+	  log_writef( NULL, LOG_LVL_INFO, "FVM registering program %s", name );
+	  fvm_register_program( name );
+	}
+      }
+	
+      sts = freg_next( NULL, key, entry.id, &entry );
+    }    
+  }
+
+  /* set max steps to limit runaway programs blocking rpcd */
+  sts = freg_get_by_name( NULL, 0, "/fju/fvm/MaxSteps", FREG_TYPE_UINT32, (char *)&nsteps, sizeof(nsteps), NULL );
+  if( !sts ) {
+    fvm_max_steps( nsteps );
+  }
+
+  
   rpc_program_register( &fvm_prog );
 }

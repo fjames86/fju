@@ -22,9 +22,23 @@ PROC-ECHO:
 	;; Echo args back to caller
 	LEASP		R1		R0
 	RET
+
+	.DATA		counter		0
+PROC-COUNTER:
+	;; increment value 
+	LD		R1		counter
+	ADD		R1		1
+	LDI		R2		counter
+	ST		R2		R1
+
+	;; return incremented value 
+	PUSH		R1
+	LDI		R0		4
+	RET
 	
 	.EXPORT		PROC-NULL
 	.EXPORT		PROC-HELLO
 	.EXPORT		PROC-ECHO
+	.EXPORT		PROC-COUNTER
 	
 	

@@ -12,7 +12,6 @@ PROJECTS += lht
 PROJECTS += ef
 PROJECTS += ftab
 PROJECTS += freg
-PROJECTS += fvm
 PROJECTS += fvm2
 PROGRAMS=
 LIBRARIES=
@@ -27,11 +26,11 @@ LIBFJU=${LIBDIR}/libfju.so
 
 .PHONY: all strip clean tar install uninstall strip ${PROJECTS}
 
-all: ${PROJECTS} ${LIBFJU} fvm.core
+all: ${PROJECTS} ${LIBFJU} 
 	rm -f *.o
 
 clean:
-	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm.core
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
 
 tar:
 	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}
@@ -60,7 +59,4 @@ FJU_LIBS+=-l${lib}
 .endfor
 ${LIBFJU}: ${FJU_DEPS}
 	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive 
-
-fvm.core: fvm/compiler/package.lisp fvm/compiler/fvm.lisp fvm/compiler/words.lisp fvm/compiler/rpc.lisp
-	sbcl --noinform --non-interactive --load scripts/make-lisp-core.lisp
 

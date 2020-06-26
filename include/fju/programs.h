@@ -52,17 +52,14 @@
 #define FREG_RPC_PROG (FJU_BASE_PROG + 4)
 #define FREG_RPC_VERS 1
 
-#define FVM_RPC_PROG (FJU_BASE_PROG + 5)
-#define FVM_RPC_VERS 1
+#define FVM2_RPC_PROG (FJU_BASE_PROG + 5)
+#define FVM2_RPC_VERS 1
 
 #define SVCTEST_RPC_PROG (FJU_BASE_PROG + 6)
 #define SVCTEST_RPC_VERS 1
 
 #define FJUD_RPC_PROG (FJU_BASE_PROG + 7)
 #define FJUD_RPC_VERS 1
-
-#define FVM2_RPC_PROG (FJU_BASE_PROG + 8)
-#define FVM2_RPC_VERS 1
 
 #endif
 

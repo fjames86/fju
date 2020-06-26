@@ -29,6 +29,7 @@ static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int npro
   pg->prog = prog;
   vs = malloc( sizeof(*vs) );
   memset( vs, 0, sizeof(*vs) );
+  vs->vers = vers;
   pg->vers = vs;
 
   pc = malloc( sizeof(*pc) * (nprocs + 1) );
@@ -70,9 +71,12 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   /* R0 contains length, R1 contains address of buffer */
   count = ntohl( state.reg[FVM_REG_R0] );
-  if( count > 0 ) {
-    sts = xdr_encode_fixed( &inc->xdr, (uint8_t *)fvm_getaddr( &state, ntohl( state.reg[FVM_REG_R1] ) ), count );
-    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  if( count > 0 && count < FVM_MAX_STACK ) {
+    char *p = fvm_getaddr( &state, ntohl( state.reg[FVM_REG_R1] ) );
+    if( p ) {
+      sts = xdr_encode_fixed( &inc->xdr, (uint8_t *)p, count );
+      if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    }
   }
   rpc_complete_accept_reply( inc, handle );
   

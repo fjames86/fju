@@ -39,6 +39,7 @@ struct fvm_s {
   uint8_t *text;
   uint32_t reg[FVM_MAX_REG];
   int32_t frame;
+  uint32_t nsteps;
   uint8_t stack[FVM_MAX_STACK];
 };
 

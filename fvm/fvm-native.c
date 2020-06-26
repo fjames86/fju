@@ -2,6 +2,8 @@
 #include "fvm-private.h"
 
 #include <fju/rpc.h>
+#include <fju/sec.h>
+
 #include <arpa/inet.h>
 
 typedef int (*fvm_native_cb)( struct fvm_s *state );
@@ -29,10 +31,17 @@ static int native_puts( struct fvm_s *state ) {
   return 0;
 }
 
+static int native_rand( struct fvm_s *state ) {
+  /* push random onto stack */
+  fvm_push( state, sec_rand_uint32() );
+  return 0;
+}
+
 static struct fvm_native_proc native_procs[] =
   {
    { 0, native_nop },
    { 1, native_puts },
+   { 2, native_rand },
    { 0, NULL }
   };
 

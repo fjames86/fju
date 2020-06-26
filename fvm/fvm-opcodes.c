@@ -90,18 +90,20 @@ static int opcode_nop( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32
 static int opcode_ldreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LD RX RY */
   state->reg[reg] = mem_read( state, ntohl( state->reg[data & 0x7] ) );
+  setflags( state, ntohl( state->reg[reg] ) );
   return 0;
 }
 
 static int opcode_ldconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LD RX const */
   state->reg[reg] = mem_read( state, data & 0xffff );
+  setflags( state, ntohl( state->reg[reg] ) );
   return 0;
 }
 
 static int opcode_streg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ST RX RY */
-  mem_write( state, state->reg[reg], ntohl( state->reg[data & 0x7] ) );
+  mem_write( state, ntohl( state->reg[reg] ), state->reg[data & 0x7] );
   return 0;
 }
 
@@ -114,6 +116,7 @@ static int opcode_stconst( struct fvm_s *state, uint32_t flags, uint32_t reg, ui
 static int opcode_ldi( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LDI RX const */
   state->reg[reg] = htonl(sign_extend( data ));
+  setflags( state, ntohl( state->reg[reg] ) );
   return 0;
 }
 
@@ -159,6 +162,7 @@ static int opcode_popreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uin
   if( state->reg[FVM_REG_SP] <= FVM_ADDR_STACK ) return -1;
   state->reg[FVM_REG_SP] -= 4;
   state->reg[reg] = mem_read( state, state->reg[FVM_REG_SP] );
+  setflags( state, ntohl( state->reg[reg] ) );
   return 0;
 }
 
@@ -317,7 +321,7 @@ static int opcode_mulconst( struct fvm_s *state, uint32_t flags, uint32_t reg, u
 }
 static int opcode_divreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* DIV RX RY */
-  if( htonl(state->reg[data & 0x7]) == 0 ) return -1;
+  if( ntohl(state->reg[data & 0x7]) == 0 ) return -1;
   state->reg[reg] = htonl(ntohl(state->reg[reg]) / ntohl(state->reg[data & 0x7]));
   setflags( state, ntohl(state->reg[reg]) );
   return 0;
@@ -331,7 +335,7 @@ static int opcode_divconst( struct fvm_s *state, uint32_t flags, uint32_t reg, u
 }
 static int opcode_modreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* MOD RX RY */
-  if( ntohl(state->reg[data & 0x7]) == 0 ) return -1;
+  if( htonl(state->reg[data & 0x7]) == 0 ) return -1;
   state->reg[reg] = htonl(ntohl(state->reg[reg]) % ntohl(state->reg[data & 0x7]));
   setflags( state, ntohl(state->reg[reg]) );
   return 0;
@@ -492,6 +496,7 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   }
 
   memset( &state2, 0, sizeof(state2) );
+  state2.nsteps = state->nsteps;
   state2.module = m;
   state2.datasize = m->header.datasize;
   state2.textsize = m->header.textsize;
@@ -502,7 +507,8 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   memcpy( state2.stack, args, argsize );
   state2.reg[FVM_REG_R0] = htonl( argsize );
   state2.reg[FVM_REG_SP] = FVM_ADDR_STACK + argsize;
-  sts = fvm_run( &state2, default_maxsteps ); 
+  sts = fvm_run( &state2, default_maxsteps );
+  state->nsteps = state2.nsteps;
   if( sts ) {
     fvm_printf( "callvirt run failed\n" );
     state->reg[rz] = htonl( -1 );
@@ -751,7 +757,8 @@ int fvm_step( struct fvm_s *state ) {
   /* fetch next instruction */
   struct opcode_def *def;
   uint32_t opcode, pc;
-
+  int sts;
+  
   pc = state->reg[FVM_REG_PC];
   if( !(pc >= FVM_ADDR_TEXT && pc < (FVM_ADDR_TEXT + FVM_MAX_TEXT)) ) return -1;
   
@@ -779,7 +786,9 @@ int fvm_step( struct fvm_s *state ) {
 	  sign_extend( opcode & 0xffff ) );
   
   state->reg[FVM_REG_PC] += 4;  
-  return def->fn( state, (opcode & 0x000f0000) >> 16, (opcode & 0x00700000) >> 20, opcode & 0x0000ffff );
+  sts = def->fn( state, (opcode & 0x000f0000) >> 16, (opcode & 0x00700000) >> 20, opcode & 0x0000ffff );
+  state->nsteps++;
+  return sts;	      
 }
 
 

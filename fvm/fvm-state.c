@@ -26,13 +26,11 @@ int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid ) {
 }
 
 int fvm_run( struct fvm_s *state, int nsteps ) {
-  int i, sts = 0;
+  int sts = 0;
 
-  i = 0;
-  while( (nsteps == -1 || i < nsteps) && state->frame >= 0 ) {
+  while( (nsteps == -1 || state->nsteps < nsteps) && state->frame >= 0 ) {
     sts = fvm_step( state );
     if( sts ) break;
-    i++;
   }
 
   return sts;

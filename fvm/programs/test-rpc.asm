@@ -20,19 +20,20 @@ PROC-HELLO:
 
 PROC-ECHO:
 	;; Echo args back to caller
-	LEASP		R1		R0
+	SUBSP		R1		R0 ; clear stack 
+	LEASP		R1		0  ; set r1 to buffer, r0 is count but that was already set for us	
 	RET
 
 	.DATA		counter		0
 PROC-COUNTER:
 	;; increment value 
 	LD		R1		counter
-	ADD		R1		1
+	ADD		R1		1	
 	LDI		R2		counter
 	ST		R2		R1
 
 	;; return incremented value 
-	PUSH		R1
+	LDI		R1		counter
 	LDI		R0		4
 	RET
 	

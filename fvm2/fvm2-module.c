@@ -6,7 +6,7 @@
 
 static struct fvm2_module *modules;
 
-int fvm2_module_load( char *filename ) {
+int fvm2_module_load( char *filename, char *name ) {
   int sts;
   struct mmf_s mmf;
   struct fvm2_header header;
@@ -31,6 +31,8 @@ int fvm2_module_load( char *filename ) {
     goto done;
   }      
 
+  if( name ) strncpy( name, header.name, FVM2_MAX_NAME - 1 );
+  
   if( fvm2_module_by_name( header.name ) ) {
     sts = -1;
     goto done;
@@ -55,13 +57,13 @@ int fvm2_module_load( char *filename ) {
   m->next = modules;
   modules = m;
   sts = 0;
-  
+	       
  done:
   mmf_close( &mmf );
   return sts;
 }
 
-int fvm2_module_register( char *buf, int size ) {
+int fvm2_module_register( char *buf, int size, char *name ) {
   struct fvm2_header header;
   struct fvm2_module *m;
   
@@ -71,6 +73,7 @@ int fvm2_module_register( char *buf, int size ) {
   if( size != (sizeof(header) + header.symcount*sizeof(struct fvm2_symbol) + header.datasize + header.textsize) ) {
     return -1;
   }
+  if( name ) strncpy( name, header.name, FVM2_MAX_NAME - 1 );
   if( fvm2_module_by_name( header.name ) ) return -1;
   if( fvm2_module_by_progid( header.progid ) ) return -1;
 

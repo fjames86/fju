@@ -72,7 +72,7 @@ int main( int argc, char **argv ) {
   
   while( i < argc ) {
     fvm2_printf( "Loading module %s\n", argv[i] );
-    sts = fvm2_module_load( argv[i] );
+    sts = fvm2_module_load( argv[i], NULL );
     if( sts ) usage( "Failed to load module \"%s\"", argv[i] );
     i++;
   }

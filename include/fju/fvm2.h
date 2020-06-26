@@ -41,10 +41,10 @@ struct fvm2_s {
 };
 
 
-/* register a module from memory */
-int fvm2_module_register( char *buf, int size );
+/* register a module from memory. if non-null name receives module name */
+int fvm2_module_register( char *buf, int size, char *name );
 /* load and register a module from a file */
-int fvm2_module_load( char *filename );
+int fvm2_module_load( char *filename, char *name );
 /* unload a given module */
 int fvm2_module_unload( char *name );
 
@@ -64,7 +64,7 @@ int fvm2_run( struct fvm2_s *state, int nsteps );
 int fvm2_register_program( char *mname );
 int fvm2_unregister_program( char *mname );
 
-#define FVM2_RPC_PROG 
+/* register rpc interface */
 void fvm2_rpc_register( void );
 
 #endif

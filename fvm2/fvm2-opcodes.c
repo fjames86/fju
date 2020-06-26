@@ -609,6 +609,38 @@ static int opcode_cmpconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, 
   return 0;
 }
 
+static int opcode_ldincreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* LDINC RX RY */
+  state->reg[reg] = mem_read( state, ntohl( state->reg[data & 0x7] ) );
+  setflags( state, ntohl( state->reg[reg] ) );
+  state->reg[data & 0x7] = htonl( ntohl( state->reg[data & 0x7] ) + 4 );
+  return 0;
+}
+
+static int opcode_stincreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+
+  /* STINC RX RY */
+  mem_write( state, ntohl( state->reg[reg] ), state->reg[data & 0x7] );
+  setflags( state, ntohl( state->reg[data & 0x7] ) );
+  state->reg[reg] = htonl( ntohl( state->reg[reg] ) + 4 );
+  
+  return 0;
+}
+
+static int opcode_ldspreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* LDSP RX RY */
+  state->reg[reg] = mem_read( state, state->reg[FVM2_REG_SP] + ntohl( state->reg[data & 0x7] ) );
+  setflags( state, ntohl( state->reg[reg] ) );
+  return 0;
+}
+
+static int opcode_ldspconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* LDSP RX RY */
+  state->reg[reg] = mem_read( state, state->reg[FVM2_REG_SP] + sign_extend( data ) );
+  setflags( state, ntohl( state->reg[reg] ) );
+  return 0;
+}
+
 struct opcode_def {
   fvm2_opcode_fn fn;
   char *name;
@@ -675,8 +707,12 @@ static struct opcode_def opcodes[FVM2_MAX_OPCODE] =
    { opcode_allocareg, "ALLOCA" },
    { opcode_allocaconst, "ALLOCA" },
    { opcode_movreg, "MOV" },
-   { opcode_cmpreg, "CMP" },
+   { opcode_cmpreg, "CMP"},
    { opcode_cmpconst, "CMP" },
+   { opcode_ldincreg, "LDINC" },
+   { opcode_stincreg, "STINC" },
+   { opcode_ldspreg, "LDSP" },
+   { opcode_ldspconst, "LDSP" },
   };
 
 

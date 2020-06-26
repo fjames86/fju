@@ -20,6 +20,7 @@ static void usage( char *fmt, ... ) {
 	  "\n"
 	  "\n OPTIONS:\n"
 	  "   -o outfile\n"
+	  "   -v verbmose mode\n"
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -35,6 +36,17 @@ static void usage( char *fmt, ... ) {
 static char modulename[64] = "default";
 static uint32_t modprogid;
 static uint32_t modversid;
+static int verbosemode = 0;
+
+static void fvmc_printf( char *fmt, ... ) {
+  va_list args;
+
+  if( !verbosemode ) return;
+  
+  va_start( args, fmt );
+  vprintf( fmt, args );
+  va_end( args );
+}
 
 static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass );
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
@@ -53,12 +65,12 @@ static int addlabel( char *name, uint32_t addr ) {
   int i ;
   for( i = 0; i < nlabels; i++ ) {
     if( strcasecmp( labels[i].name, name ) == 0 ) {
-      //printf( ";; duplicate label %s\n", name );
+      fvmc_printf( ";; duplicate label %s\n", name );
       return -1;
     }
   }
 
-  //printf( "adding label %s addr %x\n", name, addr );
+  fvmc_printf( "adding label %s addr %x\n", name, addr );
   strcpy( labels[nlabels].name, name );
   labels[nlabels].addr = addr;
   nlabels++;
@@ -86,21 +98,23 @@ static int datasize;
 
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
-  char *outfilename;
+  char outfilename[256];
   char buf[256];
   uint32_t opcode;
   int i, j, starti;
   char *p;
   uint32_t addr;
 
-  outfilename = "out.fvm";
+  strcpy( outfilename, "" );
   
   i = 1;
   while( i < argc ) {
     if( strcmp( argv[i], "-o" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      outfilename = argv[i];
+      strncpy( outfilename, argv[i], 255 );
+    } else if( strcmp( argv[i], "-v" ) == 0 ) {
+      verbosemode = 1;
     } else if( strcmp( argv[i], "-h" ) == 0 ) {
       usage( NULL );
     } else if( strcmp( argv[i], "--help" ) == 0 ) {
@@ -109,11 +123,9 @@ int main( int argc, char **argv ) {
     i++;
   }
 
-  outfile = fopen( outfilename, "w" );
-  if( !outfile ) usage( "Failed to open outfile" );
   addr = 0;
 
-  //  printf( "\n ------ first pass ------- \n" );
+  fvmc_printf( "\n ------ first pass ------- \n" );
 
   /* first pass collects labels and computes offets. does not emit opcodes */
   starti = i;
@@ -135,7 +147,7 @@ int main( int argc, char **argv ) {
 
       if( parse_directive( buf, &addr, NULL, 0 ) == 0 ) continue;
       
-      //printf( ";; attempting to encode line \"%s\"\n", buf );
+      fvmc_printf( ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, ADDR_TEXT + addr, 1 ) != -1 ) {
 	addr += 4;
       }
@@ -146,14 +158,20 @@ int main( int argc, char **argv ) {
   }
 
   
-  //printf( "\n ------ label table ------- \n" );
+  fvmc_printf( "\n ------ label table ------- \n" );
   for( j = 0; j < nlabels; j++ ) {
-    //printf( ";; Label %-4d %-16s = 0x%08x\n", j, labels[j].name, labels[j].addr );
+    fvmc_printf( ";; Label %-4d %-16s = 0x%08x\n", j, labels[j].name, labels[j].addr );
   }
-  //printf( "\n ------ second pass ------- \n" );
+  fvmc_printf( "\n ------ second pass ------- \n" );
 
   /* second pass emits output */
-  
+
+  if( !outfilename[0] ) {
+    sprintf( outfilename, "%s.fvm", modulename );
+  }
+  outfile = fopen( outfilename, "w" );
+  if( !outfile ) usage( "Failed to open outfile \"%s\"", outfilename );
+
   /* write header */
   emit_header( outfile, addr );
 
@@ -202,9 +220,9 @@ int main( int argc, char **argv ) {
       
       if( parse_directive( buf, &addr, outfile, 0 ) == 0 ) continue;
 
-      //      printf( ";; attempting to encode line \"%s\"\n", buf );
+      fvmc_printf( ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, 0, 0 ) != -1 ) {
-	//printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
+	fvmc_printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
 	opcode = htonl( opcode );
 	fwrite( &opcode, 1, 4, outfile );
       }
@@ -492,6 +510,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       q++;
     }
 
+    fvmc_printf( "setting modulename to %s\n", name );
     strcpy( modulename, name );
 
     return 0;
@@ -543,11 +562,11 @@ static struct {
 #define ARG1_CONST 0x02
 } opcodes[] = {
 	{ "NOP",  0x00, 0x00000000 },
-	{ "LD",   0x01, 0x00020000 },   /* LD RX RY */
-	{ "LD",   0x02, 0x00020002 },   /* LD RX constant */
-	{ "ST",   0x03, 0x00020000 },   /* ST RX RY */
-	{ "ST",   0x04, 0x00020002 },   /* ST RX const */
-	{ "LDI",  0x05, 0x00020002 },   /* LDI RX constant */
+	{ "LD",   0x01, 0x00020000 },   /* LD RX RY load from memory address ry into rx*/
+	{ "LD",   0x02, 0x00020002 },   /* LD RX constant load from memory address const into rx */
+	{ "ST",   0x03, 0x00020000 },   /* ST RX RY store ry into memory address rx */
+	{ "ST",   0x04, 0x00020002 },   /* ST RX const store const into memory address rx */
+	{ "LDI",  0x05, 0x00020002 },   /* LDI RX constant load const into rx*/
 	{ "LEA",  0x06, 0x00020002 },   /* LEA RX constant */
 	{ "PUSH", 0x07, 0x00010000 },   /* PUSH RX */
 	{ "PUSH", 0x08, 0x00010001 },   /* PUSH const */
@@ -603,7 +622,10 @@ static struct {
 	{ "MOV", 0x3a, 0x00020000 }, /* MOV RX RY. copy register */
 	{ "CMP", 0x3b, 0x00020000 }, /* CMP RX RY. compare register */
 	{ "CMP", 0x3c, 0x00020002 }, /* CMP RX const. compare with const */
-
+	{ "LDINC", 0x3d, 0x00020000 }, /* LDINC RX RY. load from memory address ry into rx, then increment ry */
+	{ "STINC", 0x3e, 0x00020000 }, /* STINC RX RY. store ry into memory address rx, then incremenet rx */
+	{ "LDSP", 0x3f, 0x00020000 }, /* LDSP RX RY. load from stack pointer offset by ry into rx */
+	{ "LDSP", 0x40, 0x00020002 }, /* LDSP RX const. load from stack pointer offset by const into rx */
 	
 	{ NULL, 0, 0 }
 	  
@@ -621,11 +643,6 @@ static struct {
        { "R5", 5 },
        { "R6", 6 },
        { "R7", 7 },
-#if 0
-       { "SP", 8 },
-       { "PC", 9 },
-       { "FLAGS", 10 },
-#endif
        { NULL, 0 }
 };
 

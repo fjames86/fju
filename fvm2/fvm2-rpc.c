@@ -45,7 +45,7 @@ static int fvm2_rpc_proc( struct rpc_inc *inc ) {
   /* get prog, vers, proc */
   uint32_t prog, proc;
   struct fvm2_s state;
-  int sts, handle, arglength;
+  int sts, handle, arglength, count;
   
   prog = inc->msg.u.call.prog;
   proc = inc->msg.u.call.proc;
@@ -65,10 +65,14 @@ static int fvm2_rpc_proc( struct rpc_inc *inc ) {
   sts = fvm2_run( &state, fvm2_max_steps( 0 ) );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  log_writef( NULL, LOG_LVL_INFO, "success reply %d", ntohl( state.reg[FVM2_REG_R0] ) );
+  log_writef( NULL, LOG_LVL_INFO, "success reply length %d", ntohl( state.reg[FVM2_REG_R0] ) );
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  sts = xdr_encode_fixed( &inc->xdr, state.stack, ntohl( state.reg[FVM2_REG_R0] ) );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  /* R0 contains length, R1 contains address of buffer */
+  count = ntohl( state.reg[FVM2_REG_R0] );
+  if( count > 0 ) {
+    sts = xdr_encode_fixed( &inc->xdr, (uint8_t *)fvm2_getaddr( &state, ntohl( state.reg[FVM2_REG_R1] ) ), count );
+    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  }
   rpc_complete_accept_reply( inc, handle );
   
   return 0;
@@ -173,13 +177,24 @@ static int fvm2_proc_list( struct rpc_inc *inc ) {
 static int fvm2_proc_load( struct rpc_inc *inc ) {
   int handle;
   char *bufp;
-  int lenp, sts;
+  int lenp, sts, registerp;
+  char name[FVM2_MAX_NAME];
   
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &registerp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  sts = fvm2_module_register( bufp, lenp );
+  sts = fvm2_module_register( bufp, lenp, name );
+  if( sts ) {
+    fvm2_module_unload( name );
+    sts = fvm2_module_register( bufp, lenp, name );
+  }
 
+  if( registerp ) {
+    fvm2_unregister_program( name );
+    fvm2_register_program( name );
+  }
+  
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, sts ? 1 : 0 );  
   rpc_complete_accept_reply( inc, handle );

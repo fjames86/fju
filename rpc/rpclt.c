@@ -139,7 +139,7 @@ static struct clt_info clt_procs[] = {
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
     { FVM2_RPC_PROG, 1, 1, NULL, fvm2_list_results, "fvm2.list", NULL },
-    { FVM2_RPC_PROG, 1, 2, fvm2_load_args, fvm2_load_results, "fvm2.load", "filename=*" },
+    { FVM2_RPC_PROG, 1, 2, fvm2_load_args, fvm2_load_results, "fvm2.load", "filename=* register=true|false" },
     { FVM2_RPC_PROG, 1, 3, fvm2_register_args, fvm2_register_results, "fvm2.unload", "name=*" },
     { FVM2_RPC_PROG, 1, 4, fvm2_register_args, fvm2_register_results, "fvm2.register", "name=*" },
     { FVM2_RPC_PROG, 1, 5, fvm2_register_args, fvm2_register_results, "fvm2.unregister", "name=*" },
@@ -1511,13 +1511,16 @@ static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char *filename = NULL;
   struct mmf_s mmf;
   char *buf;
-  int sts;
+  int sts, registerp;
   char argname[64], *argval;
-  
+
+  registerp = 0;
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "filename" ) == 0 ) {
       filename = argval;
+    } else if( strcmp( argname, "register" ) == 0 ) {
+      registerp = (strcasecmp( argval, "true" ) == 0);     
     } else usage( NULL );
     i++;
   }
@@ -1530,7 +1533,9 @@ static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   buf = malloc( mmf.fsize );
   mmf_read( &mmf, buf, mmf.fsize, 0 );
   xdr_encode_opaque( xdr, (uint8_t *)buf, mmf.fsize );
-
+  free( buf );
+  xdr_encode_boolean( xdr, registerp );
+  
   mmf_close( &mmf );
 }
 

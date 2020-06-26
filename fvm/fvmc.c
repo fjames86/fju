@@ -631,6 +631,8 @@ static struct {
 	{ "SUBSP", 0x41, 0x00010000 },  /* SUB RX */
 	{ "SUBSP", 0x42, 0x00010001 },  /* SUB const. adjust on stack. +ve frees, -ve allocates. */
 	{ "LEASP", 0x43, 0x00020000 },   /* LEASP RX RY. load address from stack pointer with offset */
+	{ "CALLNAT", 0x44, 0x00020000 }, /* CALLVNAT RX RY. call native function, const is the proc identifier. RX receives result status */
+	{ "CALLNAT", 0x45, 0x00020002 }, /* CALLVNAT RX const. call native function, const is the proc identifier. RX receives result status */
 	
 	{ NULL, 0, 0 }
 	  

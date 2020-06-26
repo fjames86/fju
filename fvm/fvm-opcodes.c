@@ -477,19 +477,6 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   res = (char *)&state->stack[sp - FVM_ADDR_STACK];
   ressize = FVM_MAX_STACK - (sp - FVM_ADDR_STACK);
 
-  if( ntohl( state->reg[rx] ) == 0 ) {
-    /* special code for standard libary call */
-    fvm_printf( "callvirt native %u\n", ntohl( state->reg[ry] ) );
-    sts = fvm_native_call( state, ntohl( state->reg[ry] ) );
-    if( sts ) {
-      state->reg[rz] = htonl( -1 );
-      return 0;
-    }
-    state->reg[rz] = 0;
-    state->reg[FVM_REG_SP] = sp;
-    return 0;
-  }
-  
   m = fvm_module_by_progid( ntohl( state->reg[rx] ) );
   if( !m ) {
     fvm_printf( "callvirt unknown progid %u\n", ntohl( state->reg[rx] ) );
@@ -659,6 +646,26 @@ static int opcode_subspconst( struct fvm_s *state, uint32_t flags, uint32_t reg,
   return 0;
 }
 
+static int opcode_callnatreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  int sts;
+  
+  /* CALLNAT RX RY */ 
+  sts = fvm_native_call( state, ntohl( state->reg[data & 0x7] ) );
+  fvm_printf( "callnative %u result %d\n", ntohl( state->reg[data & 0x7] ), sts );
+  state->reg[reg] = htonl( sts );
+  return 0;
+}
+
+static int opcode_callnatconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  int sts;
+  
+  /* CALLNAT RX const */ 
+  sts = fvm_native_call( state, data );
+  fvm_printf( "callnative %u result %d\n", data, sts );
+  state->reg[reg] = htonl( sts );
+  return 0;
+}
+
 struct opcode_def {
   fvm_opcode_fn fn;
   char *name;
@@ -734,7 +741,8 @@ static struct opcode_def opcodes[FVM_MAX_OPCODE] =
    { opcode_subspreg, "SUBSP" },
    { opcode_subspconst, "SUBSP" },
    { opcode_leaspreg, "LEASP" },
-   
+   { opcode_callnatreg, "CALLNAT" },
+   { opcode_callnatconst, "CALLNAT" },
   };
 
 

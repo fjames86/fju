@@ -7,13 +7,13 @@
 #include <stdint.h>
 
 #include <fju/fvm.h>
-
+#include <fju/rpc.h>
 #include "fvm-private.h"
 
 static void usage( char *fmt, ... ) {
   va_list args;
   
-  printf( "fvm2 OPTIONS file...\n"
+  printf( "fvm OPTIONS file...\n"
 	  "\n"
 	  "\n OPTIONS:\n"
 	  "   -m      module\n"
@@ -32,6 +32,8 @@ static void usage( char *fmt, ... ) {
   exit( 1 );
 }
 
+static uint8_t argbuf[FVM_MAX_STACK];
+
 int main( int argc, char **argv ) {
   static struct fvm_s state;
     
@@ -39,6 +41,9 @@ int main( int argc, char **argv ) {
   char mname[64], sname[64];
   int nsteps = -1;
   uint32_t progid = 0, procid = 0;
+  struct xdr_s argxdr;
+
+  xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
   memset( mname, 0, sizeof(mname) );
   memset( sname, 0, sizeof(sname) );
@@ -65,6 +70,18 @@ int main( int argc, char **argv ) {
       nsteps = strtoul( argv[i], NULL, 10 );
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
       fvm_debug( 1 );
+    } else if( strcmp( argv[i], "--u32" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      xdr_encode_uint32( &argxdr, strtoul( argv[i], NULL, 0 ) );
+    } else if( strcmp( argv[i], "--u64" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      xdr_encode_uint64( &argxdr, strtoull( argv[i], NULL, 0 ) );
+    } else if( strcmp( argv[i], "--str" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      xdr_encode_string( &argxdr, argv[i] );
     } else break;
     
     i++;
@@ -127,6 +144,12 @@ int main( int argc, char **argv ) {
   
   sts = fvm_state_init( &state, progid, procid );
   if( sts ) usage( "Failed to initialize" );
+
+  if( argxdr.offset > 0 ) {
+    memcpy( state.stack, argbuf, argxdr.offset );
+    state.reg[FVM_REG_SP] = FVM_ADDR_STACK + argxdr.offset;
+    state.reg[FVM_REG_R0] = htonl( argxdr.offset );
+  }
   
   sts = fvm_run( &state, nsteps );
   if( sts ) usage( "Failed to run" );

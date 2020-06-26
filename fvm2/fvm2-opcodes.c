@@ -572,20 +572,26 @@ static int opcode_stvirt( struct fvm2_s *state, uint32_t flags, uint32_t reg, ui
   return 0;
 }
 
-static int opcode_leasp( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+static int opcode_leaspconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LEASP RX const */
   state->reg[reg] = htonl( state->reg[FVM2_REG_SP] + sign_extend( data ) );
   return 0;
 }
 
-static int opcode_allocareg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  /* ALLOCA RX */
+static int opcode_leaspreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* LEASP RX RY */
+  state->reg[reg] = htonl( state->reg[FVM2_REG_SP] + ntohl( state->reg[data & 0x7] ) );
+  return 0;
+}
+
+static int opcode_addspreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* ADDSP RX */
   state->reg[FVM2_REG_SP] += ntohl( state->reg[reg] );
   return 0;
 }
 
-static int opcode_allocaconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  /* ALLOCA const */
+static int opcode_addspconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* ADDSP const */
   state->reg[FVM2_REG_SP] += sign_extend( data );
   return 0;
 }
@@ -638,6 +644,18 @@ static int opcode_ldspconst( struct fvm2_s *state, uint32_t flags, uint32_t reg,
   /* LDSP RX RY */
   state->reg[reg] = mem_read( state, state->reg[FVM2_REG_SP] + sign_extend( data ) );
   setflags( state, ntohl( state->reg[reg] ) );
+  return 0;
+}
+
+static int opcode_subspreg( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* SUBSP RX */
+  state->reg[FVM2_REG_SP] -= ntohl( state->reg[reg] );
+  return 0;
+}
+
+static int opcode_subspconst( struct fvm2_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* SUBSP const */
+  state->reg[FVM2_REG_SP] -= sign_extend( data );
   return 0;
 }
 
@@ -703,9 +721,9 @@ static struct opcode_def opcodes[FVM2_MAX_OPCODE] =
    { opcode_callvirt, "CALLVIRT" },
    { opcode_ldvirt, "LDVIRT" },
    { opcode_stvirt, "STVIRT" },
-   { opcode_leasp, "LEASP" },
-   { opcode_allocareg, "ALLOCA" },
-   { opcode_allocaconst, "ALLOCA" },
+   { opcode_leaspconst, "LEASP" },
+   { opcode_addspreg, "ADDSP" },
+   { opcode_addspconst, "ADDSP" },
    { opcode_movreg, "MOV" },
    { opcode_cmpreg, "CMP"},
    { opcode_cmpconst, "CMP" },
@@ -713,6 +731,10 @@ static struct opcode_def opcodes[FVM2_MAX_OPCODE] =
    { opcode_stincreg, "STINC" },
    { opcode_ldspreg, "LDSP" },
    { opcode_ldspconst, "LDSP" },
+   { opcode_subspreg, "SUBSP" },
+   { opcode_subspconst, "SUBSP" },
+   { opcode_leaspreg, "LEASP" },
+   
   };
 
 

@@ -38,6 +38,7 @@
 #ifndef WIN32
 #include <arpa/inet.h>
 #endif
+#include <ctype.h>
 
 #include <fju/rpc.h>
 #include <fju/hrauth.h>
@@ -108,7 +109,8 @@ static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm2_load_results( struct xdr_s *xdr );
 static void fvm2_register_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm2_register_results( struct xdr_s *xdr );
-static void test1_results( struct xdr_s *xdr );
+static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void rawmode_results( struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -143,8 +145,8 @@ static struct clt_info clt_procs[] = {
     { FVM2_RPC_PROG, 1, 3, fvm2_register_args, fvm2_register_results, "fvm2.unload", "name=*" },
     { FVM2_RPC_PROG, 1, 4, fvm2_register_args, fvm2_register_results, "fvm2.register", "name=*" },
     { FVM2_RPC_PROG, 1, 5, fvm2_register_args, fvm2_register_results, "fvm2.unregister", "name=*" },
+    { 0, 0, 0, rawmode_args, rawmode_results, "rawmode", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*]" },
     
-    { 2333333, 0, 1, NULL, test1_results, "test1", NULL },
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -164,7 +166,7 @@ static void usage( char *fmt, ... ) {
 	  "\n" );
   info = clt_procs;
   printf( "Procedures:\n" );
-  while( info->prog ) {
+  while( info->procname ) {
       sprintf( procstr, "%u:%u:%u", info->prog, info->vers, info->proc );
       printf( "    %-16s %-16s %s\n",
 	      procstr, info->procname, info->procargs ? info->procargs : "" );
@@ -344,9 +346,24 @@ int main( int argc, char **argv ) {
     else procname = argv[i]; 
     
     idx = 0;
-    while( clt_procs[idx].prog ) {
+    while( clt_procs[idx].procname ) {
       info = &clt_procs[idx];
       if( strcmp( procname, info->procname ) == 0 ) {
+
+	if( info->prog == 0 ) {
+	  /* rawmode expect args: prog vers proc */
+	  i++;
+	  if( i >= argc ) usage( "Need prog" );
+	  info->prog = strtoul( argv[i], NULL, 0 );
+	  i++;
+	  if( i >= argc ) usage( "Need vers" );
+	  info->vers = strtoul( argv[i], NULL, 0 );
+	  i++;
+	  if( i >= argc ) usage( "Need proc" );
+	  info->proc = strtoul( argv[i], NULL, 0 );
+	  i++;
+	}
+	
 	if( glob.broadcast ) {
 	  clt_broadcast( info, argc, argv, i );
 	} else {
@@ -1573,12 +1590,43 @@ static void fvm2_register_results( struct xdr_s *xdr ) {
   printf( "%s\n", b ? "failure" : "success" );
 }
 
-static void test1_results( struct xdr_s *xdr ) {
-  char name[64];
-  int sts;
+static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
   
-  sts = xdr_decode_string( xdr, name, sizeof(name) );
-  if( sts ) usage( "xdr error" );
-  printf( "%s\n", name );
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "u32" ) == 0 ) {
+      xdr_encode_uint32( xdr, strtoul( argval, NULL, 0 ) );
+    } else if( strcmp( argname, "u64" ) == 0 ) {
+      xdr_encode_uint64( xdr, strtoull( argval, NULL, 0 ) );
+    } else if( strcmp( argname, "str" ) == 0 ) {
+      xdr_encode_string( xdr, argval );
+    } else if( strcmp( argname, "bool" ) == 0 ) {
+      xdr_encode_boolean( xdr, strcmp( argval, "true" ) == 0 );
+    } else usage( NULL );
+    i++;
+  }
+  
 }
 
+static void rawmode_results( struct xdr_s *xdr ) {
+  int i, count, j, c;
+  count = xdr->count - xdr->offset;
+  
+  for( i = 0; i < count; i += 16 ) {
+    for( j = 0; j < 16; j++ ) {
+      if( (i + j) < count ) {
+	printf( "%02x ", (uint32_t)xdr->buf[xdr->offset + i + j] );
+      }
+    }
+    for( j = 0; j < 16; j++ ) {
+      if( (i + j) < count ) {
+	c = xdr->buf[xdr->offset + i + j];
+	if( !isalnum( c ) ) c = '.';
+	printf( "%c", c );
+      }
+    }
+    
+    printf( "\n" );
+  }
+}

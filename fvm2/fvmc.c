@@ -70,7 +70,7 @@ static int addlabel( char *name, uint32_t addr ) {
     }
   }
 
-  fvmc_printf( "adding label %s addr %x\n", name, addr );
+  fvmc_printf( ";; adding label %s addr %x\n", name, addr );
   strcpy( labels[nlabels].name, name );
   labels[nlabels].addr = addr;
   nlabels++;
@@ -286,29 +286,18 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	/* string */
 	size = 4; /* string length header */
 	while( *p != '"' ) {
-	  if( *p == '\0' ) break;
-	  if( *p == '\\' ) {
+	  if( *p == '\0' ) usage( "Unexpected end of line, expected closing \"" );
+	  if( *p == '\\' ) { 
 	    p++;
-	    switch( *p ) {
-	    case 'o':
-	      // octal
-	      size += 3;
-	      break;
-	    case 'x':
-	      // hex 
-	      size += 2;
-	      break;
-	    default:
-	      size++;
-	    }
-	  } else {
-	    size++;
 	  }
 	  
+	  size++;
 	  p++;
 	}
-	p--;
-	
+	p++;
+	  
+	//fvmc_printf( "String \"%.*s\" length %u\n", size - 4, startp, size - 4 );
+
 	if( f != NULL ) {	  
 	  uint32_t s = size - 4;
 	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
@@ -316,6 +305,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	    char *qq;
 	    
 	    s = htonl( s );
+	    //fvmc_printf( ";; writing string length %u\n", size - 4 );
 	    fwrite( &s, 1, 4, f );
 
 	    qq = startp;
@@ -366,28 +356,36 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 		  else if ( *qq >= '0' && *qq <= '9' ) c |= *qq - '0';		  
 		  break;
 		}
+		//fvmc_printf( "writing char %c\n", c );
 		fwrite( &c, 1, 1, f );
 	      } else {
+		//fvmc_printf( "writing char %c\n", *qq );
 		fwrite( qq, 1, 1, f );
 	      }
 	      qq++;
 	    }
 	      
-	    
-	    //	    fwrite( startp, 1, size - 4, f );
-	    if( size % 4 ) {
+	    if( size % 4 ) {	      
 	      uint8_t tmp[4];
+	      //fvmc_printf( "adding string padding strlen=%u padding=%u\n", size, 4 - (size % 4) );
 	      memset( tmp, 0, 4 );
 	      fwrite( tmp, 1, 4 - (size % 4), f );
 	      size += 4 - (size % 4);
 	    }
 	  }
 	}
+
+	if( size % 4 ) {
+	  //fvmc_printf( "size %u not multiple of 4, adding padding\n", size );
+	  size += 4 - (size % 4);
+	}
+	
       } else {
 	/* integer or label always 4 bytes */
 	char numstr[64];
         int isarray = 0;
 
+	/* integer literal, label identifier or ARRAY */
 	memset( numstr, 0, sizeof(numstr) );
 	q = numstr;
 	while( *p != ' ' && *p != '\t' && *p != '\0' ) {
@@ -396,6 +394,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  q++;
 	}
 
+	/* if value==ARRAY next arg is size of array */
 	if( strcasecmp( numstr, "ARRAY" ) == 0 ) {
 	  memset( numstr, 0, sizeof(numstr) );
 	  p++;
@@ -408,6 +407,9 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	    q++;
 	  }
 	  size = strtoul( numstr, NULL, 0 );
+	  if( size % 4 ) {
+	    size += 4 - (size % 4);
+	  }
           isarray = 1;
 	} else {	
 	  size = 4;
@@ -422,21 +424,18 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	    // not a number, try a label 
 	    x = getlabel( numstr );
 	  }
-
+	  
 	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
 	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
             if( isarray ) {
               char *b = malloc( size );
               memset( b, 0, size );
+	      //fvmc_printf( "writing buffer size %u\n", size );
               fwrite( b, 1, size, f );
 	      free( b );
-	      if( size % 4 ) {
-		char tmp[4];
-		memset( tmp, 0, sizeof(tmp) );
-		fwrite( tmp, 1, 4 - (size % 4), f );
-	      }
              } else {
   	       x = htonl( x );
+	       //fvmc_printf( "writing uint32 %x\n", x );
 	       fwrite( &x, 1, 4, f );
              }
 	  }
@@ -445,10 +444,13 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       }
 
       if( f == NULL ) {
+	if( size % 4 ) {
+	  usage( "size %u not multiple of 4", size );
+	}
+	
 	if( strcasecmp( directive, ".data" ) == 0 ) {
 	  datasize += size;
 	} else {
-	  if( size % 4 ) size += 4 - (size % 4);
 	  *addr = *addr + size;
 	}
       }
@@ -617,8 +619,8 @@ static struct {
 	{ "LDVIRT", 0x35, 0x00030000 },   /* LDVIRT RX RY RZ. load from remote module. rx=module name, ry=symbol rz=receives value */
 	{ "STVIRT", 0x36, 0x00030000 },   /* STVIRT RX RY RZ. store into remote module. rx=module, ry=symbol rz=value */
 	{ "LEASP", 0x37, 0x00020002 },   /* LEASP RX const. load address from stack pointer with offset */
-	{ "ALLOCA", 0x38, 0x00010000 },  /* ALLOCA RX */
-	{ "ALLOCA", 0x39, 0x00010001 },  /* ALLOCA const. adjust on stack. +ve allocate, -ve frees. */
+	{ "ADDSP", 0x38, 0x00010000 },  /* ADDSP RX */
+	{ "ADDSP", 0x39, 0x00010001 },  /* ADDSP const. adjust on stack. +ve allocate, -ve frees. */
 	{ "MOV", 0x3a, 0x00020000 }, /* MOV RX RY. copy register */
 	{ "CMP", 0x3b, 0x00020000 }, /* CMP RX RY. compare register */
 	{ "CMP", 0x3c, 0x00020002 }, /* CMP RX const. compare with const */
@@ -626,6 +628,9 @@ static struct {
 	{ "STINC", 0x3e, 0x00020000 }, /* STINC RX RY. store ry into memory address rx, then incremenet rx */
 	{ "LDSP", 0x3f, 0x00020000 }, /* LDSP RX RY. load from stack pointer offset by ry into rx */
 	{ "LDSP", 0x40, 0x00020002 }, /* LDSP RX const. load from stack pointer offset by const into rx */
+	{ "SUBSP", 0x41, 0x00010000 },  /* SUB RX */
+	{ "SUBSP", 0x42, 0x00010001 },  /* SUB const. adjust on stack. +ve frees, -ve allocates. */
+	{ "LEASP", 0x43, 0x00020000 },   /* LEASP RX RY. load address from stack pointer with offset */
 	
 	{ NULL, 0, 0 }
 	  
@@ -727,7 +732,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 	    j++;
 	  }
 	  if( registers[j].reg == NULL ) {
-	    //printf( ";; bad register reg=\"%s\" k=%d\n" , arg, k );
+	    fvmc_printf( ";; bad register reg=\"%s\" k=%d\n" , arg, k );
 	    goto cont;
 	  }
 	  
@@ -749,12 +754,12 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 		}
 	      }
 	      if( !b ) {
-		usage( "Bad constant or unknown label \"%s\"", arg );
-		return -1;
+		fvmc_printf( "Bad constant or unknown label \"%s\"", arg );
+		goto cont;
 	      }
 	    }
 	  }
-	  //printf( ";; constant = %x str=%s\n", j, arg );
+	  fvmc_printf( ";; constant = %x str=%s\n", j, arg );
 	  *opcode |= j & 0xffff;
 	  break;
 	}

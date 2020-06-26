@@ -12,7 +12,7 @@ PROJECTS += lht
 PROJECTS += ef
 PROJECTS += ftab
 PROJECTS += freg
-PROJECTS += fvm2
+PROJECTS += fvm
 PROGRAMS=
 LIBRARIES=
 

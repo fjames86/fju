@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 
-#include "fvm2-private.h"
+#include "fvm-private.h"
 
 #define ADDR_RESERVED 0x0000  /* 4k bytes of reserved address space */
 #define ADDR_DATA     0x1000  /* 16k reserved for data segment */
@@ -778,7 +778,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 }
 
 static void emit_header( FILE *f, uint32_t addr ) {
-  struct fvm2_header header;
+  struct fvm_header header;
   int nsyms, i;
 
   nsyms = 0;
@@ -787,8 +787,8 @@ static void emit_header( FILE *f, uint32_t addr ) {
   }
   
   memset( &header, 0, sizeof(header) );
-  header.magic = FVM2_MAGIC;
-  header.version = FVM2_VERSION;
+  header.magic = FVM_MAGIC;
+  header.version = FVM_VERSION;
   header.datasize = datasize;
   header.textsize = addr;
   header.symcount = nsyms;
@@ -799,7 +799,7 @@ static void emit_header( FILE *f, uint32_t addr ) {
 
   for( i = 0; i < nlabels; i++ ) {
     if( labels[i].flags & LABEL_EXPORT ) {
-      struct fvm2_symbol symbol;
+      struct fvm_symbol symbol;
       memset( &symbol, 0, sizeof(symbol) );
       strcpy( symbol.name, labels[i].name );
       symbol.addr = labels[i].addr;

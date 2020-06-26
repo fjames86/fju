@@ -86,11 +86,11 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void freg_rem_results( struct xdr_s *xdr );
 static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm2_list_results( struct xdr_s *xdr );
-static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm2_load_results( struct xdr_s *xdr );
-static void fvm2_register_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm2_register_results( struct xdr_s *xdr );
+static void fvm_list_results( struct xdr_s *xdr );
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_load_results( struct xdr_s *xdr );
+static void fvm_register_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_register_results( struct xdr_s *xdr );
 static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void rawmode_results( struct xdr_s *xdr );
 
@@ -113,11 +113,11 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
-    { FVM2_RPC_PROG, 1, 1, NULL, fvm2_list_results, "fvm2.list", NULL },
-    { FVM2_RPC_PROG, 1, 2, fvm2_load_args, fvm2_load_results, "fvm2.load", "filename=* register=true|false" },
-    { FVM2_RPC_PROG, 1, 3, fvm2_register_args, fvm2_register_results, "fvm2.unload", "name=*" },
-    { FVM2_RPC_PROG, 1, 4, fvm2_register_args, fvm2_register_results, "fvm2.register", "name=*" },
-    { FVM2_RPC_PROG, 1, 5, fvm2_register_args, fvm2_register_results, "fvm2.unregister", "name=*" },
+    { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
+    { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* register=true|false" },
+    { FVM_RPC_PROG, 1, 3, fvm_register_args, fvm_register_results, "fvm.unload", "name=*" },
+    { FVM_RPC_PROG, 1, 4, fvm_register_args, fvm_register_results, "fvm.register", "name=*" },
+    { FVM_RPC_PROG, 1, 5, fvm_register_args, fvm_register_results, "fvm.unregister", "name=*" },
     { 0, 0, 0, rawmode_args, rawmode_results, "rawmode", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*]" },
     
     { 0, 0, 0, NULL, NULL, NULL }
@@ -470,7 +470,7 @@ static struct {
   { REX_RPC_PROG, "rex" },
   { NLS_RPC_PROG, "nls" },
   { FREG_RPC_PROG, "freg" },
-  { FVM2_RPC_PROG, "fvm2" },
+  { FVM_RPC_PROG, "fvm" },
   { RPCBIND_RPC_PROG, "rpcbind" },
   { FJUD_RPC_PROG, "fjud" },
   { SVCTEST_RPC_PROG, "svctest" },
@@ -1079,7 +1079,7 @@ static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr 
   xdr_encode_opaque( xdr, parm, parmlen );
 }
 
-static void fvm2_list_results( struct xdr_s *xdr ) {
+static void fvm_list_results( struct xdr_s *xdr ) {
   int sts, b;
   char name[64];
   uint32_t progid, versid, datasize, textsize;
@@ -1114,7 +1114,7 @@ static void fvm2_list_results( struct xdr_s *xdr ) {
   
 }
 
-static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char *filename = NULL;
   struct mmf_s mmf;
   char *buf;
@@ -1146,7 +1146,7 @@ static void fvm2_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   mmf_close( &mmf );
 }
 
-static void fvm2_load_results( struct xdr_s *xdr ) {
+static void fvm_load_results( struct xdr_s *xdr ) {
   int b;
   
   xdr_decode_boolean( xdr, &b );
@@ -1154,7 +1154,7 @@ static void fvm2_load_results( struct xdr_s *xdr ) {
 }
 
 
-static void fvm2_register_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+static void fvm_register_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
   char name[64];
 
@@ -1173,7 +1173,7 @@ static void fvm2_register_args( int argc, char **argv, int i, struct xdr_s *xdr 
   xdr_encode_string( xdr, name );
 }
 
-static void fvm2_register_results( struct xdr_s *xdr ) {
+static void fvm_register_results( struct xdr_s *xdr ) {
   int b;
   
   xdr_decode_boolean( xdr, &b );

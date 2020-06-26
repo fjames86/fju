@@ -60,7 +60,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
 
   /* copy args onto fvm stack and set r0 to length */
   arglength = inc->xdr.count - inc->xdr.offset;
-  log_writef( NULL, LOG_LVL_INFO, "fvm_rpc_log arglength = %u", arglength );
+  log_writef( NULL, LOG_LVL_INFO, "fvm_rpc_log offet=%u count=%u arglength = %u", inc->xdr.offset, inc->xdr.count, arglength );
   
   memcpy( &state.stack, inc->xdr.buf + inc->xdr.offset, arglength );
   state.reg[FVM_REG_R0] = htonl( arglength );

@@ -334,7 +334,6 @@ int main( int argc, char **argv ) {
 	  i++;
 	  if( i >= argc ) usage( "Need proc" );
 	  info->proc = strtoul( argv[i], NULL, 0 );
-	  i++;
 	}
 	
 	if( glob.broadcast ) {
@@ -1196,7 +1195,7 @@ static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     } else usage( NULL );
     i++;
   }
-  
+
 }
 
 static void rawmode_results( struct xdr_s *xdr ) {

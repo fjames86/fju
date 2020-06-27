@@ -468,18 +468,29 @@ void fvm_rpc_register( void ) {
   struct freg_entry entry;
   char path[256];
   char name[FVM_MAX_NAME];
-
+  uint64_t clid;
+  struct fvm_module *m;
+  
   /* load all these modules on startup */
   sts = freg_subkey( NULL, 0, "/fju/fvm/modules", FREG_CREATE, &key );
   if( !sts ) {
     sts = freg_next( NULL, key, 0, &entry );
     while( !sts ) {
-      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ) {
-	sts = freg_get( NULL, entry.id, NULL, path, sizeof(path), NULL );
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+
+	clid = 0;
+	sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path), NULL );
 	if( !sts ) {
 	  log_writef( NULL, LOG_LVL_INFO, "FVM loading module %s", path );
 	  fvm_module_load( path, name );
 	}
+	
+	sts = freg_get_by_name( NULL, entry.id, "cluster", FREG_TYPE_UINT64, (char *)&clid, sizeof(clid), NULL );
+	if( !sts ) {
+	  m = fvm_module_by_name( name );
+	  if( m ) m->clusterid = clid;
+	}
+
       }
       sts = freg_next( NULL, key, entry.id, &entry );
     }

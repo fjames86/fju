@@ -1,11 +1,17 @@
 
+#ifdef WIN32
+#include <WinSock2.h>
+#include <Windows.h>
+#else
+#include <arpa/inet.h>
+#endif
+
+
 #include "fvm-private.h"
 
 #include <fju/rpc.h>
 #include <fju/sec.h>
 #include <fju/log.h>
-
-#include <arpa/inet.h>
 
 typedef int (*fvm_native_cb)( struct fvm_s *state );
 

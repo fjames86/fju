@@ -1,7 +1,13 @@
 
-#include "fvm-private.h"
-
+#ifdef WIN32
+#include <WinSock2.h>
+#include <Windows.h>
+#else
 #include <arpa/inet.h>
+#endif
+
+
+#include "fvm-private.h"
 
 static uint32_t default_maxsteps = -1;
 

@@ -1,10 +1,19 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <WinSock2.h>
+#include <Windows.h>
+#define strcasecmp _stricmp
+#else
+#include <arpa/inet.h>
+#endif
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <arpa/inet.h>
 
 #include "fvm-private.h"
 

@@ -27,6 +27,7 @@
 #define _CRT_SECURE_NO_WARNINGS 
 #include <Winsock2.h>
 #include <Windows.h>
+#define strcasecmp _stricmp
 #endif
 
 #include <stdio.h>

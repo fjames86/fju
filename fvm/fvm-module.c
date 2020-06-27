@@ -1,4 +1,9 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#define strcasecmp _stricmp
+#endif
+
 #include <fju/mmf.h>
 #include <fju/sec.h>
 

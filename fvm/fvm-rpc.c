@@ -1,11 +1,20 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <WinSock2.h>
+#include <Windows.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 #include "fvm-private.h"
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
-#include <arpa/inet.h>
+
 #include <fju/programs.h>
 #include <fju/log.h>
 #include <fju/freg.h>
+
 
 /* rpc interface */
 

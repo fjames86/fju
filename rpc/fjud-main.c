@@ -57,7 +57,7 @@ static void init_cb( void ) {
   raft_register();
   nls_register();
   freg_register();
-  fvm_register();
+  fvm_rpc_register();
 }
 
 /* -------- Setup logging ---------------- */

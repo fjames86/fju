@@ -17,6 +17,7 @@ if [ $cmd = "start" ]; then
     
     fjud -u $udpport -p $pidfile
 elif [ $cmd = "stop" ]; then
+    rpclt fjud.stop > /dev/null
     if [ -e $pidfile ]; then 
 	kill $(cat $pidfile)
 	rm -f $pidfile

@@ -3,6 +3,10 @@ How to write GTK+ applications
 
 1. Install gtk development libraries
 
+libgtk-3-dev
+glade
+
+
 2. Install glade gui. This is a gui painter for gtk.
 It generates xml files which can be linked into application binaries
 for use in generating gtk guis.

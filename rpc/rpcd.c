@@ -1261,7 +1261,7 @@ static void rpcd_load_service( char *svcname, char *path, char *mainfn ) {
   
   hdl = dlopen( path, 0 );
   if( !hdl ) {
-    rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\"", svcname, path );
+    rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\": %s", svcname, path, rpc_strerror( errno ) );
     return;
   }
 

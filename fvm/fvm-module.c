@@ -134,6 +134,7 @@ int fvm_module_list( struct fvm_module_info *minfo, int n ) {
       minfo[i].textsize = m->header.textsize;
       minfo[i].progid = m->header.progid;
       minfo[i].versid = m->header.versid;
+      minfo[i].clusterid = m->clusterid;
     }
     i++;
     m = m->next;
@@ -162,6 +163,13 @@ struct fvm_module *fvm_module_by_progid( uint32_t progid ) {
   return NULL;
 }
 
+uint32_t fvm_progid_by_name( char *name ) {
+  struct fvm_module *m;
+  m = fvm_module_by_name( name );
+  if( !m ) return -1;
+  return m->header.progid;
+}
+
 int fvm_module_symbols( char *name, struct fvm_symbol *sym, int n ) {
   struct fvm_module *m;
     
@@ -182,8 +190,14 @@ uint32_t fvm_symbol_addr( struct fvm_module *m, char *name ) {
   return 0;
 }
 
+uint32_t fvm_symbol_index( struct fvm_module *m, char *name ) {
+  int i;
+  for( i = 0; i < m->header.symcount; i++ ) {
+    if( strcasecmp( m->symbols[i].name, name ) == 0 ) return i;
+  }
+  return -1;
+}
+
 uint32_t fvm_symbol_by_index( struct fvm_module *m, uint32_t index ) {
   return (index < m->header.symcount) ? m->symbols[index].addr : 0;
 }
-
-

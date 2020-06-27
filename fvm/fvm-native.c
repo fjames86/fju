@@ -52,10 +52,14 @@ static int native_now( struct fvm_s *state ) {
   return 0;
 }
 
-static int native_logstr( struct fvm_s *state ) {
-  char *str = fvm_getaddr( state, ntohl( fvm_pop( state ) ) );
+static int native_logstr( struct fvm_s *state ) {  
+  char *str;
+  uint32_t addr;
+
+  addr = ntohl( fvm_pop( state ) );
+  str = fvm_getaddr( state, addr );
+
   if( str ) {
-    /* TODO: check this */
     struct xdr_s xdr;
     uint32_t len;
     int sts;

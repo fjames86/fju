@@ -38,6 +38,8 @@ struct fvm_module {
   struct fvm_symbol *symbols;
   uint8_t *data;
   uint8_t *text;
+  
+  uint64_t clusterid;
 };
 
 typedef enum {
@@ -56,7 +58,9 @@ typedef enum {
 
 struct fvm_module *fvm_module_by_name( char *name );
 struct fvm_module *fvm_module_by_progid( uint32_t progid );
+uint32_t fvm_progid_by_name( char *name );
 uint32_t fvm_symbol_addr( struct fvm_module *m, char *name );
+uint32_t fvm_symbol_index( struct fvm_module *m, char *name );
 uint32_t fvm_symbol_by_index( struct fvm_module *m, uint32_t index );
 int fvm_native_call( struct fvm_s *state, uint32_t procid );
 void fvm_push( struct fvm_s *state, uint32_t val );
@@ -68,6 +72,8 @@ void fvm_write( struct fvm_s *state, uint32_t addr, uint32_t val );
 void fvm_debug( int enable );
 void fvm_printf( char *fmt, ... );
 uint32_t fvm_max_steps( uint32_t n );
+
+int fvm_cluster_update( struct fvm_s *state );
 
 #endif
 

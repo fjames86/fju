@@ -92,6 +92,8 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_load_results( struct xdr_s *xdr );
 static void fvm_register_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_register_results( struct xdr_s *xdr );
+static void fvm_cluster_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_cluster_results( struct xdr_s *xdr );
 static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void rawmode_results( struct xdr_s *xdr );
 
@@ -119,6 +121,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 3, fvm_register_args, fvm_register_results, "fvm.unload", "name=*" },
     { FVM_RPC_PROG, 1, 4, fvm_register_args, fvm_register_results, "fvm.register", "name=*" },
     { FVM_RPC_PROG, 1, 5, fvm_register_args, fvm_register_results, "fvm.unregister", "name=*" },
+    { FVM_RPC_PROG, 1, 8, fvm_cluster_args, fvm_cluster_results, "fvm.cluster", "name=* clid=*" },
     { 0, 0, 0, rawmode_args, rawmode_results, "rawmode", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*]" },
     
     { 0, 0, 0, NULL, NULL, NULL }
@@ -1084,6 +1087,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
   char name[64];
   uint32_t progid, versid, datasize, textsize;
   int c;
+  uint64_t clid;
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "xdr error" );
@@ -1093,8 +1097,9 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     sts = xdr_decode_uint32( xdr, &versid );
     sts = xdr_decode_uint32( xdr, &datasize );
     sts = xdr_decode_uint32( xdr, &textsize );
-    printf( "%-32s Program %u:%u Data %u Text %u\n",
-	    name, progid, versid, datasize, textsize );
+    sts = xdr_decode_uint64( xdr, &clid );
+    printf( "%-32s Program %u:%u Data %u Text %u CLID %"PRIx64"x\n",
+	    name, progid, versid, datasize, textsize, clid );
     
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "xdr error" );
@@ -1219,4 +1224,34 @@ static void rawmode_results( struct xdr_s *xdr ) {
     
     printf( "\n" );
   }
+}
+
+static void fvm_cluster_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  char name[64];
+  uint64_t clid = 0;
+  
+  memset( name, 0, sizeof(name) );
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "name" ) == 0 ) {
+      strncpy( name, argval, 63 );
+    } else if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, NULL, 16 );
+    } else usage( NULL );
+    i++;
+  }
+
+  if( !name[0] ) usage( "Need name" );
+  
+  xdr_encode_string( xdr, name );
+  xdr_encode_uint64( xdr, clid );
+}
+
+static void fvm_cluster_results( struct xdr_s *xdr ) {
+  int b;
+  
+  xdr_decode_boolean( xdr, &b );
+  printf( "%s\n", b ? "failure" : "success" );
 }

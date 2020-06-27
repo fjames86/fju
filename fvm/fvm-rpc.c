@@ -10,6 +10,9 @@
 #include "fvm-private.h"
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
+#include <fju/raft.h>
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
 
 #include <fju/programs.h>
 #include <fju/log.h>
@@ -26,6 +29,7 @@
  */
 
 /* want to be able to register an rpc program which is dynamically generated (normally it is always a static sturct) */
+static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t progid, char *data, int datasize );
 
 static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int nprocs, rpc_proc_t proccb ) {
   struct rpc_program *pg;
@@ -166,6 +170,7 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     xdr_encode_uint32( &inc->xdr, minfo[i].versid );
     xdr_encode_uint32( &inc->xdr, minfo[i].datasize );
     xdr_encode_uint32( &inc->xdr, minfo[i].textsize );
+    xdr_encode_uint64( &inc->xdr, minfo[i].clusterid );
     m = fvm_module_symbols( minfo[i].name, sym, nsym );
     if( m > nsym ) {
       nsym = m;
@@ -262,6 +267,140 @@ static int fvm_proc_unregister( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_ping( struct rpc_inc *inc ) {
+  /* follower receives updated data from leader */
+  int handle, sts, len;
+  uint64_t clid, termseq, leaderid, stateseq, stateterm;
+  struct raft_cluster cl;
+  uint8_t *datap;
+  struct fvm_module *m;
+  uint32_t progid;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &leaderid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &termseq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateseq );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateterm );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &progid );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  sts = raft_cluster_by_id( clid, &cl );
+  if( cl.state == RAFT_STATE_LEADER ) {
+    /* we are leader, do not accept */
+    sts = -1;
+    goto done;
+  }
+  if( cl.leaderid != leaderid ) {
+    /* bad leader */
+    sts = -1;
+    goto done;
+  }  
+  if( termseq != cl.termseq ) {
+    /* bad term seq */
+    sts = -1;
+    goto done;
+  }
+  if( stateseq < cl.stateseq ) {
+    /* old state, ignore */
+    sts = -1;
+    goto done;
+  }
+
+  /* all good, accept */
+  
+  m = fvm_module_by_progid( progid );
+  if( !m ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  len = m->header.datasize;  
+  sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&datap, &len );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  
+  if( len == m->header.datasize ) {
+    memcpy( m->data, datap, len );
+    sts = 0;
+  } else {
+    sts = -1;
+  }
+
+  
+ done:
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_write( struct rpc_inc *inc ) {
+  /* leader receives upated data from follower */
+  int handle, sts, len;
+  uint64_t clid;
+  struct raft_cluster cl;
+  char *datap;  
+  uint32_t progid;
+  struct fvm_module *m;
+  int i, n;
+  struct raft_member member[32];
+    
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &progid );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&datap, &len );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  m = fvm_module_by_progid( progid );
+  if( !m ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  
+  sts = raft_cluster_by_id( clid, &cl );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  
+  if( cl.state != RAFT_STATE_LEADER ) {
+    // not leader, don't care 
+    return 1;
+  }
+
+  // update cluster 
+  cl.stateterm = cl.termseq;
+  cl.stateseq++;
+  cl.commitseq = cl.stateseq;
+  raft_cluster_set( &cl );
+
+  if( len == m->header.datasize ) {
+    memcpy( m->data, datap, len );
+  }
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+
+  // send pings to all followers
+  n = raft_member_list( cl.id, member, 32 );
+  for( i = 0; i < n; i++ ) {
+    fvm_call_ping( &cl, member[i].hostid, progid, (char *)m->data, (int)m->header.datasize );
+  }
+  
+  return 0;
+}
+
+static int fvm_proc_cluster( struct rpc_inc *inc ) {
+  int handle, sts;
+  char name[FVM_MAX_NAME];
+  struct fvm_module *m;
+  uint64_t clid;
+  
+  sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  m = fvm_module_by_name( name );
+  if( m ) m->clusterid = clid;
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, m ? 1 : 0 );  
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_list },
@@ -269,6 +408,10 @@ static struct rpc_proc fvm_procs[] = {
   { 3, fvm_proc_unload },
   { 4, fvm_proc_register },
   { 5, fvm_proc_unregister },
+  { 6, fvm_proc_ping },
+  { 7, fvm_proc_write },
+  { 8, fvm_proc_cluster },
+  
   { 0, NULL }
 };
 
@@ -291,23 +434,31 @@ static void fvm_iter_cb( struct rpc_iterator *it ) {
   struct fvm_s state;
   uint32_t procid;
   struct fvm_module *m;
-  int i, sts;
+  int sts;
 
   m = fvm_module_by_name( fvm->mname );
-  if( !m ) return;
-
-  procid = -1;
-  for( i = 0; i < m->header.symcount; i++ ) {
-    if( strcmp( m->symbols[i].name, fvm->pname ) == 0 ) {
-      procid = i;
-      break;
-    }
+  if( !m ) {
+    log_writef( NULL, LOG_LVL_INFO, "Failed to find module %s", fvm->mname );
+    return;
   }
-  if( procid == -1 ) return;
+
+  procid = fvm_symbol_index( m, fvm->pname );
+  if( procid == -1 ) {
+    log_writef( NULL, LOG_LVL_INFO, "Failed to find proc %s %s", fvm->mname, fvm->pname );
+    return;
+  }
   
   sts = fvm_state_init( &state, m->header.progid, procid );
-  if( sts ) return;
-  fvm_run( &state, -1 );
+  if( sts ) {
+    log_writef( NULL, LOG_LVL_INFO, "Failed to init state %s %s", fvm->mname, fvm->pname );
+    return;
+  }
+  
+  sts = fvm_run( &state, -1 );
+  if( sts ) {
+    log_writef( NULL, LOG_LVL_INFO, "Failed to run %s %s", fvm->mname, fvm->pname );
+  }
+  
 }
 
 void fvm_rpc_register( void ) {
@@ -387,11 +538,101 @@ void fvm_rpc_register( void ) {
   }
   
   /* set max steps to limit runaway programs blocking rpcd */
-  sts = freg_get_by_name( NULL, 0, "/fju/fvm/MaxSteps", FREG_TYPE_UINT32, (char *)&nsteps, sizeof(nsteps), NULL );
+  sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxsteps", FREG_TYPE_UINT32, (char *)&nsteps, sizeof(nsteps), NULL );
   if( !sts ) {
     fvm_max_steps( nsteps );
   }
 
   
   rpc_program_register( &fvm_prog );
+}
+
+
+static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t progid, char *data, int datasize ) {
+  /* send data to followers */
+  int sts;
+  struct hrauth_call hcall;
+  struct xdr_s xdr;
+  struct rpc_conn *tmpconn;
+
+  tmpconn = rpc_conn_acquire();
+  if( !tmpconn ) return -1;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = FVM_RPC_PROG;
+  hcall.vers = FVM_RPC_VERS;
+  hcall.proc = 6;
+  hcall.timeout = 500;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  xdr_init( &xdr, tmpconn->buf, tmpconn->count );
+  xdr_encode_uint64( &xdr, cl->id );
+  xdr_encode_uint64( &xdr, hostreg_localid() );
+  xdr_encode_uint64( &xdr, cl->termseq );
+  xdr_encode_uint64( &xdr, cl->stateseq );
+  xdr_encode_uint64( &xdr, cl->stateterm );
+  xdr_encode_uint32( &xdr, progid );
+  xdr_encode_opaque( &xdr, (uint8_t *)data, datasize );
+  
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
+  rpc_conn_release( tmpconn );
+  
+  return sts;
+}
+
+static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_s *state ) {
+  /* send data segment to leader */
+  /* send data to followers */
+  int sts;
+  struct xdr_s xdr;
+  struct rpc_conn *tmpconn;
+  struct hrauth_call hcall;
+  
+  tmpconn = rpc_conn_acquire();
+  if( !tmpconn ) return -1;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = FVM_RPC_PROG;
+  hcall.vers = FVM_RPC_VERS;
+  hcall.proc = 7;
+  hcall.timeout = 500;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  xdr_init( &xdr, tmpconn->buf, tmpconn->count );
+  xdr_encode_uint64( &xdr, cl->id );
+  xdr_encode_uint32( &xdr, state->module->header.progid );
+  xdr_encode_opaque( &xdr, (uint8_t *)state->data, state->datasize );
+  
+  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
+  rpc_conn_release( tmpconn );
+  
+  return sts;
+}
+
+
+int fvm_cluster_update( struct fvm_s *state ) {
+  int sts;
+  struct raft_cluster cl;
+  
+  sts = raft_cluster_by_id( state->module->clusterid, &cl );
+  if( sts ) return sts;
+
+  if( cl.state == RAFT_STATE_LEADER ) {
+    /* send ping rpcs to all other members */
+    int i, n;
+    struct raft_member member[32];
+  
+    n = raft_member_list( cl.id, member, 32 );
+    for( i = 0; i < n; i++ ) {
+      fvm_call_ping( &cl, member[i].hostid, state->module->header.progid, (char *)state->data, (int)state->datasize );
+    }
+    
+  } else {
+    /* send write to leader */
+    if( !cl.leaderid ) return -1;
+    sts = fvm_call_write( &cl, cl.leaderid, state );
+    if( sts ) return sts;
+  }
+  
+  return 0;
 }

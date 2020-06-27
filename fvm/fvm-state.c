@@ -33,41 +33,14 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
     if( sts ) break;
   }
 
-  return sts;
-}
+  if( sts ) return sts;
 
-int fvm_results( struct fvm_s *state, char *results, int size, int *rsize ) {
-  memcpy( results, &state->stack[state->reg[FVM_REG_SP] - size], size );
-  return 0;
-}
-
-int fvm_read_var( char *module, char *vname, char *buf, int size ) {
-  struct fvm_module *m;
-  uint32_t addr;
+  /* if clustered then send pings etc */
+  if( (state->flags & FVM_STATE_DIRTY) && state->module->clusterid ) {
+    fvm_cluster_update( state );
+  }
+  state->flags &= ~FVM_STATE_DIRTY;
   
-  m = fvm_module_by_name( module );
-  if( !m ) return -1;
-  addr = fvm_symbol_addr( m, vname );
-  if( !addr ) return -1;
-
-  if( addr < FVM_ADDR_DATA || (addr + size) >= (FVM_ADDR_DATA + m->header.datasize) ) return -1;
-
-  memcpy( buf, &m->data + (addr - FVM_ADDR_DATA), size );
-  return 0;  
-}
-
-int fvm_write_var( char *module, char *vname, char *buf, int size ) {
-  struct fvm_module *m;
-  uint32_t addr;
-  
-  m = fvm_module_by_name( module );
-  if( !m ) return -1;
-  addr = fvm_symbol_addr( m, vname );
-  if( !addr ) return -1;
-
-  if( addr < FVM_ADDR_DATA || (addr + size) >= (FVM_ADDR_DATA + m->header.datasize) ) return -1;
-
-  memcpy( (char *)&m->data + (addr - FVM_ADDR_DATA), buf, size );
   return 0;
 }
 

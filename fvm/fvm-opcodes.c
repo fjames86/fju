@@ -47,6 +47,7 @@ static void mem_write( struct fvm_s *state, uint32_t addr, uint32_t val ) {
     n = 4;
     if( (state->datasize - FVM_ADDR_DATA - addr) < n ) n = (state->datasize - FVM_ADDR_DATA - addr);
     memcpy( state->data + addr - FVM_ADDR_DATA, &val, n );
+    state->flags |= FVM_STATE_DIRTY;
   } else if( addr >= FVM_ADDR_STACK && addr < (FVM_ADDR_STACK + FVM_MAX_STACK) ) {
     n = 4;
     if( (FVM_MAX_STACK - FVM_ADDR_DATA - addr) < n ) n = (FVM_MAX_STACK - FVM_ADDR_DATA - addr);

@@ -27,12 +27,15 @@ struct fvm_module_info {
   uint32_t textsize;
   uint32_t progid;
   uint32_t versid;
+  uint64_t clusterid;
 };
   
 struct fvm_module;
 struct fvm_s {
   struct fvm_module *module;
 
+  uint32_t flags;
+#define FVM_STATE_DIRTY        0x0001      /* data section was written to */
   uint32_t datasize;
   uint8_t *data;
   uint32_t textsize;

@@ -6,6 +6,8 @@
 HELLOEND:
 
 PROC-NULL:
+	PUSH		hello
+	CALLNAT		R2 		NATIVE-LOGSTR
 	RET
 	
 PROC-HELLO:
@@ -20,7 +22,7 @@ PROC-HELLO:
 
 PROC-ECHO:
 	;; Echo args back to caller
-	SUBSP		R1		R0 ; clear stack 
+	SUBSP		R0	; clear stack 
 	LEASP		R1		0  ; set r1 to buffer, r0 is count but that was already set for us	
 	RET
 

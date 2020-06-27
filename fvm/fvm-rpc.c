@@ -271,6 +271,36 @@ static struct rpc_program fvm_prog = {
   NULL, FVM_RPC_PROG, &fvm_vers
 };
 
+struct fvm_iterator {
+  struct rpc_iterator iter;
+  char mname[FVM_MAX_NAME];
+  char pname[FVM_MAX_NAME];
+};
+
+static void fvm_iter_cb( struct rpc_iterator *it ) {
+  struct fvm_iterator *fvm = (struct fvm_iterator *)it;
+  struct fvm_s state;
+  uint32_t procid;
+  struct fvm_module *m;
+  int i, sts;
+
+  m = fvm_module_by_name( fvm->mname );
+  if( !m ) return;
+
+  procid = -1;
+  for( i = 0; i < m->header.symcount; i++ ) {
+    if( strcmp( m->symbols[i].name, fvm->pname ) == 0 ) {
+      procid = i;
+      break;
+    }
+  }
+  if( procid == -1 ) return;
+  
+  sts = fvm_state_init( &state, m->header.progid, procid );
+  if( sts ) return;
+  fvm_run( &state, -1 );
+}
+
 void fvm_rpc_register( void ) {
   int sts;
   uint32_t nsteps;
@@ -312,6 +342,41 @@ void fvm_rpc_register( void ) {
     }    
   }
 
+  /* register service routines */
+  sts = freg_subkey( NULL, 0, "/fju/fvm/service", FREG_CREATE, &key );
+  if( !sts ) {
+    sts = freg_next( NULL, key, 0, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+	char mname[FVM_MAX_NAME], pname[FVM_MAX_NAME];
+	uint32_t period = 1000;
+	
+	sts = freg_get_by_name( NULL, entry.id, "module", FREG_TYPE_STRING, mname, sizeof(mname), NULL );
+	if( !sts ) sts = freg_get_by_name( NULL, entry.id, "proc", FREG_TYPE_STRING, pname, sizeof(pname), NULL );
+	sts = freg_get_by_name( NULL, entry.id, "period", FREG_TYPE_UINT32, (char *)&period, sizeof(period), NULL );
+	if( sts ) {
+	  period = 1000;
+	  sts = 0;
+	}
+	
+	if( !sts ) {
+	  struct fvm_iterator *iter;
+	  iter = malloc( sizeof(*iter) + 8 );
+	  memset( iter, 0, sizeof(*iter) );
+	  iter->iter.period = period;
+	  iter->iter.cb = fvm_iter_cb;
+	  strncpy( iter->mname, mname, FVM_MAX_NAME );
+	  strncpy( iter->pname, pname, FVM_MAX_NAME );
+
+	  log_writef( NULL, LOG_LVL_INFO, "FVM registering iterator %s %s", mname, pname );
+	  rpc_iterator_register( &iter->iter );
+	}
+      }
+	
+      sts = freg_next( NULL, key, entry.id, &entry );
+    }    
+  }
+  
   /* set max steps to limit runaway programs blocking rpcd */
   sts = freg_get_by_name( NULL, 0, "/fju/fvm/MaxSteps", FREG_TYPE_UINT32, (char *)&nsteps, sizeof(nsteps), NULL );
   if( !sts ) {

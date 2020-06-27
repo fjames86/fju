@@ -30,6 +30,7 @@
 
 /* want to be able to register an rpc program which is dynamically generated (normally it is always a static sturct) */
 static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t progid, char *data, int datasize );
+static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module );
 
 static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int nprocs, rpc_proc_t proccb ) {
   struct rpc_program *pg;
@@ -461,6 +462,34 @@ static void fvm_iter_cb( struct rpc_iterator *it ) {
   
 }
 
+
+static void fvm_cluster_notify( raft_notify_t evt, struct raft_cluster *cl, void *cxt, void *reserved ) {
+  struct fvm_module *m;
+		  
+  switch( evt ) {
+  case RAFT_NOTIFY_LEADER:
+  case RAFT_NOTIFY_SEND_PING:
+    /* resend data whenever we become leader or are sending raft ping messages */
+    m = fvm_get_modules();
+    while( m ) {
+      if( m->clusterid == cl->id ) {
+	fvm_send_pings( cl, m );
+      }
+      m = m->next;
+    }
+    break;
+  default:
+    break;
+  }
+  
+}
+
+static struct raft_notify_context fvm_notify_cxt = {
+  NULL,
+  fvm_cluster_notify,
+  NULL
+};
+
 void fvm_rpc_register( void ) {
   int sts;
   uint32_t nsteps;
@@ -556,6 +585,8 @@ void fvm_rpc_register( void ) {
 
   
   rpc_program_register( &fvm_prog );
+
+  raft_notify_register( &fvm_notify_cxt );  
 }
 
 
@@ -620,6 +651,16 @@ static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_
   return sts;
 }
 
+static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module ) {
+  /* send ping rpcs to all other members */
+  int i, n;
+  struct raft_member member[32];
+  
+  n = raft_member_list( cl->id, member, 32 );
+  for( i = 0; i < n; i++ ) {
+    fvm_call_ping( cl, member[i].hostid, module->header.progid, (char *)module->data, (int)module->header.datasize );
+  }
+}
 
 int fvm_cluster_update( struct fvm_s *state ) {
   int sts;
@@ -630,14 +671,7 @@ int fvm_cluster_update( struct fvm_s *state ) {
 
   if( cl.state == RAFT_STATE_LEADER ) {
     /* send ping rpcs to all other members */
-    int i, n;
-    struct raft_member member[32];
-  
-    n = raft_member_list( cl.id, member, 32 );
-    for( i = 0; i < n; i++ ) {
-      fvm_call_ping( &cl, member[i].hostid, state->module->header.progid, (char *)state->data, (int)state->datasize );
-    }
-    
+    fvm_send_pings( &cl, state->module );
   } else {
     /* send write to leader */
     if( !cl.leaderid ) return -1;
@@ -647,3 +681,4 @@ int fvm_cluster_update( struct fvm_s *state ) {
   
   return 0;
 }
+

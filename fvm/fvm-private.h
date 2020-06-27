@@ -74,6 +74,7 @@ void fvm_printf( char *fmt, ... );
 uint32_t fvm_max_steps( uint32_t n );
 
 int fvm_cluster_update( struct fvm_s *state );
+struct fvm_module *fvm_get_modules( void );
 
 #endif
 

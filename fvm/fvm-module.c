@@ -10,6 +10,9 @@
 #include "fvm-private.h"
 
 static struct fvm_module *modules;
+struct fvm_module *fvm_get_modules( void ) {
+  return modules;
+}
 
 int fvm_module_load( char *filename, char *name ) {
   int sts;

@@ -93,7 +93,7 @@ int main( int argc, char **argv ) {
   
   while( i < argc ) {
     fvm_printf( "Loading module %s\n", argv[i] );
-    sts = fvm_module_load( argv[i], NULL );
+    sts = fvm_module_load_file( argv[i], NULL );
     if( sts ) usage( "Failed to load module \"%s\"", argv[i] );
     i++;
   }
@@ -126,11 +126,11 @@ int main( int argc, char **argv ) {
 
     fvm_printf( " ------------- Symbols -------------- \n" );
     
-    n = fvm_module_symbols( mname, NULL, 0 );
+    n = fvm_module_symbols( fvm_progid_by_name( mname ), NULL, 0 );
     if( n < 0 ) usage( "Failed to get module symbols" );
     if( n > 0 ) {
       sym = malloc( sizeof(*sym) * n );
-      m = fvm_module_symbols( mname, sym, n );
+      m = fvm_module_symbols( fvm_progid_by_name( mname ), sym, n );
       if( m < n ) n = m;
       for( m = 0; m < n; m++ ) {
 	fvm_printf( "%-2u %-16s = 0x%04x\n", m, sym[m].name, sym[m].addr );

@@ -14,11 +14,13 @@ struct fvm_module *fvm_get_modules( void ) {
   return modules;
 }
 
-int fvm_module_load( char *filename, char *name ) {
+int fvm_module_load_file( char *filename, uint32_t *progid ) {
   int sts;
   struct mmf_s mmf;
   struct fvm_header header;
   struct fvm_module *m;
+
+  if( progid ) *progid = 0;
   
   sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
   if( sts ) return sts;
@@ -39,7 +41,7 @@ int fvm_module_load( char *filename, char *name ) {
     goto done;
   }      
 
-  if( name ) strncpy( name, header.name, FVM_MAX_NAME - 1 );
+  if( progid ) *progid = header.progid;
   
   if( fvm_module_by_name( header.name ) ) {
     sts = -1;
@@ -71,9 +73,11 @@ int fvm_module_load( char *filename, char *name ) {
   return sts;
 }
 
-int fvm_module_register( char *buf, int size, char *name ) {
+int fvm_module_load_buffer( char *buf, int size, uint32_t *progid ) {
   struct fvm_header header;
   struct fvm_module *m;
+
+  if( progid ) *progid = 0;
   
   memcpy( &header, buf, sizeof(header) );
   if( header.magic != FVM_MAGIC ) return -1;
@@ -81,7 +85,7 @@ int fvm_module_register( char *buf, int size, char *name ) {
   if( size != (sizeof(header) + header.symcount*sizeof(struct fvm_symbol) + header.datasize + header.textsize) ) {
     return -1;
   }
-  if( name ) strncpy( name, header.name, FVM_MAX_NAME - 1 );
+  if( progid ) *progid = header.progid;  
   if( fvm_module_by_name( header.name ) ) return -1;
   if( fvm_module_by_progid( header.progid ) ) return -1;
 
@@ -102,13 +106,13 @@ int fvm_module_register( char *buf, int size, char *name ) {
   return 0;
 }
 
-int fvm_module_unload( char *name ) {
+int fvm_module_unload( uint32_t progid ) {
   struct fvm_module *m, *prev;
 
   m = modules;
   prev = NULL;
   while( m ) {
-    if( strcmp( m->header.name, name ) == 0 ) {
+    if( m->header.progid == progid ) {
       if( prev ) prev->next = m->next;
       else modules = m->next;
 
@@ -123,6 +127,26 @@ int fvm_module_unload( char *name ) {
   return -1;
 }
 
+int fvm_module_info( uint32_t progid, struct fvm_module_info *minfo ) {
+  struct fvm_module *m;
+
+  m = modules;
+  while( m ) {
+    if( m->header.progid == progid ) {
+      minfo->datasize = m->header.datasize;
+      minfo->textsize = m->header.textsize;
+      minfo->progid = m->header.progid;
+      minfo->versid = m->header.versid;
+      minfo->clusterid = m->clusterid;
+      minfo->flags = m->header.flags;
+      return 0;
+    }
+    m = m->next;
+  }
+  
+  return -1;
+}
+
 int fvm_module_list( struct fvm_module_info *minfo, int n ) {
   int i;
   struct fvm_module *m;
@@ -132,7 +156,6 @@ int fvm_module_list( struct fvm_module_info *minfo, int n ) {
   while( m ) {
     if( i < n ) {
       strcpy( minfo[i].name, m->header.name );
-      memcpy( (char *)minfo[i].checksum, (char *)m->header.checksum, sizeof(m->header.checksum) );
       minfo[i].datasize = m->header.datasize;
       minfo[i].textsize = m->header.textsize;
       minfo[i].progid = m->header.progid;
@@ -173,10 +196,10 @@ uint32_t fvm_progid_by_name( char *name ) {
   return m->header.progid;
 }
 
-int fvm_module_symbols( char *name, struct fvm_symbol *sym, int n ) {
+int fvm_module_symbols( uint32_t progid, struct fvm_symbol *sym, int n ) {
   struct fvm_module *m;
     
-  m = fvm_module_by_name( name );
+  m = fvm_module_by_progid( progid );
   if( !m ) return -1;
 
   if( n > m->header.symcount ) n = m->header.symcount;
@@ -203,4 +226,10 @@ uint32_t fvm_symbol_index( struct fvm_module *m, char *name ) {
 
 uint32_t fvm_symbol_by_index( struct fvm_module *m, uint32_t index ) {
   return (index < m->header.symcount) ? m->symbols[index].addr : 0;
+}
+
+uint32_t fvm_procid_by_name( uint32_t progid, char *name ) {
+  struct fvm_module *m = fvm_module_by_progid( progid );
+  if( !m ) return -1;
+  return fvm_symbol_index( m, name );
 }

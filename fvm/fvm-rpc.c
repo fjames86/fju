@@ -97,12 +97,12 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   return 0;
 }
 
-int fvm_register_program( char *mname ) {
+int fvm_register_program( uint32_t progid ) {
   struct fvm_module *m;
   struct rpc_program *pg;
   int i, nprocs;
 
-  m = fvm_module_by_name( mname );
+  m = fvm_module_by_progid( progid );
   if( !m ) return -1;
 
   /* collect symbols pointing to text segment, probably functions? */
@@ -118,13 +118,13 @@ int fvm_register_program( char *mname ) {
   return 0;
 }
 
-int fvm_unregister_program( char *mname ) {
+int fvm_unregister_program( uint32_t progid ) {
   struct fvm_module *m;
   struct rpc_program *p;
   struct rpc_version *vs;
   struct rpc_proc *pc;
   
-  m = fvm_module_by_name( mname );
+  m = fvm_module_by_progid( progid );
   if( !m ) return -1;
   
   rpc_program_find( m->header.progid, 0, 0, &p, &vs, &pc );
@@ -172,12 +172,12 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     xdr_encode_uint32( &inc->xdr, minfo[i].datasize );
     xdr_encode_uint32( &inc->xdr, minfo[i].textsize );
     xdr_encode_uint64( &inc->xdr, minfo[i].clusterid );
-    m = fvm_module_symbols( minfo[i].name, sym, nsym );
+    m = fvm_module_symbols( minfo[i].progid, sym, nsym );
     if( m > nsym ) {
       nsym = m;
       sym = realloc( sym, sizeof(*sym) * nsym );
     }
-    m = fvm_module_symbols( minfo[i].name, sym, nsym );
+    m = fvm_module_symbols( minfo[i].progid, sym, nsym );
     for( j = 0; j < m; j++ ) {
       xdr_encode_boolean( &inc->xdr, 1 );
       xdr_encode_string( &inc->xdr, sym[j].name );
@@ -198,21 +198,21 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   int handle;
   char *bufp;
   int lenp, sts, registerp;
-  char name[FVM_MAX_NAME];
+  uint32_t progid;
   
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &registerp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  sts = fvm_module_register( bufp, lenp, name );
+  sts = fvm_module_load_buffer( bufp, lenp, &progid );
   if( sts ) {
-    fvm_module_unload( name );
-    sts = fvm_module_register( bufp, lenp, name );
+    fvm_module_unload( progid );
+    sts = fvm_module_load_buffer( bufp, lenp, &progid );
   }
 
   if( registerp ) {
-    fvm_unregister_program( name );
-    fvm_register_program( name );
+    fvm_unregister_program( progid );
+    fvm_register_program( progid );
   }
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -229,7 +229,7 @@ static int fvm_proc_unload( struct rpc_inc *inc ) {
   sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  sts = fvm_module_unload( name );
+  sts = fvm_module_unload( fvm_progid_by_name( name ) );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, sts ? 1 : 0 );  
@@ -244,7 +244,7 @@ static int fvm_proc_register( struct rpc_inc *inc ) {
   sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  sts = fvm_register_program( name );
+  sts = fvm_register_program( fvm_progid_by_name( name ) );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, sts ? 1 : 0 );  
@@ -256,11 +256,11 @@ static int fvm_proc_register( struct rpc_inc *inc ) {
 static int fvm_proc_unregister( struct rpc_inc *inc ) {
   int handle, sts;
   char name[FVM_MAX_NAME];
-
+  
   sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  sts = fvm_unregister_program( name );
+  sts = fvm_unregister_program( fvm_progid_by_name( name ) );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, sts ? 1 : 0 );  
@@ -511,7 +511,7 @@ void fvm_rpc_register( void ) {
 	sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path), NULL );
 	if( !sts ) {
 	  log_writef( NULL, LOG_LVL_INFO, "FVM loading module %s", path );
-	  fvm_module_load( path, name );
+	  fvm_module_load_file( path, NULL );
 	}
 	
 	sts = freg_get_by_name( NULL, entry.id, "cluster", FREG_TYPE_UINT64, (char *)&clid, sizeof(clid), NULL );
@@ -534,7 +534,7 @@ void fvm_rpc_register( void ) {
 	sts = freg_get( NULL, entry.id, NULL, name, sizeof(name), NULL );
 	if( !sts ) {
 	  log_writef( NULL, LOG_LVL_INFO, "FVM registering program %s", name );
-	  fvm_register_program( name );
+	  fvm_register_program( fvm_progid_by_name( name ) );
 	}
       }
 	

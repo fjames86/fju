@@ -20,15 +20,14 @@ struct fvm_header {
   uint32_t version;
 #define FVM_VERSION  1
   uint32_t flags;
+  uint32_t progid;
+  uint32_t versid;  
   uint32_t symcount;
   uint32_t datasize;
   uint32_t textsize;
   char name[FVM_MAX_NAME];
-  uint8_t checksum[20]; /* sha1 hash of text segment */
-  uint32_t progid;
-  uint32_t versid;
   
-  uint32_t spare[3];
+  uint32_t spare[8];
 };
 
 struct fvm_module {
@@ -75,6 +74,10 @@ uint32_t fvm_max_steps( uint32_t n );
 
 int fvm_cluster_update( struct fvm_s *state );
 struct fvm_module *fvm_get_modules( void );
+
+/* register this module as an rpc program */
+int fvm_register_program( uint32_t progid );
+int fvm_unregister_program( uint32_t progid );
 
 #endif
 

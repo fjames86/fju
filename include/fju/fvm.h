@@ -18,16 +18,17 @@
 struct fvm_symbol {
   char name[FVM_MAX_NAME];
   uint32_t addr;
+  uint32_t flags;
 };
 
 struct fvm_module_info {
-  char name[FVM_MAX_NAME];
-  uint8_t checksum[20];
-  uint32_t datasize;
-  uint32_t textsize;
   uint32_t progid;
   uint32_t versid;
+  char name[FVM_MAX_NAME];
+  uint32_t datasize;
+  uint32_t textsize;
   uint64_t clusterid;
+  uint32_t flags;
 };
   
 struct fvm_module;
@@ -48,27 +49,26 @@ struct fvm_s {
 
 
 /* register a module from memory. if non-null name receives module name */
-int fvm_module_register( char *buf, int size, char *name );
+int fvm_module_load_buffer( char *buf, int size, uint32_t *progid );
 /* load and register a module from a file */
-int fvm_module_load( char *filename, char *name );
+int fvm_module_load_file( char *filename, uint32_t *progid );
 /* unload a given module */
-int fvm_module_unload( char *name );
+int fvm_module_unload( uint32_t progid );
 
 /* list modules and symbols */
+int fvm_module_info( uint32_t progid, struct fvm_module_info *minfo );
 int fvm_module_list( struct fvm_module_info *minfo, int n );
-int fvm_module_symbols( char *name, struct fvm_symbol *sym, int n );
+int fvm_module_symbols( uint32_t progid, struct fvm_symbol *sym, int n );
+uint32_t fvm_procid_by_name( uint32_t progid, char *procname );
 
 /* initialize runtime state */
 int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid );
 
 /* exeucute a single step */
 int fvm_step( struct fvm_s *state );
+
 /* execute until termination up to a maximum number of steps */
 int fvm_run( struct fvm_s *state, int nsteps );
-
-/* register this module as an rpc program */
-int fvm_register_program( char *mname );
-int fvm_unregister_program( char *mname );
 
 /* register rpc interface */
 void fvm_rpc_register( void );

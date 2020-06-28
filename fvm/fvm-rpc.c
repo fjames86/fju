@@ -181,6 +181,7 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     for( j = 0; j < m; j++ ) {
       xdr_encode_boolean( &inc->xdr, 1 );
       xdr_encode_string( &inc->xdr, sym[j].name );
+      xdr_encode_uint32( &inc->xdr, sym[j].flags );
     }
     xdr_encode_boolean( &inc->xdr, 0 );
   }

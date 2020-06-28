@@ -61,6 +61,7 @@ static void fvmc_printf( char *fmt, ... ) {
 static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass );
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
 static void emit_header( FILE *f, uint32_t addr );
+static void disassemble( char *filename );
 
 struct label {
   char name[64];
@@ -114,7 +115,8 @@ int main( int argc, char **argv ) {
   int i, j, starti;
   char *p;
   uint32_t addr;
-
+  int disass = 0;
+  
   strcpy( outfilename, "" );
   
   i = 1;
@@ -125,6 +127,8 @@ int main( int argc, char **argv ) {
       strncpy( outfilename, argv[i], 255 );
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
       verbosemode = 1;
+    } else if( strcmp( argv[i], "-d" ) == 0 ) {
+      disass = 1;
     } else if( strcmp( argv[i], "-h" ) == 0 ) {
       usage( NULL );
     } else if( strcmp( argv[i], "--help" ) == 0 ) {
@@ -140,6 +144,12 @@ int main( int argc, char **argv ) {
   /* first pass collects labels and computes offets. does not emit opcodes */
   starti = i;
   while( i < argc ) {
+    if( disass ) {
+      disassemble( argv[i] );
+      i++;
+      continue;
+    }
+    
     f = fopen( argv[i], "r" );  
     if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
     
@@ -167,6 +177,7 @@ int main( int argc, char **argv ) {
     i++;
   }
 
+  if( disass ) exit( 0 );
   
   fvmc_printf( "\n ------ label table ------- \n" );
   for( j = 0; j < nlabels; j++ ) {
@@ -822,4 +833,75 @@ static void emit_header( FILE *f, uint32_t addr ) {
     }
   }
   
+}
+
+static void disassemble( char *filename ) {
+  FILE *f;
+  struct fvm_header header;
+  struct fvm_symbol *sym;
+  uint8_t u[4];
+  uint32_t opcode;
+  int i, j, k, n;
+  
+  f = fopen( filename, "rb" );
+  if( !f ) usage( "Failed to open file \"%s\"", filename );
+
+  n = fread( &header, 1, sizeof(header), f );
+  if( n != sizeof(header) ) usage( "Bad header" );
+  if( header.magic != FVM_MAGIC ) usage( "Bad magic" );
+  if( header.version != FVM_VERSION ) usage( "Bad version %d", header.version );
+  printf( ";; -------------- HEADER ------------ \n" );
+  printf( "NAME        \t%-32s\n", header.name );
+  printf( "PROGID      \t%08x (%u) %u\n", header.progid, header.progid, header.versid );
+  printf( "DATASIZE    \t%u\n", header.datasize );
+  printf( "TEXTSIZE    \t%u\n", header.textsize );
+  printf( ";; ------------- SYMBOLS ------------ \n" );
+  sym = malloc( sizeof(*sym) * header.symcount );
+  fread( sym, 1, sizeof(*sym) * header.symcount, f );
+
+  printf( "%-4s\t%-16s\t%-4s\t%-4s\n", "PROCID", "NAME", "ADDR", "FLAGS" );
+  for( i = 0; i < header.symcount; i++ ) {
+    printf( "%-4u\t%-16s\t%04x\t%04x\n", i, sym[i].name, sym[i].addr, sym[i].flags );
+  }
+
+  printf( ";; ------------- DATA -------------- \n" );
+  for( i = 0; i < header.datasize; i += 4 ) {
+    n = fread( u, 1, sizeof(u), f );
+
+    for( j = 0; j < header.symcount; j++ ) {
+      if( sym[j].addr == (FVM_ADDR_DATA + i) ) {
+	printf( "%04x\t%s:\n", FVM_ADDR_DATA + i, sym[j].name );
+	break;
+      }
+    }    
+    printf( "%04x\t\t%02x %02x %02x %02x\n", FVM_ADDR_DATA + i, u[0], u[1], u[2], u[3] );
+  }
+
+  printf( ";; ------------- TEXT -------------- \n" );
+  for( i = 0; i < header.textsize; i += 4 ) {
+    for( j = 0; j < header.symcount; j++ ) {
+      if( sym[j].addr == (FVM_ADDR_TEXT + i) ) {
+	printf( "%04x\t%s:\n", FVM_ADDR_TEXT + i, sym[j].name );
+	break;
+      }
+    }
+    
+    n = fread( &opcode, 1, sizeof(opcode), f );
+    opcode = ntohl( opcode );
+    j = 0;
+    while( opcodes[j].inst ) {
+      if( (opcode >> 24) == opcodes[j].opcode ) {
+	printf( "%04x\t\t%-8s\t", FVM_ADDR_TEXT + i, opcodes[j].inst );
+	for( k = 0; k < (opcodes[j].args >> 16); k++ ) {
+	  if( opcodes[j].args & (0x1 << k) ) printf( "%04x\t", opcode & 0xffff );
+	  else printf( "R%u\t", k == 0 ? (opcode >> 20) & 0x7 : (opcode >> (4*(k-1))) & 0x7 );
+	}
+	printf( "\n" );
+	break;
+      }
+      j++;
+    }
+  }
+  
+  fclose( f );
 }

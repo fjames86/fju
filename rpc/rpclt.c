@@ -1088,6 +1088,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
   uint32_t progid, versid, datasize, textsize;
   int c;
   uint64_t clid;
+  uint32_t flags;
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "xdr error" );
@@ -1106,7 +1107,8 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     c = 0;
     while( b ) {
       sts = xdr_decode_string( xdr, name, sizeof(name) );
-      printf( "  %-4u %-32s\n", c, name );
+      sts = xdr_decode_uint32( xdr, &flags );
+      printf( "  %-4u %-16s %0x04x\n", c, name, flags );
       c++;
       
       sts = xdr_decode_boolean( xdr, &b );

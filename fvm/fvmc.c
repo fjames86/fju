@@ -14,13 +14,14 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "fvm-private.h"
 
 #define ADDR_RESERVED 0x0000  /* 4k bytes of reserved address space */
-#define ADDR_DATA     0x1000  /* 16k reserved for data segment */
-#define ADDR_TEXT     0x5000  /* 28k reserved for text segment */
-#define ADDR_STACK    0xc000  /* 16k reserved for stack */
+#define FVM_ADDR_DATA     0x1000  /* 16k reserved for data segment */
+#define FVM_ADDR_TEXT     0x5000  /* 28k reserved for text segment */
+#define FVM_ADDR_STACK    0xc000  /* 16k reserved for stack */
 
 static void usage( char *fmt, ... ) {
   va_list args;
@@ -157,7 +158,7 @@ int main( int argc, char **argv ) {
       if( parse_directive( buf, &addr, NULL, 0 ) == 0 ) continue;
       
       fvmc_printf( ";; attempting to encode line \"%s\"\n", buf );
-      if( encode_inst( buf, &opcode, ADDR_TEXT + addr, 1 ) != -1 ) {
+      if( encode_inst( buf, &opcode, FVM_ADDR_TEXT + addr, 1 ) != -1 ) {
 	addr += 4;
       }
     }
@@ -280,7 +281,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       q++;
     }
     
-    if( f == NULL ) addlabel( name, strcasecmp( directive, ".data" ) == 0 ? ADDR_DATA + datasize : ADDR_TEXT + *addr );
+    if( f == NULL ) addlabel( name, strcasecmp( directive, ".data" ) == 0 ? FVM_ADDR_DATA + datasize : FVM_ADDR_TEXT + *addr );
 
     while( 1 ) {
       /* data can be either a space separated list of numbers or a string */
@@ -796,6 +797,9 @@ static void emit_header( FILE *f, uint32_t addr ) {
   for( i = 0; i < nlabels; i++ ) {
     if( labels[i].flags & LABEL_EXPORT ) nsyms++;
   }
+
+  if( !modprogid ) modprogid = 0x20000000 + (time( NULL ) % 0x20000000);
+  if( !modulename[0] ) sprintf( modulename, "%08x", modprogid );
   
   memset( &header, 0, sizeof(header) );
   header.magic = FVM_MAGIC;

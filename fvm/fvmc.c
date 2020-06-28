@@ -896,10 +896,13 @@ static void disassemble( char *filename ) {
 	  if( opcodes[j].args & (0x1 << k) ) printf( "%04x\t", opcode & 0xffff );
 	  else printf( "R%u\t", k == 0 ? (opcode >> 20) & 0x7 : (opcode >> (4*(k-1))) & 0x7 );
 	}
-	printf( "\n" );
+	printf( "\t;; 0x%08x\n", opcode );
 	break;
       }
       j++;
+    }
+    if( !opcodes[j].inst ) {
+      printf( "%04x\t\tUNKNOWN\t\t\t;; 0x%08x\n", FVM_ADDR_TEXT + i, opcode );
     }
   }
   

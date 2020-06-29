@@ -60,17 +60,33 @@ static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int npro
 
 static int fvm_rpc_proc( struct rpc_inc *inc ) {
   /* get prog, vers, proc */
-  uint32_t prog, proc;
+  uint32_t progid, procid;
   struct fvm_s state;
   int sts, handle, arglength, count;
+  int i, j;
+  struct fvm_module *m;
   
-  prog = inc->msg.u.call.prog;
-  proc = inc->msg.u.call.proc;
+  progid = inc->msg.u.call.prog;
+  m = fvm_module_by_progid( progid );
+  if( !m ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  fvm_log( LOG_LVL_INFO, "fvm_rpc_log progid=%u proc=%u", prog, proc );
+  j = 0;
+  procid = -1;
+  for( i = 0; i < m->header.symcount; i++ ) {
+    if( (m->symbols[i].flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_PROC ) {
+      if( inc->msg.u.call.proc == j ) {
+	procid = i;
+	break;
+      }
+      j++;
+    }
+  }
+  if( procid == -1 ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  fvm_log( LOG_LVL_INFO, "fvm_rpc_log progid=%u procid=%u", progid, procid );
   
   /* initialize state */
-  sts = fvm_state_init( &state, prog, proc );
+  sts = fvm_state_init( &state, progid, procid );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   /* copy args onto fvm stack and set r0 to length */
@@ -102,14 +118,16 @@ int fvm_register_program( uint32_t progid ) {
   struct fvm_module *m;
   struct rpc_program *pg;
   int i, nprocs;
-
+  
   m = fvm_module_by_progid( progid );
   if( !m ) return -1;
 
   /* collect symbols pointing to text segment, probably functions? */
   nprocs = 0;
   for( i = 0; i < m->header.symcount; i++ ) {
-    if( m->symbols[i].addr >= FVM_ADDR_TEXT && m->symbols[i].addr <= (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) {
+    if( m->symbols[i].addr >= FVM_ADDR_TEXT &&
+	m->symbols[i].addr <= (FVM_ADDR_TEXT + FVM_MAX_TEXT) &&
+	((m->symbols[i].flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_PROC) ) {
       nprocs++;
     }
   }

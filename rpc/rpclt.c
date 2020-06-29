@@ -1108,7 +1108,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     while( b ) {
       sts = xdr_decode_string( xdr, name, sizeof(name) );
       sts = xdr_decode_uint32( xdr, &flags );
-      printf( "  ID %-4u Name %-16s Flags 0x%04x\n", c, name, flags );
+      printf( "  ID %-4u Name %-16s Flags 0x%08x\n", c, name, flags );
       c++;
       
       sts = xdr_decode_boolean( xdr, &b );

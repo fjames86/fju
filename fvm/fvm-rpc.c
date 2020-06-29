@@ -31,6 +31,7 @@
 /* want to be able to register an rpc program which is dynamically generated (normally it is always a static sturct) */
 static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t progid, char *data, int datasize );
 static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module );
+static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_module *module, uint32_t retry, int timeout );
 
 static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int nprocs, rpc_proc_t proccb ) {
   struct rpc_program *pg;
@@ -585,13 +586,54 @@ void fvm_rpc_register( void ) {
 }
 
 
+struct ping_cxt {
+  uint64_t clid;
+  uint64_t hostid;
+  uint64_t stateseq;
+};
+
+static void fvm_call_ping_donecb( struct xdr_s *xdr, void *cxt ) {
+  struct ping_cxt *p = (struct ping_cxt *)cxt;
+  int sts, b;
+  struct raft_cluster cl;
+  struct raft_member member;
+  
+  if( !xdr ) {
+    fvm_log( LOG_LVL_ERROR, "ping timeout" );
+    goto done;
+  }
+
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) {
+    goto done;
+  }
+
+  if( b ) {
+    /* ping accepted by follower */
+    sts = raft_cluster_by_id( p->clid, &cl );
+    if( sts ) goto done;
+    if( cl.state != RAFT_STATE_LEADER ) goto done;
+    sts = raft_member_by_hostid( p->clid, p->hostid, &member );
+    if( sts ) goto done;
+    member.nextseq = cl.stateseq;
+    member.stateseq = p->stateseq;
+    raft_member_set( &member );
+  }
+
+ done:
+  free( p );
+}
+
 static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t progid, char *data, int datasize ) {
   /* send data to followers */
   int sts;
   struct hrauth_call hcall;
   struct xdr_s xdr;
   struct rpc_conn *tmpconn;
+  struct ping_cxt *p;
 
+  fvm_log( LOG_LVL_INFO, "fvm_call_ping Progid %u Cluster %"PRIx64" Hostid %"PRIx64"", progid, cl->id, hostid );
+  
   tmpconn = rpc_conn_acquire();
   if( !tmpconn ) return -1;
   
@@ -602,6 +644,13 @@ static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t pro
   hcall.proc = 6;
   hcall.timeout = 500;
   hcall.service = HRAUTH_SERVICE_PRIV;
+  hcall.donecb = fvm_call_ping_donecb;
+  p = malloc( sizeof(*p) );
+  p->clid = cl->id;
+  p->hostid = hostid;
+  p->stateseq = cl->stateseq;
+  hcall.cxt = p;
+  
   xdr_init( &xdr, tmpconn->buf, tmpconn->count );
   xdr_encode_uint64( &xdr, cl->id );
   xdr_encode_uint64( &xdr, hostreg_localid() );
@@ -617,13 +666,44 @@ static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t pro
   return sts;
 }
 
-static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_s *state ) {
+struct write_cxt {
+  uint64_t clid;
+  uint32_t progid;
+  uint32_t retry;
+  uint32_t timeout;
+};
+
+static void fvm_call_write_donecb( struct xdr_s *xdr, void *cxt ) {
+  struct write_cxt *w = (struct write_cxt *)cxt;
+  struct raft_cluster cl;
+  struct fvm_module *m;
+  int sts;
+  int retry;
+  
+  if( !xdr ) {    
+    fvm_log( LOG_LVL_ERROR, "write timeout, retrying" );
+    sts = raft_cluster_by_id( w->clid, &cl );
+    m = fvm_module_by_progid( w->progid );
+    retry = (int)w->retry;
+    retry--;
+    if( m && sts == 0 && retry > 0 ) {
+      fvm_call_write( &cl, cl.leaderid, m, retry, (w->timeout * 3) / 2 );
+    }
+  }
+
+  free( w );
+  
+  return;
+}
+
+static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_module *module, uint32_t retry, int timeout ) {
   /* send data segment to leader */
   /* send data to followers */
   int sts;
   struct xdr_s xdr;
   struct rpc_conn *tmpconn;
   struct hrauth_call hcall;
+  struct write_cxt *w;
   
   tmpconn = rpc_conn_acquire();
   if( !tmpconn ) return -1;
@@ -633,12 +713,19 @@ static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_
   hcall.prog = FVM_RPC_PROG;
   hcall.vers = FVM_RPC_VERS;
   hcall.proc = 7;
-  hcall.timeout = 500;
+  hcall.timeout = timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
+  hcall.donecb = fvm_call_write_donecb;
+  w = malloc( sizeof(*w) );
+  w->clid = cl->id;
+  w->progid = module->header.progid;
+  w->retry = retry;
+  hcall.cxt = w;
+  
   xdr_init( &xdr, tmpconn->buf, tmpconn->count );
   xdr_encode_uint64( &xdr, cl->id );
-  xdr_encode_uint32( &xdr, state->module->header.progid );
-  xdr_encode_opaque( &xdr, (uint8_t *)state->data, state->datasize );
+  xdr_encode_uint32( &xdr, module->header.progid );
+  xdr_encode_opaque( &xdr, (uint8_t *)module->data, module->header.datasize );
   
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   rpc_conn_release( tmpconn );
@@ -653,7 +740,10 @@ static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module )
   
   n = raft_member_list( cl->id, member, 32 );
   for( i = 0; i < n; i++ ) {
-    fvm_call_ping( cl, member[i].hostid, module->header.progid, (char *)module->data, (int)module->header.datasize );
+    if( member[i].stateseq < cl->stateseq ) {
+      fvm_log( LOG_LVL_INFO, "Sending updated state to member %s cluster %"PRIx64" member %"PRIx64"", module->header.name, cl->id, member[i].hostid );
+      fvm_call_ping( cl, member[i].hostid, module->header.progid, (char *)module->data, (int)module->header.datasize );
+    } 
   }
 }
 
@@ -672,11 +762,16 @@ int fvm_cluster_update( struct fvm_s *state ) {
 
   if( cl.state == RAFT_STATE_LEADER ) {
     /* send ping rpcs to all other members */
+    cl.stateterm = cl.termseq;
+    cl.stateseq++;
+    cl.commitseq = cl.stateseq;
+    raft_cluster_set( &cl );
+    
     fvm_send_pings( &cl, state->module );
   } else {
     /* send write to leader */
     if( !cl.leaderid ) return -1;
-    sts = fvm_call_write( &cl, cl.leaderid, state );
+    sts = fvm_call_write( &cl, cl.leaderid, state->module, 3, 500 );
     if( sts ) return sts;
   }
   

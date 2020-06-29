@@ -277,7 +277,7 @@ static void print_cluster( struct raft_cluster *cluster, struct raft_member *mem
 	      strcpy( timestr, "Never" );
 	  }
 
-	  printf( "    member hostid=%"PRIx64" (%s) flags=%x lastseen=%s", 
+	  printf( "    member hostid=%"PRIx64" (%s) flags=%x lastseen=%s ", 
 		  member[j].hostid, hostreg_name_by_hostid( member[j].hostid, namestr ), member[j].flags, timestr );
 	  if( cluster->state == RAFT_STATE_LEADER ) {
 	    printf( "nextseq=%"PRIu64" stateseq=%"PRIu64"", member[j].nextseq, member[j].stateseq );

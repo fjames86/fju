@@ -2,6 +2,8 @@
 #include "fvm-private.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <fju/log.h>
+#include <fju/programs.h>
 
 int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid ) {
   struct fvm_module *m;
@@ -56,5 +58,21 @@ void fvm_printf( char *fmt, ... ) {
   
   va_start( args, fmt );
   vprintf( fmt, args );
+  va_end( args );
+}
+
+static struct log_s fvmlog;
+void fvm_log( int lvl, char *fmt, ... ) {
+  static int initialized = 0;
+  va_list args;
+  
+  if( !initialized ) {
+    log_open( NULL, NULL, &fvmlog );
+    fvmlog.ltag = FVM_RPC_PROG;
+    initialized = 1;
+  }
+
+  va_start( args, fmt );
+  log_writev( &fvmlog, lvl, fmt, args );
   va_end( args );
 }

@@ -66,7 +66,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   prog = inc->msg.u.call.prog;
   proc = inc->msg.u.call.proc;
 
-  log_writef( NULL, LOG_LVL_INFO, "fvm_rpc_log progid=%u proc=%u", prog, proc );
+  fvm_log( LOG_LVL_INFO, "fvm_rpc_log progid=%u proc=%u", prog, proc );
   
   /* initialize state */
   sts = fvm_state_init( &state, prog, proc );
@@ -74,14 +74,14 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
 
   /* copy args onto fvm stack and set r0 to length */
   arglength = inc->xdr.count - inc->xdr.offset;
-  log_writef( NULL, LOG_LVL_INFO, "fvm_rpc_log offet=%u count=%u arglength = %u", inc->xdr.offset, inc->xdr.count, arglength );
+  fvm_log( LOG_LVL_INFO, "fvm_rpc_log offet=%u count=%u arglength = %u", inc->xdr.offset, inc->xdr.count, arglength );
   
   memcpy( &state.stack, inc->xdr.buf + inc->xdr.offset, arglength );
   state.reg[FVM_REG_R0] = htonl( arglength );
   sts = fvm_run( &state, fvm_max_steps( 0 ) );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  log_writef( NULL, LOG_LVL_INFO, "success reply length %d", ntohl( state.reg[FVM_REG_R0] ) );
+  fvm_log( LOG_LVL_INFO, "success reply length %d", ntohl( state.reg[FVM_REG_R0] ) );
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   /* R0 contains length, R1 contains address of buffer */
   count = ntohl( state.reg[FVM_REG_R0] );
@@ -427,38 +427,24 @@ static struct rpc_program fvm_prog = {
 
 struct fvm_iterator {
   struct rpc_iterator iter;
-  char mname[FVM_MAX_NAME];
-  char pname[FVM_MAX_NAME];
+  uint32_t progid;
+  uint32_t procid;
 };
 
 static void fvm_iter_cb( struct rpc_iterator *it ) {
   struct fvm_iterator *fvm = (struct fvm_iterator *)it;
   struct fvm_s state;
-  uint32_t procid;
-  struct fvm_module *m;
   int sts;
-
-  m = fvm_module_by_name( fvm->mname );
-  if( !m ) {
-    log_writef( NULL, LOG_LVL_INFO, "Failed to find module %s", fvm->mname );
-    return;
-  }
-
-  procid = fvm_symbol_index( m, fvm->pname );
-  if( procid == -1 ) {
-    log_writef( NULL, LOG_LVL_INFO, "Failed to find proc %s %s", fvm->mname, fvm->pname );
-    return;
-  }
   
-  sts = fvm_state_init( &state, m->header.progid, procid );
+  sts = fvm_state_init( &state, fvm->progid, fvm->procid );
   if( sts ) {
-    log_writef( NULL, LOG_LVL_INFO, "Failed to init state %s %s", fvm->mname, fvm->pname );
+    fvm_log( LOG_LVL_INFO, "Failed to init state %u %u", fvm->progid, fvm->procid );
     return;
   }
   
   sts = fvm_run( &state, -1 );
   if( sts ) {
-    log_writef( NULL, LOG_LVL_INFO, "Failed to run %s %s", fvm->mname, fvm->pname );
+    fvm_log( LOG_LVL_INFO, "Failed to run %u %u", fvm->progid, fvm->procid );
   }
   
 }
@@ -500,6 +486,7 @@ void fvm_rpc_register( void ) {
   char name[FVM_MAX_NAME];
   uint64_t clid;
   struct fvm_module *m;
+  uint32_t progid;
   
   /* load all these modules on startup */
   sts = freg_subkey( NULL, 0, "/fju/fvm/modules", FREG_CREATE, &key );
@@ -511,14 +498,16 @@ void fvm_rpc_register( void ) {
 	clid = 0;
 	sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path), NULL );
 	if( !sts ) {
-	  log_writef( NULL, LOG_LVL_INFO, "FVM loading module %s", path );
-	  fvm_module_load_file( path, NULL );
+	  fvm_log( LOG_LVL_INFO, "FVM loading module %s", path );
+	  sts = fvm_module_load_file( path, &progid );
+	  if( sts ) fvm_log( LOG_LVL_ERROR, "Failed to load module %s", path );
 	}
 	
 	sts = freg_get_by_name( NULL, entry.id, "cluster", FREG_TYPE_UINT64, (char *)&clid, sizeof(clid), NULL );
 	if( !sts ) {
-	  m = fvm_module_by_name( name );
+	  m = fvm_module_by_progid( progid );
 	  if( m ) m->clusterid = clid;
+	  else fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
 	}
 
       }
@@ -534,7 +523,7 @@ void fvm_rpc_register( void ) {
       if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ) {
 	sts = freg_get( NULL, entry.id, NULL, name, sizeof(name), NULL );
 	if( !sts ) {
-	  log_writef( NULL, LOG_LVL_INFO, "FVM registering program %s", name );
+	  fvm_log( LOG_LVL_INFO, "FVM registering program %s", name );
 	  fvm_register_program( fvm_progid_by_name( name ) );
 	}
       }
@@ -566,11 +555,15 @@ void fvm_rpc_register( void ) {
 	  memset( iter, 0, sizeof(*iter) );
 	  iter->iter.period = period;
 	  iter->iter.cb = fvm_iter_cb;
-	  strncpy( iter->mname, mname, FVM_MAX_NAME );
-	  strncpy( iter->pname, pname, FVM_MAX_NAME );
-
-	  log_writef( NULL, LOG_LVL_INFO, "FVM registering iterator %s %s", mname, pname );
-	  rpc_iterator_register( &iter->iter );
+	  iter->progid = fvm_progid_by_name( mname );
+	  iter->procid = fvm_procid_by_name( iter->progid, pname );
+	  if( iter->progid == -1 || iter->procid == -1 ) {
+	    fvm_log( LOG_LVL_ERROR, "Failed to register iterator for %s %s", mname, pname );
+	    free( iter );
+	  } else {
+	    fvm_log( LOG_LVL_INFO, "FVM registering iterator %s %s", mname, pname );
+	    rpc_iterator_register( &iter->iter );
+	  }
 	}
       }
 	
@@ -581,6 +574,7 @@ void fvm_rpc_register( void ) {
   /* set max steps to limit runaway programs blocking rpcd */
   sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxsteps", FREG_TYPE_UINT32, (char *)&nsteps, sizeof(nsteps), NULL );
   if( !sts ) {
+    fvm_log( LOG_LVL_INFO, "Setting max steps to %u", nsteps );
     fvm_max_steps( nsteps );
   }
 
@@ -666,6 +660,12 @@ static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module )
 int fvm_cluster_update( struct fvm_s *state ) {
   int sts;
   struct raft_cluster cl;
+
+  fvm_log( LOG_LVL_INFO, "Updating cluster for program %s %u:%u cluster %"PRIx64"",
+	   state->module->header.name,
+	   state->module->header.progid,
+	   state->module->header.versid,
+	   state->module->clusterid );
   
   sts = raft_cluster_by_id( state->module->clusterid, &cl );
   if( sts ) return sts;

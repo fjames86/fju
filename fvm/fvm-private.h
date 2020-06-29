@@ -78,6 +78,7 @@ struct fvm_module *fvm_get_modules( void );
 /* register this module as an rpc program */
 int fvm_register_program( uint32_t progid );
 int fvm_unregister_program( uint32_t progid );
+void fvm_log( int lvl, char *fmt, ... );
 
 #endif
 

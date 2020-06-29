@@ -1099,7 +1099,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     sts = xdr_decode_uint32( xdr, &datasize );
     sts = xdr_decode_uint32( xdr, &textsize );
     sts = xdr_decode_uint64( xdr, &clid );
-    printf( "%-32s Program %u:%u Data %u Text %u CLID %"PRIx64"x\n",
+    printf( "%-32s Program %u:%u Data %u Text %u CLID %"PRIx64"\n",
 	    name, progid, versid, datasize, textsize, clid );
     
     sts = xdr_decode_boolean( xdr, &b );
@@ -1108,7 +1108,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     while( b ) {
       sts = xdr_decode_string( xdr, name, sizeof(name) );
       sts = xdr_decode_uint32( xdr, &flags );
-      printf( "  %-4u %-16s %0x04x\n", c, name, flags );
+      printf( "  ID %-4u Name %-16s Flags 0x%04x\n", c, name, flags );
       c++;
       
       sts = xdr_decode_boolean( xdr, &b );

@@ -18,7 +18,7 @@
 
 #include "fvm-private.h"
 
-#define ADDR_RESERVED 0x0000  /* 4k bytes of reserved address space */
+#define ADDR_RESERVED     0x0000  /* 4k bytes of reserved address space */
 #define FVM_ADDR_DATA     0x1000  /* 16k reserved for data segment */
 #define FVM_ADDR_TEXT     0x5000  /* 28k reserved for text segment */
 #define FVM_ADDR_STACK    0xc000  /* 16k reserved for stack */
@@ -71,6 +71,30 @@ struct label {
   uint32_t flags;
 #define LABEL_EXPORT 0x01  
 };
+
+static char *skipwhitespace( char *p ) {
+  while( *p == ' ' || *p == '\t' ) p++;
+  return p;
+}
+
+static char *copytoken( char *p, char *dest ) {
+  char *q;
+  int i;
+  
+  p = skipwhitespace( p );
+  
+  q = dest;
+  i = 0;
+  while( (i < FVM_MAX_NAME) && (*p != '\0') && (*p != ' ') && (*p != '\t') ) {
+    *q = *p;
+    p++;
+    q++;
+    i++;
+  }
+  *q = '\0';
+  
+  return p;
+}
 
 static int nlabels;
 static struct label labels[1024];
@@ -137,46 +161,47 @@ static void staticlib_load( char *path ) {
   
   f = fopen( path, "rb" );
   if( !f ) {
-    fvmc_printf( "Failed to open static library %s\n", path );
+    usage( "Failed to open static library %s\n", path );
     return;
   }
 
   sl = malloc( sizeof(*sl) );
   n = fread( &sl->header, 1, sizeof(sl->header), f );
-  if( n != sizeof(&sl->header) ) {
-    fvmc_printf( "Bad header" );
+  if( n != sizeof(sl->header) ) {
+    usage( "Bad header size %u", n );
     goto done;
   }
   if( sl->header.magic != FVM_MAGIC ) {
-    fvmc_printf( "Bad header" );
+    usage( "Bad header magic" );
     goto done;    
   }
   if( sl->header.version != FVM_VERSION ) {
-    fvmc_printf( "Bad header" );
+    usage( "Bad header version" );
     goto done;    
   }
 
   sl->symbols = malloc( sizeof(*sl->symbols) * sl->header.symcount );
   n = fread( sl->symbols, 1, sizeof(*sl->symbols) * sl->header.symcount, f );
   if( n != sizeof(*sl->symbols) * sl->header.symcount ) {
-    fvmc_printf( "Bad symbol table" );
+    usage( "Bad symbol table size" );
     goto done;
   }
   
   sl->data = malloc( sl->header.datasize );
   n = fread( sl->data, 1, sl->header.datasize, f );
   if( n != sl->header.datasize ) {
-    fvmc_printf( "Bad data size" );
+    usage( "Bad data size" );
     goto done;
   }
   
   sl->text = malloc( sl->header.textsize );
   n = fread( sl->text, 1, sl->header.textsize, f );
   if( n != sl->header.textsize ) {
-    fvmc_printf( "Bad text size" );
+    usage( "Bad text size" );
     goto done;
   }
 
+  fvmc_printf( "Loaded static library %s\n", sl->header.name );
   sl->next = staticlibs;
   staticlibs = sl;
   
@@ -248,7 +273,7 @@ int main( int argc, char **argv ) {
       }
 
       p = buf;
-      while( *p == ' ' || *p == '\t' ) p++;
+      p = skipwhitespace( p );
       if( *p == '\0' ) continue;
 
       if( parse_directive( buf, &addr, NULL, 0 ) == 0 ) continue;
@@ -297,7 +322,7 @@ int main( int argc, char **argv ) {
       }
       
       p = buf;
-      while( *p == ' ' || *p == '\t' ) p++;
+      p = skipwhitespace( p );
       if( *p == '\0' ) continue;
       
       if( parse_directive( buf, &addr, outfile, 1 ) == 0 ) continue;
@@ -322,7 +347,7 @@ int main( int argc, char **argv ) {
       }
       
       p = buf;
-      while( *p == ' ' || *p == '\t' ) p++;
+      p = skipwhitespace( p );
       if( *p == '\0' ) continue;
       
       if( parse_directive( buf, &addr, outfile, 0 ) == 0 ) continue;
@@ -348,41 +373,30 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
   char *p;
   char directive[64], name[64];
   uint32_t size;
-  char *q;
   
   p = buf;
-  while( *p == ' ' || *p == '\t' ) p++;
+  p = skipwhitespace( p );
   if( *p == '\0' ) return -1;
   if( *p != '.' ) return -1;
   
   /* assembler directive */
   memset( directive, 0, sizeof(directive) );
-  q = directive;
-  while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-    *q = *p;
-    p++;
-    q++;
-  }
+  p = copytoken( p, directive );
   
   if( (strcasecmp( directive, ".data" ) == 0) ||
       (strcasecmp( directive, ".text" ) == 0) ) {
     /* reserve some bytes in the data/text segment */
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
     memset( name, 0, sizeof(name) );
-    q = name;
-    while( *p != ' ' && *p != '\t' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, name );
     
     if( f == NULL ) addlabel( name, strcasecmp( directive, ".data" ) == 0 ? FVM_ADDR_DATA + datasize : FVM_ADDR_TEXT + *addr );
 
     while( 1 ) {
       /* data can be either a space separated list of numbers or a string */
-      while( *p == ' ' || *p == '\t' ) p++;
+      p = skipwhitespace( p );
       if( *p == '\0' ) return 0;
 
       size = 0;
@@ -494,25 +508,15 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
 	/* integer literal, label identifier or ARRAY */
 	memset( numstr, 0, sizeof(numstr) );
-	q = numstr;
-	while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-	  *q = *p;
-	  p++;
-	  q++;
-	}
+	p = copytoken( p, numstr );
 
 	/* if value==ARRAY next arg is size of array */
 	if( strcasecmp( numstr, "ARRAY" ) == 0 ) {
 	  memset( numstr, 0, sizeof(numstr) );
 	  p++;
-	  while( *p == ' ' || *p == '\t' || *p == '\0' ) p++;
-	  
-	  q = numstr;
-	  while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-	    *q = *p;
-	    p++;
-	    q++;
-	  }
+	  p = skipwhitespace( p );
+
+	  p = copytoken( p, numstr );
 	  size = strtoul( numstr, NULL, 0 );
 	  if( size % 4 ) {
 	    size += 4 - (size % 4);
@@ -571,27 +575,18 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
   } else if( strcasecmp( directive, ".CONST" ) == 0 ) {
     char str[64];
 
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
     memset( name, 0, sizeof(name) );
-    q = name;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, name );
 
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
     memset( str, 0, sizeof(str) );
-    q = str;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, str );
+
     if( f == NULL ) addlabel( name, strtoul( str, NULL, 0 ) );
     
     return 0;    
@@ -599,27 +594,18 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     uint32_t symflags;
     char symtype[64];
     
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
     memset( name, 0, sizeof(name) );
-    q = name;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, name );
 
     symflags = 0;
     
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     memset( symtype, 0, sizeof(symtype) );
-    q = symtype;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    } 
+    p = copytoken( p, symtype );
+
     if( strcasecmp( symtype, "PROC" ) == 0 ) symflags |= FVM_SYMBOL_PROC;
     else if( strcasecmp( symtype, "STRING" ) == 0 ) symflags |= FVM_SYMBOL_STRING;
     else if( strcasecmp( symtype, "UINT32" ) == 0 ) {
@@ -630,14 +616,10 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       symflags |= 0x0008;
     }
 
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     memset( symtype, 0, sizeof(symtype) );
-    q = symtype;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }    
+    p = copytoken( p, symtype );
+
     if( symtype[0] ) {
       symflags |= (getlabel( symtype ) - getlabel( name )) & 0xffff;
     }
@@ -647,16 +629,11 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     return 0;
   } else if( strcasecmp( directive, ".MODULE" ) == 0 ) {
 
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
     memset( name, 0, sizeof(name) );
-    q = name;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, name );
 
     fvmc_printf( "setting modulename to %s\n", name );
     strcpy( modulename, name );
@@ -664,29 +641,20 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     return 0;
   } else if( strcasecmp( directive, ".PROGRAM" ) == 0 ) {
 
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
     memset( name, 0, sizeof(name) );
-    q = name;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, name );
 
     modprogid = strtoul( name, NULL, 0 );
 
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
     memset( name, 0, sizeof(name) );
-    q = name;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, name );
+
     modversid = strtoul( name, NULL, 0 );
     
     return 0;
@@ -694,51 +662,43 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     /* .LINK modulename symbolname */
     struct staticlib *sl;
     int j, found;
-    uint32_t saddr, type, size;
+    uint32_t saddr, size;
     
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
     memset( name, 0, sizeof(name) );
-    q = name;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, name );
 
     sl = staticlib_by_name( name );
     if( !sl ) usage( "Unknown library module \"%s\"", name );
 
-    while( *p == ' ' || *p == '\t' ) p++;    
+    p = skipwhitespace( p );
     if( *p == '\0' ) usage( "Expected symbol name" );
     
     memset( name, 0, sizeof(name) );
-    q = name;
-    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
-      *q = *p;
-      p++;
-      q++;
-    }
+    p = copytoken( p, name );
 
     found = 0;
     for( j = 0; j < sl->header.symcount; j++ ) {
       if( strcasecmp( sl->symbols[j].name, name ) == 0 ) {
 	saddr = sl->symbols[j].addr;
 	size = sl->symbols[j].flags & FVM_SYMBOL_SIZE_MASK;
-	type = sl->symbols[j].flags & FVM_SYMBOL_TYPE_MASK;
 	if( f ) {
-	  if( datasegment && saddr >= FVM_ADDR_DATA && saddr < (FVM_ADDR_DATA + FVM_MAX_DATA) ) {
-	    fwrite( sl->data + (saddr - FVM_ADDR_DATA), 1, size, f );
-	  } else if( !datasegment && saddr >= FVM_ADDR_TEXT && saddr < (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) {
-	    fwrite( sl->text + (saddr - FVM_ADDR_TEXT), 1, size, f );
-	  } else usage( "Bad symbol address" );
+	  if( saddr >= FVM_ADDR_DATA && saddr < (FVM_ADDR_DATA + FVM_MAX_DATA) ) {
+	    if( datasegment ) fwrite( sl->data + (saddr - FVM_ADDR_DATA), 1, size, f );
+	  } else if( saddr >= FVM_ADDR_TEXT && saddr < (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) {
+	    if( !datasegment ) fwrite( sl->text + (saddr - FVM_ADDR_TEXT), 1, size, f );
+	  } else usage( "Bad symbol address saddr=%x", saddr );
 	} else {
 	  if( saddr >= FVM_ADDR_DATA && saddr < (FVM_ADDR_DATA + FVM_MAX_DATA) ) {
+	    addlabel( name, FVM_ADDR_DATA + datasize );
 	    datasize += size;
 	  } else if( saddr >= FVM_ADDR_TEXT && saddr < (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) {
+	    addlabel( name, FVM_ADDR_TEXT + *addr );
 	    *addr += size;
-	  } else usage( "Bad symbol address" );	  
+	  } else usage( "Bad symbol address saddr=%x", saddr );
+
 	}
 	
 	found = 1;
@@ -746,7 +706,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       }
     }
     if( !found ) usage( "Unresolved symbol %s", name );
-    
+    return 0;
   } else {
     /* unknown directive */
     usage( "Unknown directive \"%s\"", directive );
@@ -863,7 +823,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
   int i, nargs, j, k;
   
   p = str;
-  while( *p == ' ' || *p == '\t' ) p++;
+  p = skipwhitespace ( p );
   if( *p == ';' ) {
     //printf( ";; comment\n" );
     return -1;
@@ -874,20 +834,13 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
   }
   
   memset( inst, 0, sizeof(inst) );
-  q = inst;
-  while( *p != ' ' && *p != '\t' && *p != '\n' ) {
-    if( *p == '\0' || *p == '\n' ) {
-      break;
-    }
-    *q = *p;
-    p++;
-    q++;
-  }
-  if( *(q - 1) == ':' ) {
+  p = copytoken( p, inst );
+  q = inst + strlen( inst ) - 1;
+  if( *q == ':' ) {
     if( !firstpass ) return -1;
     
     /* last character is a : means this is a label identifier */
-    *(q - 1)= '\0';
+    *q = '\0';
 
     addlabel( inst, addr );
     return -1;
@@ -902,23 +855,14 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
       
       nargs = (opcodes[i].args & 0x000f0000) >> 16;
       for( k = 0; k < nargs; k++ ) {
-	while( *p == ' ' || *p == '\t' ) p++;
+	p = skipwhitespace( p );
 	if( *p == '\0' || *p == '\n' ) {
 	  //printf( ";; empty line 3\n" );
 	  goto cont;
 	}
 
 	memset( arg, 0, sizeof(arg) );
-	q = arg;
-	while( *p != ' ' && *p != '\t' && *p != '\n' ) {
-	  if( *p == '\0' || *p == '\n' ) {
-	    //printf( ";; end of line\n" );
-	    break;
-	  }
-	  *q = *p;
-	  p++;
-	  q++;
-	}	  
+	p = copytoken( p, arg );
 
 	//printf( ";; arg %d = %d\n", k, (opcodes[i].args >> k) & 0x1 );
 	switch( (opcodes[i].args >> k) & 0x1 ) {

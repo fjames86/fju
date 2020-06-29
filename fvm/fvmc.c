@@ -31,6 +31,7 @@ static void usage( char *fmt, ... ) {
 	  "\n OPTIONS:\n"
 	  "   -o outfile\n"
 	  "   -v verbmose mode\n"
+	  "   -d Disassemble\n" 
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -109,6 +110,82 @@ static int exportlabel( char *name, uint32_t symflags ) {
 
 static int datasize;
 
+struct staticlib {
+  struct staticlib *next;
+
+  struct fvm_header header;
+  struct fvm_symbol *symbols;
+  uint8_t *data;
+  uint8_t *text;
+};
+static struct staticlib *staticlibs;
+
+static struct staticlib *staticlib_by_name( char *name ) {
+  struct staticlib *sl;
+  sl = staticlibs;
+  while( sl ) {
+    if( strcasecmp( sl->header.name, name ) == 0 ) return sl;
+    sl = sl->next;
+  }
+  return NULL;
+}
+    
+static void staticlib_load( char *path ) {
+  FILE *f;
+  struct staticlib *sl;
+  int n;
+  
+  f = fopen( path, "rb" );
+  if( !f ) {
+    fvmc_printf( "Failed to open static library %s\n", path );
+    return;
+  }
+
+  sl = malloc( sizeof(*sl) );
+  n = fread( &sl->header, 1, sizeof(sl->header), f );
+  if( n != sizeof(&sl->header) ) {
+    fvmc_printf( "Bad header" );
+    goto done;
+  }
+  if( sl->header.magic != FVM_MAGIC ) {
+    fvmc_printf( "Bad header" );
+    goto done;    
+  }
+  if( sl->header.version != FVM_VERSION ) {
+    fvmc_printf( "Bad header" );
+    goto done;    
+  }
+
+  sl->symbols = malloc( sizeof(*sl->symbols) * sl->header.symcount );
+  n = fread( sl->symbols, 1, sizeof(*sl->symbols) * sl->header.symcount, f );
+  if( n != sizeof(*sl->symbols) * sl->header.symcount ) {
+    fvmc_printf( "Bad symbol table" );
+    goto done;
+  }
+  
+  sl->data = malloc( sl->header.datasize );
+  n = fread( sl->data, 1, sl->header.datasize, f );
+  if( n != sl->header.datasize ) {
+    fvmc_printf( "Bad data size" );
+    goto done;
+  }
+  
+  sl->text = malloc( sl->header.textsize );
+  n = fread( sl->text, 1, sl->header.textsize, f );
+  if( n != sl->header.textsize ) {
+    fvmc_printf( "Bad text size" );
+    goto done;
+  }
+
+  sl->next = staticlibs;
+  staticlibs = sl;
+  
+ done:
+  fclose( f );
+}
+
+
+
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
   char outfilename[256];
@@ -131,10 +208,17 @@ int main( int argc, char **argv ) {
       verbosemode = 1;
     } else if( strcmp( argv[i], "-d" ) == 0 ) {
       disass = 1;
+    } else if( strcmp( argv[i], "-l" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      /* load library: -l path
+       * Add library. .INCLUDE directive pastes symbol content. 
+       */
+      staticlib_load( argv[i] );
     } else if( strcmp( argv[i], "-h" ) == 0 ) {
       usage( NULL );
     } else if( strcmp( argv[i], "--help" ) == 0 ) {
-      usage( NULL );      
+      usage( NULL );
     } else break;
     i++;
   }
@@ -143,7 +227,7 @@ int main( int argc, char **argv ) {
 
   fvmc_printf( "\n ------ first pass ------- \n" );
 
-  /* first pass collects labels and computes offets. does not emit opcodes */
+  /* first pass collects labels and computes offsets. does not emit opcodes */
   starti = i;
   while( i < argc ) {
     if( disass ) {
@@ -605,7 +689,64 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     }
     modversid = strtoul( name, NULL, 0 );
     
-    return 0;        
+    return 0;
+  } else if( strcasecmp( directive, ".LINK" ) == 0 ) {
+    /* .LINK modulename symbolname */
+    struct staticlib *sl;
+    int j, found;
+    uint32_t saddr, type, size;
+    
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) return 0;
+    
+    memset( name, 0, sizeof(name) );
+    q = name;
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+
+    sl = staticlib_by_name( name );
+    if( !sl ) usage( "Unknown library module \"%s\"", name );
+
+    while( *p == ' ' || *p == '\t' ) p++;    
+    if( *p == '\0' ) usage( "Expected symbol name" );
+    
+    memset( name, 0, sizeof(name) );
+    q = name;
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+      *q = *p;
+      p++;
+      q++;
+    }
+
+    found = 0;
+    for( j = 0; j < sl->header.symcount; j++ ) {
+      if( strcasecmp( sl->symbols[j].name, name ) == 0 ) {
+	saddr = sl->symbols[j].addr;
+	size = sl->symbols[j].flags & FVM_SYMBOL_SIZE_MASK;
+	type = sl->symbols[j].flags & FVM_SYMBOL_TYPE_MASK;
+	if( f ) {
+	  if( datasegment && saddr >= FVM_ADDR_DATA && saddr < (FVM_ADDR_DATA + FVM_MAX_DATA) ) {
+	    fwrite( sl->data + (saddr - FVM_ADDR_DATA), 1, size, f );
+	  } else if( !datasegment && saddr >= FVM_ADDR_TEXT && saddr < (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) {
+	    fwrite( sl->text + (saddr - FVM_ADDR_TEXT), 1, size, f );
+	  } else usage( "Bad symbol address" );
+	} else {
+	  if( saddr >= FVM_ADDR_DATA && saddr < (FVM_ADDR_DATA + FVM_MAX_DATA) ) {
+	    datasize += size;
+	  } else if( saddr >= FVM_ADDR_TEXT && saddr < (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) {
+	    *addr += size;
+	  } else usage( "Bad symbol address" );	  
+	}
+	
+	found = 1;
+	break;
+      }
+    }
+    if( !found ) usage( "Unresolved symbol %s", name );
+    
   } else {
     /* unknown directive */
     usage( "Unknown directive \"%s\"", directive );

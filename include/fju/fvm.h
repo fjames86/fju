@@ -19,6 +19,13 @@ struct fvm_symbol {
   char name[FVM_MAX_NAME];
   uint32_t addr;
   uint32_t flags;
+#define FVM_SYMBOL_SIZE_MASK 0x0000ffff
+#define FVM_SYMBOL_TYPE_MASK 0x000f0000
+#define FVM_SYMBOL_PROC      0x00000000
+#define FVM_SYMBOL_STRING    0x00010000
+#define FVM_SYMBOL_UINT32    0x00020000
+#define FVM_SYMBOL_UINT64    0x00030000
+#define FVM_SYMBOL_FLAG_MASK 0xfff00000
 };
 
 struct fvm_module_info {

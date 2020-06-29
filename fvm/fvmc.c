@@ -66,8 +66,9 @@ static void disassemble( char *filename );
 struct label {
   char name[64];
   uint32_t addr;
+  uint32_t symflags;
   uint32_t flags;
-#define LABEL_EXPORT 0x01
+#define LABEL_EXPORT 0x01  
 };
 
 static int nlabels;
@@ -94,11 +95,12 @@ static uint32_t getlabel( char *name ) {
   }
   return 0;
 }
-static int exportlabel( char *name ) {
+static int exportlabel( char *name, uint32_t symflags ) {
   int i;
   for( i = 0; i < nlabels; i++ ) {
     if( strcasecmp( labels[i].name, name ) == 0 ) {
       labels[i].flags |= LABEL_EXPORT;
+      labels[i].symflags = symflags;
       return 0;
     }
   }
@@ -442,8 +444,13 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  
 	  x = strtoul( numstr, &term, 0 );
 	  if( *term ) {
-	    // not a number, try a label 
-	    x = getlabel( numstr );
+	    // not a number, try a label
+	    if( strcmp( numstr, "$") == 0 ) {
+	      if( strcasecmp( directive, ".data" ) == 0 ) x = datasize;
+	      else x = *addr;
+	    } else {
+	      x = getlabel( numstr );
+	    }
 	  }
 	  
 	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
@@ -505,7 +512,9 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     
     return 0;    
   } else if( strcasecmp( directive, ".EXPORT" ) == 0 ) {
-
+    uint32_t symflags;
+    char symtype[64];
+    
     while( *p == ' ' || *p == '\t' ) p++;    
     if( *p == '\0' ) return 0;
     
@@ -517,7 +526,39 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       q++;
     }
 
-    if( exportlabel( name ) ) usage( "Unknown label \"%s\"", name );
+    symflags = 0;
+    
+    while( *p == ' ' || *p == '\t' ) p++;    
+    memset( symtype, 0, sizeof(symtype) );
+    q = symtype;
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+      *q = *p;
+      p++;
+      q++;
+    } 
+    if( strcasecmp( symtype, "PROC" ) == 0 ) symflags |= FVM_SYMBOL_PROC;
+    else if( strcasecmp( symtype, "STRING" ) == 0 ) symflags |= FVM_SYMBOL_STRING;
+    else if( strcasecmp( symtype, "UINT32" ) == 0 ) {
+      symflags |= FVM_SYMBOL_UINT32;
+      symflags |= 0x0004;
+    } else if( strcasecmp( symtype, "UINT64" ) == 0 ) {
+      symflags |= FVM_SYMBOL_UINT64;
+      symflags |= 0x0008;
+    }
+
+    while( *p == ' ' || *p == '\t' ) p++;    
+    memset( symtype, 0, sizeof(symtype) );
+    q = symtype;
+    while( *p != ' ' && *p != '\t' && *p != '\0' ) {
+      *q = *p;
+      p++;
+      q++;
+    }    
+    if( symtype[0] ) {
+      symflags |= (getlabel( symtype ) - getlabel( name )) & 0xffff;
+    }
+    
+    if( exportlabel( name, symflags ) ) usage( "Unknown label \"%s\"", name );
 
     return 0;
   } else if( strcasecmp( directive, ".MODULE" ) == 0 ) {
@@ -829,6 +870,7 @@ static void emit_header( FILE *f, uint32_t addr ) {
       memset( &symbol, 0, sizeof(symbol) );
       strcpy( symbol.name, labels[i].name );
       symbol.addr = labels[i].addr;
+      symbol.flags = labels[i].symflags;
       fwrite( &symbol, 1, sizeof(symbol), f );
     }
   }
@@ -861,7 +903,7 @@ static void disassemble( char *filename ) {
 
   printf( "%-4s\t%-16s\t%-4s\t%-4s\n", "PROCID", "NAME", "ADDR", "FLAGS" );
   for( i = 0; i < header.symcount; i++ ) {
-    printf( "%-4u\t%-16s\t%04x\t%04x\n", i, sym[i].name, sym[i].addr, sym[i].flags );
+    printf( "%-4u\t%-16s\t%04x\t%08x\n", i, sym[i].name, sym[i].addr, sym[i].flags );
   }
 
   printf( ";; ------------- DATA -------------- \n" );
@@ -902,7 +944,8 @@ static void disassemble( char *filename ) {
       j++;
     }
     if( !opcodes[j].inst ) {
-      printf( "%04x\t\tUNKNOWN\t\t\t;; 0x%08x\n", FVM_ADDR_TEXT + i, opcode );
+      printf( "%04x\t\tUNKNOWN\t\t\t;; 0x%08x | %c%c%c%c\n", FVM_ADDR_TEXT + i, opcode,
+	      (char)((opcode >> 24) & 0xff), (char)((opcode >> 16) & 0xff), (char)((opcode >> 8) & 0xff), (char)(opcode & 0xff) );
     }
   }
   

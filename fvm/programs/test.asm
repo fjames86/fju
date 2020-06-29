@@ -3,6 +3,7 @@
 	.PROGRAM	999		1
 
 	.TEXT		hellomsg	"Hello, World!\n"
+	.TEXT		thisaddr	$
 	
 hello-world:	
 	PUSH		hellomsg		      ; native/puts requires address of string on stack 
@@ -16,7 +17,9 @@ echo-string:
 	PUSH		R1
 	CALLNAT		R1		NATIVE-PUTS
 	RET
+echo-string-end:	
 	
-	.EXPORT		hello-world
-	.EXPORT		echo-string
+	.EXPORT		hello-world     PROC 	echo-string 
+	.EXPORT		echo-string     PROC	echo-string-end
+	.EXPORT		hellomsg 	STRING
 	

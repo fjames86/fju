@@ -533,9 +533,15 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  x = strtoul( numstr, &term, 0 );
 	  if( *term ) {
 	    // not a number, try a label
-	    if( strcmp( numstr, "$") == 0 ) {
-	      if( strcasecmp( directive, ".data" ) == 0 ) x = datasize;
-	      else x = *addr;
+	    if( numstr[0] == '$' ) {
+	      x = getlabel( numstr + 2 );
+	      if( numstr[1] == '-' ) {
+		if( strcasecmp( directive, ".data" ) == 0 ) x = datasize - x;
+		else x = x - (*addr + 4);
+	      } else if( numstr[1] == '+' ) {
+		if( strcasecmp( directive, ".data" ) == 0 ) x = datasize + x;
+		else x = x + (*addr + 4);
+	      } else usage( "Unknown operator %c", numstr[1] );
 	    } else {
 	      x = getlabel( numstr );
 	    }
@@ -621,6 +627,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     p = copytoken( p, symtype );
 
     if( symtype[0] ) {
+      symflags &= 0xffff0000;
       symflags |= (getlabel( symtype ) - getlabel( name )) & 0xffff;
     }
     
@@ -628,7 +635,6 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
     return 0;
   } else if( strcasecmp( directive, ".MODULE" ) == 0 ) {
-
     p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
     
@@ -684,6 +690,8 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       if( strcasecmp( sl->symbols[j].name, name ) == 0 ) {
 	saddr = sl->symbols[j].addr;
 	size = sl->symbols[j].flags & FVM_SYMBOL_SIZE_MASK;
+	if( size == 0 ) usage( "Symbol missing size specifier" );
+	
 	if( f ) {
 	  if( saddr >= FVM_ADDR_DATA && saddr < (FVM_ADDR_DATA + FVM_MAX_DATA) ) {
 	    if( datasegment ) fwrite( sl->data + (saddr - FVM_ADDR_DATA), 1, size, f );
@@ -903,8 +911,14 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 		}
 	      }
 	      if( !b ) {
-		fvmc_printf( "Bad constant or unknown label \"%s\"", arg );
-		goto cont;
+		if( arg[0] == '$' ) {
+		  if( arg[1] == '-' ) j = addr + 4 - getlabel( arg + 2 );
+		  else if( arg[1] == '+' ) addr + 4 + getlabel( arg + 2 );
+		  else usage( "Bad operator %c", arg[1] );
+		} else {
+		  fvmc_printf( "Bad constant or unknown label \"%s\"", arg );
+		  goto cont;
+		}
 	      }
 	    }
 	  }

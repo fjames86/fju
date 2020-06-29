@@ -1,4 +1,10 @@
 
+JMPREL:
+	LDI		R0	JMPREL
+	LEA		R1	0
+	SUB		R1	R0
+	JMP		R1
+	
 	;; dest source count 
 MEMCPY:
 	POP		R0 	; count

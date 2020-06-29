@@ -912,8 +912,8 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 	      }
 	      if( !b ) {
 		if( arg[0] == '$' ) {
-		  if( arg[1] == '-' ) j = addr + 4 - getlabel( arg + 2 );
-		  else if( arg[1] == '+' ) addr + 4 + getlabel( arg + 2 );
+		  if( arg[1] == '-' ) j = (addr + 4 - getlabel( arg + 2 )) % 0x10000;
+		  else if( arg[1] == '+' ) j = (addr + 4 + getlabel( arg + 2 )) + 0x10000;
 		  else usage( "Bad operator %c", arg[1] );
 		} else {
 		  fvmc_printf( "Bad constant or unknown label \"%s\"", arg );
@@ -1034,7 +1034,7 @@ static void disassemble( char *filename ) {
       if( (opcode >> 24) == opcodes[j].opcode ) {
 	printf( "%04x\t\t%-8s\t", FVM_ADDR_TEXT + i, opcodes[j].inst );
 	for( k = 0; k < (opcodes[j].args >> 16); k++ ) {
-	  if( opcodes[j].args & (0x1 << k) ) printf( "%04x\t", opcode & 0xffff );
+	  if( opcodes[j].args & (0x1 << k) ) printf( "%04x (%d)\t", opcode & 0xffff, (opcode & 0xffff) | 0xffff0000 );
 	  else printf( "R%u\t", k == 0 ? (opcode >> 20) & 0x7 : (opcode >> (4*(k-1))) & 0x7 );
 	}
 	printf( "\t;; 0x%08x\n", opcode );

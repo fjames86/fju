@@ -74,7 +74,8 @@ static int native_logstr( struct fvm_s *state ) {
 
 static int native_read( struct fvm_s *state ) {
   uint32_t progid, addr;
-
+  struct fvm_module *m;
+  
   progid = ntohl( fvm_pop( state ) );
   addr = ntohl( fvm_pop( state ) );
   m = fvm_module_by_progid( progid );
@@ -85,7 +86,7 @@ static int native_read( struct fvm_s *state ) {
   
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize) ) {
     fvm_push( state, *(uint32_t *)(m->data + (addr - FVM_ADDR_DATA)) );
-  } else if( addr >= FVM_ADDR_TEXT && add < (FVM_ADDR_TEXT + m->header.textsize) ) {
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize) ) {
     fvm_push( state, *(uint32_t *)(m->text + (addr - FVM_ADDR_TEXT)) );
   } else {
     fvm_push( state, 0 );
@@ -95,8 +96,9 @@ static int native_read( struct fvm_s *state ) {
 }
 
 static int native_write( struct fvm_s *state ) {
-  uint32_t progid, addr;
-
+  uint32_t progid, addr, val;
+  struct fvm_module *m;
+  
   progid = ntohl( fvm_pop( state ) );
   addr = ntohl( fvm_pop( state ) );
   val = fvm_pop( state );
@@ -108,7 +110,7 @@ static int native_write( struct fvm_s *state ) {
   
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize) ) {
     *(uint32_t *)(m->data + (addr - FVM_ADDR_DATA)) = val;
-  } else if( addr >= FVM_ADDR_TEXT && add < (FVM_ADDR_TEXT + m->header.textsize) ) {
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize) ) {
     *(uint32_t *)(m->text + (addr - FVM_ADDR_TEXT)) = val;
   } 
 

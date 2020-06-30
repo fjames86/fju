@@ -153,9 +153,7 @@ int main( int argc, char **argv ) {
   if( sts ) usage( "Failed to initialize" );
 
   if( argxdr.offset > 0 ) {
-    memcpy( state.stack, argbuf, argxdr.offset );
-    state.reg[FVM_REG_SP] = FVM_ADDR_STACK + argxdr.offset;
-    state.reg[FVM_REG_R0] = htonl( argxdr.offset );
+    fvm_set_args( &state, (char *)argbuf, argxdr.offset );
   }
   
   sts = fvm_run( &state, nsteps );

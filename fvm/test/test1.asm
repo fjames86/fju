@@ -3,7 +3,8 @@
 ;;; We expect this to build and run without errors.
 
 	.MODULE		TEST1
-
+	.PROGRAM	10000		1
+	
 	.TEXT		test-success 	"Test1 success\n"
 	
 MAIN:
@@ -34,6 +35,10 @@ MAIN:
 
 	PUSH		test-success
 	CALLNAT		R6	NATIVE-PUTS
+
+	;; Clear result registers incase we were called remotely 
+	LDI		R0		0
+	LDI		R1		0
 	RET
 
 	.TEXT		test-add-name "TEST-ADD\n"

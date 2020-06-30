@@ -421,6 +421,38 @@ static int fvm_proc_cluster( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_run( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint32_t progid, procid;
+  char *bufp;
+  int lenp;
+  struct fvm_s state;
+
+
+  sts = xdr_decode_uint32( &inc->xdr, &progid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &procid );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  sts = fvm_state_init( &state, progid, procid );
+  if( sts ) goto done;
+  sts = fvm_set_args( &state, bufp, lenp );
+  if( sts ) goto done;
+  sts = fvm_run( &state, -1 );
+
+ done:
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts == 0 ? 1 : 0 );
+
+  lenp = 0;
+  if( !sts ) lenp = fvm_get_res( &state, &bufp );
+  xdr_encode_opaque( &inc->xdr, (uint8_t *)bufp, lenp );
+  
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
@@ -432,6 +464,7 @@ static struct rpc_proc fvm_procs[] = {
   { 6, fvm_proc_ping },
   { 7, fvm_proc_write },
   { 8, fvm_proc_cluster },
+  { 9, fvm_proc_run },
   
   { 0, NULL }
 };

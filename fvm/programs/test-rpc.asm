@@ -1,4 +1,9 @@
 
+;;; This file defines an example RPC program. it implements a few procedures
+;;; which can be called from rpclt, e.g. to call PROC-COUNTER: 
+;;; rpclt rawmode 2333333 1 3
+	
+	
 	.MODULE		test-rpc
 	.PROGRAM	2333333		1
 

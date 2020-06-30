@@ -1,4 +1,12 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <WinSock2.h>
+#include <Windows.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 #include "fvm-private.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -25,6 +33,30 @@ int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid ) {
   state->reg[FVM_REG_SP] = FVM_ADDR_STACK;
   
   return 0;
+}
+
+int fvm_set_args( struct fvm_s *state, char *buf, int len ) {
+  if( len > FVM_MAX_STACK ) return -1;
+  
+  memcpy( state->stack, buf, len );
+  state->reg[FVM_REG_SP] = FVM_ADDR_STACK + len;
+  state->reg[FVM_REG_R0] = htonl( len );
+
+  return 0;
+}
+
+int fvm_get_res( struct fvm_s *state, char **buf ) {
+  int lenp;
+  char *bufp;
+  
+  if( buf ) *buf = NULL;
+  
+  lenp = ntohl( state->reg[FVM_REG_R0] );
+  bufp = fvm_getaddr( state, ntohl( state->reg[FVM_REG_R1] ) );
+  if( !bufp ) lenp = 0;
+
+  if( buf ) *buf = bufp;
+  return lenp;
 }
 
 int fvm_run( struct fvm_s *state, int nsteps ) {

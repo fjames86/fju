@@ -70,6 +70,8 @@ uint32_t fvm_procid_by_name( uint32_t progid, char *procname );
 
 /* initialize runtime state */
 int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid );
+int fvm_set_args( struct fvm_s *state, char *buf, int len );
+int fvm_get_res( struct fvm_s *state, char **buf );
 
 /* exeucute a single step */
 int fvm_step( struct fvm_s *state );

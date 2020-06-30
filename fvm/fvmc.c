@@ -45,6 +45,20 @@ static void usage( char *fmt, ... ) {
   exit( 1 );
 }
 
+/*
+ * TODO:
+ * - On first pass, save data entries so we can emit them immediately before the 2nd pass (this avoids the weird middle pass).
+ * - Refactor out the file parsing so we can easily add suport for .include directive.
+ * - General tidy up required. 
+ * - parse_directive is far too large.
+ * - do we need the export symbol size/type stuff anymore?
+ *
+ * - First pass: collect labels, data entries (i.e. parse directives, check opcodes are valid but don't emit).
+ * - Then Emit header. 
+ * - Then Emit data segment (we saved the entries in the first pass).
+ * - Second pass: emit text segment (opcodes, text data). Still need to parse directives for e.g. .includes?
+ */
+
 static char modulename[64] = "default";
 static uint32_t modprogid;
 static uint32_t modversid;

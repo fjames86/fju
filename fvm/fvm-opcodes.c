@@ -129,7 +129,7 @@ static int opcode_ldi( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32
 
 static int opcode_lea( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LEA RX const */
-  state->reg[reg] = htonl(ntohl(state->reg[FVM_REG_PC]) + sign_extend( data ));
+  state->reg[reg] = htonl(state->reg[FVM_REG_PC] + sign_extend( data ));
   return 0;
 }
 

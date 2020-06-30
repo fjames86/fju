@@ -31,7 +31,8 @@ static void usage( char *fmt, ... ) {
 	  "\n OPTIONS:\n"
 	  "   -o outfile\n"
 	  "   -v verbmose mode\n"
-	  "   -d Disassemble\n" 
+	  "   -d Disassemble\n"
+	  "   -I include path\n"
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -92,6 +93,7 @@ static char *copytoken( char *p, char *dest ) {
     i++;
   }
   *q = '\0';
+  if( i == FVM_MAX_NAME ) usage( "Name too long" );
   
   return p;
 }
@@ -134,82 +136,11 @@ static int exportlabel( char *name, uint32_t symflags ) {
 
 static int datasize;
 
-struct staticlib {
-  struct staticlib *next;
-
-  struct fvm_header header;
-  struct fvm_symbol *symbols;
-  uint8_t *data;
-  uint8_t *text;
+struct searchpath {
+  struct searchpath *next;
+  char *path;
 };
-static struct staticlib *staticlibs;
-
-static struct staticlib *staticlib_by_name( char *name ) {
-  struct staticlib *sl;
-  sl = staticlibs;
-  while( sl ) {
-    if( strcasecmp( sl->header.name, name ) == 0 ) return sl;
-    sl = sl->next;
-  }
-  return NULL;
-}
-    
-static void staticlib_load( char *path ) {
-  FILE *f;
-  struct staticlib *sl;
-  int n;
-  
-  f = fopen( path, "rb" );
-  if( !f ) {
-    usage( "Failed to open static library %s\n", path );
-    return;
-  }
-
-  sl = malloc( sizeof(*sl) );
-  n = fread( &sl->header, 1, sizeof(sl->header), f );
-  if( n != sizeof(sl->header) ) {
-    usage( "Bad header size %u", n );
-    goto done;
-  }
-  if( sl->header.magic != FVM_MAGIC ) {
-    usage( "Bad header magic" );
-    goto done;    
-  }
-  if( sl->header.version != FVM_VERSION ) {
-    usage( "Bad header version" );
-    goto done;    
-  }
-
-  sl->symbols = malloc( sizeof(*sl->symbols) * sl->header.symcount );
-  n = fread( sl->symbols, 1, sizeof(*sl->symbols) * sl->header.symcount, f );
-  if( n != sizeof(*sl->symbols) * sl->header.symcount ) {
-    usage( "Bad symbol table size" );
-    goto done;
-  }
-  
-  sl->data = malloc( sl->header.datasize );
-  n = fread( sl->data, 1, sl->header.datasize, f );
-  if( n != sl->header.datasize ) {
-    usage( "Bad data size" );
-    goto done;
-  }
-  
-  sl->text = malloc( sl->header.textsize );
-  n = fread( sl->text, 1, sl->header.textsize, f );
-  if( n != sl->header.textsize ) {
-    usage( "Bad text size" );
-    goto done;
-  }
-
-  fvmc_printf( "Loaded static library %s\n", sl->header.name );
-  sl->next = staticlibs;
-  staticlibs = sl;
-  
- done:
-  fclose( f );
-}
-
-
+static struct searchpath *searchpaths;
 
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
@@ -220,6 +151,7 @@ int main( int argc, char **argv ) {
   char *p;
   uint32_t addr;
   int disass = 0;
+  struct searchpath *sp;
   
   strcpy( outfilename, "" );
   
@@ -233,13 +165,13 @@ int main( int argc, char **argv ) {
       verbosemode = 1;
     } else if( strcmp( argv[i], "-d" ) == 0 ) {
       disass = 1;
-    } else if( strcmp( argv[i], "-l" ) == 0 ) {
+    } else if( strcmp( argv[i], "-I" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      /* load library: -l path
-       * Add library. .INCLUDE directive pastes symbol content. 
-       */
-      staticlib_load( argv[i] );
+      sp = malloc( sizeof(*sp) );
+      sp->path = argv[i];
+      sp->next = searchpaths;
+      searchpaths = sp;
     } else if( strcmp( argv[i], "-h" ) == 0 ) {
       usage( NULL );
     } else if( strcmp( argv[i], "--help" ) == 0 ) {
@@ -261,8 +193,17 @@ int main( int argc, char **argv ) {
       continue;
     }
     
-    f = fopen( argv[i], "r" );  
-    if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
+    f = fopen( argv[i], "r" );
+    if( f == NULL ) {
+      sp = searchpaths;
+      while( sp ) {
+	sprintf( buf, "%s%s", sp->path, argv[i] );
+	f = fopen( argv[i], "r" );
+	if( f ) break;
+	sp = sp->next;
+      }
+      if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
+    }
     
     memset( buf, 0, sizeof(buf) );
     while( fgets( buf, sizeof(buf) - 1, f ) ) {
@@ -309,8 +250,17 @@ int main( int argc, char **argv ) {
 
   i = starti;
   while( i < argc ) {
-    f = fopen( argv[i], "r" );  
-    if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
+    f = fopen( argv[i], "r" );
+    if( f == NULL ) {
+      sp = searchpaths;
+      while( sp ) {
+	sprintf( buf, "%s%s", sp->path, argv[i] );
+	f = fopen( argv[i], "r" );
+	if( f ) break;
+	sp = sp->next;
+      }
+      if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
+    }
     
     memset( buf, 0, sizeof(buf) );
     addr = 0;
@@ -334,8 +284,17 @@ int main( int argc, char **argv ) {
   
   i = starti;
   while( i < argc ) {
-    f = fopen( argv[i], "r" );  
-    if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
+    f = fopen( argv[i], "r" );
+    if( f == NULL ) {
+      sp = searchpaths;
+      while( sp ) {
+	sprintf( buf, "%s%s", sp->path, argv[i] );
+	f = fopen( argv[i], "r" );
+	if( f ) break;
+	sp = sp->next;
+      }
+      if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
+    }
     
     memset( buf, 0, sizeof(buf) );
     addr = 0;
@@ -664,57 +623,6 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     modversid = strtoul( name, NULL, 0 );
     
     return 0;
-  } else if( strcasecmp( directive, ".LINK" ) == 0 ) {
-    /* .LINK modulename symbolname */
-    struct staticlib *sl;
-    int j, found;
-    uint32_t saddr, size;
-    
-    p = skipwhitespace( p );
-    if( *p == '\0' ) return 0;
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    sl = staticlib_by_name( name );
-    if( !sl ) usage( "Unknown library module \"%s\"", name );
-
-    p = skipwhitespace( p );
-    if( *p == '\0' ) usage( "Expected symbol name" );
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    found = 0;
-    for( j = 0; j < sl->header.symcount; j++ ) {
-      if( strcasecmp( sl->symbols[j].name, name ) == 0 ) {
-	saddr = sl->symbols[j].addr;
-	size = sl->symbols[j].flags & FVM_SYMBOL_SIZE_MASK;
-	if( size == 0 ) usage( "Symbol missing size specifier" );
-	
-	if( f ) {
-	  if( saddr >= FVM_ADDR_DATA && saddr < (FVM_ADDR_DATA + FVM_MAX_DATA) ) {
-	    if( datasegment ) fwrite( sl->data + (saddr - FVM_ADDR_DATA), 1, size, f );
-	  } else if( saddr >= FVM_ADDR_TEXT && saddr < (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) {
-	    if( !datasegment ) fwrite( sl->text + (saddr - FVM_ADDR_TEXT), 1, size, f );
-	  } else usage( "Bad symbol address saddr=%x", saddr );
-	} else {
-	  if( saddr >= FVM_ADDR_DATA && saddr < (FVM_ADDR_DATA + FVM_MAX_DATA) ) {
-	    addlabel( name, FVM_ADDR_DATA + datasize );
-	    datasize += size;
-	  } else if( saddr >= FVM_ADDR_TEXT && saddr < (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) {
-	    addlabel( name, FVM_ADDR_TEXT + *addr );
-	    *addr += size;
-	  } else usage( "Bad symbol address saddr=%x", saddr );
-
-	}
-	
-	found = 1;
-	break;
-      }
-    }
-    if( !found ) usage( "Unresolved symbol %s", name );
-    return 0;
   } else {
     /* unknown directive */
     usage( "Unknown directive \"%s\"", directive );
@@ -804,6 +712,7 @@ static struct {
 	{ "LEASP", 0x43, 0x00020000 },   /* LEASP RX RY. load address from stack pointer with offset */
 	{ "CALLNAT", 0x44, 0x00020000 }, /* CALLVNAT RX RY. call native function, const is the proc identifier. RX receives result status */
 	{ "CALLNAT", 0x45, 0x00020002 }, /* CALLVNAT RX const. call native function, const is the proc identifier. RX receives result status */
+	{ "HALT", 0x46, 0x00000000 }, /* HALT stop execution immediatly */
 	
 	{ NULL, 0, 0 }
 	  

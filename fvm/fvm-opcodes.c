@@ -679,6 +679,10 @@ static int opcode_callnatconst( struct fvm_s *state, uint32_t flags, uint32_t re
   return 0;
 }
 
+static int opcode_halt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  return -1;
+}
+
 struct opcode_def {
   fvm_opcode_fn fn;
   char *name;
@@ -756,6 +760,7 @@ static struct opcode_def opcodes[FVM_MAX_OPCODE] =
    { opcode_leaspreg, "LEASP" },
    { opcode_callnatreg, "CALLNAT" },
    { opcode_callnatconst, "CALLNAT" },
+   { opcode_halt, "HALT" },
   };
 
 

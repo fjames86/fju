@@ -16,15 +16,18 @@
 
 static void usage( char *fmt, ... ) {
   va_list args;
+
+  if( fmt == NULL ) {
+    printf( "fvm OPTIONS file...\n"
+	    "\n"
+	    "\n OPTIONS:\n"
+	    "   -m      module\n"
+	    "   -s      start symbol\n"
+	    "   -n      max steps\n"
+	    "   -v      Verbose\n"
+	    "\n" );
+  }
   
-  printf( "fvm OPTIONS file...\n"
-	  "\n"
-	  "\n OPTIONS:\n"
-	  "   -m      module\n"
-	  "   -s      start symbol\n"
-	  "   -n      max steps\n"
-	  "   -v      Verbose\n"
-	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
     printf( "Error: " );

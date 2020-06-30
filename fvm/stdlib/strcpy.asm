@@ -10,7 +10,7 @@ STRCPY:
 	LD		R3	R1 
 	CMP		R3	R0
 	JPN		STRCPY-LOOP
-	LDI		R3	R0	
+	MOV		R3	R0	
 STRCPY-LOOP:
 	LDINC		R4	R1 ;get value from source 
 	STINC		R2	R4 ;store into dest 

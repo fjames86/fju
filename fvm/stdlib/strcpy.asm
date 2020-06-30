@@ -7,7 +7,8 @@ STRCPY:
 	POP		R2	; dest
 
 	;; get source string length. If larger than dest buffer truncate
-	LD		R3	R1 
+	LD		R3	R1
+	ADD		R3	4 ;add length prefix size 
 	CMP		R3	R0
 	JPN		STRCPY-LOOP
 	MOV		R3	R0	

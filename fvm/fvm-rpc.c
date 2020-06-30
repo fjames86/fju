@@ -434,6 +434,7 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
+  fvm_log( LOG_LVL_INFO, "fvm_proc_run progid=%u procid=%u buflen=%u", progid, procid, lenp );
   sts = fvm_state_init( &state, progid, procid );
   if( sts ) goto done;
   sts = fvm_set_args( &state, bufp, lenp );
@@ -447,6 +448,7 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   lenp = 0;
   if( !sts ) lenp = fvm_get_res( &state, &bufp );
   xdr_encode_opaque( &inc->xdr, (uint8_t *)bufp, lenp );
+  fvm_log( LOG_LVL_INFO, "fvm_proc_run progid=%u procid=%u reslen=%u", progid, procid, lenp );
   
   rpc_complete_accept_reply( inc, handle );
   
@@ -650,7 +652,7 @@ static void fvm_call_ping_donecb( struct xdr_s *xdr, void *cxt ) {
   struct raft_member member;
   
   if( !xdr ) {
-    fvm_log( LOG_LVL_ERROR, "ping timeout" );
+    fvm_log( LOG_LVL_TRACE, "fvm ping timeout" );
     goto done;
   }
 
@@ -792,7 +794,7 @@ static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module )
   n = raft_member_list( cl->id, member, 32 );
   for( i = 0; i < n; i++ ) {
     if( member[i].stateseq < cl->stateseq ) {
-      fvm_log( LOG_LVL_INFO, "Sending updated state to member %s cluster %"PRIx64" member %"PRIx64"", module->header.name, cl->id, member[i].hostid );
+      fvm_log( LOG_LVL_TRACE, "Sending updated state to member %s cluster %"PRIx64" member %"PRIx64"", module->header.name, cl->id, member[i].hostid );
       fvm_call_ping( cl, member[i].hostid, module->header.progid, (char *)module->data, (int)module->header.datasize );
     } 
   }

@@ -101,6 +101,7 @@ static void fvm_run_results( struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
+    { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*]" },
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
@@ -124,7 +125,6 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 4, fvm_register_args, fvm_register_results, "fvm.register", "name=*" },
     { FVM_RPC_PROG, 1, 5, fvm_register_args, fvm_register_results, "fvm.unregister", "name=*" },
     { FVM_RPC_PROG, 1, 8, fvm_cluster_args, fvm_cluster_results, "fvm.cluster", "name=* clid=*" },
-    { 0, 0, 0, rawmode_args, rawmode_results, "rawmode", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*]" },
     { FVM_RPC_PROG, 1, 9, fvm_run_args, fvm_run_results, "fvm.run", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
     
     { 0, 0, 0, NULL, NULL, NULL }
@@ -1301,7 +1301,6 @@ static void fvm_run_results( struct xdr_s *xdr ) {
   if( !b ) usage( "Failed" );
 
   xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &count );
-  count = xdr->count - xdr->offset;
   
   for( i = 0; i < count; i += 16 ) {
     for( j = 0; j < 16; j++ ) {

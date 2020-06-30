@@ -44,7 +44,9 @@ PROC-COUNTER:
 	LDI		R0		4
 	RET
 
-	.EXPORT		hello		STRING
+;;; ------- Export table ----------------------------------------------------
+		
+;;	.EXPORT		hello		STRING
 	.EXPORT		PROC-NULL	PROC
 	.EXPORT		PROC-HELLO	PROC
 	.EXPORT		PROC-ECHO	PROC

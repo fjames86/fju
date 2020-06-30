@@ -197,8 +197,9 @@ int main( int argc, char **argv ) {
     if( f == NULL ) {
       sp = searchpaths;
       while( sp ) {
-	sprintf( buf, "%s%s", sp->path, argv[i] );
-	f = fopen( argv[i], "r" );
+	sprintf( buf, "%s/%s", sp->path, argv[i] );
+	fvmc_printf( "Trying to open \"%s\"\n", buf );
+	f = fopen( buf, "r" );
 	if( f ) break;
 	sp = sp->next;
       }
@@ -254,8 +255,9 @@ int main( int argc, char **argv ) {
     if( f == NULL ) {
       sp = searchpaths;
       while( sp ) {
-	sprintf( buf, "%s%s", sp->path, argv[i] );
-	f = fopen( argv[i], "r" );
+	sprintf( buf, "%s/%s", sp->path, argv[i] );
+	fvmc_printf( "Trying to open \"%s\"\n", buf );
+	f = fopen( buf, "r" );
 	if( f ) break;
 	sp = sp->next;
       }
@@ -288,8 +290,9 @@ int main( int argc, char **argv ) {
     if( f == NULL ) {
       sp = searchpaths;
       while( sp ) {
-	sprintf( buf, "%s%s", sp->path, argv[i] );
-	f = fopen( argv[i], "r" );
+	sprintf( buf, "%s/%s", sp->path, argv[i] );
+	fvmc_printf( "Trying to open \"%s\"\n", buf );
+	f = fopen( buf, "r" );
 	if( f ) break;
 	sp = sp->next;
       }
@@ -943,7 +946,7 @@ static void disassemble( char *filename ) {
       if( (opcode >> 24) == opcodes[j].opcode ) {
 	printf( "%04x\t\t%-8s\t", FVM_ADDR_TEXT + i, opcodes[j].inst );
 	for( k = 0; k < (opcodes[j].args >> 16); k++ ) {
-	  if( opcodes[j].args & (0x1 << k) ) printf( "%04x (%d)\t", opcode & 0xffff, (opcode & 0xffff) | 0xffff0000 );
+	  if( opcodes[j].args & (0x1 << k) ) printf( "%04x (%d)\t", opcode & 0xffff, (opcode & 0x8000) ? (opcode & 0xffff) | 0xffff0000 : opcode & 0xffff );
 	  else printf( "R%u\t", k == 0 ? (opcode >> 20) & 0x7 : (opcode >> (4*(k-1))) & 0x7 );
 	}
 	printf( "\t;; 0x%08x\n", opcode );

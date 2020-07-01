@@ -42,7 +42,6 @@ static void usage( char *fmt, ... ) {
 /*
  * TODO:
  * - On first pass, save data entries so we can emit them immediately before the 2nd pass (this avoids the weird middle pass).
- * - Refactor out the file parsing so we can easily add suport for .include directive.
  * - General tidy up required. 
  * - parse_directive is far too large.
  * - do we need the export symbol size/type stuff anymore?

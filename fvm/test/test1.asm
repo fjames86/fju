@@ -4,6 +4,8 @@
 
 	.MODULE		TEST1
 	.PROGRAM	10000		1
+
+	.INCLUDE	"native.asm"
 	
 	.TEXT		test-success 	"Test1 success\n"
 	

@@ -8,7 +8,6 @@
 #include <arpa/inet.h>
 #endif
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,11 +16,6 @@
 #include <time.h>
 
 #include "fvm-private.h"
-
-#define ADDR_RESERVED     0x0000  /* 4k bytes of reserved address space */
-#define FVM_ADDR_DATA     0x1000  /* 16k reserved for data segment */
-#define FVM_ADDR_TEXT     0x5000  /* 28k reserved for text segment */
-#define FVM_ADDR_STACK    0xc000  /* 16k reserved for stack */
 
 static void usage( char *fmt, ... ) {
   va_list args;
@@ -59,15 +53,19 @@ static void usage( char *fmt, ... ) {
  * - Second pass: emit text segment (opcodes, text data). Still need to parse directives for e.g. .includes?
  */
 
-static char modulename[64] = "default";
-static uint32_t modprogid;
-static uint32_t modversid;
-static int verbosemode = 0;
+/* store things here */
+static struct {
+  char modulename[64];
+  uint32_t progid;
+  uint32_t versid;
+  int verbosemode;
+} glob;
+
 
 static void fvmc_printf( char *fmt, ... ) {
   va_list args;
 
-  if( !verbosemode ) return;
+  if( !glob.verbosemode ) return;
   
   va_start( args, fmt );
   vprintf( fmt, args );
@@ -176,7 +174,7 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       strncpy( outfilename, argv[i], 255 );
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
-      verbosemode = 1;
+      glob.verbosemode = 1;
     } else if( strcmp( argv[i], "-d" ) == 0 ) {
       disass = 1;
     } else if( strcmp( argv[i], "-I" ) == 0 ) {
@@ -255,7 +253,7 @@ int main( int argc, char **argv ) {
   /* second pass emits output */
 
   if( !outfilename[0] ) {
-    sprintf( outfilename, "%s.fvm", modulename );
+    sprintf( outfilename, "%s.fvm", glob.modulename );
   }
   outfile = fopen( outfilename, "w" );
   if( !outfile ) usage( "Failed to open outfile \"%s\"", outfilename );
@@ -618,7 +616,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     p = copytoken( p, name );
 
     fvmc_printf( "setting modulename to %s\n", name );
-    strcpy( modulename, name );
+    strcpy( glob.modulename, name );
 
     return 0;
   } else if( strcasecmp( directive, ".PROGRAM" ) == 0 ) {
@@ -629,7 +627,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     memset( name, 0, sizeof(name) );
     p = copytoken( p, name );
 
-    modprogid = strtoul( name, NULL, 0 );
+    glob.progid = strtoul( name, NULL, 0 );
 
     p = skipwhitespace( p );
     if( *p == '\0' ) return 0;
@@ -637,7 +635,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     memset( name, 0, sizeof(name) );
     p = copytoken( p, name );
 
-    modversid = strtoul( name, NULL, 0 );
+    glob.versid = strtoul( name, NULL, 0 );
     
     return 0;
   } else {
@@ -875,8 +873,8 @@ static void emit_header( FILE *f, uint32_t addr ) {
     if( labels[i].flags & LABEL_EXPORT ) nsyms++;
   }
 
-  if( !modprogid ) modprogid = 0x20000000 + (time( NULL ) % 0x20000000);
-  if( !modulename[0] ) sprintf( modulename, "%08x", modprogid );
+  if( !glob.progid ) glob.progid = 0x20000000 + (time( NULL ) % 0x20000000);
+  if( !glob.modulename[0] ) sprintf( glob.modulename, "%08x", glob.progid );
   
   memset( &header, 0, sizeof(header) );
   header.magic = FVM_MAGIC;
@@ -884,9 +882,9 @@ static void emit_header( FILE *f, uint32_t addr ) {
   header.datasize = datasize;
   header.textsize = addr;
   header.symcount = nsyms;
-  strcpy( header.name, modulename );
-  header.progid = modprogid;
-  header.versid = modversid;
+  strcpy( header.name, glob.modulename );
+  header.progid = glob.progid;
+  header.versid = glob.versid;
   fwrite( &header, 1, sizeof(header), f );
 
   for( i = 0; i < nlabels; i++ ) {

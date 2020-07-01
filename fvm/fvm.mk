@@ -1,6 +1,6 @@
 
 
-fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm #fvm/test/test1.fvm
+fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm
 
 ${LIBDIR}/libfvm.a: fvm/fvm-module.c fvm/fvm-state.c fvm/fvm-opcodes.c include/fju/fvm.h fvm/fvm-native.c fvm/fvm-private.h fvm/fvm-rpc.c 
 	${CC} -c -g fvm/fvm-module.c fvm/fvm-state.c fvm/fvm-opcodes.c fvm/fvm-native.c fvm/fvm-rpc.c ${CFLAGS} 
@@ -17,11 +17,11 @@ ${BINDIR}/fvm: fvm/fvm-main.c ${LIBDIR}/libfvm.a
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.asm
 	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm -I fvm/stdlib/ fvm/programs/test-rpc.asm native.asm
 
-#fvm/test/test1.fvm: ${BINDIR}/fvmc fvm/test/test1.asm ${BINDIR}/fvm fvm/test/test2.asm
-#	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test1.fvm fvm/test/test1.asm native.asm
-#	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test2.fvm fvm/test/test2.asm native.asm
-#	${BINDIR}/fvm fvm/test/test1.fvm
-#	${BINDIR}/fvm -m test2 -s MAIN fvm/test/test1.fvm fvm/test/test2.fvm
+fvm/test/test1.fvm: ${BINDIR}/fvmc fvm/test/test1.asm ${BINDIR}/fvm fvm/test/test2.asm
+	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test1.fvm fvm/test/test1.asm native.asm
+	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test2.fvm fvm/test/test2.asm native.asm
+	${BINDIR}/fvm fvm/test/test1.fvm
+	${BINDIR}/fvm -m test2 -s MAIN fvm/test/test1.fvm fvm/test/test2.fvm
 
 
 PROGRAMS+=fvmc

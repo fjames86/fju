@@ -7,11 +7,14 @@
 #include <arpa/inet.h>
 #endif
 
+#include <stdint.h>
+
 #include "fvm-private.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <fju/log.h>
 #include <fju/programs.h>
+#include <fju/rpc.h>
 
 int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid ) {
   struct fvm_module *m;
@@ -108,4 +111,144 @@ void fvm_log( int lvl, char *fmt, ... ) {
   va_start( args, fmt );
   log_writev( &fvmlog, lvl, fmt, args );
   va_end( args );
+}
+
+uint32_t fvm_read_uint32( struct fvm_module *m, uint32_t procid ) {
+  uint32_t addr, u32;
+  
+  if( procid >= m->header.symcount ) return -1;
+  if( (m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK) != FVM_SYMBOL_UINT32 ) return -1;
+
+  addr = m->symbols[procid].addr;
+  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 4) ) {
+    memcpy( &u32, &m->data[addr - FVM_ADDR_DATA], 4 );
+    return ntohl( u32 );
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - 4) ) {
+    memcpy( &u32, &m->text[addr - FVM_ADDR_TEXT], 4 );
+    return ntohl( u32 );
+  }
+  
+  return -1;
+}
+
+int fvm_write_uint32( struct fvm_module *m, uint32_t procid, uint32_t val ) {
+  uint32_t addr;
+  
+  if( procid >= m->header.symcount ) return -1;
+  if( (m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK) != FVM_SYMBOL_UINT32 ) return -1;
+
+  addr = m->symbols[procid].addr;
+  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 4) ) {
+    val = htonl( val );
+    memcpy( &m->data[addr - FVM_ADDR_TEXT], &val, 4 );
+    return 0;
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - 4) ) {
+    val = htonl( val );    
+    memcpy( &m->text[addr - FVM_ADDR_TEXT], &val, 4 );
+    return 0;
+  }
+
+  return -1;
+}
+
+uint64_t fvm_read_uint64( struct fvm_module *m, uint32_t procid ) {
+  uint32_t addr;
+  uint64_t u64;
+  struct xdr_s xdr;
+  
+  if( procid >= m->header.symcount ) return -1;
+  if( (m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK) != FVM_SYMBOL_UINT64 ) return -1;
+
+  addr = m->symbols[procid].addr;
+  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 8) ) {
+    xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], 8 );
+    xdr_decode_uint64( &xdr, &u64 );
+    return u64;
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - 8) ) {
+    xdr_init( &xdr, &m->text[addr - FVM_ADDR_TEXT], 8 );
+    xdr_decode_uint64( &xdr, &u64 );
+    return u64;
+  }
+  
+  return -1;
+}
+
+int fvm_write_uint64( struct fvm_module *m, uint32_t procid, uint64_t val ) {
+  uint32_t addr;
+  struct xdr_s xdr;
+  
+  if( procid >= m->header.symcount ) return -1;
+  if( (m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK) != FVM_SYMBOL_UINT64 ) return -1;
+
+  addr = m->symbols[procid].addr;
+  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 8) ) {
+    xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], 8 );
+    xdr_encode_uint64( &xdr, val );
+    return 0;
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - 8) ) {
+    xdr_init( &xdr, &m->text[addr - FVM_ADDR_TEXT], 8 );
+    xdr_encode_uint64( &xdr, val );
+    return 0;
+  }
+  
+  return -1;
+}
+
+int fvm_read_string( struct fvm_module *m, uint32_t procid, char *str, int size ) {
+  uint32_t addr, ssize;
+  struct xdr_s xdr;
+
+  memset( str, 0, size );
+  
+  if( procid >= m->header.symcount ) return -1;
+  if( (m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK) != FVM_SYMBOL_STRING ) return -1;
+
+  addr = m->symbols[procid].addr;  
+  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 4) ) {
+    xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], 4 );
+    xdr_decode_uint32( &xdr, &ssize );
+    
+    if( addr > (FVM_ADDR_DATA + m->header.datasize - 4 - ssize) ) return -1;
+
+    xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], 4 + ssize + (ssize % 4 ? (4 - (ssize % 4)) : 0) );
+    xdr_decode_string( &xdr, str, size );    
+    return 0;
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - 4) ) {
+    xdr_init( &xdr, &m->text[addr - FVM_ADDR_TEXT], 4 );
+    xdr_decode_uint32( &xdr, &ssize );
+    
+    if( addr > (FVM_ADDR_TEXT + m->header.textsize - 4 - ssize) ) return -1;
+
+    xdr_init( &xdr, &m->text[addr - FVM_ADDR_TEXT], 4 + ssize + (ssize % 4 ? (4 - (ssize % 4)) : 0) );
+    xdr_decode_string( &xdr, str, size );
+    return 0;
+  }
+  
+  return -1;
+}
+
+int fvm_write_string( struct fvm_module *m, uint32_t procid, char *str ) {
+  uint32_t addr, ssize, xsize;
+  struct xdr_s xdr;
+
+  ssize = strlen( str );
+  xsize = 4 + ssize;
+  if( xsize % 4 ) xsize += 4 - (xsize % 4);
+  
+  if( procid >= m->header.symcount ) return -1;
+  if( (m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK) != FVM_SYMBOL_STRING ) return -1;
+  if( (m->symbols[procid].flags & FVM_SYMBOL_SIZE_MASK) < xsize ) return -1;
+  
+  addr = m->symbols[procid].addr;  
+  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - xsize) ) {
+    xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], xsize );
+    xdr_encode_string( &xdr, str );
+    return 0;
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - xsize) ) {
+    xdr_init( &xdr, &m->text[addr - FVM_ADDR_TEXT], xsize );
+    xdr_encode_string( &xdr, str );
+    return 0;
+  }
+  
+  return -1;
 }

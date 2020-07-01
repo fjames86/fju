@@ -60,55 +60,102 @@ static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int npro
 
 static int fvm_rpc_proc( struct rpc_inc *inc ) {
   /* get prog, vers, proc */
-  uint32_t progid, procid;
+  uint32_t progid, procid, type;
   struct fvm_s state;
   int sts, handle, arglength, count;
-  int i, j;
   struct fvm_module *m;
   
   progid = inc->msg.u.call.prog;
   m = fvm_module_by_progid( progid );
   if( !m ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  j = 0;
-  procid = -1;
-  for( i = 0; i < m->header.symcount; i++ ) {
-    if( (m->symbols[i].flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_PROC ) {
-      if( inc->msg.u.call.proc == j ) {
-	procid = i;
-	break;
-      }
-      j++;
-    }
-  }
-  if( procid == -1 ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  procid = inc->msg.u.call.proc;
+  if( procid >= m->header.symcount ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
   fvm_log( LOG_LVL_INFO, "fvm_rpc_log progid=%u procid=%u", progid, procid );
-  
-  /* initialize state */
-  sts = fvm_state_init( &state, progid, procid );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  /* copy args onto fvm stack and set r0 to length */
-  arglength = inc->xdr.count - inc->xdr.offset;
-  fvm_log( LOG_LVL_INFO, "fvm_rpc_log offet=%u count=%u arglength = %u", inc->xdr.offset, inc->xdr.count, arglength );
-
-  fvm_set_args( &state, (char *)(inc->xdr.buf + inc->xdr.offset), arglength );
-  sts = fvm_run( &state, fvm_max_steps( 0 ) );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-
-  fvm_log( LOG_LVL_INFO, "success reply length %d", ntohl( state.reg[FVM_REG_R0] ) );
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  /* R0 contains length, R1 contains address of buffer */
-  count = ntohl( state.reg[FVM_REG_R0] );
-  if( count > 0 && count < FVM_MAX_STACK ) {
-    char *p = fvm_getaddr( &state, ntohl( state.reg[FVM_REG_R1] ) );
-    if( p ) {
-      sts = xdr_encode_fixed( &inc->xdr, (uint8_t *)p, count );
-      if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  type = m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK;
+  switch( type ) {
+  case FVM_SYMBOL_PROC:
+    /* initialize state */
+    sts = fvm_state_init( &state, progid, procid );
+    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    
+    /* copy args onto fvm stack and set r0 to length */
+    arglength = inc->xdr.count - inc->xdr.offset;
+    fvm_log( LOG_LVL_INFO, "fvm_rpc_log offet=%u count=%u arglength = %u", inc->xdr.offset, inc->xdr.count, arglength );
+    
+    fvm_set_args( &state, (char *)(inc->xdr.buf + inc->xdr.offset), arglength );
+    sts = fvm_run( &state, fvm_max_steps( 0 ) );
+    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    
+    fvm_log( LOG_LVL_INFO, "success reply length %d", ntohl( state.reg[FVM_REG_R0] ) );
+    rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+    /* R0 contains length, R1 contains address of buffer */
+    count = ntohl( state.reg[FVM_REG_R0] );
+    if( count > 0 && count < FVM_MAX_STACK ) {
+      char *p = fvm_getaddr( &state, ntohl( state.reg[FVM_REG_R1] ) );
+      if( p ) {
+	sts = xdr_encode_fixed( &inc->xdr, (uint8_t *)p, count );
+	if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+      }
     }
+    rpc_complete_accept_reply( inc, handle );
+    break;
+  case FVM_SYMBOL_UINT32:
+    {
+      uint32_t u1, u2;
+      int b;
+      sts = xdr_decode_boolean( &inc->xdr, &b );
+      if( !sts && b ) sts = xdr_decode_uint32( &inc->xdr, &u1 );
+      if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+      
+      u2 = fvm_read_uint32( m, procid );
+      if( b ) fvm_write_uint32( m, procid, u1 );
+    
+      rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+      xdr_encode_uint32( &inc->xdr, u2 );
+      rpc_complete_accept_reply( inc, handle );
+    }
+    break;
+  case FVM_SYMBOL_UINT64:
+    {
+      uint64_t u1, u2;
+      int b;
+      sts = xdr_decode_boolean( &inc->xdr, &b );
+      if( !sts && b ) sts = xdr_decode_uint64( &inc->xdr, &u1 );
+      if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+      u2 = fvm_read_uint64( m, procid );
+      if( b ) fvm_write_uint64( m, procid, u1 );
+      
+      rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+      xdr_encode_uint64( &inc->xdr, u2 );
+      rpc_complete_accept_reply( inc, handle );
+    }
+    break;
+  case FVM_SYMBOL_STRING:
+    {
+      char str1[256], str2[256];
+      int b;
+      
+      sts = xdr_decode_boolean( &inc->xdr, &b );
+      if( !sts && b ) sts = xdr_decode_string( &inc->xdr, str1, sizeof(str1) );
+      if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+      fvm_read_string( m, procid, str2, sizeof(str2) );
+      if( b ) fvm_write_string( m, procid, str1 );
+      
+      rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+      xdr_encode_string( &inc->xdr, str1 );
+      rpc_complete_accept_reply( inc, handle );
+    }    
+    break;
+  default:
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    break;
   }
-  rpc_complete_accept_reply( inc, handle );
+
   
   return 0;
 }

@@ -4,6 +4,7 @@
 #define strcasecmp _stricmp
 #endif
 
+#include <stdint.h>
 #include <fju/mmf.h>
 #include <fju/sec.h>
 

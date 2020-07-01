@@ -80,5 +80,12 @@ int fvm_register_program( uint32_t progid );
 int fvm_unregister_program( uint32_t progid );
 void fvm_log( int lvl, char *fmt, ... );
 
+uint32_t fvm_read_uint32( struct fvm_module *m, uint32_t procid );
+int fvm_write_uint32( struct fvm_module *m, uint32_t procid, uint32_t val );
+uint64_t fvm_read_uint64( struct fvm_module *m, uint32_t procid );
+int fvm_write_uint64( struct fvm_module *m, uint32_t procid, uint64_t val );
+int fvm_read_string( struct fvm_module *m, uint32_t procid, char *str, int size );
+int fvm_write_string( struct fvm_module *m, uint32_t procid, char *str );
+
 #endif
 

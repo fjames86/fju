@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #endif
 
+#include <stdint.h>
 
 #include "fvm-private.h"
 

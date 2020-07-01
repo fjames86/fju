@@ -170,6 +170,26 @@ static int exportlabel( char *name, uint32_t symflags ) {
   return -1;
 }
 
+static FILE *opensourcefile( char *name ) {
+  FILE *f;
+  struct searchpath *sp;
+  char path[256];
+
+  f = fopen( name, "r" );
+  if( f ) return f;
+  
+  sp = glob.searchpaths;
+  while( sp ) {
+    sprintf( path, "%s/%s", sp->path, name );
+    fvmc_printf( "Trying to open \"%s\"\n", path );
+    f = fopen( path, "r" );
+    if( f ) return f;
+    sp = sp->next;
+  }
+  usage( "Failed to open file \"%s\"", name );
+  return NULL;
+}
+
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
   char outfilename[256];
@@ -221,18 +241,7 @@ int main( int argc, char **argv ) {
       continue;
     }
     
-    f = fopen( argv[i], "r" );
-    if( f == NULL ) {
-      sp = glob.searchpaths;
-      while( sp ) {
-	sprintf( buf, "%s/%s", sp->path, argv[i] );
-	fvmc_printf( "Trying to open \"%s\"\n", buf );
-	f = fopen( buf, "r" );
-	if( f ) break;
-	sp = sp->next;
-      }
-      if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
-    }
+    f = opensourcefile( argv[i] );
     
     memset( buf, 0, sizeof(buf) );
     while( fgets( buf, sizeof(buf) - 1, f ) ) {
@@ -287,18 +296,7 @@ int main( int argc, char **argv ) {
 
   i = starti;
   while( i < argc ) {
-    f = fopen( argv[i], "r" );
-    if( f == NULL ) {
-      sp = glob.searchpaths;
-      while( sp ) {
-	sprintf( buf, "%s/%s", sp->path, argv[i] );
-	fvmc_printf( "Trying to open \"%s\"\n", buf );
-	f = fopen( buf, "r" );
-	if( f ) break;
-	sp = sp->next;
-      }
-      if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
-    }
+    f = opensourcefile( argv[i] );
     
     memset( buf, 0, sizeof(buf) );
     addr = 0;
@@ -322,18 +320,7 @@ int main( int argc, char **argv ) {
   
   i = starti;
   while( i < argc ) {
-    f = fopen( argv[i], "r" );
-    if( f == NULL ) {
-      sp = glob.searchpaths;
-      while( sp ) {
-	sprintf( buf, "%s/%s", sp->path, argv[i] );
-	fvmc_printf( "Trying to open \"%s\"\n", buf );
-	f = fopen( buf, "r" );
-	if( f ) break;
-	sp = sp->next;
-      }
-      if( !f ) usage( "Failed to open file \"%s\"", argv[i] );
-    }
+    f = opensourcefile( argv[i] );
     
     memset( buf, 0, sizeof(buf) );
     addr = 0;
@@ -922,6 +909,8 @@ static void emit_header( FILE *f, uint32_t addr ) {
   }
   
 }
+
+/* ------------------------ Disassembly routine ------------------------------- */
 
 static void disassemble( char *filename ) {
   FILE *f;

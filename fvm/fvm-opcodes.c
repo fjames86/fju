@@ -469,7 +469,7 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   struct fvm_module *m;
   uint32_t rx, ry, rz;
   struct fvm_s state2;
-  char *args, *res;
+  char *args, *res, *resp;
   int argsize, ressize;
   uint32_t sp;
   
@@ -511,9 +511,7 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   state2.text = m->text;
   state2.reg[FVM_REG_PC] = addr;
   /* copy args onto stack */
-  memcpy( state2.stack, args, argsize );
-  state2.reg[FVM_REG_R0] = htonl( argsize );
-  state2.reg[FVM_REG_SP] = FVM_ADDR_STACK + argsize;
+  fvm_set_args( &state2, args, argsize );
   sts = fvm_run( &state2, default_maxsteps );
   state->nsteps = state2.nsteps;
   if( sts ) {
@@ -522,15 +520,15 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
     return 0;
   }
 
-  /* extract result data. Calling convention is R0 contains result length.  */
-  ressize = ntohl( state2.reg[FVM_REG_R0] );
+  /* extract result data. Calling convention is R0 contains result length, R1 contains address of results, typically SP - R0  */
+  ressize = fvm_get_res( &state2, &resp );
   if( ressize == -1 ) {
     fvm_printf( "callvirt return failure\n" );
     state->reg[rz] = htonl( -1 );
     return 0;
   }
 
-  memcpy( res, state2.stack, ressize );
+  memcpy( res, resp, ressize );
   state->reg[rz] = htonl( ressize );
   fvm_printf( "callvirt success\n" );
   return 0;

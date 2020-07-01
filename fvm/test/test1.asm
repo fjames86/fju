@@ -38,7 +38,7 @@ MAIN:
 	PUSH		test-success
 	CALLNAT		R6	NATIVE-PUTS
 
-	;; Clear result registers incase we were called remotely 
+	;; Set result registers
 	LDI		R0		0
 	LDI		R1		0
 	RET
@@ -123,5 +123,15 @@ TEST-FAIL:
 	HALT
 	
 
+TEST-ADDPROC:
+	;;  R0 = length R1 = pointer 
+	LD		R2		R1 ; get a number 
+	ADD		R2		1
+	ST		R1		R2 ; set results
+	;; R0 = length (unchanged) R1 = pointer (unchanged)
+	RET
+	
 	.EXPORT		MAIN
+	.EXPORT		TEST-ADDPROC
+	
 	

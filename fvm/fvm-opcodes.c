@@ -166,10 +166,14 @@ static int opcode_pushconst( struct fvm_s *state, uint32_t flags, uint32_t reg, 
 
 static int opcode_popreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* POP RX */
-  if( state->reg[FVM_REG_SP] <= FVM_ADDR_STACK ) return -1;
-  state->reg[FVM_REG_SP] -= 4;
-  state->reg[reg] = mem_read( state, state->reg[FVM_REG_SP] );
+  if( state->reg[FVM_REG_SP] >= (FVM_ADDR_STACK + 4) ) {
+    state->reg[FVM_REG_SP] -= 4;
+    state->reg[reg] = mem_read( state, state->reg[FVM_REG_SP] );
+  } else {
+    state->reg[reg] = 0;
+  }
   setflags( state, ntohl( state->reg[reg] ) );
+  
   return 0;
 }
 

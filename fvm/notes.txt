@@ -29,6 +29,8 @@ The address space is divided up as follows:
 
 There is space for up to 256 intructions, most are currently unused. So far there are: load, store, jump, push/pop, arithmetic and bitwise operators.
 
+The stack is ephemeral and discarded after the entry point routine exits. The only persistent writable memory is the data segment.
+
 # Cross module calling
 It is possible for a module to call into another module using the CALLVIRT instruction. This is implemented essentially as an RPC, with
 args and results encoded using XDR, passed on the stack.
@@ -41,4 +43,8 @@ called from another module using the CALLVIRT instruction, or as a top level ent
 When called in this way, the register R0 contains the length of argument data and R1 contains a pointer to the start of the arguments.
 The args are on the stack, so R1 = SP - R0.
 On return, R0 contains the result length and R1 contains the address of the results. Typically the results will be on the stack but need not be.
+
+Main point to note: all EXPORTed procedures must expect to receive args in R0/R1 and MUST set R0/R1 to results i.e. set to 0 if no results.
+
+
 

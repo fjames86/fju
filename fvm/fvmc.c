@@ -53,12 +53,26 @@ static void usage( char *fmt, ... ) {
  * - Second pass: emit text segment (opcodes, text data). Still need to parse directives for e.g. .includes?
  */
 
+/* -------------------- structs ----------------------- */
+
+struct label {
+  struct label *next;
+  
+  char name[64];
+  uint32_t addr;
+  uint32_t symflags;
+  uint32_t flags;
+#define LABEL_EXPORT 0x01  
+};
+
+
 /* store things here */
 static struct {
   char modulename[64];
   uint32_t progid;
   uint32_t versid;
   int verbosemode;
+  struct label *labels;
 } glob;
 
 
@@ -76,14 +90,6 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
 static void emit_header( FILE *f, uint32_t addr );
 static void disassemble( char *filename );
-
-struct label {
-  char name[64];
-  uint32_t addr;
-  uint32_t symflags;
-  uint32_t flags;
-#define LABEL_EXPORT 0x01  
-};
 
 static char *skipwhitespace( char *p ) {
   while( *p == ' ' || *p == '\t' ) p++;
@@ -110,38 +116,49 @@ static char *copytoken( char *p, char *dest ) {
   return p;
 }
 
-static int nlabels;
-static struct label labels[1024];
 static int addlabel( char *name, uint32_t addr ) {
-  int i ;
-  for( i = 0; i < nlabels; i++ ) {
-    if( strcasecmp( labels[i].name, name ) == 0 ) {
+  struct label *l;
+  l = glob.labels;
+  while( l ) {
+    if( strcasecmp( l->name, name ) == 0 ) {
       fvmc_printf( ";; duplicate label %s\n", name );
       return -1;
     }
+    l = l->next;
   }
 
   fvmc_printf( ";; adding label %s addr %x\n", name, addr );
-  strcpy( labels[nlabels].name, name );
-  labels[nlabels].addr = addr;
-  nlabels++;
+  l = malloc( sizeof(*l) );
+  memset( l, 0, sizeof(*l) );
+  strcpy( l->name, name );
+  l->addr = addr;
+  l->next = glob.labels;
+  glob.labels = l;
+    
   return 0;
 }
-static uint32_t getlabel( char *name ) {
-  int i;
-  for( i = 0; i < nlabels; i++ ) {
-    if( strcasecmp( labels[i].name, name ) == 0 ) return labels[i].addr;
+static struct label *getlabel( char *name ) {
+  struct label *l;
+  l = glob.labels;
+  while( l ) {
+    if( strcasecmp( l->name, name ) == 0 ) return l;
+    l = l->next;
   }
-  return 0;
+  return NULL;
 }
+static uint32_t getlabeladdr( char *name ) {
+  struct label *l;
+  l = getlabel( name );
+  return l ? l->addr : 0;
+}
+
 static int exportlabel( char *name, uint32_t symflags ) {
-  int i;
-  for( i = 0; i < nlabels; i++ ) {
-    if( strcasecmp( labels[i].name, name ) == 0 ) {
-      labels[i].flags |= LABEL_EXPORT;
-      labels[i].symflags = symflags;
-      return 0;
-    }
+  struct label *l;
+  l = getlabel( name );
+  if( l ) {
+    l->flags |= LABEL_EXPORT;
+    l->symflags = symflags;
+    return 0;
   }
   return -1;
 }
@@ -245,9 +262,17 @@ int main( int argc, char **argv ) {
   if( disass ) exit( 0 );
   
   fvmc_printf( "\n ------ label table ------- \n" );
-  for( j = 0; j < nlabels; j++ ) {
-    fvmc_printf( ";; Label %-4d %-16s = 0x%08x\n", j, labels[j].name, labels[j].addr );
+  {
+    struct label *l;
+    j = 0;
+    l = glob.labels;
+    while( l ) {
+      fvmc_printf( ";; Label %-4d %-16s = 0x%08x Flags %x SymFlags 0x%08x\n", j, l->name, l->addr, l->flags, l->symflags );
+      j++;
+      l = l->next;
+    }
   }
+  
   fvmc_printf( "\n ------ second pass ------- \n" );
 
   /* second pass emits output */
@@ -508,7 +533,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  if( *term ) {
 	    // not a number, try a label
 	    if( numstr[0] == '$' ) {
-	      x = getlabel( numstr + 2 );
+	      x = getlabeladdr( numstr + 2 );
 	      if( numstr[1] == '-' ) {
 		if( strcasecmp( directive, ".data" ) == 0 ) x = datasize - x;
 		else x = x - (*addr + 4);
@@ -517,7 +542,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 		else x = x + (*addr + 4);
 	      } else usage( "Unknown operator %c", numstr[1] );
 	    } else {
-	      x = getlabel( numstr );
+	      x = getlabeladdr( numstr );
 	    }
 	  }
 	  
@@ -602,7 +627,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
     if( symtype[0] ) {
       symflags &= 0xffff0000;
-      symflags |= (getlabel( symtype ) - getlabel( name )) & 0xffff;
+      symflags |= (getlabeladdr( symtype ) - getlabeladdr( name )) & 0xffff;
     }
     
     if( exportlabel( name, symflags ) ) usage( "Unknown label \"%s\"", name );
@@ -825,19 +850,13 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 	    /* bad constant, maybe a label? */
 	    if( firstpass ) j = 0;
 	    else {
-	      int b = 0, nl;
-	      j = 0;
-	      for( nl = 0; nl < nlabels; nl++ ) {
-		if( strcasecmp( labels[nl].name, arg ) == 0 ) {
-		  j = labels[nl].addr;
-		  b = 1;
-		  break;
-		}
-	      }
-	      if( !b ) {
+	      struct label *l = getlabel( arg );
+	      if( l ) {
+		j = l->addr;
+	      } else {
 		if( arg[0] == '$' ) {
-		  if( arg[1] == '-' ) j = (addr + 4 - getlabel( arg + 2 )) % 0x10000;
-		  else if( arg[1] == '+' ) j = (addr + 4 + getlabel( arg + 2 )) + 0x10000;
+		  if( arg[1] == '-' ) j = (addr + 4 - getlabeladdr( arg + 2 )) % 0x10000;
+		  else if( arg[1] == '+' ) j = (addr + 4 + getlabeladdr( arg + 2 )) + 0x10000;
 		  else usage( "Bad operator %c", arg[1] );
 		} else {
 		  fvmc_printf( "Bad constant or unknown label \"%s\"", arg );
@@ -866,11 +885,14 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 
 static void emit_header( FILE *f, uint32_t addr ) {
   struct fvm_header header;
-  int nsyms, i;
+  int nsyms;
+  struct label *l;
 
+  l = glob.labels;
   nsyms = 0;
-  for( i = 0; i < nlabels; i++ ) {
-    if( labels[i].flags & LABEL_EXPORT ) nsyms++;
+  while( l ) {
+    if( l->flags & LABEL_EXPORT ) nsyms++;
+    l = l->next;
   }
 
   if( !glob.progid ) glob.progid = 0x20000000 + (time( NULL ) % 0x20000000);
@@ -887,15 +909,17 @@ static void emit_header( FILE *f, uint32_t addr ) {
   header.versid = glob.versid;
   fwrite( &header, 1, sizeof(header), f );
 
-  for( i = 0; i < nlabels; i++ ) {
-    if( labels[i].flags & LABEL_EXPORT ) {
+  l = glob.labels;
+  while( l ) {
+    if( l->flags & LABEL_EXPORT ) {
       struct fvm_symbol symbol;
       memset( &symbol, 0, sizeof(symbol) );
-      strcpy( symbol.name, labels[i].name );
-      symbol.addr = labels[i].addr;
-      symbol.flags = labels[i].symflags;
+      strcpy( symbol.name, l->name );
+      symbol.addr = l->addr;
+      symbol.flags = l->symflags;
       fwrite( &symbol, 1, sizeof(symbol), f );
     }
+    l = l->next;
   }
   
 }

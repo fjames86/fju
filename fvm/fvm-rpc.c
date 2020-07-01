@@ -109,6 +109,8 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
       sts = xdr_decode_boolean( &inc->xdr, &b );
       if( !sts && b ) sts = xdr_decode_uint32( &inc->xdr, &u1 );
       if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+      fvm_log( LOG_LVL_INFO, "getvar uint32 %u:%u set %u", progid, procid, b ? u1 : 0 );
       
       u2 = fvm_read_uint32( m, procid );
       if( b ) fvm_write_uint32( m, procid, u1 );
@@ -126,6 +128,8 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
       if( !sts && b ) sts = xdr_decode_uint64( &inc->xdr, &u1 );
       if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
+      fvm_log( LOG_LVL_INFO, "getvar uint64 %u:%u set %"PRIu64"", progid, procid, b ? u1 : 0 );
+      
       u2 = fvm_read_uint64( m, procid );
       if( b ) fvm_write_uint64( m, procid, u1 );
       
@@ -143,11 +147,13 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
       if( !sts && b ) sts = xdr_decode_string( &inc->xdr, str1, sizeof(str1) );
       if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
+      fvm_log( LOG_LVL_INFO, "getvar string %u:%u set %s", progid, procid, b ? str1 : "" );
+      
       fvm_read_string( m, procid, str2, sizeof(str2) );
       if( b ) fvm_write_string( m, procid, str1 );
       
       rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-      xdr_encode_string( &inc->xdr, str1 );
+      xdr_encode_string( &inc->xdr, str2 );
       rpc_complete_accept_reply( inc, handle );
     }    
     break;

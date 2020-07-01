@@ -1,0 +1,44 @@
+
+# Overview
+This is a simple bytecode interpreter. fvm implements the interpreter, which can easily be added to any application. There is an assembler fvmc.
+
+# Terminology
+ - Module: applications are packaged as a module. This is a single file produced by fvmc. It contains:
+            - a fixed sized header storing metadata
+	    - a symbol table mapping names to addresses
+	    - a variable length data segment
+	    - a variable length text segment
+ - Symbol: a pair of string name and integer address. The address is a location in the virtual address space of the module, pointing either
+ into the data or text segments. 
+ - Data segment: a fixed sized buffer of initialization data. This will be loaded into the module's data segment of its virtual address space.
+ - Text segment: this is the program instructions and any data. It is loaded into the module's text segment and is READ ONLY.
+ - Program: modules may be written to implement an RPC program i.e. a set of RPC procedures. Modules written this way can be registered
+ with the rpc service to handle incoming RPC calls.
+ 
+# Instructions
+There are 8 general purpose 32 bit registers, plus hidden stack pointer (SP) and program counter (PC) registers. SP and PC cannot be directly accessed,
+but there are some instructons access them indirectly.
+
+Unusually, it represents integers in network byte order (big endian). This is to make it easy for parsing/encoding XDR structures.
+
+The address space is divided up as follows:
+ - 0x0000 - 0x0fff : reserved (currently unused)
+ - 0x1000 - 0x4fff : data segment
+ - 0x5000 - 0xbfff : text segment
+ - 0xc000 - 0xffff : stack
+
+There is space for up to 256 intructions, most are currently unused. So far there are: load, store, jump, push/pop, arithmetic and bitwise operators.
+
+# Cross module calling
+It is possible for a module to call into another module using the CALLVIRT instruction. This is implemented essentially as an RPC, with
+args and results encoded using XDR, passed on the stack.
+
+# Calling convention
+No restrictions are placed on internal subroutine calls. The CALL instruction PUSHes the current PC and then jumps, RET POPs then jumps back.
+
+Procedures which are exported i.e. have entries in the symbol table, are expected to be called as entry points. They can be called in two different ways:
+called from another module using the CALLVIRT instruction, or as a top level entry point from fvm_run().
+When called in this way, the register R0 contains the length of argument data and R1 contains a pointer to the start of the arguments.
+The args are on the stack, so R1 = SP - R0.
+On return, R0 contains the result length and R1 contains the address of the results. Typically the results will be on the stack but need not be.
+

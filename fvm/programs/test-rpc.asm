@@ -7,6 +7,8 @@
 	.MODULE		test-rpc
 	.PROGRAM	2333333		1
 
+	.INCLUDE	"native.asm"
+	
 	.TEXT		hello		"Hello, world!"
 HELLOEND:
 

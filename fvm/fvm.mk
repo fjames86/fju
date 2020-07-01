@@ -15,7 +15,7 @@ ${BINDIR}/fvm: fvm/fvm-main.c ${LIBDIR}/libfvm.a
 	${CC} -o $@ -g fvm/fvm-main.c ${CFLAGS} ${LFLAGS} 
 
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.asm
-	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm -I fvm/stdlib/ fvm/programs/test-rpc.asm native.asm
+	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm -I fvm/stdlib/ fvm/programs/test-rpc.asm 
 
 fvm/test/test1.fvm: ${BINDIR}/fvmc fvm/test/test1.asm ${BINDIR}/fvm fvm/test/test2.asm
 	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test1.fvm fvm/test/test1.asm native.asm

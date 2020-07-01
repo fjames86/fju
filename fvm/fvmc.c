@@ -137,13 +137,14 @@ static char *copytoken( char *p, char *dest ) {
 }
 
 static int addlabel( char *name, uint32_t addr ) {
-  struct label *l;
+  struct label *l, *prev = NULL;
   l = glob.labels;
   while( l ) {
     if( strcasecmp( l->name, name ) == 0 ) {
       fvmc_printf( ";; duplicate label %s\n", name );
       return -1;
     }
+    prev = l;
     l = l->next;
   }
 
@@ -152,8 +153,9 @@ static int addlabel( char *name, uint32_t addr ) {
   memset( l, 0, sizeof(*l) );
   strcpy( l->name, name );
   l->addr = addr;
-  l->next = glob.labels;
-  glob.labels = l;
+  l->next = NULL;
+  if( prev ) prev->next = l;
+  else glob.labels = l;
     
   return 0;
 }
@@ -730,6 +732,34 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
     glob.versid = strtoul( name, NULL, 0 );
     
+    return 0;
+  } else if( strcasecmp( directive, ".INCLUDE" ) == 0 ) {
+    /* include path */
+    FILE *incfile;
+    char *q;
+    
+    p = skipwhitespace( p );
+    if( *p == '\0' ) usage( "Unexpected end of line" );
+
+    if( *p != '"' ) usage( "expected .INCLUDE \"path\"" );
+    q = name;
+    memset( name, 0, sizeof(name) );
+    p++;
+    while( *p != '"' ) {
+      if( *p == '\0' ) usage( "Unexpected end of line" );
+      if( *p == '\\' ) {
+	p++;
+      }
+      *q = *p;
+      p++;
+      q++;
+    }
+
+    incfile = opensourcefile( name );
+    if( !incfile ) usage( "failed to open include file \"%s\"", name );
+    fvmc_printf( "including \"%s\"", name );
+    parse_file( incfile, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
+    fclose( incfile );
     return 0;
   } else {
     /* unknown directive */

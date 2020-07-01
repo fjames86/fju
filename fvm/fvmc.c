@@ -65,6 +65,11 @@ struct label {
 #define LABEL_EXPORT 0x01  
 };
 
+struct searchpath {
+  struct searchpath *next;
+  char *path;
+};
+
 
 /* store things here */
 static struct {
@@ -73,6 +78,8 @@ static struct {
   uint32_t versid;
   int verbosemode;
   struct label *labels;
+  int datasize;
+  struct searchpath *searchpaths;
 } glob;
 
 
@@ -163,14 +170,6 @@ static int exportlabel( char *name, uint32_t symflags ) {
   return -1;
 }
 
-static int datasize;
-
-struct searchpath {
-  struct searchpath *next;
-  char *path;
-};
-static struct searchpath *searchpaths;
-
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
   char outfilename[256];
@@ -199,8 +198,8 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       sp = malloc( sizeof(*sp) );
       sp->path = argv[i];
-      sp->next = searchpaths;
-      searchpaths = sp;
+      sp->next = glob.searchpaths;
+      glob.searchpaths = sp;
     } else if( strcmp( argv[i], "-h" ) == 0 ) {
       usage( NULL );
     } else if( strcmp( argv[i], "--help" ) == 0 ) {
@@ -224,7 +223,7 @@ int main( int argc, char **argv ) {
     
     f = fopen( argv[i], "r" );
     if( f == NULL ) {
-      sp = searchpaths;
+      sp = glob.searchpaths;
       while( sp ) {
 	sprintf( buf, "%s/%s", sp->path, argv[i] );
 	fvmc_printf( "Trying to open \"%s\"\n", buf );
@@ -290,7 +289,7 @@ int main( int argc, char **argv ) {
   while( i < argc ) {
     f = fopen( argv[i], "r" );
     if( f == NULL ) {
-      sp = searchpaths;
+      sp = glob.searchpaths;
       while( sp ) {
 	sprintf( buf, "%s/%s", sp->path, argv[i] );
 	fvmc_printf( "Trying to open \"%s\"\n", buf );
@@ -325,7 +324,7 @@ int main( int argc, char **argv ) {
   while( i < argc ) {
     f = fopen( argv[i], "r" );
     if( f == NULL ) {
-      sp = searchpaths;
+      sp = glob.searchpaths;
       while( sp ) {
 	sprintf( buf, "%s/%s", sp->path, argv[i] );
 	fvmc_printf( "Trying to open \"%s\"\n", buf );
@@ -391,7 +390,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     memset( name, 0, sizeof(name) );
     p = copytoken( p, name );
     
-    if( f == NULL ) addlabel( name, strcasecmp( directive, ".data" ) == 0 ? FVM_ADDR_DATA + datasize : FVM_ADDR_TEXT + *addr );
+    if( f == NULL ) addlabel( name, strcasecmp( directive, ".data" ) == 0 ? FVM_ADDR_DATA + glob.datasize : FVM_ADDR_TEXT + *addr );
 
     while( 1 ) {
       /* data can be either a space separated list of numbers or a string */
@@ -535,10 +534,10 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	    if( numstr[0] == '$' ) {
 	      x = getlabeladdr( numstr + 2 );
 	      if( numstr[1] == '-' ) {
-		if( strcasecmp( directive, ".data" ) == 0 ) x = datasize - x;
+		if( strcasecmp( directive, ".data" ) == 0 ) x = glob.datasize - x;
 		else x = x - (*addr + 4);
 	      } else if( numstr[1] == '+' ) {
-		if( strcasecmp( directive, ".data" ) == 0 ) x = datasize + x;
+		if( strcasecmp( directive, ".data" ) == 0 ) x = glob.datasize + x;
 		else x = x + (*addr + 4);
 	      } else usage( "Unknown operator %c", numstr[1] );
 	    } else {
@@ -570,7 +569,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	}
 	
 	if( strcasecmp( directive, ".data" ) == 0 ) {
-	  datasize += size;
+	  glob.datasize += size;
 	} else {
 	  *addr = *addr + size;
 	}
@@ -901,7 +900,7 @@ static void emit_header( FILE *f, uint32_t addr ) {
   memset( &header, 0, sizeof(header) );
   header.magic = FVM_MAGIC;
   header.version = FVM_VERSION;
-  header.datasize = datasize;
+  header.datasize = glob.datasize;
   header.textsize = addr;
   header.symcount = nsyms;
   strcpy( header.name, glob.modulename );

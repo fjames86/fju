@@ -70,6 +70,18 @@ struct searchpath {
   char *path;
 };
 
+#if 0 
+struct dataentry {
+  struct dataentry *next;
+
+  uint32_t type;
+#define DATAENTRY_UINT32 0
+#define DATAENTRY_STRING 1
+#define DATAENTRY_LABEL  2
+  uint32_t size;
+  char *data;
+};
+#endif
 
 /* store things here */
 static struct {
@@ -80,6 +92,7 @@ static struct {
   struct label *labels;
   int datasize;
   struct searchpath *searchpaths;
+  //  struct dataentry *dataentries;
 } glob;
 
 
@@ -190,13 +203,91 @@ static FILE *opensourcefile( char *name ) {
   return NULL;
 }
 
+#if 0
+static void add_dataentry( uint32_t size, uint32_t type, char *data ) {
+  struct dataentry *d;
+  d = malloc( sizeof(*d) + size );
+  memset( d, 0, sizeof(*d) + size );
+  d->size = size;
+  d->type = type;
+  d->data = (char *)d + sizeof(*d);
+  memcpy( d->data, data, size );
+  d->next = glob.dataentries;
+  glob.dataentries = d;
+}
+static void add_dataentry_uint32( uint32_t val ) {
+  add_dataentry( 4, DATAENTRY_UINT32, (char *)&val );
+}
+static void add_dataentry_string( char *str ) {
+  uint32_t len, size;
+  char *data;
+  
+  len = strlen( str );
+  size = 4 + len;
+  if( size % 4 ) size += 4 - (size % 4);
+  
+  data = malloc( size );
+  memset( data, 0, size );
+  memcpy( data, &size, 4 );
+  memcpy( data + 4, str, len );
+  add_dataentry( size, DATAENTRY_STRING, data );
+  free( data );
+}
+static void add_dataentry_label( char *str ) {
+  uint32_t len;
+  char *data;
+  
+  len = strlen( str );
+  
+  data = malloc( len + 1 );
+  memset( data, 0, len + 1 );
+  memcpy( data, str, len );
+  add_dataentry( len + 1, DATAENTRY_LABEL, data );
+  free( data );
+}
+#endif
+
+static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
+  char buf[256];
+  char *p;
+  uint32_t opcode;
+  
+  memset( buf, 0, sizeof(buf) );
+  while( fgets( buf, sizeof(buf) - 1, f ) ) {
+    p = buf;
+    while( *p != '\0' ) {
+      if( *p == '\n' ) *p = '\0';
+      p++;
+    }
+    
+    p = buf;
+    p = skipwhitespace( p );
+    if( *p == '\0' ) continue;
+    
+    if( parse_directive( buf, addr, passid == 0 ? NULL : outfile, passid == 1 ? 1 : 0 ) == 0 ) continue;
+
+    if( passid != 1 ) {
+      fvmc_printf( ";; attempting to encode line \"%s\"\n", buf );
+      if( encode_inst( buf, &opcode, FVM_ADDR_TEXT + *addr, passid == 0 ? 1 : 0 ) != -1 ) {
+	if( passid == 2 ) {
+	  fvmc_printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
+	  opcode = htonl( opcode );
+	  fwrite( &opcode, 1, 4, outfile );
+	} else {
+	  *addr += 4;
+	}
+      }
+    }
+    
+  }
+  
+}
+
+
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
   char outfilename[256];
-  char buf[256];
-  uint32_t opcode;
   int i, j, starti;
-  char *p;
   uint32_t addr;
   int disass = 0;
   struct searchpath *sp;
@@ -242,27 +333,7 @@ int main( int argc, char **argv ) {
     }
     
     f = opensourcefile( argv[i] );
-    
-    memset( buf, 0, sizeof(buf) );
-    while( fgets( buf, sizeof(buf) - 1, f ) ) {
-      p = buf;
-      while( *p != '\0' ) {
-	if( *p == '\n' ) *p = '\0';
-	p++;
-      }
-
-      p = buf;
-      p = skipwhitespace( p );
-      if( *p == '\0' ) continue;
-
-      if( parse_directive( buf, &addr, NULL, 0 ) == 0 ) continue;
-      
-      fvmc_printf( ";; attempting to encode line \"%s\"\n", buf );
-      if( encode_inst( buf, &opcode, FVM_ADDR_TEXT + addr, 1 ) != -1 ) {
-	addr += 4;
-      }
-    }
-    
+    parse_file( f, &addr, 0, NULL );    
     fclose( f );
     i++;
   }
@@ -297,23 +368,7 @@ int main( int argc, char **argv ) {
   i = starti;
   while( i < argc ) {
     f = opensourcefile( argv[i] );
-    
-    memset( buf, 0, sizeof(buf) );
-    addr = 0;
-    while( fgets( buf, sizeof(buf) - 1, f ) ) {
-      p = buf;
-      while( *p != '\0' ) {
-	if( *p == '\n' ) *p = '\0';
-	p++;
-      }
-      
-      p = buf;
-      p = skipwhitespace( p );
-      if( *p == '\0' ) continue;
-      
-      if( parse_directive( buf, &addr, outfile, 1 ) == 0 ) continue;
-    }
-    
+    parse_file( f, &addr, 1, outfile );
     fclose( f );
     i++;
   }
@@ -321,30 +376,7 @@ int main( int argc, char **argv ) {
   i = starti;
   while( i < argc ) {
     f = opensourcefile( argv[i] );
-    
-    memset( buf, 0, sizeof(buf) );
-    addr = 0;
-    while( fgets( buf, sizeof(buf) - 1, f ) ) {
-      p = buf;
-      while( *p != '\0' ) {
-	if( *p == '\n' ) *p = '\0';
-	p++;
-      }
-      
-      p = buf;
-      p = skipwhitespace( p );
-      if( *p == '\0' ) continue;
-      
-      if( parse_directive( buf, &addr, outfile, 0 ) == 0 ) continue;
-
-      fvmc_printf( ";; attempting to encode line \"%s\"\n", buf );
-      if( encode_inst( buf, &opcode, 0, 0 ) != -1 ) {
-	fvmc_printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
-	opcode = htonl( opcode );
-	fwrite( &opcode, 1, 4, outfile );
-      }
-    }
-    
+    parse_file( f, &addr, 2, outfile );
     fclose( f );
     i++;
   }
@@ -353,6 +385,56 @@ int main( int argc, char **argv ) {
     
   return 0;
 }
+
+/* -------------------- directives ---------------------- */
+
+#if 0
+static int parse_directive_data( char *buf, int firstpass ) {
+  char *p, *q;
+  char str[256], str2[256];
+  uint32_t u32;
+    
+  p = skipwhitespace( buf );
+  while( *p ) {
+    if( *p == '"' ) {
+      /* string */
+      memset( str, 0, sizeof(str) );
+      q = str;
+      while( *p != '"' ) {
+	if( *p == '\0' ) usage( "Unexpected end of line" );
+	
+	if( *p == '\\' ) {
+	  p++;
+	  if( *p == '\0' ) usage( "Unexpected end of line" );
+	  
+	  if( *p == '"' ) {
+	    *q = *p;
+	    p++;
+	    q++;
+	  }
+	}
+	*q = *p;
+	q++;
+	p++;
+      }
+
+      sprintf( str2, str );
+      add_dataentry_string( str2 );
+    } else {
+      /* integer */
+      p = copytoken( p, str );
+      u32 = strtoul( str, &q, 0 );
+      if( *q ) {
+	add_dataentry_label( str );
+      } else {
+	add_dataentry_uint32( u32 );
+      }      
+    }
+  }
+
+  return 0;
+}
+#endif
 
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment ) {
   char *p;

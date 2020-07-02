@@ -67,6 +67,12 @@ static uint32_t sign_extend( uint32_t x ) {
   return x;
 }
 
+static uint32_t limitaddr( uint32_t addr, uint32_t start, uint32_t count ) {
+  if( addr < start ) return start;
+  if( addr >= (start + count) ) return start + count;
+  return addr;
+}
+
 static void setflags( struct fvm_s *state, uint32_t val ) {
   int32_t i32 = (int32_t)val;
   state->reg[FVM_REG_FLAGS] = 0;
@@ -136,20 +142,23 @@ static int opcode_lea( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32
 
 void fvm_push( struct fvm_s *state, uint32_t val ) {
   /* PUSH RX */
-  if( state->reg[FVM_REG_SP] >= (FVM_ADDR_STACK + FVM_MAX_STACK) ) return;
+  if( state->reg[FVM_REG_SP] >= (FVM_ADDR_STACK + FVM_MAX_STACK - 4) ) return;
   mem_write( state, state->reg[FVM_REG_SP], val );
   state->reg[FVM_REG_SP] += 4;  
 }
 
 uint32_t fvm_pop( struct fvm_s *state ) {
-  if( state->reg[FVM_REG_SP] <= FVM_ADDR_STACK ) return -1;
+  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK + 4 ) {
+    fvm_printf( "fvm_pop bad SP %x\n", state->reg[FVM_REG_SP] );						  
+    return -1;
+  }
   state->reg[FVM_REG_SP] -= 4;
   return mem_read( state, state->reg[FVM_REG_SP] );  
 }
 
 static int opcode_pushreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* PUSH RX */
-  if( state->reg[FVM_REG_SP] >= (FVM_ADDR_STACK + FVM_MAX_STACK) ) return -1;
+  if( state->reg[FVM_REG_SP] >= (FVM_ADDR_STACK + FVM_MAX_STACK - 4) ) return -1;
   
   mem_write( state, state->reg[FVM_REG_SP], state->reg[reg] );
   state->reg[FVM_REG_SP] += 4;
@@ -158,7 +167,7 @@ static int opcode_pushreg( struct fvm_s *state, uint32_t flags, uint32_t reg, ui
 
 static int opcode_pushconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* PUSH const */
-  if( state->reg[FVM_REG_SP] >= (FVM_ADDR_STACK + FVM_MAX_STACK) ) return -1;
+  if( state->reg[FVM_REG_SP] >= (FVM_ADDR_STACK + FVM_MAX_STACK - 4) ) return -1;
   
   mem_write( state, state->reg[FVM_REG_SP], htonl(sign_extend( data )) );
   state->reg[FVM_REG_SP] += 4;
@@ -180,116 +189,111 @@ static int opcode_popreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uin
 
 static int opcode_ret( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* RET */
-  if( state->reg[FVM_REG_SP] >= (FVM_ADDR_STACK + 4) ) {
-    state->reg[FVM_REG_SP] -= 4;
-    state->reg[FVM_REG_PC] = ntohl(mem_read( state, state->reg[FVM_REG_SP] ));
-  }
+  uint32_t addr = ntohl( fvm_pop( state ) );
+  state->reg[FVM_REG_PC] = limitaddr( addr, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   state->frame--;
   return 0;
 }
 
 static int opcode_callreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  mem_write( state, state->reg[FVM_REG_SP], htonl(state->reg[FVM_REG_PC]) );
-  state->reg[FVM_REG_SP] += 4;
-  state->reg[FVM_REG_PC] = ntohl(state->reg[reg]);
+  fvm_push( state, htonl( state->reg[FVM_REG_PC] ) );
+  state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
   state->frame++;
   return 0;
 }
 
 static int opcode_callconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  mem_write( state, state->reg[FVM_REG_SP], htonl(state->reg[FVM_REG_PC]) );
-  state->reg[FVM_REG_SP] += 4;
-  state->reg[FVM_REG_PC] = data & 0xffff;
+  fvm_push( state, htonl( state->reg[FVM_REG_PC] ) );
+  state->reg[FVM_REG_PC] = limitaddr( data & 0xffff, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   state->frame++;
   return 0;  
 }
 
-
 static int opcode_jmpreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  state->reg[FVM_REG_PC] = ntohl(state->reg[reg]);
+  state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
   return 0;
 }
 static int opcode_jmpconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  state->reg[FVM_REG_PC] = data;
+  state->reg[FVM_REG_PC] = limitaddr( data, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   return 0;
 }
 
 
 static int opcode_jzreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & FVM_FLAG_ZERO ) {
-    state->reg[FVM_REG_PC] = ntohl(state->reg[reg]);
+    state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }  
   return 0;
 }
 static int opcode_jzconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & FVM_FLAG_ZERO ) {
-    state->reg[FVM_REG_PC] = data;
+    state->reg[FVM_REG_PC] = limitaddr( data, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }    
   return 0;
 }
 
 static int opcode_jpreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & FVM_FLAG_POS ) {
-    state->reg[FVM_REG_PC] = ntohl(state->reg[reg]);
+    state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }  
   return 0;
 }
 static int opcode_jpconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & FVM_FLAG_POS ) {
-    state->reg[FVM_REG_PC] = data;
+    state->reg[FVM_REG_PC] = limitaddr( data, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }    
   return 0;
 }
 
 static int opcode_jnreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & FVM_FLAG_NEG ) {
-    state->reg[FVM_REG_PC] = ntohl(state->reg[reg]);
+    state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }  
   return 0;
 }
 
 static int opcode_jnconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & FVM_FLAG_NEG ) {
-    state->reg[FVM_REG_PC] = data;
+    state->reg[FVM_REG_PC] = limitaddr( data, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }    
   return 0;
 }
 
 static int opcode_jpzreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & (FVM_FLAG_POS|FVM_FLAG_ZERO) ) {
-    state->reg[FVM_REG_PC] = ntohl(state->reg[reg]);
+    state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }  
   return 0;
 }
 static int opcode_jpzconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & (FVM_FLAG_POS|FVM_FLAG_ZERO) ) {
-    state->reg[FVM_REG_PC] = data;
+    state->reg[FVM_REG_PC] = limitaddr( data, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }    
   return 0;
 }
 
 static int opcode_jpnreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & (FVM_FLAG_POS|FVM_FLAG_NEG) ) {
-    state->reg[FVM_REG_PC] = ntohl(state->reg[reg]);
+    state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }  
   return 0;
 }
 static int opcode_jpnconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & (FVM_FLAG_POS|FVM_FLAG_NEG) ) {
-    state->reg[FVM_REG_PC] = data;
+    state->reg[FVM_REG_PC] = limitaddr( data, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }    
   return 0;
 }
 
 static int opcode_jnzreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & (FVM_FLAG_NEG|FVM_FLAG_ZERO) ) {
-    state->reg[FVM_REG_PC] = ntohl(state->reg[reg]);
+    state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }  
   return 0;
 }
 static int opcode_jnzconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   if( state->reg[FVM_REG_FLAGS] & (FVM_FLAG_NEG|FVM_FLAG_ZERO) ) {
-    state->reg[FVM_REG_PC] = data;
+    state->reg[FVM_REG_PC] = limitaddr( data, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }    
   return 0;
 }
@@ -541,37 +545,40 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
 
 static int opcode_ldvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   uint32_t rx, ry, rz;
-  struct fvm_s state2;
-  int sts;
+  struct fvm_module *m;
   
   rx = reg;
   ry = data & 0x7;
   rz = (data >> 4) & 0x7;
 
-  sts = fvm_state_init( &state2, ntohl( state->reg[rx] ), ntohl( state->reg[ry] ) );
-  if( sts ) {
-    fvm_printf( "ldvirt failed to init\n" );
+  m = fvm_module_by_progid( ntohl( state->reg[rx] ) );
+  if( !m ) {
+    fvm_printf( "ldvirt failed to get module\n" );
+    state->reg[rz] = -1;
+    return 0;
   }
   
-  state->reg[rz] = fvm_read( &state2, state2.reg[FVM_REG_PC] );
+  state->reg[rz] = htonl( fvm_read_uint32( m, ntohl( state->reg[ry] ) ) );
   return 0;
 }
 
 static int opcode_stvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   uint32_t rx, ry, rz;
-  struct fvm_s state2;
-  int sts;
+  struct fvm_module *m;
   
   rx = reg;
   ry = data & 0x7;
   rz = (data >> 4) & 0x7;
 
-  sts = fvm_state_init( &state2, ntohl( state->reg[rx] ), ntohl( state->reg[ry] ) );
-  if( sts ) {
-    fvm_printf( "ldvirt failed to init\n" );
+  m = fvm_module_by_progid( ntohl( state->reg[rx] ) );
+  if( !m ) {
+    fvm_printf( "stvirt failed to get module\n" );
+    state->reg[rz] = -1;
+    return 0;
   }
 
-  fvm_write( &state2, state2.reg[FVM_REG_PC], state->reg[rz] );
+  fvm_write_uint32( m, ntohl( state->reg[ry] ), ntohl( state->reg[rz] ) );
+  state->reg[rz] = 0;
   return 0;
 }
 
@@ -590,12 +597,14 @@ static int opcode_leaspreg( struct fvm_s *state, uint32_t flags, uint32_t reg, u
 static int opcode_addspreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ADDSP RX */
   state->reg[FVM_REG_SP] += ntohl( state->reg[reg] );
+  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK;  
   return 0;
 }
 
 static int opcode_addspconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ADDSP const */
   state->reg[FVM_REG_SP] += sign_extend( data );
+  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK;  
   return 0;
 }
 
@@ -627,7 +636,6 @@ static int opcode_ldincreg( struct fvm_s *state, uint32_t flags, uint32_t reg, u
 }
 
 static int opcode_stincreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-
   /* STINC RX RY */
   mem_write( state, ntohl( state->reg[reg] ), state->reg[data & 0x7] );
   setflags( state, ntohl( state->reg[data & 0x7] ) );
@@ -653,12 +661,14 @@ static int opcode_ldspconst( struct fvm_s *state, uint32_t flags, uint32_t reg, 
 static int opcode_subspreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* SUBSP RX */
   state->reg[FVM_REG_SP] -= ntohl( state->reg[reg] );
+  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK;
   return 0;
 }
 
 static int opcode_subspconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* SUBSP const */
   state->reg[FVM_REG_SP] -= sign_extend( data );
+  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK;   
   return 0;
 }
 
@@ -775,7 +785,10 @@ int fvm_step( struct fvm_s *state ) {
   int sts;
   
   pc = state->reg[FVM_REG_PC];
-  if( !(pc >= FVM_ADDR_TEXT && pc < (FVM_ADDR_TEXT + FVM_MAX_TEXT)) ) return -1;
+  if( pc < FVM_ADDR_TEXT || (pc >= (FVM_ADDR_TEXT + state->textsize)) ) {
+    printf( "xx bad pc %x\n", pc );
+    return -1;
+  }
   
   opcode = ntohl(mem_read( state, state->reg[FVM_REG_PC] ));
   def = &opcodes[(opcode >> 24) & 0xff];
@@ -803,6 +816,7 @@ int fvm_step( struct fvm_s *state ) {
   state->reg[FVM_REG_PC] += 4;  
   sts = def->fn( state, (opcode & 0x000f0000) >> 16, (opcode & 0x00700000) >> 20, opcode & 0x0000ffff );
   state->nsteps++;
+  if( sts ) fvm_printf( "opcode returned error status %d\n", sts );
   return sts;	      
 }
 

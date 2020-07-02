@@ -68,7 +68,10 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
 
   while( (nsteps == -1 || state->nsteps < nsteps) && state->frame >= 0 ) {
     sts = fvm_step( state );
-    if( sts ) break;
+    if( sts ) {
+      printf( "xxx fvm_step returned error status\n" );
+      break;
+    }
   }
 
   if( sts ) return sts;
@@ -140,11 +143,7 @@ int fvm_write_uint32( struct fvm_module *m, uint32_t procid, uint32_t val ) {
   addr = m->symbols[procid].addr;
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 4) ) {
     val = htonl( val );
-    memcpy( &m->data[addr - FVM_ADDR_TEXT], &val, 4 );
-    return 0;
-  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - 4) ) {
-    val = htonl( val );    
-    memcpy( &m->text[addr - FVM_ADDR_TEXT], &val, 4 );
+    memcpy( &m->data[addr - FVM_ADDR_DATA], &val, 4 );
     return 0;
   }
 
@@ -183,10 +182,6 @@ int fvm_write_uint64( struct fvm_module *m, uint32_t procid, uint64_t val ) {
   addr = m->symbols[procid].addr;
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 8) ) {
     xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], 8 );
-    xdr_encode_uint64( &xdr, val );
-    return 0;
-  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - 8) ) {
-    xdr_init( &xdr, &m->text[addr - FVM_ADDR_TEXT], 8 );
     xdr_encode_uint64( &xdr, val );
     return 0;
   }
@@ -242,10 +237,6 @@ int fvm_write_string( struct fvm_module *m, uint32_t procid, char *str ) {
   addr = m->symbols[procid].addr;  
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - xsize) ) {
     xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], xsize );
-    xdr_encode_string( &xdr, str );
-    return 0;
-  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - xsize) ) {
-    xdr_init( &xdr, &m->text[addr - FVM_ADDR_TEXT], xsize );
     xdr_encode_string( &xdr, str );
     return 0;
   }

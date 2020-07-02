@@ -72,7 +72,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   procid = inc->msg.u.call.proc;
   if( procid >= m->header.symcount ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
-  fvm_log( LOG_LVL_INFO, "fvm_rpc_log progid=%u procid=%u", progid, procid );
+  fvm_log( LOG_LVL_INFO, "fvm_rpc_proc progid=%u procid=%u", progid, procid );
 
   type = m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK;
   switch( type ) {
@@ -83,11 +83,14 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
     
     /* copy args onto fvm stack and set r0 to length */
     arglength = inc->xdr.count - inc->xdr.offset;
-    fvm_log( LOG_LVL_INFO, "fvm_rpc_log offet=%u count=%u arglength = %u", inc->xdr.offset, inc->xdr.count, arglength );
+    fvm_log( LOG_LVL_INFO, "fvm_rpc_proc run offset=%u count=%u arglength=%u", inc->xdr.offset, inc->xdr.count, arglength );
     
     fvm_set_args( &state, (char *)(inc->xdr.buf + inc->xdr.offset), arglength );
     sts = fvm_run( &state, fvm_max_steps( 0 ) );
-    if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "fvm_rpc_proc fvm_run failed" );
+      return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+    }
     
     fvm_log( LOG_LVL_INFO, "success reply length %d", ntohl( state.reg[FVM_REG_R0] ) );
     rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );

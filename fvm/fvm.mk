@@ -1,6 +1,6 @@
 
 
-fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm
+fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm #fvm/test/test1.fvm
 
 ${LIBDIR}/libfvm.a: fvm/fvm-module.c fvm/fvm-state.c fvm/fvm-opcodes.c include/fju/fvm.h fvm/fvm-native.c fvm/fvm-private.h fvm/fvm-rpc.c 
 	${CC} -c -g fvm/fvm-module.c fvm/fvm-state.c fvm/fvm-opcodes.c fvm/fvm-native.c fvm/fvm-rpc.c ${CFLAGS} 

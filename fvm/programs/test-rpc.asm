@@ -9,9 +9,6 @@
 
 	.INCLUDE	"native.asm"
 	
-	.TEXT		hello		"Hello, world!"
-HELLOEND:
-
 PROC-NULL:
 	PUSH		hello
 	CALLNAT		R2 		NATIVE-LOGSTR
@@ -46,13 +43,16 @@ PROC-COUNTER:
 	LDI		R0		4
 	RET
 
+	.DATA		hello		"Hello, world!"
+HELLOEND:
+
+
 ;;; ------- Export table ----------------------------------------------------
 		
-;;	.EXPORT		hello		STRING
 	.EXPORT		PROC-NULL	PROC
 	.EXPORT		PROC-HELLO	PROC
 	.EXPORT		PROC-ECHO	PROC
 	.EXPORT		PROC-COUNTER	PROC
-	
+	.EXPORT		hello		STRING	
 	
 	

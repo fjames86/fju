@@ -61,7 +61,8 @@ struct label {
   uint32_t addr;
   uint32_t symflags;
   uint32_t flags;
-#define LABEL_EXPORT 0x01  
+#define LABEL_EXPORT 0x01
+  uint32_t exportidx;
 };
 
 struct searchpath {
@@ -78,6 +79,7 @@ static struct {
   struct label *labels;
   int datasize;
   struct searchpath *searchpaths;
+  int exportidx;
 } glob;
 
 
@@ -163,8 +165,13 @@ static int exportlabel( char *name, uint32_t symflags ) {
   struct label *l;
   l = getlabel( name );
   if( l ) {
+    if( !(l->flags & LABEL_EXPORT) ) {
+      l->exportidx = glob.exportidx;
+      glob.exportidx++;
+    }
+    
     l->flags |= LABEL_EXPORT;
-    l->symflags = symflags;
+    l->symflags |= symflags;
     return 0;
   }
   return -1;
@@ -332,6 +339,67 @@ int main( int argc, char **argv ) {
 
 /* -------------------- directives ---------------------- */
 
+static char *parse_escaped_string( char *qq, FILE *f ) {
+  char c;
+  
+  while( *qq != '"' && *qq != '\0' ) {
+    if( *qq == '\\' ) {
+      qq++;
+      c = *qq;
+      switch( c ) {
+      case '0':
+	c = '\0'; break;
+      case 'a':
+	c = '\a'; break;
+      case 'b':
+	c = '\b'; break;
+      case 'f':
+	c = '\f'; break;
+      case 'n':
+	c = '\n'; break;
+      case 'r':
+	c = '\r'; break;
+      case 't':
+	c = '\t'; break;
+      case 'v':
+	c = '\v'; break;
+      case 'o':
+	// octal
+	qq++;
+	c = (*qq - '0');
+	qq++;
+	c <<= 3; 
+	c |= (*qq - '0');
+	qq++;
+	c <<= 3;
+	c |= (*qq - '0');
+	break;
+      case 'x':
+	// hex
+	qq++;
+	c = 0;
+	if( *qq >= 'a' && *qq <= 'f' ) c = 10 + *qq - 'a';
+	else if ( *qq >= 'A' && *qq <= 'F' ) c = 10 + *qq - 'A';
+	else if ( *qq >= '0' && *qq <= '9' ) c = *qq - '0';
+	qq++;
+	c <<= 4;
+	if( *qq >= 'a' && *qq <= 'f' ) c |= 10 + *qq - 'a';
+	else if ( *qq >= 'A' && *qq <= 'F' ) c |= 10 + *qq - 'A';
+	else if ( *qq >= '0' && *qq <= '9' ) c |= *qq - '0';		  
+	break;
+      }
+      //fvmc_printf( "writing char %c\n", c );
+      fwrite( &c, 1, 1, f );
+    } else {
+      //fvmc_printf( "writing char %c\n", *qq );
+      fwrite( qq, 1, 1, f );
+    }
+    qq++;
+  }
+
+  return qq;
+}
+
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment ) {
   char *p;
   char directive[64], name[64];
@@ -386,69 +454,12 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  uint32_t s = size - 4;
 	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
 	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
-	    char *qq;
 	    
 	    s = htonl( s );
 	    //fvmc_printf( ";; writing string length %u\n", size - 4 );
 	    fwrite( &s, 1, 4, f );
 
-	    qq = startp;
-	    while( *qq != '"' && *qq != '\0' ) {
-	      if( *qq == '\\' ) {
-		char c;
-		qq++;
-		c = *qq;
-		switch( c ) {
-		case '0':
-		  c = '\0'; break;
-		case 'a':
-		  c = '\a'; break;
-		case 'b':
-		  c = '\b'; break;
-		case 'f':
-		  c = '\f'; break;
-		case 'n':
-		  c = '\n'; break;
-		case 'r':
-		  c = '\r'; break;
-		case 't':
-		  c = '\t'; break;
-		case 'v':
-		  c = '\v'; break;
-		case 'o':
-		  // octal
-		  qq++;
-		  c = (*qq - '0');
-		  qq++;
-		  c <<= 3; 
-		  c |= (*qq - '0');
-		  qq++;
-		  c <<= 3;
-		  c |= (*qq - '0');
-		  break;
-		case 'x':
-		  // hex
-		  qq++;
-		  c = 0;
-		  if( *qq >= 'a' && *qq <= 'f' ) c = 10 + *qq - 'a';
-		  else if ( *qq >= 'A' && *qq <= 'F' ) c = 10 + *qq - 'A';
-		  else if ( *qq >= '0' && *qq <= '9' ) c = *qq - '0';
-		  qq++;
-		  c <<= 4;
-		  if( *qq >= 'a' && *qq <= 'f' ) c |= 10 + *qq - 'a';
-		  else if ( *qq >= 'A' && *qq <= 'F' ) c |= 10 + *qq - 'A';
-		  else if ( *qq >= '0' && *qq <= '9' ) c |= *qq - '0';		  
-		  break;
-		}
-		//fvmc_printf( "writing char %c\n", c );
-		fwrite( &c, 1, 1, f );
-	      } else {
-		//fvmc_printf( "writing char %c\n", *qq );
-		fwrite( qq, 1, 1, f );
-	      }
-	      qq++;
-	    }
-	      
+	    parse_escaped_string( startp, f );
 	    if( size % 4 ) {	      
 	      uint8_t tmp[4];
 	      //fvmc_printf( "adding string padding strlen=%u padding=%u\n", size, 4 - (size % 4) );
@@ -463,7 +474,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  //fvmc_printf( "size %u not multiple of 4, adding padding\n", size );
 	  size += 4 - (size % 4);
 	}
-	
+
       } else {
 	/* integer or label always 4 bytes */
 	char numstr[64];
@@ -538,6 +549,12 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	} else {
 	  *addr = *addr + size;
 	}
+
+	{
+	  struct label *l = getlabel( name );
+	  l->symflags |= size;
+	}
+				      
       }
     }
     return 0;
@@ -877,7 +894,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 
 static void emit_header( FILE *f, uint32_t addr ) {
   struct fvm_header header;
-  int nsyms;
+  int nsyms, idx;
   struct label *l;
 
   l = glob.labels;
@@ -886,7 +903,8 @@ static void emit_header( FILE *f, uint32_t addr ) {
     if( l->flags & LABEL_EXPORT ) nsyms++;
     l = l->next;
   }
-
+  if( nsyms != glob.exportidx ) usage( "bad export number?" );
+  
   if( !glob.progid ) glob.progid = 0x20000000 + (time( NULL ) % 0x20000000);
   if( !glob.modulename[0] ) sprintf( glob.modulename, "%08x", glob.progid );
   
@@ -901,17 +919,21 @@ static void emit_header( FILE *f, uint32_t addr ) {
   header.versid = glob.versid;
   fwrite( &header, 1, sizeof(header), f );
 
-  l = glob.labels;
-  while( l ) {
-    if( l->flags & LABEL_EXPORT ) {
-      struct fvm_symbol symbol;
-      memset( &symbol, 0, sizeof(symbol) );
-      strcpy( symbol.name, l->name );
-      symbol.addr = l->addr;
-      symbol.flags = l->symflags;
-      fwrite( &symbol, 1, sizeof(symbol), f );
+  for( idx = 0; idx < glob.exportidx; idx++ ) {
+    l = glob.labels;
+    while( l ) {
+      if( (l->flags & LABEL_EXPORT) && (l->exportidx == idx) ) {
+	struct fvm_symbol symbol;
+	memset( &symbol, 0, sizeof(symbol) );
+	strcpy( symbol.name, l->name );
+	symbol.addr = l->addr;
+	symbol.flags = l->symflags;
+	fwrite( &symbol, 1, sizeof(symbol), f );
+	break;
+      }
+      l = l->next;
     }
-    l = l->next;
+    if( !l ) usage( "failed to find exported symbol index %u", idx );
   }
   
 }

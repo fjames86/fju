@@ -8,6 +8,8 @@
 	.PROGRAM	2333333		1
 
 	.INCLUDE	"native.asm"
+
+	.DATA		hello		"Hello, world!"
 	
 PROC-NULL:
 	PUSH		hello
@@ -39,8 +41,7 @@ PROC-COUNTER:
 	LDI		R0		4
 	RET
 
-	.DATA		hello		"Hello, world!"
-HELLOEND:
+
 
 
 ;;; ------- Export table ----------------------------------------------------

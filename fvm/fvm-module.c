@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <fju/mmf.h>
 #include <fju/sec.h>
+#include <fju/rpc.h>
+#include <fju/log.h>
 
 #include "fvm-private.h"
 
@@ -24,11 +26,14 @@ int fvm_module_load_file( char *filename, uint32_t *progid ) {
   if( progid ) *progid = 0;
   
   sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
-  if( sts ) return sts;
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "Failed to open file %s", rpc_strerror( rpc_errno() ) );    
+    return sts;
+  }
 
   memset( &header, 0, sizeof(header) );
   sts = mmf_read( &mmf, (char *)&header, sizeof(header), 0 );
-  if( sts != sizeof(header) ) {
+  if( sts != sizeof(header) ) {    
     sts = -1;
     goto done;
   }

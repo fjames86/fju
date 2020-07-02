@@ -47,4 +47,15 @@ On return, R0 contains the result length and R1 contains the address of the resu
 Main point to note: all EXPORTed procedures must expect to receive args in R0/R1 and MUST set R0/R1 to results i.e. set to 0 if no results.
 
 
+# Atypical design
+ - Big endian: this is to make it easier to serialize xdr structures
+ - Stack grows upwards. again this is to make it easier to encode/decode xdr.
+   Entry points receive args on the stack, with SP set to the start of the args i.e. subsequent PUSH operations
+   would overwrite the values. But the args can be easily decoded by POPping instructions.
+
+# Clustering
+Modules can register with a cluster, so that changes to the data segment are kept synchronized between hosts. This allows
+program state to be maintained across different machines. Note that it will be lost if the cluster goes offline.
+If the execution of a procedure would result in some side effect e.g. writing to a log file, these side effects are
+not clustered, and will happen only on the machine where the procedure was run.
 

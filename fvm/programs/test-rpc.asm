@@ -9,25 +9,34 @@
 
 	.INCLUDE	"native.asm"
 
-	.DATA		hello		"Hello, world!"
+
+	
+;;; ------------------------------------------
 	
 PROC-NULL:
 	PUSH		hello
 	CALLNAT		R2 		NATIVE-LOGSTR
 	RET
 	
+;;; ------------------------------------------
+	
+	.DATA		hello		"Hello, world!"	
 PROC-HELLO:
 	LDI		R1		hello
 	LD		R0		hello 
 	ADD		R0		4	
 	RET
 
+;;; ------------------------------------------
+	
 PROC-ECHO:
 	;; Echo args back to caller
 	SUBSP		R0	; clear stack 
 	LEASP		R1		0  ; set r1 to buffer, r0 is count but that was already set for us	
 	RET
 
+;;; ------------------------------------------
+	
 	.DATA		counter		0
 PROC-COUNTER:
 	;; increment value 
@@ -40,7 +49,8 @@ PROC-COUNTER:
 	LDI		R1		counter
 	LDI		R0		4
 	RET
-
+	
+;;; ------------------------------------------
 
 
 

@@ -15,13 +15,9 @@ PROC-NULL:
 	RET
 	
 PROC-HELLO:
-	;; ignore all args
-	SUBSP		R0
-	
-	LDI		R0		helloend
 	LDI		R1		hello
-	SUB		R0		R1		 ; R0 = buffer count
-	LDI		R1		hello 		 ; R1 = buffer pointer
+	LD		R0		hello 
+	ADD		R0		4	
 	RET
 
 PROC-ECHO:

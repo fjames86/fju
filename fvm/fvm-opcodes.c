@@ -148,10 +148,7 @@ void fvm_push( struct fvm_s *state, uint32_t val ) {
 }
 
 uint32_t fvm_pop( struct fvm_s *state ) {
-  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK + 4 ) {
-    fvm_printf( "fvm_pop bad SP %x\n", state->reg[FVM_REG_SP] );						  
-    return -1;
-  }
+  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK + 4 ) return -1;
   state->reg[FVM_REG_SP] -= 4;
   return mem_read( state, state->reg[FVM_REG_SP] );  
 }

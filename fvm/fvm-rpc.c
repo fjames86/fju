@@ -72,9 +72,9 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   procid = inc->msg.u.call.proc;
   if( procid >= m->header.symcount ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
-  fvm_log( LOG_LVL_INFO, "fvm_rpc_proc progid=%u procid=%u", progid, procid );
-
   type = m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK;
+  fvm_log( LOG_LVL_INFO, "fvm_rpc_proc progid=%u procid=%u type=%s", progid, procid,
+	   type == FVM_SYMBOL_PROC ? "PROC" : type == FVM_SYMBOL_UINT32 ? "UINT32" : type == FVM_SYMBOL_UINT64 ? "UINT64" : type == FVM_SYMBOL_STRING ? "STRING" : "UNKNOWN" );  
   switch( type ) {
   case FVM_SYMBOL_PROC:
     /* initialize state */
@@ -172,22 +172,11 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
 int fvm_register_program( uint32_t progid ) {
   struct fvm_module *m;
   struct rpc_program *pg;
-  int i, nprocs;
   
   m = fvm_module_by_progid( progid );
   if( !m ) return -1;
 
-  /* collect symbols pointing to text segment, probably functions? */
-  nprocs = 0;
-  for( i = 0; i < m->header.symcount; i++ ) {
-    if( m->symbols[i].addr >= FVM_ADDR_TEXT &&
-	m->symbols[i].addr <= (FVM_ADDR_TEXT + FVM_MAX_TEXT) &&
-	((m->symbols[i].flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_PROC) ) {
-      nprocs++;
-    }
-  }
-  
-  pg = alloc_program( m->header.progid, m->header.versid, nprocs, fvm_rpc_proc );
+  pg = alloc_program( m->header.progid, m->header.versid, m->header.symcount, fvm_rpc_proc );
   rpc_program_register( pg );
   return 0;
 }

@@ -1,4 +1,10 @@
 
+set -eu
+
+fvm fvm/test/test1.fvm
+fvm -m test2 -s MAIN fvm/test/test1.fvm fvm/test/test2.fvm
+
+	
 echo "------------- FVM.LIST -------------------------- "
 rpclt fvm.list
 echo "------------- test-rpc.fvm PROC-NULL ------------ "

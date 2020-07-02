@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 remoteip=$1
 if [ ! $remoteip ]; then
     remoteip=$(freg get /remotehost)
@@ -26,7 +28,7 @@ scp fvm/programs/test-rpc.fvm root@${remoteip}:~
 sh scripts/fjud.sh start
 ssh root@${remoteip} sh ~/fjud.sh start
 
-
-
+# run the fvm test script
+sh scripts/test-fvm.sh
 
 

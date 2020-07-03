@@ -71,6 +71,8 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
 
   procid = inc->msg.u.call.proc;
   if( procid >= m->header.symcount ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  fvm_audit_write( progid, procid, (char *)(inc->xdr.buf + inc->xdr.offset), inc->xdr.count - inc->xdr.offset );
   
   type = m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK;
   fvm_log( LOG_LVL_DEBUG, "fvm_rpc_proc progid=%u procid=%u type=%s", progid, procid,
@@ -487,6 +489,8 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   if( sts ) goto done;
   sts = fvm_set_args( &state, bufp, lenp );
   if( sts ) goto done;
+
+  fvm_audit_write( progid, procid, bufp, lenp );
   sts = fvm_run( &state, 0 );
 
  done:
@@ -683,7 +687,8 @@ static void fvm_iter_cb( struct rpc_iterator *it ) {
     fvm_log( LOG_LVL_ERROR, "Failed to init state %u %u", fvm->progid, fvm->procid );
     return;
   }
-  
+
+  fvm_audit_write( fvm->progid, fvm->procid, NULL, 0 );
   sts = fvm_run( &state, 0 );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "Failed to run %u %u", fvm->progid, fvm->procid );
@@ -857,6 +862,7 @@ void fvm_rpc_register( void ) {
 	  if( sts ) {
 	    fvm_log( LOG_LVL_ERROR, "FVM initializing proc failed" );
 	  } else {
+	    fvm_audit_write( progid, procid, NULL, 0 );
 	    fvm_run( &state, 0 );
 	  }
 	}

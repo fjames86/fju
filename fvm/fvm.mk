@@ -2,9 +2,16 @@
 
 fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm
 
-${LIBDIR}/libfvm.a: fvm/fvm-module.c fvm/fvm-state.c fvm/fvm-opcodes.c include/fju/fvm.h fvm/fvm-native.c fvm/fvm-private.h fvm/fvm-rpc.c 
-	${CC} -c fvm/fvm-module.c fvm/fvm-state.c fvm/fvm-opcodes.c fvm/fvm-native.c fvm/fvm-rpc.c ${CFLAGS} 
-	${AR} rcs $@ fvm-module.o fvm-state.o fvm-opcodes.o fvm-native.o fvm-rpc.o 
+libfvm_source+=fvm/fvm-module.c
+libfvm_source+=fvm/fvm-state.c
+libfvm_source+=fvm/fvm-opcodes.c
+libfvm_source+=fvm/fvm-native.c
+libfvm_source+=fvm/fvm-rpc.c
+libfvm_source+=fvm/fvm-audit.c
+
+${LIBDIR}/libfvm.a: ${libfvm_source} include/fju/fvm.h fvm/fvm-private.h 
+	${CC} -c ${libfvm_source} ${CFLAGS} 
+	${AR} rcs $@ fvm-module.o fvm-state.o fvm-opcodes.o fvm-native.o fvm-rpc.o fvm-audit.o
 
 fvmc_deps+=
 ${BINDIR}/fvmc: fvm/fvmc.c

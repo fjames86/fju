@@ -87,5 +87,8 @@ int fvm_write_uint64( struct fvm_module *m, uint32_t procid, uint64_t val );
 int fvm_read_string( struct fvm_module *m, uint32_t procid, char *str, int size );
 int fvm_write_string( struct fvm_module *m, uint32_t procid, char *str );
 
+int fvm_audit_write( uint32_t progid, uint32_t procid, char *args, int len );
+uint64_t fvm_audit_read( uint64_t nextid, uint32_t *progid, uint32_t *procid, char *args, int len, int *lenp );
+
 #endif
 

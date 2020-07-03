@@ -50,6 +50,7 @@
 #include <fju/freg.h>
 #include <fju/sec.h>
 #include <fju/programs.h>
+#include <fju/fvm.h>
 
 struct clt_info {
     uint32_t prog;
@@ -98,6 +99,10 @@ static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void rawmode_results( struct xdr_s *xdr );
 static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_run_results( struct xdr_s *xdr );
+static void fvm_readvar_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_readvar_results( struct xdr_s *xdr );
+static void fvm_writevar_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_writevar_results( struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -126,6 +131,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 5, fvm_register_args, fvm_register_results, "fvm.unregister", "name=*" },
     { FVM_RPC_PROG, 1, 8, fvm_cluster_args, fvm_cluster_results, "fvm.cluster", "name=* clid=*" },
     { FVM_RPC_PROG, 1, 9, fvm_run_args, fvm_run_results, "fvm.run", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
+    { FVM_RPC_PROG, 1, 10, fvm_readvar_args, fvm_readvar_results, "fvm.readvar", "progid=* procid=*" },
+    { FVM_RPC_PROG, 1, 11, fvm_writevar_args, fvm_writevar_results, "fvm.writevar", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1318,4 +1325,112 @@ static void fvm_run_results( struct xdr_s *xdr ) {
     
     printf( "\n" );
   }
+}
+
+static void fvm_readvar_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint32_t progid = 0, procid = 0;
+
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "progid" ) == 0 ) {
+      progid = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "procid" ) == 0 ) {
+      procid = strtoul( argval, NULL, 0 );
+    } else usage( NULL );
+    i++;
+  }
+
+  xdr_encode_uint32( xdr, progid );
+  xdr_encode_uint32( xdr, procid );
+}
+
+static void fvm_readvar_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint32_t u32, type;
+  uint64_t u64;
+  char str[256];
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  if( !b ) usage( "Failed" );
+
+  sts = xdr_decode_uint32( xdr, &type );
+  if( sts ) usage( "xdr error" );
+
+  switch( type ) {
+  case FVM_SYMBOL_UINT32:
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );
+    printf( "%u (0x%x)", u32, u32 );
+    break;
+  case FVM_SYMBOL_UINT64:
+    sts = xdr_decode_uint64( xdr, &u64 );
+    if( sts ) usage( "xdr error" );
+    printf( "%"PRIu64" (0x%"PRIx64")", u64, u64 );
+    break;
+  case FVM_SYMBOL_STRING:
+    sts = xdr_decode_string( xdr, str, sizeof(str) );
+    if( sts ) usage( "xdr error" );
+    printf( "%s", str );
+    break;
+  default:
+    usage( "Unknown typecode" );
+  }
+}
+
+static void fvm_writevar_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  uint32_t progid, procid, type, u32;
+  uint64_t u64;
+  char *str;
+
+  progid = 0;
+  procid = 0;
+  type = 0;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "u32" ) == 0 ) {
+      type = FVM_SYMBOL_UINT32;
+      u32 = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "u64" ) == 0 ) {
+      type = FVM_SYMBOL_UINT64;
+      u64 = strtoull( argval, NULL, 0 );
+    } else if( strcmp( argname, "str" ) == 0 ) {
+      type = FVM_SYMBOL_STRING;
+      str = argval;
+    } else if( strcmp( argname, "progid" ) == 0 ) {
+      progid = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "procid" ) == 0 ) {
+      procid = strtoul( argval, NULL, 0 );
+    } else usage( NULL );
+    i++;
+  }
+
+  xdr_encode_uint32( xdr, progid );
+  xdr_encode_uint32( xdr, procid );
+  xdr_encode_uint32( xdr, type );
+  switch( type ) {
+  case FVM_SYMBOL_UINT32:
+    xdr_encode_uint32( xdr, u32 );
+    break;
+  case FVM_SYMBOL_UINT64:
+    xdr_encode_uint64( xdr, u64 );
+    break;
+  case FVM_SYMBOL_STRING:
+    xdr_encode_string( xdr, str );
+    break;
+  default:
+    usage( NULL );
+  }
+  
+}
+
+static void fvm_writevar_results( struct xdr_s *xdr ) {
+  int sts, b;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  if( !b ) usage( "Failed" );
+
 }

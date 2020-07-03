@@ -502,6 +502,142 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_readvar( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint32_t progid, procid;
+  struct fvm_module *m;
+  struct fvm_symbol *sym;
+  uint32_t u32, type;
+  uint64_t u64;
+  char str[256];
+
+  sts = xdr_decode_uint32( &inc->xdr, &progid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &procid );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  fvm_log( LOG_LVL_INFO, "fvm_proc_readvar progid=%u procid=%u", progid, procid );
+
+  m = fvm_module_by_progid( progid );
+  if( !m ) {
+    sts = -1;
+    goto done;
+  }
+
+  if( procid >= m->header.symcount ) {
+    sts = -1;
+    goto done;
+  }
+
+  sym = &m->symbols[procid];
+  type = sym->flags & FVM_SYMBOL_TYPE_MASK;
+
+  switch( type ) {
+  case FVM_SYMBOL_UINT32:
+    u32 = fvm_read_uint32( m, procid );    
+    break;
+  case FVM_SYMBOL_UINT64:
+    u64 = fvm_read_uint64( m, procid );
+    break;
+  case FVM_SYMBOL_STRING:
+    sts = fvm_read_string( m, procid, str, sizeof(str) );
+    break;
+  default:
+    sts = -1;
+  }
+
+ done:
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts == 0 ? 1 : 0 );
+  if( sts == 0 ) {
+    xdr_encode_uint32( &inc->xdr, type );
+    switch( type ) {
+    case FVM_SYMBOL_UINT32:
+      xdr_encode_uint32( &inc->xdr, u32 );
+      break;
+    case FVM_SYMBOL_UINT64:
+      xdr_encode_uint64( &inc->xdr, u64 );
+      break;
+    case FVM_SYMBOL_STRING:
+      xdr_encode_string( &inc->xdr, str );
+      break;      
+    }
+  }   
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_writevar( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint32_t progid, procid;
+  struct fvm_module *m;
+  struct fvm_symbol *sym;
+  uint32_t u32, type;
+  uint64_t u64;
+  char str[256];
+
+  sts = xdr_decode_uint32( &inc->xdr, &progid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &procid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &type );
+  if( !sts ) {
+    switch( type ) {
+    case FVM_SYMBOL_UINT32:
+      sts = xdr_decode_uint32( &inc->xdr, &u32 );
+      break;
+    case FVM_SYMBOL_UINT64:
+      sts = xdr_decode_uint64( &inc->xdr, &u64 );
+      break;
+    case FVM_SYMBOL_STRING:
+      sts = xdr_decode_string( &inc->xdr, str, sizeof(str) );
+      break;
+    default:
+      sts = -1;
+      break;
+    }
+  }
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  fvm_log( LOG_LVL_INFO, "fvm_proc_writevar progid=%u procid=%u type=%u", progid, procid, type );
+
+  m = fvm_module_by_progid( progid );
+  if( !m ) {
+    sts = -1;
+    goto done;
+  }
+
+  if( procid >= m->header.symcount ) {
+    sts = -1;
+    goto done;
+  }
+
+  sym = &m->symbols[procid];
+  if( (sym->flags & FVM_SYMBOL_TYPE_MASK) != type ) {
+    sts = -1;
+    goto done;
+  }
+
+  switch( type ) {
+  case FVM_SYMBOL_UINT32:
+    sts = fvm_write_uint32( m, procid, u32 );
+    break;
+  case FVM_SYMBOL_UINT64:
+    sts = fvm_write_uint64( m, procid, u64 );
+    break;
+  case FVM_SYMBOL_STRING:
+    sts = fvm_write_string( m, procid, str );
+    break;
+  default:
+    sts = -1;
+  }
+
+ done:
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts == 0 ? 1 : 0 );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
@@ -514,6 +650,8 @@ static struct rpc_proc fvm_procs[] = {
   { 7, fvm_proc_write },
   { 8, fvm_proc_cluster },
   { 9, fvm_proc_run },
+  { 10, fvm_proc_readvar },
+  { 11, fvm_proc_writevar },
   
   { 0, NULL }
 };

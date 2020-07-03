@@ -123,13 +123,13 @@ static char *copytoken( char *p, char *dest ) {
   return p;
 }
 
-static int addlabel( char *name, uint32_t addr ) {
+static struct label *addlabel( char *name, uint32_t addr ) {
   struct label *l, *prev = NULL;
   l = glob.labels;
   while( l ) {
     if( strcasecmp( l->name, name ) == 0 ) {
       fvmc_printf( ";; duplicate label %s\n", name );
-      return -1;
+      return NULL;
     }
     prev = l;
     l = l->next;
@@ -142,9 +142,8 @@ static int addlabel( char *name, uint32_t addr ) {
   l->addr = addr;
   l->next = NULL;
   if( prev ) prev->next = l;
-  else glob.labels = l;
-    
-  return 0;
+  else glob.labels = l;    
+  return l;
 }
 static struct label *getlabel( char *name ) {
   struct label *l;
@@ -803,12 +802,15 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
   p = copytoken( p, inst );
   q = inst + strlen( inst ) - 1;
   if( *q == ':' ) {
+    struct label *l;
+    
     if( !firstpass ) return -1;
     
     /* last character is a : means this is a label identifier */
     *q = '\0';
 
-    addlabel( inst, addr );
+    l = addlabel( inst, addr );
+    if( l ) l->symflags = FVM_SYMBOL_PROC;
     return -1;
   }
         

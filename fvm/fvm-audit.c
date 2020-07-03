@@ -66,7 +66,12 @@ uint64_t fvm_audit_read( uint64_t nextid, uint32_t *progid, uint32_t *procid, ch
   sts = log_read( auditlog(), nextid, &entry, 1, &ne );
   if( sts || !ne ) return 0;
 
+  if( entry.msglen < sizeof(header) ) return 0;
+  
+  *progid = header.progid;
+  *procid = header.procid;
   *lenp = entry.msglen - sizeof(header);
+  
   return entry.id;
 }
 

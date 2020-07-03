@@ -39,6 +39,9 @@ struct fvm_module {
   uint8_t *text;
   
   uint64_t clusterid;
+  uint32_t flags;
+#define FVM_MODULE_AUDIT        0x0001
+  
 };
 
 typedef enum {

@@ -72,7 +72,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   procid = inc->msg.u.call.proc;
   if( procid >= m->header.symcount ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  fvm_audit_write( progid, procid, (char *)(inc->xdr.buf + inc->xdr.offset), inc->xdr.count - inc->xdr.offset );
+  if( m->flags & FVM_MODULE_AUDIT ) fvm_audit_write( progid, procid, (char *)(inc->xdr.buf + inc->xdr.offset), inc->xdr.count - inc->xdr.offset );
   
   type = m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK;
   fvm_log( LOG_LVL_DEBUG, "fvm_rpc_proc progid=%u procid=%u type=%s", progid, procid,
@@ -490,7 +490,7 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   sts = fvm_set_args( &state, bufp, lenp );
   if( sts ) goto done;
 
-  fvm_audit_write( progid, procid, bufp, lenp );
+  if( state.module->flags & FVM_MODULE_AUDIT ) fvm_audit_write( progid, procid, bufp, lenp );
   sts = fvm_run( &state, 0 );
 
  done:
@@ -688,7 +688,7 @@ static void fvm_iter_cb( struct rpc_iterator *it ) {
     return;
   }
 
-  fvm_audit_write( fvm->progid, fvm->procid, NULL, 0 );
+  if( state.module->flags & FVM_MODULE_AUDIT ) fvm_audit_write( fvm->progid, fvm->procid, NULL, 0 );
   sts = fvm_run( &state, 0 );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "Failed to run %u %u", fvm->progid, fvm->procid );
@@ -747,13 +747,12 @@ static struct raft_notify_context fvm_notify_cxt = {
 void fvm_rpc_register( void ) {
   int sts;
   uint32_t nsteps;
-  uint64_t key;
+  uint64_t key, clid;
   struct freg_entry entry;
   char path[256];
   char name[FVM_MAX_NAME];
-  uint64_t clid;
   struct fvm_module *m;
-  uint32_t progid, procid;
+  uint32_t progid, procid, flags;
   struct fvm_s state;
   
   /* load all these modules on startup */
@@ -778,11 +777,20 @@ void fvm_rpc_register( void ) {
 	  else fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
 	}
 
+	sts = freg_get_by_name( NULL, entry.id, "flags", FREG_TYPE_UINT32, (char *)&flags, sizeof(flags), NULL );
+	if( !sts ) {
+	  m = fvm_module_by_progid( progid );
+	  if( m ) m->flags = flags;
+	  else fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
+	}
+	
       }
       sts = freg_next( NULL, key, entry.id, &entry );
     }
   }
 
+  /* TODO: replay audit logs from cluster leader? */
+  
   /* register all these modules as rpc programs on startup */
   sts = freg_subkey( NULL, 0, "/fju/fvm/programs", FREG_CREATE, &key );
   if( !sts ) {
@@ -862,7 +870,7 @@ void fvm_rpc_register( void ) {
 	  if( sts ) {
 	    fvm_log( LOG_LVL_ERROR, "FVM initializing proc failed" );
 	  } else {
-	    fvm_audit_write( progid, procid, NULL, 0 );
+	    if( state.module->flags & FVM_MODULE_AUDIT ) fvm_audit_write( progid, procid, NULL, 0 );
 	    fvm_run( &state, 0 );
 	  }
 	}

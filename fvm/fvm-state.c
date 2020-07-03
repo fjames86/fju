@@ -66,6 +66,8 @@ int fvm_get_res( struct fvm_s *state, char **buf ) {
 int fvm_run( struct fvm_s *state, int nsteps ) {
   int sts = 0;
 
+  if( nsteps == 0 ) nsteps = fvm_max_steps( 0 );
+  
   while( (nsteps == -1 || state->nsteps < nsteps) && state->frame >= 0 ) {
     sts = fvm_step( state );
     if( sts ) {

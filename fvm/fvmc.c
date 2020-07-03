@@ -667,7 +667,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
     incfile = opensourcefile( name );
     if( !incfile ) usage( "failed to open include file \"%s\"", name );
-    fvmc_printf( "including \"%s\"", name );
+    fvmc_printf( "including \"%s\"\n", name );
     parse_file( incfile, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
     fclose( incfile );
     return 0;
@@ -761,6 +761,8 @@ static struct {
 	{ "CALLNAT", 0x44, 0x00020000 }, /* CALLVNAT RX RY. call native function, const is the proc identifier. RX receives result status */
 	{ "CALLNAT", 0x45, 0x00020002 }, /* CALLVNAT RX const. call native function, const is the proc identifier. RX receives result status */
 	{ "HALT", 0x46, 0x00000000 }, /* HALT stop execution immediatly */
+	{ "CALLZ", 0x47, 0x00010000 }, /* CALLZ RX call if zero flag set */
+	{ "CALLZ", 0x48, 0x00010001 }, /* CALLZ const call if zero flag set */
 	
 	{ NULL, 0, 0 }
 	  
@@ -870,7 +872,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 		  else if( arg[1] == '+' ) j = (addr + 4 + getlabeladdr( arg + 2 )) + 0x10000;
 		  else usage( "Bad operator %c", arg[1] );
 		} else {
-		  fvmc_printf( "Bad constant or unknown label \"%s\"", arg );
+		  fvmc_printf( "Bad constant or unknown label \"%s\"\n", arg );
 		  goto cont;
 		}
 	      }

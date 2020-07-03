@@ -1303,17 +1303,21 @@ void rpc_iterator_unregister( struct rpc_iterator *it ) {
 }
 
 void rpc_iterator_service( void ) {
-  struct rpc_iterator *it;
+  struct rpc_iterator *it, *next;
   uint64_t now;
 
   now = rpc_now();
   it = itlist;
   while( it ) {
+    /* save next pointer so that it->cb can unregister itself */
+    next = it->next;
+    
     if( (it->timeout == 0) || (now >= it->timeout) ) {
       it->timeout = now + it->period;
       it->cb( it );
     }
-    it = it->next;
+    
+    it = next;
   }
 
 }

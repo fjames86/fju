@@ -518,7 +518,7 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   state2.reg[FVM_REG_PC] = addr;
   /* copy args onto stack */
   fvm_set_args( &state2, args, argsize );
-  sts = fvm_run( &state2, default_maxsteps );
+  sts = fvm_run( &state2, 0 );
   state->nsteps = state2.nsteps;
   if( sts ) {
     fvm_printf( "callvirt run failed\n" );
@@ -689,6 +689,30 @@ static int opcode_callnatconst( struct fvm_s *state, uint32_t flags, uint32_t re
   return 0;
 }
 
+static int opcode_callzreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  
+  /* CALLZ RX */
+  if( state->reg[FVM_REG_FLAGS] & FVM_FLAG_ZERO ) {
+    fvm_push( state, htonl( state->reg[FVM_REG_PC] ) );
+    state->reg[FVM_REG_PC] = limitaddr( ntohl(state->reg[reg]), FVM_ADDR_TEXT, FVM_MAX_TEXT );
+    state->frame++;
+  }
+  
+  return 0;
+}
+
+static int opcode_callzconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  
+  /* CALLZ const */
+  if( state->reg[FVM_REG_FLAGS] & FVM_FLAG_ZERO ) {      
+    fvm_push( state, htonl( state->reg[FVM_REG_PC] ) );
+    state->reg[FVM_REG_PC] = limitaddr( data & 0xffff, FVM_ADDR_TEXT, FVM_MAX_TEXT );
+    state->frame++;
+  }
+  
+  return 0;
+}
+
 static int opcode_halt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   return -1;
 }
@@ -771,6 +795,8 @@ static struct opcode_def opcodes[FVM_MAX_OPCODE] =
    { opcode_callnatreg, "CALLNAT" },
    { opcode_callnatconst, "CALLNAT" },
    { opcode_halt, "HALT" },
+   { opcode_callzreg, "CALLZ" },
+   { opcode_callzconst, "CALLZ" },
   };
 
 

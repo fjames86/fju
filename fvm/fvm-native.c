@@ -117,6 +117,31 @@ static int native_write( struct fvm_s *state ) {
   return 0;
 }
 
+static int native_progid_by_name( struct fvm_s *state ) {
+  int i, strlen;
+  uint32_t nameaddr, *up, progid;
+  char str[FVM_MAX_NAME];
+  
+  nameaddr = ntohl( fvm_pop( state ) );
+  strlen = ntohl( fvm_read( state, nameaddr ) );
+  if( strlen >= FVM_MAX_NAME - 1 ) strlen = FVM_MAX_NAME - 1;
+
+  memset( str, 0, sizeof(str) );
+  nameaddr += 4;
+  up = (uint32_t *)str;
+  for( i = 0; i < strlen; i += 4 ) {
+    *up = fvm_read( state, nameaddr );
+    up++;
+    nameaddr += 4;
+  }
+
+  progid = fvm_progid_by_name( str );
+  
+  fvm_push( state, htonl( progid ) );
+  
+  return 0;
+}
+
 
 static struct fvm_native_proc native_procs[] =
   {
@@ -127,7 +152,8 @@ static struct fvm_native_proc native_procs[] =
    { 4, native_logstr },
    { 5, native_read },
    { 6, native_write },
-   
+   { 7, native_progid_by_name },
+ 
    { 0, NULL }
   };
 

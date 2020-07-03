@@ -73,7 +73,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   if( procid >= m->header.symcount ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
   
   type = m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK;
-  fvm_log( LOG_LVL_INFO, "fvm_rpc_proc progid=%u procid=%u type=%s", progid, procid,
+  fvm_log( LOG_LVL_DEBUG, "fvm_rpc_proc progid=%u procid=%u type=%s", progid, procid,
 	   type == FVM_SYMBOL_PROC ? "PROC" : type == FVM_SYMBOL_UINT32 ? "UINT32" : type == FVM_SYMBOL_UINT64 ? "UINT64" : type == FVM_SYMBOL_STRING ? "STRING" : "UNKNOWN" );  
   switch( type ) {
   case FVM_SYMBOL_PROC:
@@ -83,16 +83,16 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
     
     /* copy args onto fvm stack and set r0 to length */
     arglength = inc->xdr.count - inc->xdr.offset;
-    fvm_log( LOG_LVL_INFO, "fvm_rpc_proc run offset=%u count=%u arglength=%u", inc->xdr.offset, inc->xdr.count, arglength );
+    fvm_log( LOG_LVL_TRACE, "fvm_rpc_proc run offset=%u count=%u arglength=%u", inc->xdr.offset, inc->xdr.count, arglength );
     
     fvm_set_args( &state, (char *)(inc->xdr.buf + inc->xdr.offset), arglength );
-    sts = fvm_run( &state, fvm_max_steps( 0 ) );
+    sts = fvm_run( &state, 0 );
     if( sts ) {
       fvm_log( LOG_LVL_ERROR, "fvm_rpc_proc fvm_run failed" );
       return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
     }
     
-    fvm_log( LOG_LVL_INFO, "success reply length %d", ntohl( state.reg[FVM_REG_R0] ) );
+    fvm_log( LOG_LVL_TRACE, "success reply length %d", ntohl( state.reg[FVM_REG_R0] ) );
     rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
     /* R0 contains length, R1 contains address of buffer */
     count = ntohl( state.reg[FVM_REG_R0] );
@@ -113,7 +113,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
       if( !sts && b ) sts = xdr_decode_uint32( &inc->xdr, &u1 );
       if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-      fvm_log( LOG_LVL_INFO, "getvar uint32 %u:%u set %u", progid, procid, b ? u1 : 0 );
+      fvm_log( LOG_LVL_TRACE, "getvar uint32 %u:%u set %u", progid, procid, b ? u1 : 0 );
       
       u2 = fvm_read_uint32( m, procid );
       if( b ) fvm_write_uint32( m, procid, u1 );
@@ -131,7 +131,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
       if( !sts && b ) sts = xdr_decode_uint64( &inc->xdr, &u1 );
       if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-      fvm_log( LOG_LVL_INFO, "getvar uint64 %u:%u set %"PRIu64"", progid, procid, b ? u1 : 0 );
+      fvm_log( LOG_LVL_TRACE, "getvar uint64 %u:%u set %"PRIu64"", progid, procid, b ? u1 : 0 );
       
       u2 = fvm_read_uint64( m, procid );
       if( b ) fvm_write_uint64( m, procid, u1 );
@@ -150,12 +150,13 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
       if( !sts && b ) sts = xdr_decode_string( &inc->xdr, str1, sizeof(str1) );
       if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-      fvm_log( LOG_LVL_INFO, "getvar string %u:%u %s%s", progid, procid, b ? "set " : "get ", b ? str1 : "" );
+      fvm_log( LOG_LVL_TRACE, "getvar string %u:%u %s%s", progid, procid, b ? "set " : "get ", b ? str1 : "" );
       
-      fvm_read_string( m, procid, str2, sizeof(str2) );
+      sts = fvm_read_string( m, procid, str2, sizeof(str2) );
+      if( sts ) strcpy( str2, "" );
       if( b ) {
-	fvm_write_string( m, procid, str1 );
-	fvm_log( LOG_LVL_ERROR, "fvm_write_string failed" );
+	sts = fvm_write_string( m, procid, str1 );
+	if( sts ) fvm_log( LOG_LVL_ERROR, "fvm_write_string failed" );
       }
       
       rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -481,12 +482,12 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  fvm_log( LOG_LVL_INFO, "fvm_proc_run progid=%u procid=%u buflen=%u", progid, procid, lenp );
+  fvm_log( LOG_LVL_DEBUG, "fvm_proc_run progid=%u procid=%u buflen=%u", progid, procid, lenp );
   sts = fvm_state_init( &state, progid, procid );
   if( sts ) goto done;
   sts = fvm_set_args( &state, bufp, lenp );
   if( sts ) goto done;
-  sts = fvm_run( &state, -1 );
+  sts = fvm_run( &state, 0 );
 
  done:
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -495,7 +496,7 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   lenp = 0;
   if( !sts ) lenp = fvm_get_res( &state, &bufp );
   xdr_encode_opaque( &inc->xdr, (uint8_t *)bufp, lenp );
-  fvm_log( LOG_LVL_INFO, "fvm_proc_run progid=%u procid=%u reslen=%u", progid, procid, lenp );
+  fvm_log( LOG_LVL_DEBUG, "fvm_proc_run progid=%u procid=%u reslen=%u", progid, procid, lenp );
   
   rpc_complete_accept_reply( inc, handle );
   
@@ -515,7 +516,7 @@ static int fvm_proc_readvar( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &procid );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  fvm_log( LOG_LVL_INFO, "fvm_proc_readvar progid=%u procid=%u", progid, procid );
+  fvm_log( LOG_LVL_DEBUG, "fvm_proc_readvar progid=%u procid=%u", progid, procid );
 
   m = fvm_module_by_progid( progid );
   if( !m ) {
@@ -597,7 +598,7 @@ static int fvm_proc_writevar( struct rpc_inc *inc ) {
   }
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  fvm_log( LOG_LVL_INFO, "fvm_proc_writevar progid=%u procid=%u type=%u", progid, procid, type );
+  fvm_log( LOG_LVL_DEBUG, "fvm_proc_writevar progid=%u procid=%u type=%u", progid, procid, type );
 
   m = fvm_module_by_progid( progid );
   if( !m ) {
@@ -673,17 +674,39 @@ struct fvm_iterator {
 static void fvm_iter_cb( struct rpc_iterator *it ) {
   struct fvm_iterator *fvm = (struct fvm_iterator *)it;
   struct fvm_s state;
-  int sts;
+  int sts, reslen, period;
+  struct xdr_s xdr;
+  char *resbufp;
   
   sts = fvm_state_init( &state, fvm->progid, fvm->procid );
   if( sts ) {
-    fvm_log( LOG_LVL_INFO, "Failed to init state %u %u", fvm->progid, fvm->procid );
+    fvm_log( LOG_LVL_ERROR, "Failed to init state %u %u", fvm->progid, fvm->procid );
     return;
   }
   
-  sts = fvm_run( &state, -1 );
+  sts = fvm_run( &state, 0 );
   if( sts ) {
-    fvm_log( LOG_LVL_INFO, "Failed to run %u %u", fvm->progid, fvm->procid );
+    fvm_log( LOG_LVL_ERROR, "Failed to run %u %u", fvm->progid, fvm->procid );
+  }
+
+  reslen = fvm_get_res( &state, &resbufp );
+  if( reslen > 0 ) {
+    xdr_init( &xdr, (uint8_t *)resbufp, reslen );
+    sts = xdr_decode_uint32( &xdr, (uint32_t *)&period );
+    if( !sts ) {
+      if( period > 0 ) {
+	/* positive means update the period */
+	fvm->iter.period = period;
+	fvm->iter.timeout = 0;
+      } else if( period < 0 ) {
+	/* returning negative means rerun immediately */
+	fvm->iter.timeout = 0;
+      } else if( period == 0 ) {
+	/* if the iterator routine returns 0 then it means unregister itself */
+	rpc_iterator_unregister( &fvm->iter );
+	free( fvm );
+      }
+    }
   }
   
 }
@@ -725,7 +748,8 @@ void fvm_rpc_register( void ) {
   char name[FVM_MAX_NAME];
   uint64_t clid;
   struct fvm_module *m;
-  uint32_t progid;
+  uint32_t progid, procid;
+  struct fvm_s state;
   
   /* load all these modules on startup */
   sts = freg_subkey( NULL, 0, "/fju/fvm/modules", FREG_CREATE, &key );
@@ -817,6 +841,32 @@ void fvm_rpc_register( void ) {
     fvm_max_steps( nsteps );
   }
 
+
+  /* run init functions on startup */
+  sts = freg_subkey( NULL, 0, "/fju/fvm/modules", FREG_CREATE, &key );
+  if( !sts ) {
+    sts = freg_next( NULL, key, 0, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+	if( !sts ) sts = freg_get_by_name( NULL, entry.id, "init", FREG_TYPE_STRING, name, sizeof(name), NULL );
+	if( !sts ) {
+	  fvm_log( LOG_LVL_INFO, "FVM initializing module %s proc %s", entry.name, name );
+	  progid = fvm_progid_by_name( entry.name );
+	  procid = fvm_procid_by_name( progid, name );
+	  sts = fvm_state_init( &state, progid, procid );
+	  if( sts ) {
+	    fvm_log( LOG_LVL_ERROR, "FVM initializing proc failed" );
+	  } else {
+	    fvm_run( &state, 0 );
+	  }
+	}
+
+
+      }
+      sts = freg_next( NULL, key, entry.id, &entry );
+    }
+  }
+
   
   rpc_program_register( &fvm_prog );
 
@@ -870,7 +920,7 @@ static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t pro
   struct rpc_conn *tmpconn;
   struct ping_cxt *p;
 
-  fvm_log( LOG_LVL_INFO, "fvm_call_ping Progid %u Cluster %"PRIx64" Hostid %"PRIx64"", progid, cl->id, hostid );
+  fvm_log( LOG_LVL_DEBUG, "fvm_call_ping Progid %u Cluster %"PRIx64" Hostid %"PRIx64"", progid, cl->id, hostid );
   
   tmpconn = rpc_conn_acquire();
   if( !tmpconn ) return -1;
@@ -979,7 +1029,7 @@ static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module )
   n = raft_member_list( cl->id, member, 32 );
   for( i = 0; i < n; i++ ) {
     if( member[i].stateseq < cl->stateseq ) {
-      fvm_log( LOG_LVL_TRACE, "Sending updated state to member %s cluster %"PRIx64" member %"PRIx64"", module->header.name, cl->id, member[i].hostid );
+      fvm_log( LOG_LVL_DEBUG, "Sending updated state to member %s cluster %"PRIx64" member %"PRIx64"", module->header.name, cl->id, member[i].hostid );
       fvm_call_ping( cl, member[i].hostid, module->header.progid, (char *)module->data, (int)module->header.datasize );
     } 
   }

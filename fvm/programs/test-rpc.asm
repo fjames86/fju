@@ -20,10 +20,10 @@ PROC-NULL:
 	
 ;;; ------------------------------------------
 	
-	.DATA		hello		"Hello, world!"	
+	.DATA		hello		"Hello, world!\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"	
 PROC-HELLO:
-	LDI		R1		hello
-	LD		R0		hello 
+	LDI		R1		hello ;pointer to buffer
+	LD		R0		hello ; count 
 	ADD		R0		4	
 	RET
 

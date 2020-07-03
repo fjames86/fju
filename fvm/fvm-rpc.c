@@ -790,7 +790,10 @@ void fvm_rpc_register( void ) {
   }
 
   /* TODO: replay audit logs from cluster leader? */
-  
+
+  /* clear audit log */
+  fvm_audit_reset();  
+
   /* register all these modules as rpc programs on startup */
   sts = freg_subkey( NULL, 0, "/fju/fvm/programs", FREG_CREATE, &key );
   if( !sts ) {
@@ -881,7 +884,6 @@ void fvm_rpc_register( void ) {
     }
   }
 
-  
   rpc_program_register( &fvm_prog );
 
   raft_notify_register( &fvm_notify_cxt );  

@@ -9,11 +9,15 @@ static struct log_s *auditlog( void ) {
 
   if( !initialized ) {
     log_open( mmf_default_path( "fvmaudit.log", NULL ), NULL, &log );
-    log_reset( &log );
     initialized = 1;
   }
 
   return &log;
+}
+
+int fvm_audit_reset( void ) {
+  log_reset( auditlog() );
+  return 0;
 }
 
 struct fvm_audit_header {
@@ -66,3 +70,21 @@ uint64_t fvm_audit_read( uint64_t nextid, uint32_t *progid, uint32_t *procid, ch
   return entry.id;
 }
 
+int fvm_audit_replay( void ) {
+  struct fvm_s state;
+  uint32_t progid, procid;
+  uint64_t id;
+  char args[FVM_MAX_STACK];
+  int len, sts;
+  
+  id = 0;
+  while( (id = fvm_audit_read( id, &progid, &procid, args, sizeof(args), &len )) ) {
+    sts = fvm_state_init( &state, progid, procid );
+    if( sts ) continue;
+
+    fvm_set_args( &state, args, len );
+    sts = fvm_run( &state, 0 );
+  }
+
+  return 0;
+}

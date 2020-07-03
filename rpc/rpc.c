@@ -806,11 +806,10 @@ static int bind_list( struct rpc_inc *inc ) {
   struct rpc_program *p;
   struct rpc_version *v;
   struct sockaddr_in laddr;
-  int lport, handle;
+  int handle;
 
   memset( &laddr, 0, sizeof(laddr) );
   if( inc->laddr_len == sizeof(laddr) ) memcpy( &laddr, &inc->laddr, sizeof(laddr) );
-  lport = ntohs( laddr.sin_port );
 
   i = 0;
   p = rpc_program_list();

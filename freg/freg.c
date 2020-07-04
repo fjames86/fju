@@ -183,7 +183,7 @@ int freg_list( struct freg_s *freg, uint64_t parentid, struct freg_entry *entry,
 }
 
 int freg_next( struct freg_s *freg, uint64_t parentid, uint64_t id, struct freg_entry *entry ) {
-  int sts, nentry, i, j, idx, nn;
+  int sts, nentry, i, j, nn;
     uint64_t buf[32];
     struct freg_entry etry;
     struct entry_s e;
@@ -203,7 +203,6 @@ int freg_next( struct freg_s *freg, uint64_t parentid, uint64_t id, struct freg_
     if( nentry < 0 ) return -1;  
     if( !nentry ) return -1;
     
-    idx = 0;
     getnext = id ? 0 : 1;    
     for( i = 0; i < nentry; i += 32 ) {
       sts = fdtab_read( &freg->fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );

@@ -190,6 +190,7 @@ int ecdh_generate( struct sec_buf *local_priv, struct sec_buf *local_public ) {
 			       POINT_CONVERSION_UNCOMPRESSED, 
 			       (uint8_t *)tmpkey, 2*SEC_ECDH_KEYLEN + 1, 
 			       bncxt );
+  (void)(nbytes);
 
   memcpy( local_public->buf, tmpkey + 1, 2*SEC_ECDH_KEYLEN );
   local_public->len = 2*SEC_ECDH_KEYLEN;

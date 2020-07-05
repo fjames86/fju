@@ -1,4 +1,12 @@
 
+;;; This file shows a loop and calling convention cdecl
+;;; Calling convention is:
+;;;  - push args in reverse order
+;;;  - call. on return r0 contains return result value
+;;;  - clean stack by subtracting length of args pushed
+;;;
+	
+	
 	.MODULE		test3
 
 MAIN:

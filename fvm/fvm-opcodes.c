@@ -612,14 +612,14 @@ static int opcode_movreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uin
 
 static int opcode_cmpreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   uint32_t x;
-  x = ntohl( state->reg[reg] )  - ntohl( state->reg[data & 0x7] );
+  x = ntohl( state->reg[reg] ) - ntohl( state->reg[data & 0x7] );
   setflags( state, x );
   return 0;
 }
 
 static int opcode_cmpconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   uint32_t x;
-  x = ntohl( state->reg[reg] )  - sign_extend( data );
+  x = ntohl( state->reg[reg] ) - sign_extend( data );
   setflags( state, x );
   return 0;
 }
@@ -689,6 +689,11 @@ static int opcode_callnatconst( struct fvm_s *state, uint32_t flags, uint32_t re
   return 0;
 }
 
+
+static int opcode_halt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  return -1;
+}
+
 static int opcode_callzreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   
   /* CALLZ RX */
@@ -713,9 +718,35 @@ static int opcode_callzconst( struct fvm_s *state, uint32_t flags, uint32_t reg,
   return 0;
 }
 
-static int opcode_halt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  return -1;
+static int opcode_stspreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* STSP RX RY */
+  mem_write( state, state->reg[FVM_REG_SP] + ntohl( state->reg[data & 0x7] ), state->reg[reg] );
+  return 0;
 }
+
+static int opcode_stspconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* STSP RX const */
+  mem_write( state, state->reg[FVM_REG_SP] + sign_extend( data ), state->reg[reg] );
+  return 0;
+}
+
+static int opcode_increg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* INC RX RY */
+  uint32_t x = mem_read( state, ntohl( state->reg[reg] ) );
+  x += ntohl( state->reg[data & 0x7] );
+  mem_write( state, ntohl( state->reg[reg] ), x );
+  return 0;
+}
+
+static int opcode_incconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* INC RX const */
+  uint32_t x = mem_read( state, ntohl( state->reg[reg] ) );
+  x += sign_extend( data );
+  mem_write( state, ntohl( state->reg[reg] ), x );
+  return 0;
+}
+
+
 
 struct opcode_def {
   fvm_opcode_fn fn;
@@ -797,6 +828,11 @@ static struct opcode_def opcodes[FVM_MAX_OPCODE] =
    { opcode_halt, "HALT" },
    { opcode_callzreg, "CALLZ" },
    { opcode_callzconst, "CALLZ" },
+   { opcode_stspreg, "STSP" },
+   { opcode_stspconst, "STSP" },
+   { opcode_increg, "INC" },
+   { opcode_incconst, "INC" },
+   
   };
 
 

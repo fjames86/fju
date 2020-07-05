@@ -30,7 +30,7 @@ all: ${PROJECTS} ${LIBFJU}
 	rm -f *.o
 
 clean:
-	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm/programs/*.fvm fvm/test/*.fvm 
 
 tar:
 	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}

@@ -763,6 +763,10 @@ static struct {
 	{ "HALT", 0x46, 0x00000000 }, /* HALT stop execution immediatly */
 	{ "CALLZ", 0x47, 0x00010000 }, /* CALLZ RX call if zero flag set */
 	{ "CALLZ", 0x48, 0x00010001 }, /* CALLZ const call if zero flag set */
+	{ "STSP", 0x49, 0x00020000 }, /* STSP RX RY. store into stack pointer offset by ry into rx */
+	{ "STSP", 0x4a, 0x00020002 }, /* STSP RX const. store into stack pointer offset by const into rx */
+	{ "INC", 0x4b, 0x00020000 }, /* INC RX RY. increment at memory address RX by RY */	
+	{ "INC", 0x4c, 0x00020002 }, /* INC RX const. increment at memory address RX by const */	
 	
 	{ NULL, 0, 0 }
 	  

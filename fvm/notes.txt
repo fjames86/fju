@@ -37,10 +37,16 @@ args and results encoded using XDR, passed on the stack.
 
 # Calling convention
 No restrictions are placed on internal subroutine calls. The CALL instruction PUSHes the current PC and then jumps, RET POPs then jumps back.
+Typical calling convention would be cdecl:
+ - PUSH args in reverse order
+ - CALL
+ - R0 contains return value
+ - SUBSP size of args pushed 
+
 
 Procedures which are exported i.e. have entries in the symbol table, are expected to be called as entry points. They can be called in two different ways:
 called from another module using the CALLVIRT instruction, or as a top level entry point from fvm_run().
-When called in this way, the register R0 contains the length of argument data and R1 contains a pointer to the start of the arguments.
+When called in either of these ways, the register R0 contains the length of argument data and R1 contains a pointer to the start of the arguments.
 The args are on the stack, so R1 = SP - R0.
 On return, R0 contains the result length and R1 contains the address of the results. Typically the results will be on the stack but need not be.
 

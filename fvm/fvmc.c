@@ -80,6 +80,9 @@ static struct {
   int datasize;
   struct searchpath *searchpaths;
   int exportidx;
+  char *currentfile;
+  int currentfileidx;
+  int currentline;
 } glob;
 
 
@@ -124,21 +127,29 @@ static char *copytoken( char *p, char *dest ) {
 }
 
 static struct label *addlabel( char *name, uint32_t addr ) {
+  char lname[256];
   struct label *l, *prev = NULL;
+
+  if( name[strlen( name ) - 1] == '$' ) {
+    sprintf( lname, "%s%u", name, glob.currentfileidx );
+  } else {
+    sprintf( lname, "%s", name );
+  }
+	     
   l = glob.labels;
   while( l ) {
-    if( strcasecmp( l->name, name ) == 0 ) {
-      fvmc_printf( 2, ";; duplicate label %s\n", name );
+    if( strcasecmp( l->name, lname ) == 0 ) {
+      usage( ";; duplicate label %s\n", lname );
       return NULL;
     }
     prev = l;
     l = l->next;
   }
 
-  fvmc_printf( 2, ";; adding label %s addr %x\n", name, addr );
+  fvmc_printf( 2, ";; adding label %s addr %x\n", lname, addr );
   l = malloc( sizeof(*l) );
   memset( l, 0, sizeof(*l) );
-  strcpy( l->name, name );
+  strcpy( l->name, lname );
   l->addr = addr;
   l->next = NULL;
   if( prev ) prev->next = l;
@@ -146,10 +157,18 @@ static struct label *addlabel( char *name, uint32_t addr ) {
   return l;
 }
 static struct label *getlabel( char *name ) {
+  char lname[256];
   struct label *l;
+  
+  if( name[strlen( name ) - 1] == '$' ) {
+    sprintf( lname, "%s%u", name, glob.currentfileidx );
+  } else {
+    sprintf( lname, "%s", name );
+  }
+
   l = glob.labels;
   while( l ) {
-    if( strcasecmp( l->name, name ) == 0 ) return l;
+    if( strcasecmp( l->name, lname ) == 0 ) return l;
     l = l->next;
   }
   return NULL;
@@ -177,19 +196,27 @@ static int exportlabel( char *name, uint32_t symflags ) {
 }
 
 static FILE *opensourcefile( char *name ) {
+  static char path[256];
+  
   FILE *f;
   struct searchpath *sp;
-  char path[256];
 
   f = fopen( name, "r" );
-  if( f ) return f;
+  if( f ) {
+    glob.currentfileidx++;
+    return f;
+  }
   
   sp = glob.searchpaths;
   while( sp ) {
     sprintf( path, "%s/%s", sp->path, name );
     fvmc_printf( 2, "Trying to open \"%s\"\n", path );
     f = fopen( path, "r" );
-    if( f ) return f;
+    if( f ) {
+      glob.currentfile = path;
+      glob.currentfileidx++;
+      return f;
+    }
     sp = sp->next;
   }
   usage( "Failed to open file \"%s\"", name );
@@ -201,7 +228,8 @@ static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
   char buf[256];
   char *p;
   uint32_t opcode;
-  
+
+  glob.currentline = 1;
   memset( buf, 0, sizeof(buf) );
   while( fgets( buf, sizeof(buf) - 1, f ) ) {
     p = buf;
@@ -228,7 +256,8 @@ static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
 	}
       }
     }
-    
+
+    glob.currentline++;
   }
   
 }
@@ -274,6 +303,7 @@ int main( int argc, char **argv ) {
   fvmc_printf( 1, "\n ------ first pass ------- \n" );
 
   /* first pass collects labels and computes offsets. does not emit opcodes */
+  glob.currentfileidx = 0;
   starti = i;
   while( i < argc ) {
     if( disass ) {
@@ -308,7 +338,7 @@ int main( int argc, char **argv ) {
 
   if( !outfilename[0] ) {
     if( starti < argc ) {
-      char outfilename2[256];
+      char outfilename2[252];
       char *pp = argv[starti];
       char *qq = outfilename2;
 
@@ -333,6 +363,7 @@ int main( int argc, char **argv ) {
   /* write header */
   emit_header( outfile, addr );
 
+  glob.currentfileidx = 0;      
   i = starti;
   while( i < argc ) {
     f = opensourcefile( argv[i] );
@@ -341,6 +372,7 @@ int main( int argc, char **argv ) {
     i++;
   }
   
+  glob.currentfileidx = 0;
   i = starti;
   while( i < argc ) {
     f = opensourcefile( argv[i] );

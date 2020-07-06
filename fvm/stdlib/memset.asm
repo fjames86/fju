@@ -6,9 +6,9 @@ MEMSET:
 	LDSP		R2	-16 ; dest 
 	CMP		R0	0 
 	JZ		MEMSET-END
-MEMSET-LOOP:
+L1$:	
 	STINC		R2	R1 ; store and increment 
 	SUB		R0	4
-	JP		MEMSET-LOOP
+	JP		L1$
 MEMSET-END:
 	RET

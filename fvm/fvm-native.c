@@ -43,17 +43,14 @@ static int native_puts( struct fvm_s *state ) {
 }
 
 static int native_rand( struct fvm_s *state ) {
-  /* push random onto stack */
-  fvm_push( state, sec_rand_uint32() );
-  return 0;
+  /* return random number */
+  return sec_rand_uint32();
 }
 
 static int native_now( struct fvm_s *state ) {
-  /* push random onto stack */
+  /* return current time */
   uint64_t now = rpc_now();
-  fvm_push( state, htonl( now >> 32 ) );
-  fvm_push( state, htonl( now & 0xffffffff ) );
-  return 0;
+  return htonl( now & 0xffffffff );
 }
 
 static int native_logstr( struct fvm_s *state ) {  
@@ -84,18 +81,15 @@ static int native_read( struct fvm_s *state ) {
   addr = ntohl( fvm_stack_read( state, 8 ) );
   m = fvm_module_by_progid( progid );
   if( !m ) {
-    fvm_push( state, 0 );
     return 0;
   }
   
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize) ) {
-    fvm_push( state, *(uint32_t *)(m->data + (addr - FVM_ADDR_DATA)) );
+    return *(uint32_t *)(m->data + (addr - FVM_ADDR_DATA));
   } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize) ) {
-    fvm_push( state, *(uint32_t *)(m->text + (addr - FVM_ADDR_TEXT)) );
-  } else {
-    fvm_push( state, 0 );
+    return *(uint32_t *)(m->text + (addr - FVM_ADDR_TEXT));
   }
-
+  
   return 0;
 }
 
@@ -146,9 +140,7 @@ static int native_progid_by_name( struct fvm_s *state ) {
 
   native_readstr( state, ntohl( fvm_stack_read( state, 4 ) ), str, sizeof(str) );
   progid = fvm_progid_by_name( str );  
-  fvm_push( state, htonl( progid ) );
-  
-  return 0;
+  return htonl( progid );
 }
 
 static int native_writelog( struct fvm_s *state ) {
@@ -203,7 +195,6 @@ static int native_readlog( struct fvm_s *state ) {
 
   return msglen;
 }
-
 
 static struct fvm_native_proc native_procs[] =
   {

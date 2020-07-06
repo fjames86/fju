@@ -27,7 +27,8 @@ fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.asm fvm/programs
 
 fvm/test/test1.fvm: ${BINDIR}/fvmc fvm/test/test1.asm ${BINDIR}/fvm fvm/test/test2.asm
 	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test1.fvm fvm/test/test1.asm 
-	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test2.fvm fvm/test/test2.asm 
+	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test2.fvm fvm/test/test2.asm
+	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test3.fvm fvm/test/test3.asm 
 
 
 PROGRAMS+=fvmc

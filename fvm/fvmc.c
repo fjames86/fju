@@ -83,10 +83,10 @@ static struct {
 } glob;
 
 
-static void fvmc_printf( char *fmt, ... ) {
+static void fvmc_printf( int lvl, char *fmt, ... ) {
   va_list args;
 
-  if( !glob.verbosemode ) return;
+  if( glob.verbosemode < lvl ) return;
   
   va_start( args, fmt );
   vprintf( fmt, args );
@@ -128,14 +128,14 @@ static struct label *addlabel( char *name, uint32_t addr ) {
   l = glob.labels;
   while( l ) {
     if( strcasecmp( l->name, name ) == 0 ) {
-      fvmc_printf( ";; duplicate label %s\n", name );
+      fvmc_printf( 2, ";; duplicate label %s\n", name );
       return NULL;
     }
     prev = l;
     l = l->next;
   }
 
-  fvmc_printf( ";; adding label %s addr %x\n", name, addr );
+  fvmc_printf( 2, ";; adding label %s addr %x\n", name, addr );
   l = malloc( sizeof(*l) );
   memset( l, 0, sizeof(*l) );
   strcpy( l->name, name );
@@ -187,7 +187,7 @@ static FILE *opensourcefile( char *name ) {
   sp = glob.searchpaths;
   while( sp ) {
     sprintf( path, "%s/%s", sp->path, name );
-    fvmc_printf( "Trying to open \"%s\"\n", path );
+    fvmc_printf( 2, "Trying to open \"%s\"\n", path );
     f = fopen( path, "r" );
     if( f ) return f;
     sp = sp->next;
@@ -217,10 +217,10 @@ static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
     if( parse_directive( buf, addr, passid == 0 ? NULL : outfile, passid == 1 ? 1 : 0 ) == 0 ) continue;
 
     if( passid != 1 ) {
-      fvmc_printf( ";; attempting to encode line \"%s\"\n", buf );
+      fvmc_printf( 2, ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, FVM_ADDR_TEXT + *addr, passid == 0 ? 1 : 0 ) != -1 ) {
 	if( passid == 2 ) {
-	  fvmc_printf( ";; encoding \"%s\" = %08x\n", buf, opcode );
+	  fvmc_printf( 2, ";; encoding \"%s\" = %08x\n", buf, opcode );
 	  opcode = htonl( opcode );
 	  fwrite( &opcode, 1, 4, outfile );
 	} else {
@@ -251,7 +251,7 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       strncpy( outfilename, argv[i], 255 );
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
-      glob.verbosemode = 1;
+      glob.verbosemode++;
     } else if( strcmp( argv[i], "-d" ) == 0 ) {
       disass = 1;
     } else if( strcmp( argv[i], "-I" ) == 0 ) {
@@ -271,7 +271,7 @@ int main( int argc, char **argv ) {
 
   addr = 0;
 
-  fvmc_printf( "\n ------ first pass ------- \n" );
+  fvmc_printf( 1, "\n ------ first pass ------- \n" );
 
   /* first pass collects labels and computes offsets. does not emit opcodes */
   starti = i;
@@ -290,25 +290,43 @@ int main( int argc, char **argv ) {
 
   if( disass ) exit( 0 );
   
-  fvmc_printf( "\n ------ label table ------- \n" );
+  fvmc_printf( 1, "\n ------ label table ------- \n" );
   {
     struct label *l;
     j = 0;
     l = glob.labels;
     while( l ) {
-      fvmc_printf( ";; Label %-4d %-16s = 0x%08x Flags %x SymFlags 0x%08x\n", j, l->name, l->addr, l->flags, l->symflags );
+      fvmc_printf( 1, ";; Label %-4d %-16s = 0x%08x Flags %x SymFlags 0x%08x\n", j, l->name, l->addr, l->flags, l->symflags );
       j++;
       l = l->next;
     }
   }
   
-  fvmc_printf( "\n ------ second pass ------- \n" );
+  fvmc_printf( 1, "\n ------ second pass ------- \n" );
 
   /* second pass emits output */
 
   if( !outfilename[0] ) {
-    sprintf( outfilename, "%s.fvm", glob.modulename );
+    if( starti < argc ) {
+      char outfilename2[256];
+      char *pp = argv[starti];
+      char *qq = outfilename2;
+
+      fvmc_printf( 3, "Taking outfilename from first file \"%s\"\n", argv[starti] );
+      
+      memset( outfilename2, 0, sizeof(outfilename2) );
+      while( *pp != '\0' && *pp != '.' ) {
+	*qq = *pp;
+	pp++;
+	qq++;
+      }
+      sprintf( outfilename, "%s.fvm", outfilename2 );
+    } else {
+      fvmc_printf( 3, "Taking outfilename from module name \"%s\"\n", glob.modulename );
+      sprintf( outfilename, "%s.fvm", glob.modulename );
+    }
   }
+  fvmc_printf( 1, ";; Opening outfile \"%s\"\n", outfilename );
   outfile = fopen( outfilename, "w" );
   if( !outfile ) usage( "Failed to open outfile \"%s\"", outfilename );
 
@@ -387,10 +405,10 @@ static char *parse_escaped_string( char *qq, FILE *f ) {
 	else if ( *qq >= '0' && *qq <= '9' ) c |= *qq - '0';		  
 	break;
       }
-      //fvmc_printf( "writing char %c\n", c );
+      fvmc_printf( 3, "writing char %c\n", c );
       fwrite( &c, 1, 1, f );
     } else {
-      //fvmc_printf( "writing char %c\n", *qq );
+      fvmc_printf( 3, "writing char %c\n", *qq );
       fwrite( qq, 1, 1, f );
     }
     qq++;
@@ -447,7 +465,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	}
 	p++;
 	  
-	//fvmc_printf( "String \"%.*s\" length %u\n", size - 4, startp, size - 4 );
+	fvmc_printf( 3, "String \"%.*s\" length %u\n", size - 4, startp, size - 4 );
 
 	if( f != NULL ) {	  
 	  uint32_t s = size - 4;
@@ -455,13 +473,13 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
 	    
 	    s = htonl( s );
-	    //fvmc_printf( ";; writing string length %u\n", size - 4 );
+	    fvmc_printf( 3, ";; writing string length %u\n", size - 4 );
 	    fwrite( &s, 1, 4, f );
 
 	    parse_escaped_string( startp, f );
 	    if( size % 4 ) {	      
 	      uint8_t tmp[4];
-	      //fvmc_printf( "adding string padding strlen=%u padding=%u\n", size, 4 - (size % 4) );
+	      fvmc_printf( 3, "adding string padding strlen=%u padding=%u\n", size, 4 - (size % 4) );
 	      memset( tmp, 0, 4 );
 	      fwrite( tmp, 1, 4 - (size % 4), f );
 	      size += 4 - (size % 4);
@@ -470,7 +488,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	}
 
 	if( size % 4 ) {
-	  //fvmc_printf( "size %u not multiple of 4, adding padding\n", size );
+	  fvmc_printf( 2, "size %u not multiple of 4, adding padding\n", size );
 	  size += 4 - (size % 4);
 	}
 
@@ -525,12 +543,12 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
             if( isarray ) {
               char *b = malloc( size );
               memset( b, 0, size );
-	      //fvmc_printf( "writing buffer size %u\n", size );
+	      fvmc_printf( 3, "writing buffer size %u\n", size );
               fwrite( b, 1, size, f );
 	      free( b );
              } else {
   	       x = htonl( x );
-	       //fvmc_printf( "writing uint32 %x\n", x );
+	       fvmc_printf( 3, "writing uint32 %x\n", x );
 	       fwrite( &x, 1, 4, f );
              }
 	  }
@@ -620,7 +638,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     memset( name, 0, sizeof(name) );
     p = copytoken( p, name );
 
-    fvmc_printf( "setting modulename to %s\n", name );
+    fvmc_printf( 1, ";; setting modulename to %s\n", name );
     strcpy( glob.modulename, name );
 
     return 0;
@@ -667,7 +685,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
     incfile = opensourcefile( name );
     if( !incfile ) usage( "failed to open include file \"%s\"", name );
-    fvmc_printf( "including \"%s\"\n", name );
+    fvmc_printf( 2, "including \"%s\"\n", name );
     parse_file( incfile, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
     fclose( incfile );
     return 0;
@@ -855,7 +873,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 	    j++;
 	  }
 	  if( registers[j].reg == NULL ) {
-	    fvmc_printf( ";; bad register reg=\"%s\" k=%d\n" , arg, k );
+	    fvmc_printf( 2, ";; bad register reg=\"%s\" k=%d\n" , arg, k );
 	    goto cont;
 	  }
 	  
@@ -876,13 +894,13 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 		  else if( arg[1] == '+' ) j = (addr + 4 + getlabeladdr( arg + 2 )) + 0x10000;
 		  else usage( "Bad operator %c", arg[1] );
 		} else {
-		  fvmc_printf( "Bad constant or unknown label \"%s\"\n", arg );
+		  fvmc_printf( 2, "Bad constant or unknown label \"%s\"\n", arg );
 		  goto cont;
 		}
 	      }
 	    }
 	  }
-	  fvmc_printf( ";; constant = %x str=%s\n", j, arg );
+	  fvmc_printf( 2, ";; constant = %x str=%s\n", j, arg );
 	  *opcode |= j & 0xffff;
 	  break;
 	}

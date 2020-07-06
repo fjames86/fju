@@ -1109,8 +1109,9 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     sts = xdr_decode_uint32( xdr, &datasize );
     sts = xdr_decode_uint32( xdr, &textsize );
     sts = xdr_decode_uint64( xdr, &clid );
-    printf( "%-32s Program %u:%u Data %u Text %u CLID %"PRIx64"\n",
-	    name, progid, versid, datasize, textsize, clid );
+    sts = xdr_decode_uint32( xdr, &flags );
+    printf( "%s Program %u:%u Data %u Text %u Flags 0x%08x CLID %"PRIx64"\n",
+	    name, progid, versid, datasize, textsize, flags, clid );
     
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "xdr error" );
@@ -1118,7 +1119,15 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     while( b ) {
       sts = xdr_decode_string( xdr, name, sizeof(name) );
       sts = xdr_decode_uint32( xdr, &flags );
-      printf( "  ID %-4u Name %-16s Flags 0x%08x\n", c, name, flags );
+      printf( "  ID %-4u Name %-16s Flags 0x%08x", c, name, flags );
+      if( (flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_UINT32 ) printf( " Type %-8s", "UINT32" );
+      else if( (flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_UINT64 ) printf( " Type %-8s", "UINT64" );
+      else if( (flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_STRING ) printf( " Type %-8s", "STRING" );
+      else if( (flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_PROC ) printf( " Type %-8s", "PROC" ); 
+      else printf( "?" );
+      printf( " Size %u", flags & FVM_SYMBOL_SIZE_MASK );
+      
+      printf( "\n" );
       c++;
       
       sts = xdr_decode_boolean( xdr, &b );

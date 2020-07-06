@@ -1,10 +1,9 @@
 
 MEMSET:
 	;; dest val count
-	POP		R7
-	POP		R0 	; count
-	POP		R1	; val
-	POP		R2	; dest
+	LDSP		R0	-8 ; count
+	LDSP		R1	-12 ; val
+	LDSP		R2	-16 ; dest 
 	CMP		R0	0 
 	JZ		MEMSET-END
 MEMSET-LOOP:
@@ -12,5 +11,4 @@ MEMSET-LOOP:
 	SUB		R0	4
 	JP		MEMSET-LOOP
 MEMSET-END:
-	PUSH		R7
 	RET

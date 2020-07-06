@@ -16,6 +16,8 @@
 PROC-NULL:
 	PUSH		hello
 	CALLNAT		R2 		NATIVE-LOGSTR
+	SUBSP		4
+	
 	RET
 	
 ;;; ------------------------------------------

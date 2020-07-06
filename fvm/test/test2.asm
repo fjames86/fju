@@ -17,7 +17,8 @@ MAIN:
 
 	PUSH		test2-success
 	CALLNAT		R5		NATIVE-PUTS
-
+	SUBSP		4
+	
 	LDI		R0		10000
 	LDI		R1		1
 	PUSH		123
@@ -34,6 +35,7 @@ MAIN:
 	
 	PUSH		test2-success
 	CALLNAT		R5		NATIVE-PUTS
+	SUBSP		4
 	
 	RET
 

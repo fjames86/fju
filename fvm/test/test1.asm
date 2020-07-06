@@ -37,7 +37,8 @@ MAIN:
 
 	PUSH		test-success
 	CALLNAT		R6	NATIVE-PUTS
-
+	SUBSP		4
+	
 	;; Set result registers
 	LDI		R0		0
 	LDI		R1		0
@@ -47,7 +48,8 @@ MAIN:
 TEST-ADD:
 	PUSH		test-add-name
 	CALLNAT		R6	NATIVE-PUTS
-
+	SUBSP		4
+	
 	POP		R7
 	POP		R0	; get expected result
 	POP		R1	; get y
@@ -62,7 +64,8 @@ TEST-ADD:
 TEST-SUB:
 	PUSH		test-sub-name
 	CALLNAT		R6	NATIVE-PUTS
-
+	SUBSP		4
+	
 	POP		R7
 	POP 		R0
 	POP		R1
@@ -77,7 +80,8 @@ TEST-SUB:
 TEST-MUL:
 	PUSH		test-mul-name
 	CALLNAT		R6	NATIVE-PUTS
-
+	SUBSP		4
+	
 	POP		R7
 	POP 		R0
 	POP		R1
@@ -92,7 +96,8 @@ TEST-MUL:
 TEST-MOD:
 	PUSH		test-mod-name
 	CALLNAT		R6	NATIVE-PUTS
-
+	SUBSP		4
+	
 	POP		R7
 	POP 		R0
 	POP		R1
@@ -107,7 +112,8 @@ TEST-MOD:
 TEST-DIV:
 	PUSH		test-div-name
 	CALLNAT		R6	NATIVE-PUTS
-
+	SUBSP		4
+	
 	POP		R7
 	POP 		R0
 	POP		R1

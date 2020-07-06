@@ -50,6 +50,30 @@ FN2:
 	ADD		R0		1  ;x=x+1
 	ST		R1		R0 ;*y = x
 	RET
-		
-	.EXPORT	MAIN
+
+;;; ----------------------------------------------------------------
+
+	.INCLUDE	"native.asm"
 	
+	.TEXT		testlogname 	"test3"
+	.TEXT		bufp 		0x12345678
+testlogging:
+	PUSH		testlogname	
+	PUSH		bufp
+	PUSH		4	
+	CALLNAT		R0		NATIVE-WRITELOG
+	SUBSP		12
+
+	PUSH		testlogname
+	PUSH		0
+	PUSH		0
+	PUSH		bufp
+	PUSH		4
+	CALLNAT		R0		NATIVE-READLOG
+	SUBSP		16
+
+	RET
+
+	
+	.EXPORT	MAIN
+	.EXPORT	testlogging

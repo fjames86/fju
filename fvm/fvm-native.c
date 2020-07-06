@@ -17,6 +17,10 @@ static uint32_t fvm_stack_read( struct fvm_s *state, int depth ) {
   return fvm_read( state, state->reg[FVM_REG_SP] - depth );
 }
 
+static void fvm_stack_write( struct fvm_s *state, int depth, uint32_t x ) {
+  fvm_write( state, state->reg[FVM_REG_SP] - depth, x );
+}
+
 typedef int (*fvm_native_cb)( struct fvm_s *state );
 
 struct fvm_native_proc {
@@ -159,7 +163,8 @@ static int native_writelog( struct fvm_s *state ) {
   
   bufp = fvm_getaddr( state, bufaddr );
   if( !bufp ) return -1;
-  
+
+  fvm_printf( "native_writelog opening file \"%s\" count=%u\n", str, bufcount );
   sts = log_open( mmf_default_path( str, NULL ), NULL, &log );
   if( sts ) return -1;
   log_write_buf( &log, LOG_LVL_INFO, bufp, bufcount, NULL );
@@ -175,6 +180,8 @@ static int native_readlog( struct fvm_s *state ) {
   char *bufp;
   char str[FVM_MAX_NAME];
   uint64_t id;
+  struct log_entry entry;
+  struct log_iov iov[1];
   
   /* readlog(logname, id, buf, count */
   
@@ -190,9 +197,22 @@ static int native_readlog( struct fvm_s *state ) {
   
   sts = log_open( mmf_default_path( str, NULL ), NULL, &log );
   if( sts ) return -1;
-  log_read_buf( &log, id, bufp, bufcount, &msglen );
+
+  memset( &entry, 0, sizeof(entry) );
+  iov[0].buf = bufp;
+  iov[0].len = bufcount;
+  entry.iov = iov;
+  entry.niov = 1;
+  msglen = log_read_entry( &log, id, &entry );
+  if( msglen == 0 ) {
+    msglen = entry.msglen;
+    fvm_stack_write( state, 16, htonl( entry.id >> 32 ) );
+    fvm_stack_write( state, 12, htonl( entry.id & 0xffffffff ) );
+  }
   log_close( &log );
 
+  
+  
   return msglen;
 }
 

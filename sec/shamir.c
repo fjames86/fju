@@ -65,6 +65,7 @@ int main( int argc, char **argv ) {
       if( argi >= argc ) usage( NULL );
       k = strtoul( argv[argi], NULL, 10 );
     } else break;
+    argi++;
   }
       
   

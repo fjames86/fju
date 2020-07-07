@@ -46,6 +46,9 @@ install: all #strip
 	mkdir -p /opt/fju
 	cd bin && cp ${PROGRAMS} /usr/local/bin
 	cp ${LIBFJU} /usr/local/lib
+	mkdir -p /opt/fju/fvm
+	cp fvm/programs/test-rpc.fvm /opt/fju/fvm
+	sh scripts/regfvm.sh /opt/fju/fvm/test-rpc.fvm 
 
 uninstall:
 	cd /usr/local/bin && rm ${PROGRAMS}

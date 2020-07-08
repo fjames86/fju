@@ -434,6 +434,7 @@ static int fvm_proc_write( struct rpc_inc *inc ) {
   cl.stateterm = cl.termseq;
   cl.stateseq++;
   cl.commitseq = cl.stateseq;
+  fvm_log( LOG_LVL_TRACE, "setting cluster stateseq=%"PRIu64"", cl.stateseq );
   raft_cluster_set( &cl );
 
   if( len == m->header.datasize ) {
@@ -922,6 +923,7 @@ static void fvm_call_ping_donecb( struct xdr_s *xdr, void *cxt ) {
     if( sts ) goto done;
     member.nextseq = cl.stateseq;
     member.stateseq = p->stateseq;
+    fvm_log( LOG_LVL_TRACE, "Setting member stateseq %"PRIu64"", p->stateseq );
     raft_member_set( &member );
   }
 
@@ -937,7 +939,7 @@ static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t pro
   struct rpc_conn *tmpconn;
   struct ping_cxt *p;
 
-  fvm_log( LOG_LVL_DEBUG, "fvm_call_ping Progid %u Cluster %"PRIx64" Hostid %"PRIx64"", progid, cl->id, hostid );
+  fvm_log( LOG_LVL_DEBUG, "fvm_call_ping clid=%"PRIx64" Progid=%u Hostid=%"PRIx64" datasize=%u", cl->id, progid, hostid, datasize );
   
   tmpconn = rpc_conn_acquire();
   if( !tmpconn ) return -1;
@@ -1009,6 +1011,8 @@ static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_
   struct rpc_conn *tmpconn;
   struct hrauth_call hcall;
   struct write_cxt *w;
+
+  fvm_log( LOG_LVL_DEBUG, "fvm_call_write clid=%"PRIx64" hostid=%"PRIx64" datasize=%u", cl->id, hostid, module->header.datasize );
   
   tmpconn = rpc_conn_acquire();
   if( !tmpconn ) return -1;
@@ -1045,8 +1049,12 @@ static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module )
   
   n = raft_member_list( cl->id, member, 32 );
   for( i = 0; i < n; i++ ) {
+    fvm_log( LOG_LVL_TRACE, "Comparing cluster stateseq %"PRIu64" to member stateseq %"PRIu64"", cl->stateseq, member[i].stateseq );
+    
     if( member[i].stateseq < cl->stateseq ) {
-      fvm_log( LOG_LVL_DEBUG, "Sending updated state to member %s cluster %"PRIx64" member %"PRIx64"", module->header.name, cl->id, member[i].hostid );
+      fvm_log( LOG_LVL_DEBUG, "Sending updated state module=%s clid=%"PRIx64" member=%"PRIx64" cl.stateseq=%"PRIu64" member.stateseq="PRIu64"",
+	       module->header.name, cl->id, member[i].hostid, cl->stateseq, member[i].stateseq );
+
       fvm_call_ping( cl, member[i].hostid, module->header.progid, (char *)module->data, (int)module->header.datasize );
     } 
   }

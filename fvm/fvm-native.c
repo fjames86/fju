@@ -12,6 +12,7 @@
 #include <fju/rpc.h>
 #include <fju/sec.h>
 #include <fju/log.h>
+#include <fju/freg.h>
 
 static uint32_t fvm_stack_read( struct fvm_s *state, int depth ) {
   return fvm_read( state, state->reg[FVM_REG_SP] - depth );
@@ -210,10 +211,58 @@ static int native_readlog( struct fvm_s *state ) {
     fvm_stack_write( state, 12, htonl( entry.id & 0xffffffff ) );
   }
   log_close( &log );
-
-  
   
   return msglen;
+}
+
+static int native_freg_get( struct fvm_s *state ) {
+  uint32_t size, bufaddr, nameaddr, flags;
+  char *buf;
+  char name[1024];
+  int sts, lenp;
+  
+  /* freg_get( char *name, uint32_t flags, char *buf, int size ) */
+  size = ntohl( fvm_stack_read( state, 4 ) );
+  bufaddr = ntohl( fvm_stack_read( state, 8 ) );
+  buf = fvm_getaddr( state, bufaddr );
+  if( !buf ) {
+    fvm_printf( "Bad name address\n" );
+    return -1;
+  }
+  
+  flags = ntohl( fvm_stack_read( state, 12 ) );
+  nameaddr = ntohl( fvm_stack_read( state, 16 ) );  
+  native_readstr( state, nameaddr, name, sizeof(name) );
+  
+  sts = freg_get_by_name( NULL, 0, name, flags, buf, size, &lenp );
+  if( sts ) {
+    fvm_printf( "freg_Get_by_name failed name=%s flags=%x size=%u\n", name, flags, size );
+    return -1;
+  }
+  
+  return lenp;  
+}
+
+static int native_freg_put( struct fvm_s *state ) {
+  uint32_t size, bufaddr, nameaddr, flags;
+  char *buf;
+  char name[1024];
+  int sts;
+
+  /* freg_put( char *name, uint32_t flags, char *buf, int size ) */
+  size = ntohl( fvm_stack_read( state, 4 ) );
+  bufaddr = ntohl( fvm_stack_read( state, 8 ) );
+  buf = fvm_getaddr( state, bufaddr );
+  if( !buf ) return -1;
+  
+  flags = ntohl( fvm_stack_read( state, 12 ) );
+  nameaddr = ntohl( fvm_stack_read( state, 16 ) );  
+  native_readstr( state, nameaddr, name, sizeof(name) );
+  
+  sts = freg_put( NULL, 0, name, flags, buf, size, NULL );
+  if( sts ) return -1;
+  
+  return 0;  
 }
 
 static struct fvm_native_proc native_procs[] =
@@ -228,6 +277,8 @@ static struct fvm_native_proc native_procs[] =
    { 7, native_progid_by_name },
    { 8, native_writelog },
    { 9, native_readlog },
+   { 10, native_freg_get },
+   { 11, native_freg_put },
    
    { 0, NULL }
   };

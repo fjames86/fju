@@ -1052,17 +1052,17 @@ static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module )
   }
 }
 
-int fvm_cluster_update( struct fvm_s *state ) {
+int fvm_cluster_update( struct fvm_module *module ) {
   int sts;
   struct raft_cluster cl;
 
   fvm_log( LOG_LVL_INFO, "Updating cluster for program %s %u:%u cluster %"PRIx64"",
-	   state->module->header.name,
-	   state->module->header.progid,
-	   state->module->header.versid,
-	   state->module->clusterid );
+	   module->header.name,
+	   module->header.progid,
+	   module->header.versid,
+	   module->clusterid );
   
-  sts = raft_cluster_by_id( state->module->clusterid, &cl );
+  sts = raft_cluster_by_id( module->clusterid, &cl );
   if( sts ) return sts;
 
   if( cl.state == RAFT_STATE_LEADER ) {
@@ -1072,11 +1072,11 @@ int fvm_cluster_update( struct fvm_s *state ) {
     cl.commitseq = cl.stateseq;
     raft_cluster_set( &cl );
     
-    fvm_send_pings( &cl, state->module );
+    fvm_send_pings( &cl, module );
   } else {
     /* send write to leader */
     if( !cl.leaderid ) return -1;
-    sts = fvm_call_write( &cl, cl.leaderid, state->module, 3, 500 );
+    sts = fvm_call_write( &cl, cl.leaderid, module, 3, 500 );
     if( sts ) return sts;
   }
   

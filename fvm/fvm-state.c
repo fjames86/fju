@@ -12,6 +12,8 @@
 #include "fvm-private.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <inttypes.h>
+
 #include <fju/log.h>
 #include <fju/programs.h>
 #include <fju/rpc.h>
@@ -64,18 +66,23 @@ int fvm_get_res( struct fvm_s *state, char **buf ) {
 }
 
 int fvm_run( struct fvm_s *state, int nsteps ) {
-  int sts = 0;
-
-  if( nsteps == 0 ) nsteps = fvm_max_steps( 0 );
+  int sts = 0, ns = 0;
+  uint64_t start, end;
   
+  if( nsteps == 0 ) nsteps = fvm_max_steps( 0 );
+
+  start = rpc_now();
   while( (nsteps == -1 || state->nsteps < nsteps) && state->frame >= 0 ) {
     sts = fvm_step( state );
+    ns++;
     if( sts ) {
-      printf( "xxx fvm_step returned error status\n" );
+      fvm_printf( "xxx fvm_step returned error status\n" );
       break;
     }
   }
-
+  end = rpc_now();
+  fvm_log( LOG_LVL_DEBUG, "fvm_run name=%s progid=%u took %"PRIu64"ms in %u steps", state->module->header.name, state->module->header.progid, end - start, ns );
+  
   if( sts ) return sts;
 
   /* if clustered then send pings etc */

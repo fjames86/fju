@@ -70,6 +70,7 @@ static uint32_t sign_extend( uint32_t x ) {
 static uint32_t limitaddr( uint32_t addr, uint32_t start, uint32_t count ) {
   if( addr < start ) return start;
   if( addr >= (start + count) ) return start + count;
+  if( addr % 4 ) addr -= addr % 4;
   return addr;
 }
 
@@ -593,15 +594,21 @@ static int opcode_leaspreg( struct fvm_s *state, uint32_t flags, uint32_t reg, u
 
 static int opcode_addspreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ADDSP RX */
-  state->reg[FVM_REG_SP] += ntohl( state->reg[reg] );
-  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK;  
+  uint32_t x = ntohl( state->reg[reg] );
+  if( x % 4 ) x -= x % 4;
+  state->reg[FVM_REG_SP] += x;
+  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK;
+  if( state->reg[FVM_REG_SP] > (FVM_ADDR_STACK + FVM_MAX_STACK) ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK + FVM_MAX_STACK;
   return 0;
 }
 
 static int opcode_addspconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* ADDSP const */
-  state->reg[FVM_REG_SP] += sign_extend( data );
-  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK;  
+  uint32_t x = sign_extend( data );
+  if( x % 4 ) x -= x % 4;
+  state->reg[FVM_REG_SP] += x;
+  if( state->reg[FVM_REG_SP] < FVM_ADDR_STACK ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK;
+  if( state->reg[FVM_REG_SP] > (FVM_ADDR_STACK + FVM_MAX_STACK) ) state->reg[FVM_REG_SP] = FVM_ADDR_STACK + FVM_MAX_STACK;  
   return 0;
 }
 

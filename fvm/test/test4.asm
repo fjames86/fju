@@ -3,29 +3,53 @@
 
 	.INCLUDE	"native.asm"
 
-	.TEXT		keyname "test4"
-	.TEXT		keyval	0x1234
-MAIN:
-	;; try calling freg-get(name,flags,buf,size)
-	PUSH		keyname
-	PUSH		FREG-TYPE-UINT32
-	PUSH		keyval
-	PUSH		4
-	CALLNAT		R0		NATIVE-FREG-GET
-	SUBSP		16 
+	.TEXT		keynameu32 	"test4-u32"
+	.TEXT		keynamestr 	"test4-str"
+	.TEXT		teststr 	"test4 hello world!"
 
-	LDI		R0		keyval
-	LD		R1		R0
-	ADD		R1		1
-	ST		R0		R1
+MAIN:
+	;; call fregget-u32(name)
+	PUSH		keynameu32
+	CALLNAT		R0		NATIVE-FREGGET-U32
+	SUBSP		4
+
+	;; increment whatever value got returned 
+	ADD		R0		1
 	
-	;; call freg-put(name,flags,buf,size)
-	PUSH		keyname
-	PUSH		FREG-TYPE-UINT32
-	PUSH		keyval
-	PUSH		4
-	CALLNAT		R0		NATIVE-FREG-PUT
+	;; call fregput-u32(name,val)
+	PUSH		R0		
+	PUSH		keynameu32
+	CALLNAT		R0		NATIVE-FREGPUT-U32
+	SUBSP		8
+
+	;; call fregput-buf(name,flags,buf,len)
+	LD		R0		teststr	; get string length
+	PUSH		R0			; push len
+	LDI		R0		teststr
+	ADD		R0		4
+	PUSH		R0	; push buf
+	PUSH		FREG-TYPE-STRING ; push flags
+	PUSH		keynamestr
+	CALLNAT		R0		NATIVE-FREGPUT-BUF
 	SUBSP		16
+
+	LEASP		R1		0 ; get some space on stack
+	MOV		R2		R1
+	ADD		R2		4 ; reserve length prefix 
+	ADDSP		68
+	PUSH		64 	; push len
+	PUSH		R2 	; push buf
+	PUSH		FREG-TYPE-STRING
+	PUSH		keynamestr
+	CALLNAT		R0		NATIVE-FREGGET-BUF
+	SUBSP		16
+	ST		R1		R0 ; save length
+	
+	PUSH		R1
+	CALLNAT		R0		NATIVE-PUTS
+	SUBSP		4
+
+	SUBSP		68 	; free string
 	
 	RET
 

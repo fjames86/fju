@@ -34,8 +34,8 @@ FN1:
 	LDSP		R0	-8 ;get n
 	LEASP		R1	-8 ;&n
 	
-	PUSH		R0	
-	PUSH		R1
+	PUSH		R1	
+	PUSH		R0
 	CALL		FN2	; R0 = FN2(n, &n)
 	SUBSP		8 	; clean stack
 	
@@ -45,10 +45,10 @@ FN1:
 
 	;; void FN2(int x, int *y)
 FN2:
-	LDSP		R1		-8 ;get y
-	LDSP		R0		-12 ;get x
-	ADD		R0		1  ;x=x+1
-	ST		R1		R0 ;*y = x
+	LDSP		R0		-8 ;get y
+	LDSP		R1		-12 ;get x
+	ADD		R1		1  ;x=x+1
+	ST		R0		R1 ;*y = x
 	RET
 
 ;;; ----------------------------------------------------------------
@@ -58,17 +58,17 @@ FN2:
 	.TEXT		testlogname 	"test3"
 	.TEXT		bufp 		0x12345678
 testlogging:
+	PUSH		4
+	PUSH		bufp	
 	PUSH		testlogname	
-	PUSH		bufp
-	PUSH		4	
 	CALLNAT		R0		NATIVE-WRITELOG
 	SUBSP		12
 
-	PUSH		testlogname
-	PUSH		0
-	PUSH		0
-	PUSH		bufp
 	PUSH		4
+	PUSH		bufp
+	PUSH		0
+	PUSH		0	
+	PUSH		testlogname
 	CALLNAT		R0		NATIVE-READLOG
 	SUBSP		16
 

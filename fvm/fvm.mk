@@ -25,10 +25,12 @@ fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.asm fvm/programs
 	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm -I fvm/stdlib/ fvm/programs/test-rpc.asm
 	${BINDIR}/fvmc -o fvm/programs/test-service.fvm -I fvm/stdlib/ fvm/programs/test-service.asm
 
-fvm/test/test1.fvm: ${BINDIR}/fvmc fvm/test/test1.asm ${BINDIR}/fvm fvm/test/test2.asm
-	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test1.fvm fvm/test/test1.asm 
-	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test2.fvm fvm/test/test2.asm
-	${BINDIR}/fvmc -I fvm/stdlib/ -o fvm/test/test3.fvm fvm/test/test3.asm 
+fvmtest_source+=fvm/test/test1.asm
+fvmtest_source+=fvm/test/test2.asm
+fvmtest_source+=fvm/test/test3.asm
+fvmtest_source+=fvm/test/test4.asm
+fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm ${fvmtest_source}
+	for x in ${fvmtest_source}; do ${BINDIR}/fvmc -I fvm/stdlib/ $$x; done 
 
 
 PROGRAMS+=fvmc

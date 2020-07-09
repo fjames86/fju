@@ -151,36 +151,45 @@ static int native_progid_by_name( struct fvm_s *state ) {
   return htonl( progid );
 }
 
+static struct log_s prevlog;
+static char prevlogname[64];
+
 static int native_writelog( struct fvm_s *state ) {
   int sts;
-  struct log_s log;
   uint32_t bufcount, bufaddr;
   char *bufp;
   char str[FVM_MAX_NAME];
-  
+
   /* int writelog(logname, buf, count) */
 
   native_readstr( state, ntohl( fvm_stack_read( state, 4 ) ), str, sizeof(str) );
   bufaddr = ntohl( fvm_stack_read( state, 8 ) );  
   bufcount = ntohl( fvm_stack_read( state, 12 ) );
 
-  strcat( str, ".log" );
+  if( strcmp( prevlogname, str ) != 0 ) {
+    if( prevlog.pid ) log_close( &prevlog );
+    memset( &prevlog, 0, sizeof(prevlog) );
+    strcpy( prevlogname, str );  
+    strcat( str, ".log" );
+
+    fvm_printf( "native_writelog opening file \"%s\" count=%u\n", str, bufcount );
+    sts = log_open( mmf_default_path( str, NULL ), NULL, &prevlog );
+    if( sts ) {
+      strcpy( prevlogname, "" );
+      return -1;
+    }
+  }
   
   bufp = fvm_getaddr( state, bufaddr );
   if( !bufp ) return -1;
-
-  fvm_printf( "native_writelog opening file \"%s\" count=%u\n", str, bufcount );
-  sts = log_open( mmf_default_path( str, NULL ), NULL, &log );
-  if( sts ) return -1;
-  log_write_buf( &log, LOG_LVL_INFO, bufp, bufcount, NULL );
-  log_close( &log );
+  
+  log_write_buf( &prevlog, LOG_LVL_INFO, bufp, bufcount, NULL );
 
   return 0;
 }
 
 static int native_readlog( struct fvm_s *state ) {
   int sts, msglen;
-  struct log_s log;
   uint32_t bufcount, bufaddr;
   char *bufp;
   char str[FVM_MAX_NAME];
@@ -196,26 +205,34 @@ static int native_readlog( struct fvm_s *state ) {
   bufaddr = ntohl( fvm_stack_read( state, 16 ) );  
   bufcount = ntohl( fvm_stack_read( state, 20 ) );
 
-  strcat( str, ".log" );
+  if( strcmp( prevlogname, str ) != 0 ) {
+    if( prevlog.pid ) log_close( &prevlog );
+    memset( &prevlog, 0, sizeof(prevlog) );
+    strcpy( prevlogname, str );  
+    strcat( str, ".log" );
+
+    fvm_printf( "native_writelog opening file \"%s\" count=%u\n", str, bufcount );
+    sts = log_open( mmf_default_path( str, NULL ), NULL, &prevlog );
+    if( sts ) {
+      strcpy( prevlogname, "" );
+      return -1;
+    }
+  }
   
   bufp = fvm_getaddr( state, bufaddr );
   if( !bufp ) return -1;
   
-  sts = log_open( mmf_default_path( str, NULL ), NULL, &log );
-  if( sts ) return -1;
-
   memset( &entry, 0, sizeof(entry) );
   iov[0].buf = bufp;
   iov[0].len = bufcount;
   entry.iov = iov;
   entry.niov = 1;
-  msglen = log_read_entry( &log, id, &entry );
+  msglen = log_read_entry( &prevlog, id, &entry );
   if( msglen == 0 ) {
     msglen = entry.msglen;
     fvm_stack_write( state, 16, htonl( entry.id >> 32 ) );
     fvm_stack_write( state, 12, htonl( entry.id & 0xffffffff ) );
   }
-  log_close( &log );
   
   return msglen;
 }

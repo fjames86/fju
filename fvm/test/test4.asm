@@ -1,4 +1,6 @@
-
+;;; This file shows calling some native functions for freg get/put and sprintf
+	
+	
 	.MODULE		test4
 
 	.INCLUDE	"native.asm"

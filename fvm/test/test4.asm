@@ -6,7 +6,8 @@
 	.TEXT		keynameu32 	"test4-u32"
 	.TEXT		keynamestr 	"test4-str"
 	.TEXT		teststr 	"test4 hello world!"
-
+	.TEXT		testfmt		"test format \"%s\"\n"
+	
 MAIN:
 	;; call fregget-u32(name)
 	PUSH		keynameu32
@@ -49,7 +50,25 @@ MAIN:
 	CALLNAT		R0		NATIVE-PUTS
 	SUBSP		4
 
+;;;  --------- test format
+
+	PUSH		teststr	; arg0
+	PUSH		testfmt	;fmt
+	PUSH		68	; len
+	PUSH		R1	; buf
+	;;  sprintf(buf,len,fmt,...)
+	CALLNAT		R0		NATIVE-SPRINTF
+	SUBSP		16
+	
+	PUSH		R1
+	CALLNAT		R0		NATIVE-PUTS
+	SUBSP		4 
+	
+	
 	SUBSP		68 	; free string
+
+	
+
 	
 	RET
 

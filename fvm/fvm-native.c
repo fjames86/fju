@@ -305,6 +305,79 @@ static int native_fregput_buf( struct fvm_s *state ) {
   return 0;  
 }
 
+static int native_sprintf( struct fvm_s *state ) {
+  uint32_t bufaddr, fmtaddr, bufsize;
+  char fmt[1024];
+  char argstr[256];
+  char *p, *q, *buf;
+  int n, argi, blen;
+  
+  /* sprintf( buf, bufsize, fmt, ... ) */
+  bufaddr = ntohl( fvm_stack_read( state, 4 ) );
+  buf = fvm_getaddr( state, bufaddr );
+  if( !buf ) return -1;    
+  bufsize = ntohl( fvm_stack_read( state, 8 ) );
+
+  /* check buffer */
+  if( !((bufaddr >= FVM_ADDR_DATA && bufaddr < (FVM_ADDR_DATA + state->datasize - bufsize)) ||
+	(bufaddr >= FVM_ADDR_STACK && bufaddr < (FVM_ADDR_STACK + FVM_MAX_STACK - bufsize))) ) {
+    fvm_printf( "Bad buffer out of range or too large addr=%x size=%u\n", bufaddr, bufsize );
+    return -1;
+  }
+  
+  fmtaddr = ntohl( fvm_stack_read( state, 12 ) );
+  native_readstr( state, fmtaddr, fmt, sizeof(fmt) );
+
+  /* parse format string, getting args when required */
+  p = fmt;
+  q = buf + 4;
+  blen = 0;
+  argi = 0;
+  while( *p ) {
+    if( *p == '%' ) {
+      p++;
+      switch( *p ) {
+      case 's':
+	native_readstr( state, ntohl( fvm_stack_read( state, 16 + argi*4 ) ), argstr, sizeof(argstr) );
+	n = sprintf( q, "%s", argstr );
+	blen += n;
+	q += n;
+	p++;
+	break;
+      case 'd':
+	n = sprintf( q, "%d", ntohl( fvm_stack_read( state, 16 + argi*4 ) ) );
+	blen += n;
+	q += n;
+	p++;	
+	break;
+      case 'u':
+	n = sprintf( q, "%u", ntohl( fvm_stack_read( state, 16 + argi*4 ) ) );
+	blen += n;
+	q += n;
+	p++;		
+	break;
+      case 'x':
+	n = sprintf( q, "%x", ntohl( fvm_stack_read( state, 16 + argi*4 ) ) );
+	blen += n;
+	q += n;
+	p++;		
+	break;
+      default:
+	break;
+      }
+      argi++;
+    } else {
+      *q = *p;
+      p++;
+      q++;
+      blen++;
+    }
+  }
+
+  *((uint32_t *)buf) = htonl( blen );
+  return blen;
+}
+
 static struct fvm_native_proc native_procs[] =
   {
    { 0, native_nop },
@@ -321,6 +394,7 @@ static struct fvm_native_proc native_procs[] =
    { 11, native_fregput_u32 },   
    { 12, native_fregget_buf },
    { 13, native_fregput_buf },
+   { 14, native_sprintf },   
    
    { 0, NULL }
   };

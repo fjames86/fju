@@ -10,7 +10,7 @@
 	.MODULE		test3
 
 MAIN:
-	ADDSP		4	;int i 
+	ADDSP		4	;reserve some space for an int i 
 	LDI		R0		0
 	STSP		R0		-4 ; set i = 0
 LOOP:	
@@ -45,10 +45,10 @@ FN1:
 
 	;; void FN2(int x, int *y)
 FN2:
-	LDSP		R0		-8 ;get y
-	LDSP		R1		-12 ;get x
-	ADD		R1		1  ;x=x+1
-	ST		R0		R1 ;*y = x
+	LDSP		R0		-8 ;get x
+	LDSP		R1		-12 ;get y
+	ADD		R0		1  ;x=x+1
+	ST		R1		R0 ;*y = x
 	RET
 
 ;;; ----------------------------------------------------------------

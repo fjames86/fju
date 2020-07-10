@@ -163,7 +163,9 @@ static int native_writelog( struct fvm_s *state ) {
   /* int writelog(logname, buf, count) */
 
   native_readstr( state, ntohl( fvm_stack_read( state, 4 ) ), str, sizeof(str) );
-  bufaddr = ntohl( fvm_stack_read( state, 8 ) );  
+  bufaddr = ntohl( fvm_stack_read( state, 8 ) );
+  bufp = fvm_getaddr( state, bufaddr );
+  if( !bufp ) return -1;  
   bufcount = ntohl( fvm_stack_read( state, 12 ) );
 
   if( strcmp( prevlogname, str ) != 0 ) {
@@ -179,10 +181,7 @@ static int native_writelog( struct fvm_s *state ) {
       return -1;
     }
   }
-  
-  bufp = fvm_getaddr( state, bufaddr );
-  if( !bufp ) return -1;
-  
+    
   log_write_buf( &prevlog, LOG_LVL_INFO, bufp, bufcount, NULL );
 
   return 0;

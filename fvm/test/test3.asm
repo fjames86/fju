@@ -74,6 +74,13 @@ testlogging:
 
 	RET
 
+
+infiniteloop:
+	NOP
+	JMP 		infiniteloop
+	RET
 	
-	.EXPORT	MAIN
-	.EXPORT	testlogging
+	.EXPORT		MAIN
+	.EXPORT		testlogging
+	.EXPORT 	infiniteloop
+	

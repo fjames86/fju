@@ -9,6 +9,7 @@ freg put fju/fvm/programs/test-rpc str test-rpc
 
 fvm fvm/test/test1.fvm
 fvm -m test2 -s MAIN fvm/test/test1.fvm fvm/test/test2.fvm
+fvm fvm/test/test3.fvm
 
 	
 echo "------------- FVM.LIST -------------------------- "

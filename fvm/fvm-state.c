@@ -76,7 +76,7 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
     sts = fvm_step( state );
     ns++;
     if( sts ) {
-      fvm_printf( "xxx fvm_step returned error status\n" );
+      fvm_printf( "fvm_step returned error status\n" );
       break;
     }
   }

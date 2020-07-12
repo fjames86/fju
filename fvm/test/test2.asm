@@ -40,7 +40,9 @@ MAIN:
 	PUSH		test2-success
 	CALLNAT		R5		NATIVE-PUTS
 	SUBSP		4
-	
+
+	LDI		R0 		0
+	LDI		R1		0 
 	RET
 
 TEST-FAIL:

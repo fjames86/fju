@@ -495,6 +495,9 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   res = (char *)&state->stack[sp - FVM_ADDR_STACK];
   ressize = FVM_MAX_STACK - (sp - FVM_ADDR_STACK);
 
+  /* clean stack */
+  state->reg[FVM_REG_SP] -= argsize;
+  
   m = fvm_module_by_progid( ntohl( state->reg[rx] ) );
   if( !m ) {
     fvm_printf( "callvirt unknown progid %u\n", ntohl( state->reg[rx] ) );
@@ -537,6 +540,7 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
 
   memcpy( res, resp, ressize );
   state->reg[rz] = htonl( ressize );
+  state->reg[FVM_REG_SP] += ressize;
   fvm_printf( "callvirt success\n" );
   return 0;
 }

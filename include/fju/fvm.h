@@ -44,6 +44,7 @@ struct fvm_s {
 
   uint32_t flags;
 #define FVM_STATE_DIRTY        0x0001      /* data section was written to */
+#define FVM_STATE_YIELD        0x0002      /* state yielded */
   uint32_t datasize;
   uint8_t *data;
   uint32_t textsize;

@@ -14,6 +14,8 @@
 	.TEXT		logmsg		"Test service routine"
 
 	.DATA		progid		0
+
+;;; -----------------------------------------------------
 	
 SERVICE:
 	
@@ -28,16 +30,24 @@ SERVICE:
 	LDI		R2		0 ; arg length 
 	CALLVIRT	R0		R1		R2
 
+	;; YIELD
+	;; PUSH		logmsg
+	;; CALLNAT		R0		NATIVE-LOGSTR
+	
 	;; ret 
 	LDI		R0		0
 	LDI		R1		0
 	RET
 
+;;; -----------------------------------------------------
+	
 INIT:
 	CALL		GETPROGID
 	LDI		R0		0
 	LDI		R1		0
 	RET
+
+;;; -----------------------------------------------------
 	
 GETPROGID:
 	POP		R7	; save return  address

@@ -72,7 +72,9 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
   if( nsteps == 0 ) nsteps = fvm_max_steps( 0 );
 
   start = rpc_now();
-  while( (nsteps == -1 || state->nsteps < nsteps) && state->frame >= 0 ) {
+  while( !(state->flags & FVM_STATE_YIELD) &&
+	 (nsteps == -1 || state->nsteps < nsteps) &&
+	 (state->frame >= 0) ) {
     sts = fvm_step( state );
     ns++;
     if( sts ) {

@@ -13,9 +13,13 @@
 	;; };	
 	.CONST		entrysize	16
 	.CONST		maxentry	16
+
+;;; --------------------------------------------------------------------------
 	
 	.DATA		entries		ARRAY 256
 	.DATA		nentry		0
+
+;;; --------------------------------------------------------------------------
 	
 	;; register(progid,procid,timeout)
 REGISTER:
@@ -39,7 +43,7 @@ L1:
 DONE:	
 	RET
 
-
+;;; --------------------------------------------------------------------------
 	
 	;; sevice routine (iterator). Execute any registered callbacks.
 SERVICE:
@@ -52,15 +56,24 @@ SERVICE-AGAIN:
 	RET
 
 
+;;; --------------------------------------------------------------------------
 	;; invoke(entry *)
 INVOKE:
+	PUSH		0
+	PUSH		0
+	CALLNAT		R4	NATIVE-NOW ; get current time 
 	LDSP		R0	-8 ; get entry pointer
+
+	
+	LDSP		R0	-8 ; get entry pointer	
 	LDINC		R1	R0 ; get progid
-	LDIINC		R2 	R0 ; get procid
+	LDINC		R2 	R0 ; get procid
 	LDI		R3 	0
 	CALLVIRT	R1 	R2 	R3 
 	RET
 
+;;; --------------------------------------------------------------------------
+	
 	;; int gettimeout()
 GETTIMEOUT:	
 	LDI		R0 		1000
@@ -78,6 +91,7 @@ GETTIMEOUT-SET:
 	;;  return timeout in R0
 	RET
 
+;;; --------------------------------------------------------------------------
 	
 	.EXPORT		REGISTER
 	.EXPORT		SERVICE

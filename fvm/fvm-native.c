@@ -55,6 +55,16 @@ static int native_rand( struct fvm_s *state ) {
 static int native_now( struct fvm_s *state ) {
   /* return current time */
   uint64_t now = rpc_now();
+  uint32_t nowaddr;
+
+  /* now(uint32_t *now) */  
+  nowaddr = ntohl( fvm_stack_read( state, -4 ) );
+
+  if( state ) {
+    fvm_write( state, nowaddr, htonl( now >> 32 ) );
+    fvm_write( state, nowaddr + 4, htonl( now & 0xffffffff ) );
+  }
+  
   return now & 0xffffffff;
 }
 

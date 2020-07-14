@@ -1,6 +1,8 @@
 
 ;;; This provides a mechanism for logging a formatted message string
 
+	.INCLUDE	"native.asm"
+	
 	;; logf( fmt, .... ) */
 LOGF:
 	POP		R7	  ; save return address

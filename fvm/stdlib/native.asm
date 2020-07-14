@@ -1,6 +1,11 @@
 
 ;;; This file contains the proc ids of the native functions
 
+	.IFNDEF		NATIVE-ASM
+	.CONST		NATIVE-ASM		0
+
+
+	
 	.CONST		MODULE-NATIVE		0
 	.CONST		NATIVE-NOP		0
 	.CONST		NATIVE-PUTS		1
@@ -29,3 +34,6 @@
 	
 	.CONST		YIELD-FORK		1 ; process is forked and will continue at the specified timeout. execution continues
 	
+
+	
+	.ENDIF

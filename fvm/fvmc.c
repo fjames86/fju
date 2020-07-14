@@ -70,6 +70,13 @@ struct searchpath {
   char *path;
 };
 
+struct ifclause {
+  struct ifclause *next;
+
+  int skip;
+  char name[64];
+};
+
 /* store things here */
 static struct {
   char modulename[64];
@@ -83,6 +90,7 @@ static struct {
   char *currentfile;
   int currentfileidx;
   int currentline;
+  struct ifclause *ifclause;
 } glob;
 
 
@@ -229,9 +237,11 @@ static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
   char *p;
   uint32_t opcode;
 
-  glob.currentline = 1;
+  glob.currentline = 0;
   memset( buf, 0, sizeof(buf) );
   while( fgets( buf, sizeof(buf) - 1, f ) ) {
+    glob.currentline++;
+    
     p = buf;
     while( *p != '\0' ) {
       if( *p == '\n' ) *p = '\0';
@@ -244,6 +254,8 @@ static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
     
     if( parse_directive( buf, addr, passid == 0 ? NULL : outfile, passid == 1 ? 1 : 0 ) == 0 ) continue;
 
+    if( glob.ifclause && glob.ifclause->skip ) continue;
+    
     if( passid != 1 ) {
       fvmc_printf( 2, ";; attempting to encode line \"%s\"\n", buf );
       if( encode_inst( buf, &opcode, FVM_ADDR_TEXT + *addr, passid == 0 ? 1 : 0 ) != -1 ) {
@@ -257,11 +269,11 @@ static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
       }
     }
 
-    glob.currentline++;
   }
+
+  if( glob.ifclause ) usage( "Unexpected end of file waiting for terminating .ENDIF clause" );
   
 }
-
 
 int main( int argc, char **argv ) {
   FILE *f, *outfile;
@@ -462,6 +474,18 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
   /* assembler directive */
   memset( directive, 0, sizeof(directive) );
   p = copytoken( p, directive );
+
+  if( strcasecmp( directive, ".ENDIF" ) == 0 ) {
+    struct ifclause *ifc;
+    
+    if( !glob.ifclause ) usage( "Unexpected .ENDIF clause" );
+    ifc = glob.ifclause;
+    glob.ifclause = ifc->next;
+    free( ifc );
+    return 0;    
+  }
+
+  if( glob.ifclause && glob.ifclause->skip ) return 0;
   
   if( (strcasecmp( directive, ".data" ) == 0) ||
       (strcasecmp( directive, ".text" ) == 0) ) {
@@ -720,6 +744,42 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     fvmc_printf( 2, "including \"%s\"\n", name );
     parse_file( incfile, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
     fclose( incfile );
+    return 0;
+  } else if( (strcasecmp( directive, ".IFDEF" ) == 0) || (strcasecmp( directive, ".IFNDEF" ) == 0 ) ) {
+    /* possibly enter new if clause */
+    int ifdef = 0, skip;
+    struct ifclause *ifc;
+    
+    p = skipwhitespace( p );
+    if( *p == '\0' ) usage( "Expected label identifier" );
+    
+    memset( name, 0, sizeof(name) );
+    p = copytoken( p, name );
+
+    ifdef = (strcasecmp( directive, ".IFDEF" ) == 0);
+    if( ifdef ) {
+      skip = getlabel( name ) ? 0 : 1;
+    } else {
+      skip = getlabel( name ) ? 1 : 0;
+    }
+
+    fvmc_printf( 1, "adding if clause name=%s skip=%u\n", name, skip );
+    
+    ifc = malloc( sizeof(*ifc) );
+    memset( ifc, 0, sizeof(*ifc) );
+    strcpy( ifc->name, name );
+    ifc->skip = skip;
+    ifc->next = glob.ifclause;
+    glob.ifclause = ifc;
+    
+    return 0;
+  } else if( strcasecmp( directive, ".ENDIF" ) == 0 ) {
+    struct ifclause *ifc;
+    
+    if( !glob.ifclause ) usage( "Unexpected .ENDIF clause" );
+    ifc = glob.ifclause;
+    glob.ifclause = ifc->next;
+    free( ifc );
     return 0;
   } else {
     /* unknown directive */

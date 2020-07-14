@@ -159,7 +159,7 @@ static int native_progid_by_name( struct fvm_s *state, uint32_t reg ) {
   /*progidbyname(name) */
   native_readstr( state, ntohl( fvm_stack_read( state, 4 ) ), str, sizeof(str) );
   progid = fvm_progid_by_name( str );  
-  return htonl( progid );
+  return progid;
 }
 
 static struct log_s prevlog;
@@ -342,9 +342,9 @@ static int native_sprintf( struct fvm_s *state, uint32_t reg ) {
   /* sprintf( buf, bufsize, fmt, ... ) */
   bufaddr = ntohl( fvm_stack_read( state, 4 ) );
   buf = fvm_getaddr( state, bufaddr );
-  if( !buf ) return -1;    
+  if( !buf ) return -1;  
   bufsize = ntohl( fvm_stack_read( state, 8 ) );
-
+  
   /* check buffer */
   if( !((bufaddr >= FVM_ADDR_DATA && bufaddr < (FVM_ADDR_DATA + state->datasize - bufsize)) ||
 	(bufaddr >= FVM_ADDR_STACK && bufaddr < (FVM_ADDR_STACK + FVM_MAX_STACK - bufsize))) ) {
@@ -354,7 +354,7 @@ static int native_sprintf( struct fvm_s *state, uint32_t reg ) {
   
   fmtaddr = ntohl( fvm_stack_read( state, 12 ) );
   native_readstr( state, fmtaddr, fmt, sizeof(fmt) );
-
+  
   /* parse format string, getting args when required */
   p = fmt;
   q = buf + 4;

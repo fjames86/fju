@@ -38,7 +38,7 @@ SERVICE:
 ;;; -----------------------------------------------------
 
 	.TEXT		yieldmsg	"Yield message"
-	
+
 INIT:
 	CALL		GETPROGID
 
@@ -57,17 +57,24 @@ noyield:
 	RET
 
 ;;; -----------------------------------------------------
+
+	.TEXT		getprogidmsg 	"Got progid %u for program %s"
+	.INCLUDE	"logf.asm"
 	
 GETPROGID:
-	POP		R7	; save return  address
-	
 	PUSH		progname
 	CALLNAT		R3 		NATIVE-GETPROGID
-	POP		R3	; get progid for module test-rpc
+	SUBSP		4 
 	LDI		R4		progid
 	ST		R4		R3
 
-	PUSH		R7
+	;; write a message to log 
+	PUSH		progname 
+	PUSH		R3	; progid
+	PUSH		getprogidmsg
+	CALL		LOGF
+	SUBSP		12
+	
 	RET
 
 ;;; ---------------------------------------------------

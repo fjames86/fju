@@ -122,6 +122,7 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
 static void emit_header( FILE *f, uint32_t addr );
 static void disassemble( char *filename );
+static int emit_opcode( char *buf, uint32_t *addr, int passid, FILE *outfile );
 
 static char *skipwhitespace( char *p ) {
   while( *p == ' ' || *p == '\t' ) p++;
@@ -265,7 +266,6 @@ static FILE *opensourcefile( char *name ) {
 static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
   char buf[256];
   char *p;
-  uint32_t opcode;
 
   glob.currentline = 0;
   memset( buf, 0, sizeof(buf) );
@@ -285,24 +285,31 @@ static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
     if( parse_directive( buf, addr, passid == 0 ? NULL : outfile, passid == 1 ? 1 : 0 ) == 0 ) continue;
 
     if( glob.ifclause && glob.ifclause->skip ) continue;
-    
-    if( passid != 1 ) {
-      fvmc_printf( 2, ";; attempting to encode line \"%s\"\n", buf );
-      if( encode_inst( buf, &opcode, FVM_ADDR_TEXT + *addr, passid == 0 ? 1 : 0 ) != -1 ) {
-	if( passid == 2 ) {
-	  fvmc_printf( 2, ";; encoding \"%s\" = %08x\n", buf, opcode );
-	  opcode = htonl( opcode );
-	  fwrite( &opcode, 1, 4, outfile );
-	} else {
-	  *addr += 4;
-	}
-      }
-    }
 
+    emit_opcode( buf, addr, passid, outfile );
   }
 
   if( glob.ifclause ) usage( "Unexpected end of file waiting for terminating .ENDIF clause" );
   
+}
+
+static int emit_opcode( char *buf, uint32_t *addr, int passid, FILE *outfile ) {
+  uint32_t opcode;
+  
+  if( passid != 1 ) {
+    fvmc_printf( 2, ";; attempting to encode line \"%s\"\n", buf );
+    if( encode_inst( buf, &opcode, FVM_ADDR_TEXT + *addr, passid == 0 ? 1 : 0 ) != -1 ) {
+      if( passid == 2 ) {
+	fvmc_printf( 2, ";; encoding \"%s\" = %08x\n", buf, opcode );
+	opcode = htonl( opcode );
+	fwrite( &opcode, 1, 4, outfile );
+      } else {
+	*addr += 4;
+      }
+    }
+  }
+
+  return 0;
 }
 
 int main( int argc, char **argv ) {
@@ -752,6 +759,8 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     /* include path */
     FILE *incfile;
     char *q;
+    char labelname[64];
+    struct label *addedlabels = NULL, *al, *nextal;
     
     p = skipwhitespace( p );
     if( *p == '\0' ) usage( "Unexpected end of line" );
@@ -770,11 +779,34 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       q++;
     }
 
+    p++;
+    p = skipwhitespace( p );
+    while( *p ) {
+      p = copytoken( p, labelname );
+      addlabel( labelname, 0 );
+
+      al = malloc( sizeof(*al) );
+      memset( al, 0, sizeof(*al) );
+      strcpy( al->name, labelname );
+      al->next = addedlabels;      
+      addedlabels = al;
+    }
+    
+
     incfile = opensourcefile( name );
     if( !incfile ) usage( "failed to open include file \"%s\"", name );
     fvmc_printf( 2, "including \"%s\"\n", name );
     parse_file( incfile, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
     fclose( incfile );
+
+    al = addedlabels;
+    while( al ) {
+      nextal = al->next;
+      undeflabel( al->name );      
+      free( al );
+      al = nextal;
+    }
+    
     return 0;
   } else if( (strcasecmp( directive, ".IFDEF" ) == 0) || (strcasecmp( directive, ".IFNDEF" ) == 0 ) ) {
     /* possibly enter new if clause */
@@ -822,6 +854,61 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     if( !f ) {
       fvmc_printf( 2, "Undefining label %s\n", name );
       undeflabel( name );
+    }
+
+    return 0;
+  } else if( strcasecmp( directive, ".CALL" ) == 0 ) {
+    /* .CALL name arg1 arg2 arg3 ... */
+    int nargs = 0;
+    char argname[64];
+    char inststr[256];
+    
+    /* a sortof macro that expands to 
+       PUSH arg3
+       PUSH arg2 
+       PUSH arg1 
+       CALL name 
+       SUBSP n
+    */
+
+    p = skipwhitespace( p );
+    if( *p == '\0' ) usage( "Expected label identifier" );
+    
+    memset( name, 0, sizeof(name) );
+    p = copytoken( p, name );
+
+    if( f ) {
+      /* writing output */
+      if( !datasegment ) {
+	/* only emit if in text segment */
+	nargs = 0;
+	p = skipwhitespace( p );
+	while( *p ) {
+	  p = copytoken( p, argname );
+	  sprintf( inststr, "PUSH %s", argname );
+	  emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
+
+	  nargs++;
+	  p = skipwhitespace( p );
+	}
+
+	sprintf( inststr, "CALL %s", name );
+	emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );	
+
+	sprintf( inststr, "SUBSP %u", nargs * 4 );
+	emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );	
+      }
+    } else {
+      /* not emitting, just update address */
+      nargs = 0;
+      p = skipwhitespace( p );
+      while( *p ) {
+	p = copytoken( p, argname );
+	nargs++;
+	p = skipwhitespace( p );
+      }
+          
+      *addr += 4 + 4*nargs + 4; /* call + n*push + subsp*/
     }
 
     return 0;

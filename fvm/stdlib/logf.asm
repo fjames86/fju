@@ -2,6 +2,8 @@
 ;;; This provides a mechanism for logging a formatted message string
 
 	.INCLUDE	"native.asm"
+
+	.IFDEF		%LOGF
 	
 	;; logf( fmt, .... ) */
 LOGF:
@@ -21,4 +23,4 @@ LOGF:
 	
 	RET
 
-	
+	.ENDIF

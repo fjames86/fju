@@ -42,7 +42,7 @@ SERVICE:
 INIT:
 	CALL		GETPROGID
 
-	PUSH		YIELD-FORK ; fork execution - continue 
+	PUSH		YIELD-FORK ; fork i.e. yield but also continue  
 	PUSH		5000	   ; timeout - child is executed after 5000ms 
 	CALLNAT		R0		NATIVE-YIELD
 	CMP		R0		1 ; R0 receives 1 in child, 0 in parent 
@@ -59,7 +59,7 @@ noyield:
 ;;; -----------------------------------------------------
 
 	.TEXT		getprogidmsg 	"Got progid %u for program %s"
-	.INCLUDE	"logf.asm"
+	.INCLUDE	"logf.asm"	%LOGF
 	
 GETPROGID:
 	PUSH		progname

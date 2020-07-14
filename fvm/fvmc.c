@@ -77,6 +77,19 @@ struct ifclause {
   char name[64];
 };
 
+struct macroline {
+  struct macroline *next;
+  char line[1024];
+};
+
+struct defmacro {
+  struct defmacro *next;
+
+  char name[64];  
+  struct macroline *lines;
+};
+
+
 /* store things here */
 static struct {
   char modulename[64];
@@ -91,6 +104,7 @@ static struct {
   int currentfileidx;
   int currentline;
   struct ifclause *ifclause;
+  struct defmacro *macros;
 } glob;
 
 
@@ -186,6 +200,22 @@ static uint32_t getlabeladdr( char *name ) {
   l = getlabel( name );
   return l ? l->addr : 0;
 }
+static void undeflabel( char *name ) {
+  struct label *l, *prev;
+  prev = NULL;
+  l = glob.labels;
+  while( l ) {
+    if( strcasecmp( l->name, name ) == 0 ) {
+      if( prev ) prev->next = l->next;
+      else glob.labels = l->next;
+      free( l );
+      return;
+    }
+    prev = l;
+    l = l->next;
+  }
+
+}
 
 static int exportlabel( char *name, uint32_t symflags ) {
   struct label *l;
@@ -251,7 +281,7 @@ static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
     p = buf;
     p = skipwhitespace( p );
     if( *p == '\0' ) continue;
-    
+
     if( parse_directive( buf, addr, passid == 0 ? NULL : outfile, passid == 1 ? 1 : 0 ) == 0 ) continue;
 
     if( glob.ifclause && glob.ifclause->skip ) continue;
@@ -635,17 +665,18 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     char str[64];
 
     p = skipwhitespace( p );
-    if( *p == '\0' ) return 0;
+    if( *p == '\0' ) usage( "Expected label identifier" );
     
     memset( name, 0, sizeof(name) );
     p = copytoken( p, name );
 
     p = skipwhitespace( p );
-    if( *p == '\0' ) return 0;
+    if( *p == '\0' ) strcpy( str, "0" );
+    else {
+      memset( str, 0, sizeof(str) );
+      p = copytoken( p, str );
+    }
     
-    memset( str, 0, sizeof(str) );
-    p = copytoken( p, str );
-
     if( f == NULL ) addlabel( name, strtoul( str, NULL, 0 ) );
     
     return 0;    
@@ -780,6 +811,19 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     ifc = glob.ifclause;
     glob.ifclause = ifc->next;
     free( ifc );
+    return 0;
+  } else if( strcasecmp( directive, ".UNDEF" ) == 0 ) {
+    p = skipwhitespace( p );
+    if( *p == '\0' ) usage( "Expected label identifier" );
+    
+    memset( name, 0, sizeof(name) );
+    p = copytoken( p, name );
+
+    if( !f ) {
+      fvmc_printf( 2, "Undefining label %s\n", name );
+      undeflabel( name );
+    }
+
     return 0;
   } else {
     /* unknown directive */

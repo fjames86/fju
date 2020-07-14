@@ -688,7 +688,7 @@ static int opcode_callnatreg( struct fvm_s *state, uint32_t flags, uint32_t reg,
   int sts;
   
   /* CALLNAT RX RY */ 
-  sts = fvm_native_call( state, ntohl( state->reg[data & 0x7] ) );
+  sts = fvm_native_call( state, ntohl( state->reg[data & 0x7] ), reg );
   fvm_printf( "callnative %u result %d\n", ntohl( state->reg[data & 0x7] ), sts );
   state->reg[reg] = htonl( sts );
   return 0;
@@ -698,7 +698,7 @@ static int opcode_callnatconst( struct fvm_s *state, uint32_t flags, uint32_t re
   int sts;
   
   /* CALLNAT RX const */ 
-  sts = fvm_native_call( state, data );
+  sts = fvm_native_call( state, data, reg );
   fvm_printf( "callnative %u result %d\n", data, sts );
   state->reg[reg] = htonl( sts );
   return 0;
@@ -762,46 +762,6 @@ static int opcode_incconst( struct fvm_s *state, uint32_t flags, uint32_t reg, u
 }
 
 
-struct fvm_yield_iterator {
-  struct rpc_iterator iter;
-  struct fvm_s state;
-};
-
-static void fvm_yield_cb( struct rpc_iterator *iter ) {
-  struct fvm_yield_iterator *it = (struct fvm_yield_iterator *)iter;
-  int sts;
-  
-  /* unregister ourselves */
-  rpc_iterator_unregister( iter );
-
-  fvm_log( LOG_LVL_DEBUG, "Running yielded state" );
-  sts = fvm_run( &it->state, 0 );
-  
-  free( it );  
-}
-  
-static int opcode_yield( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  /* save state to an interator, which gets scheduled to run immediately. */
-  struct fvm_yield_iterator *iter;
-
-  /* No op if not running as service */
-  if( !rpcdp() ) return 0;
-
-  fvm_log( LOG_LVL_DEBUG, "Yielding state" ); 
-  
-  iter = malloc( sizeof(*iter) );
-  memset( iter, 0, sizeof(*iter) );
-  memcpy( &iter->state, state, sizeof(*state) );
-
-  iter->iter.timeout = 0;
-  iter->iter.period = 0;
-  iter->iter.cb = fvm_yield_cb;
-
-  rpc_iterator_register( &iter->iter );
-
-  state->flags |= FVM_STATE_YIELD;
-  return 0;
-}
 
 
 struct opcode_def {
@@ -888,7 +848,6 @@ static struct opcode_def opcodes[FVM_MAX_OPCODE] =
    { opcode_stspconst, "STSP" },
    { opcode_increg, "INC" },
    { opcode_incconst, "INC" },
-   { opcode_yield, "YIELD" },   
    
   };
 

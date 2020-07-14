@@ -16,8 +16,8 @@
 	.CONST		NATIVE-FREGPUT-U32	11
 	.CONST		NATIVE-FREGGET-BUF	12
 	.CONST		NATIVE-FREGPUT-BUF	13
-	.CONST		NATIVE-SPRINTF		14	
-
+	.CONST		NATIVE-SPRINTF		14
+	.CONST		NATIVE-YIELD		15 	
 
 	;; freg constants
 	.CONST		FREG-TYPE-OPAQUE	0x0000
@@ -27,5 +27,5 @@
 	.CONST		FREG-TYPE-KEY		0x0004
 	
 	
-
+	.CONST		YIELD-FORK		1 ; process is forked and will continue at the specified timeout. execution continues
 	

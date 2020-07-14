@@ -10,6 +10,7 @@
 #include "fvm-private.h"
 
 #include <fju/rpc.h>
+#include <fju/rpcd.h>
 #include <fju/sec.h>
 #include <fju/log.h>
 #include <fju/freg.h>
@@ -22,18 +23,18 @@ static void fvm_stack_write( struct fvm_s *state, int depth, uint32_t x ) {
   fvm_write( state, state->reg[FVM_REG_SP] - depth, x );
 }
 
-typedef int (*fvm_native_cb)( struct fvm_s *state );
+typedef int (*fvm_native_cb)( struct fvm_s *state, uint32_t reg );
 
 struct fvm_native_proc {
   uint32_t procid;
   fvm_native_cb cb;
 };
 
-static int native_nop( struct fvm_s *state ) {
+static int native_nop( struct fvm_s *state, uint32_t reg ) {
   return 0;
 }
 
-static int native_puts( struct fvm_s *state ) {
+static int native_puts( struct fvm_s *state, uint32_t reg ) {
   /* pop stack to get address of string */
   uint32_t sp, len;
   char *str;
@@ -47,12 +48,12 @@ static int native_puts( struct fvm_s *state ) {
   return 0;
 }
 
-static int native_rand( struct fvm_s *state ) {
+static int native_rand( struct fvm_s *state, uint32_t reg ) {
   /* return random number */
   return sec_rand_uint32();
 }
 
-static int native_now( struct fvm_s *state ) {
+static int native_now( struct fvm_s *state, uint32_t reg ) {
   /* return current time */
   uint64_t now = rpc_now();
   uint32_t nowaddr;
@@ -68,7 +69,7 @@ static int native_now( struct fvm_s *state ) {
   return now & 0xffffffff;
 }
 
-static int native_logstr( struct fvm_s *state ) {  
+static int native_logstr( struct fvm_s *state, uint32_t reg ) {  
   char *str;
   uint32_t addr;
 
@@ -88,7 +89,7 @@ static int native_logstr( struct fvm_s *state ) {
   return 0;
 }
 
-static int native_read( struct fvm_s *state ) {
+static int native_read( struct fvm_s *state, uint32_t reg ) {
   uint32_t progid, addr;
   struct fvm_module *m;
 
@@ -109,7 +110,7 @@ static int native_read( struct fvm_s *state ) {
   return 0;
 }
 
-static int native_write( struct fvm_s *state ) {
+static int native_write( struct fvm_s *state, uint32_t reg ) {
   uint32_t progid, addr, val;
   struct fvm_module *m;
 
@@ -151,7 +152,7 @@ static int native_readstr( struct fvm_s *state, uint32_t addr, char *str, int si
   return strlen;
 }
 
-static int native_progid_by_name( struct fvm_s *state ) {
+static int native_progid_by_name( struct fvm_s *state, uint32_t reg ) {
   uint32_t progid;
   char str[FVM_MAX_NAME];
 
@@ -164,7 +165,7 @@ static int native_progid_by_name( struct fvm_s *state ) {
 static struct log_s prevlog;
 static char prevlogname[64];
 
-static int native_writelog( struct fvm_s *state ) {
+static int native_writelog( struct fvm_s *state, uint32_t reg ) {
   int sts;
   uint32_t bufcount, bufaddr;
   char *bufp;
@@ -197,7 +198,7 @@ static int native_writelog( struct fvm_s *state ) {
   return 0;
 }
 
-static int native_readlog( struct fvm_s *state ) {
+static int native_readlog( struct fvm_s *state, uint32_t reg ) {
   int sts, msglen;
   uint32_t bufcount, bufaddr;
   char *bufp;
@@ -246,7 +247,7 @@ static int native_readlog( struct fvm_s *state ) {
   return msglen;
 }
 
-static int native_fregget_u32( struct fvm_s *state ) {
+static int native_fregget_u32( struct fvm_s *state, uint32_t reg ) {
   uint32_t nameaddr, val;
   char name[1024];
   int sts, lenp;
@@ -264,7 +265,7 @@ static int native_fregget_u32( struct fvm_s *state ) {
   return val;
 }
 
-static int native_fregput_u32( struct fvm_s *state ) {
+static int native_fregput_u32( struct fvm_s *state, uint32_t reg ) {
   uint32_t nameaddr, val;
   char name[1024];
   int sts;
@@ -283,7 +284,7 @@ static int native_fregput_u32( struct fvm_s *state ) {
   return 0;
 }
 
-static int native_fregget_buf( struct fvm_s *state ) {
+static int native_fregget_buf( struct fvm_s *state, uint32_t reg ) {
   uint32_t size, bufaddr, nameaddr, flags;
   char *buf;
   char name[1024];
@@ -310,7 +311,7 @@ static int native_fregget_buf( struct fvm_s *state ) {
   return lenp;  
 }
 
-static int native_fregput_buf( struct fvm_s *state ) {
+static int native_fregput_buf( struct fvm_s *state, uint32_t reg ) {
   uint32_t size, bufaddr, nameaddr, flags;
   char *buf;
   char name[1024];
@@ -331,7 +332,7 @@ static int native_fregput_buf( struct fvm_s *state ) {
   return 0;  
 }
 
-static int native_sprintf( struct fvm_s *state ) {
+static int native_sprintf( struct fvm_s *state, uint32_t reg ) {
   uint32_t bufaddr, fmtaddr, bufsize;
   char fmt[1024];
   char argstr[256];
@@ -404,6 +405,68 @@ static int native_sprintf( struct fvm_s *state ) {
   return blen;
 }
 
+
+struct fvm_yield_iterator {
+  struct rpc_iterator iter;
+  struct fvm_s state;
+};
+
+static void fvm_yield_cb( struct rpc_iterator *iter ) {
+  struct fvm_yield_iterator *it = (struct fvm_yield_iterator *)iter;
+  int sts;
+  
+  /* unregister ourselves */
+  rpc_iterator_unregister( iter );
+
+  fvm_log( LOG_LVL_DEBUG, "Running yielded state" );
+  sts = fvm_run( &it->state, 0 );
+  
+  free( it );  
+}
+  
+static int native_yield( struct fvm_s *state, uint32_t reg ) {
+  /* save state to an interator, which gets scheduled to run immediately. */
+  struct fvm_yield_iterator *iter;
+  uint32_t flags, timeout;
+
+  /* yield(timeout, flags) */
+  
+  /* No op if not running as service */
+  if( !rpcdp() ) {
+    fvm_log( LOG_LVL_DEBUG, "Yield not rpcd" );
+    return 0;
+  }
+
+  fvm_log( LOG_LVL_DEBUG, "Yielding state" ); 
+  
+  iter = malloc( sizeof(*iter) );
+  memset( iter, 0, sizeof(*iter) );
+  memcpy( &iter->state, state, sizeof(*state) );
+  iter->state.reg[reg] = ntohl( 1 ); /* result register receives 1 if resuming from yield */
+  
+  timeout = ntohl( fvm_stack_read( state, 4 ) );
+  fvm_log( LOG_LVL_DEBUG, "Yield timeout %u", timeout );
+  iter->iter.timeout = timeout ? rpc_now() + timeout : 0;
+  iter->iter.period = timeout;
+  iter->iter.cb = fvm_yield_cb;
+
+  rpc_iterator_register( &iter->iter );
+
+  flags = ntohl( fvm_stack_read( state, 8 ) );
+  if( flags & 1 ) {
+    /* fork flag - continue execution i.e. don't yield */
+    fvm_log( LOG_LVL_DEBUG, "Yield fork" );
+  } else {
+    /* don't fork, terminate execution immediately */
+    state->flags |= FVM_STATE_YIELD;
+    fvm_log( LOG_LVL_DEBUG, "Yield no fork" );
+  }
+
+  /* if forking, execution will continue and result register receives 0, as opposed to child that receives 1 */
+  return 0;
+}
+
+
 static struct fvm_native_proc native_procs[] =
   {
    { 0, native_nop },
@@ -421,16 +484,17 @@ static struct fvm_native_proc native_procs[] =
    { 12, native_fregget_buf },
    { 13, native_fregput_buf },
    { 14, native_sprintf },   
+   { 15, native_yield },
    
    { 0, NULL }
   };
 
-int fvm_native_call( struct fvm_s *state, uint32_t procid ) {
+int fvm_native_call( struct fvm_s *state, uint32_t procid, uint32_t reg ) {
   int i;
   i = 0;
   while( native_procs[i].cb ) {
     if( native_procs[i].procid == procid ) {
-      return native_procs[i].cb( state );
+      return native_procs[i].cb( state, reg );
     }
     i++;
   }

@@ -64,7 +64,7 @@ uint32_t fvm_progid_by_name( char *name );
 uint32_t fvm_symbol_addr( struct fvm_module *m, char *name );
 uint32_t fvm_symbol_index( struct fvm_module *m, char *name );
 uint32_t fvm_symbol_by_index( struct fvm_module *m, uint32_t index );
-int fvm_native_call( struct fvm_s *state, uint32_t procid );
+int fvm_native_call( struct fvm_s *state, uint32_t procid, uint32_t reg );
 
 char *fvm_getaddr( struct fvm_s *state, uint32_t addr );
 uint32_t fvm_read( struct fvm_s *state, uint32_t addr );

@@ -413,13 +413,12 @@ struct fvm_yield_iterator {
 
 static void fvm_yield_cb( struct rpc_iterator *iter ) {
   struct fvm_yield_iterator *it = (struct fvm_yield_iterator *)iter;
-  int sts;
   
   /* unregister ourselves */
   rpc_iterator_unregister( iter );
 
   fvm_log( LOG_LVL_DEBUG, "Running yielded state" );
-  sts = fvm_run( &it->state, 0 );
+  fvm_run( &it->state, 0 );
   
   free( it );  
 }

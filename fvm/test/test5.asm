@@ -26,4 +26,4 @@
 	.INCLUDE	"logf.asm" %LOGF	
 	.CALL	LOGF	R0 R1 R2
 	
-	.TEXT	"end" 
+	.TEXT	xxxxxxxx "xxxxxxxxxend" 

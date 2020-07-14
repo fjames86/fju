@@ -306,7 +306,10 @@ static int emit_opcode( char *buf, uint32_t *addr, int passid, FILE *outfile ) {
       } else {
 	*addr += 4;
       }
+    } else {
+      fvmc_printf( 2, ";; Failed to encode line\n" );
     }
+      
   }
 
   return 0;
@@ -528,7 +531,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       (strcasecmp( directive, ".text" ) == 0) ) {
     /* reserve some bytes in the data/text segment */
     p = skipwhitespace( p );
-    if( *p == '\0' ) return 0;
+    if( *p == '\0' ) usage( "Expected label identifier" );
     
     memset( name, 0, sizeof(name) );
     p = copytoken( p, name );
@@ -881,17 +884,38 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       /* writing output */
       if( !datasegment ) {
 	/* only emit if in text segment */
+	char *startp;
+	int argi, argn;
+	
+	startp = p;
+	
 	nargs = 0;
 	p = skipwhitespace( p );
 	while( *p ) {
 	  p = copytoken( p, argname );
-	  sprintf( inststr, "PUSH %s", argname );
-	  emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
-
 	  nargs++;
 	  p = skipwhitespace( p );
 	}
 
+	argn = nargs;
+	while( argn > 0 ) {
+	  p = startp;
+	  p = skipwhitespace( p );
+	  argi = 0;
+	  while( *p ) {
+	    p = copytoken( p, argname );
+	    if( argi == nargs - 1 ) {
+	      sprintf( inststr, "PUSH %s", argname );
+	      emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
+	      break;
+	    }
+	    
+	    p = skipwhitespace( p );
+	    argi++;
+	  }
+	  argn--;
+	}
+	
 	sprintf( inststr, "CALL %s", name );
 	emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );	
 

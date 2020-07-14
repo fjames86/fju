@@ -304,6 +304,7 @@ static int emit_opcode( char *buf, uint32_t *addr, int passid, FILE *outfile ) {
 	opcode = htonl( opcode );
 	fwrite( &opcode, 1, 4, outfile );
       } else {
+	fvmc_printf( 1, "emitting (%u) %04x %s\n", *addr, *addr, buf );	
 	*addr += 4;
       }
     } else {
@@ -423,7 +424,7 @@ int main( int argc, char **argv ) {
     fclose( f );
     i++;
   }
-  
+
   glob.currentfileidx = 0;
   i = starti;
   while( i < argc ) {
@@ -860,7 +861,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     }
 
     return 0;
-  } else if( strcasecmp( directive, ".CALL" ) == 0 ) {
+  } else if( (strcasecmp( directive, ".CALL" ) == 0) || (strcasecmp( directive, ".CALLNAT" ) == 0) ) {
     /* .CALL name arg1 arg2 arg3 ... */
     int nargs = 0;
     char argname[64];
@@ -904,9 +905,9 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  argi = 0;
 	  while( *p ) {
 	    p = copytoken( p, argname );
-	    if( argi == nargs - 1 ) {
+	    if( argi == argn - 1 ) {
 	      sprintf( inststr, "PUSH %s", argname );
-	      emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
+	      emit_opcode( inststr, addr, 2, f );
 	      break;
 	    }
 	    
@@ -915,12 +916,13 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	  }
 	  argn--;
 	}
-	
-	sprintf( inststr, "CALL %s", name );
-	emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );	
+
+	if( strcasecmp( directive, ".CALL" ) == 0 ) sprintf( inststr, "CALL %s", name );
+	else if( strcasecmp( directive, ".CALLNAT" ) == 0 ) sprintf( inststr, "CALLNAT R0 %s", name );
+	emit_opcode( inststr, addr, 2, f );	
 
 	sprintf( inststr, "SUBSP %u", nargs * 4 );
-	emit_opcode( inststr, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );	
+	emit_opcode( inststr, addr, 2, f );	
       }
     } else {
       /* not emitting, just update address */
@@ -931,8 +933,10 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	nargs++;
 	p = skipwhitespace( p );
       }
-          
-      *addr += 4 + 4*nargs + 4; /* call + n*push + subsp*/
+
+      fvmc_printf( 2, ";; .CALL/.CALLVIRT size nargs=%u adding %u addr=%u\n", nargs, 8 + 4*nargs, *addr );
+      *addr = *addr + 8 + 4*nargs; /* call + n*push + subsp*/
+      fvmc_printf( 2, ";; current addr=%u (0x%04x)\n", *addr, *addr );
     }
 
     return 0;
@@ -1049,6 +1053,14 @@ static struct {
        { "R5", 5 },
        { "R6", 6 },
        { "R7", 7 },
+       { "%R0", 0 },
+       { "%R1", 1 },
+       { "%R2", 2 },
+       { "%R3", 3 },
+       { "%R4", 4 },
+       { "%R5", 5 },
+       { "%R6", 6 },
+       { "%R7", 7 },       
        { NULL, 0 }
 };
 
@@ -1263,8 +1275,10 @@ static void disassemble( char *filename ) {
 	break;
       }
     }
-    
+
     n = fread( &opcode, 1, sizeof(opcode), f );
+    if( n != 4 ) usage( "Failed to read opcode i=%u size=%u offset=%u", i, header.textsize, (int)ftell( f ) - sizeof(header) - header.symcount * sizeof(*sym) );
+    
     opcode = ntohl( opcode );
     j = 0;
     while( opcodes[j].inst ) {

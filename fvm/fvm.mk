@@ -29,6 +29,7 @@ fvmtest_source+=fvm/test/test1.asm
 fvmtest_source+=fvm/test/test2.asm
 fvmtest_source+=fvm/test/test3.asm
 fvmtest_source+=fvm/test/test4.asm
+fvmtest_source+=fvm/test/test5.asm
 fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm ${fvmtest_source}
 	for x in ${fvmtest_source}; do ${BINDIR}/fvmc -I fvm/stdlib/ $$x; done 
 

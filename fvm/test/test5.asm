@@ -1,4 +1,6 @@
 
+;;; This file is for testing ifdef/endif macros and .call macro
+	
 	.IFDEF	bob
 	.TEXT	mystr1 "bob"
 	.ENDIF
@@ -25,5 +27,12 @@
 
 	.INCLUDE	"logf.asm" %LOGF	
 	.CALL	LOGF	R0 R1 R2
+
+	.CALLNAT NATIVE-PUTS	endstr
+	.CALLNAT NATIVE-PUTS	endstr	
+	RET
 	
-	.TEXT	xxxxxxxx "xxxxxxxxxend" 
+	.TEXT	endstr	"endstr"
+	RET
+	ADD	R0	1
+	

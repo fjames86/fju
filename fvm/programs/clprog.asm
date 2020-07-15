@@ -62,9 +62,84 @@ PROC-GET:
 	JZ		$+4
 	HALT
 	
-	;; TODO: return all entries starting from seqno
+	;;  get starting index
+	CALL		GETINDEX
+	SUBSP		4
+
+	CMP		R0		-1
+	JPN		PROC-GET-L1
+	LDI		R0		0
+	LDI		R1		0
+	RET
+	
+PROC-GET-L1:	
+
+	;; R0 contains starting index, return count from there
+	LD		R1		count
+PROG-GET-LOOP:
+	LDI		R2		entries
+	ADD		R2		R0
+	LDINC		R3		R2
+	PUSH		R3
+	LDINC		R3		R2
+	PUSH		R3
+
+	ADD		R0		1
+	CMP		R0		R1
+	JPN		$+4
+	MOD		R0		R1 
+	
+	SUB		R1		1
+	CMP		R1		0
+	JP		PROG-GET-LOOP
+
+
+	
+
+PROC-GET-DONE:	
 	RET
 
+;;; --------------------------------------------------------------
+
+	;; int getindex(seqno)
+GETINDEX:
+	;; Compute index into entries array given a seqno.
+	;; returns -1 if seqno out of range
+
+	;; get count
+	LD	R0	count
+
+	;;  get input seqno
+	LDSP	R1	-8
+
+	;; get current seqno
+	LD	R2	seqno
+
+	;; compare difference against count.
+	;; if input - actual < 0 return -1
+	;; if input - actual > count return -1
+	;; else return input % max
+
+	;; if(input > seqno) return -1
+	CMP	R1	R2
+	JNZ	$+8
+	LDI	R0	-1
+	RET
+
+	;; if(input - seqno > count ) return -1
+	MOV	R3	R2
+	SUB	R3	R1
+	CMP	R3	R0
+	JNZ	$+8
+	LDI	R0	-1
+	RET
+
+	MOD	R1	R0
+	MOV	R0	R1
+	RET
+
+;;; --------------------------------------------------------------
+	
 	.EXPORT		PROC-NULL
 	.EXPORT		PROC-REGISTER
 	.EXPORT		PROC-GET 

@@ -46,7 +46,7 @@ int fvm_set_args( struct fvm_s *state, char *buf, int len ) {
   memcpy( state->stack, buf, len );
   state->reg[FVM_REG_SP] = FVM_ADDR_STACK + len;
   state->reg[FVM_REG_R0] = htonl( len );
-  state->reg[FVM_REG_R1] = ntohl( FVM_ADDR_STACK + len); /* for consistency with getres */
+  state->reg[FVM_REG_R1] = ntohl( FVM_ADDR_STACK ); /* for consistency with getres */
   
   return 0;
 }

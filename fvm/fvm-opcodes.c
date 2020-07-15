@@ -549,8 +549,9 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   return 0;
 }
 
+/* TODO: assess how useful LDVIRT/STVIRT actually are */
 static int opcode_ldvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  uint32_t rx, ry, rz;
+  uint32_t rx, ry, rz, u32, addr;
   struct fvm_module *m;
   
   rx = reg;
@@ -563,8 +564,21 @@ static int opcode_ldvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, uin
     state->reg[rz] = -1;
     return 0;
   }
+
+  /* if address is a small number then assume it is really a symbol index */
+  addr = ntohl( state->reg[ry] );
+  if( addr < FVM_ADDR_DATA ) {
+    addr = fvm_symbol_by_index( m, addr );
+  }
+
+  u32 = 0;
+  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 4) ) {
+    memcpy( &u32, &m->data[addr - FVM_ADDR_DATA], 4 );
+  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize - 4) ) {
+    memcpy( &u32, &m->text[addr - FVM_ADDR_TEXT], 4 );
+  }
   
-  state->reg[rz] = htonl( fvm_read_uint32( m, ntohl( state->reg[ry] ) ) );
+  state->reg[rz] = u32;
   return 0;
 }
 
@@ -583,6 +597,7 @@ static int opcode_stvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, uin
     return 0;
   }
 
+  // FIXME: ry should be an address not a symbol index 
   fvm_write_uint32( m, ntohl( state->reg[ry] ), ntohl( state->reg[rz] ) );
   state->reg[rz] = 0;
   return 0;

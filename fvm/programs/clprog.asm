@@ -58,10 +58,9 @@ L1:
 
 	;; procget(seqno)
 PROC-GET:
-	CMP		R0		4
-	JZ		PROGGET-L1
+	CMP		R0		4 ; check args 
+	JZ		$+4
 	HALT
-PROGGET-L1:	
 	
 	;; TODO: return all entries starting from seqno
 	RET

@@ -25,4 +25,7 @@
 	.TEXT	endstr	"endstr"
 	RET
 	ADD	R0	1
-	
+
+	JMP	$-8
+	RET
+

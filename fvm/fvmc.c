@@ -1209,8 +1209,8 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 		  j = strtoul( arg + 2, &q, 0 );
 		  if( *q ) j = getlabeladdr( arg + 2 );
 		  
-		  if( arg[1] == '-' ) j = (addr + 4 - j) % 0x10000;
-		  else if( arg[1] == '+' ) j = (addr + 4 + j) + 0x10000;
+		  if( arg[1] == '-' ) j = (addr - j) % 0x10000;
+		  else if( arg[1] == '+' ) j = (addr + j) + 0x10000;
 		  else usage( "Bad operator %c", arg[1] );
 		} else {
 		  struct constdef *c = getconst( arg );

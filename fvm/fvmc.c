@@ -89,6 +89,11 @@ struct defmacro {
   struct macroline *lines;
 };
 
+struct constdef {
+  struct constdef *next;
+  char name[64];
+  uint32_t val;
+};
 
 /* store things here */
 static struct {
@@ -105,6 +110,7 @@ static struct {
   int currentline;
   struct ifclause *ifclause;
   struct defmacro *macros;
+  struct constdef *constdefs;
 } glob;
 
 
@@ -201,23 +207,6 @@ static uint32_t getlabeladdr( char *name ) {
   l = getlabel( name );
   return l ? l->addr : 0;
 }
-static void undeflabel( char *name ) {
-  struct label *l, *prev;
-  prev = NULL;
-  l = glob.labels;
-  while( l ) {
-    if( strcasecmp( l->name, name ) == 0 ) {
-      if( prev ) prev->next = l->next;
-      else glob.labels = l->next;
-      free( l );
-      return;
-    }
-    prev = l;
-    l = l->next;
-  }
-
-}
-
 static int exportlabel( char *name, uint32_t symflags ) {
   struct label *l;
   l = getlabel( name );
@@ -232,6 +221,65 @@ static int exportlabel( char *name, uint32_t symflags ) {
     return 0;
   }
   return -1;
+}
+
+
+static struct constdef *getconst( char *name ) {
+  struct constdef *c;
+  c = glob.constdefs;
+  while( c ) {
+    if( strcasecmp( c->name, name ) == 0 ) return c;
+    c = c->next;
+  }
+  return NULL;
+}
+
+static struct constdef *addconst( char *name, uint32_t val ) {
+  struct constdef *c;
+  c = getconst( name );
+  if( c ) {
+    if( c->val == val ) {
+      fvmc_printf( 2, ";; Redefining constant %s with same value %u\n", name, val );
+      return c;
+    }
+    usage( "Attempt to redefine constant %s with new value %u\n", name, val );
+  }
+
+  c = malloc( sizeof(*c) );
+  memset( c, 0, sizeof(*c) );
+  strcpy( c->name, name );
+  c->val = val;
+  c->next = glob.constdefs;
+  glob.constdefs = c;
+  return c;
+}
+
+static void undefconst( char *name ) {
+  struct constdef *c, *prev;
+  prev = NULL;
+  c = glob.constdefs;
+  while( c ) {
+    if( strcasecmp( c->name, name ) == 0 ) {
+      if( prev ) prev->next = c->next;
+      else glob.constdefs = c->next;
+      free( c );
+      return;
+    }
+    prev = c;
+    c = c->next;
+  }
+
+}
+
+static void resetconsts( void ) {
+  struct constdef *c, *next;
+  c = glob.constdefs;
+  while( c ) {
+    next = c->next;
+    free( c );
+    c = next;
+  }
+  glob.constdefs = NULL;
 }
 
 static FILE *opensourcefile( char *name ) {
@@ -416,6 +464,7 @@ int main( int argc, char **argv ) {
   /* write header */
   emit_header( outfile, addr );
 
+  resetconsts();
   glob.currentfileidx = 0;      
   i = starti;
   while( i < argc ) {
@@ -425,6 +474,7 @@ int main( int argc, char **argv ) {
     i++;
   }
 
+  resetconsts();
   glob.currentfileidx = 0;
   i = starti;
   while( i < argc ) {
@@ -631,7 +681,14 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 		else x = x + (*addr + 4);
 	      } else usage( "Unknown operator %c", numstr[1] );
 	    } else {
-	      x = getlabeladdr( numstr );
+	      struct label *l = getlabel( numstr );
+	      if( l ) {
+		x = l->addr;
+	      } else {
+		struct constdef *c = getconst( numstr );
+		if( !c ) usage( "Unknown label or constant %s", numstr );
+		x = c->val;
+	      }
 	    }
 	  }
 	  
@@ -672,11 +729,11 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       }
     }
     return 0;
-  } else if( strcasecmp( directive, ".CONST" ) == 0 ) {
+  } else if( (strcasecmp( directive, ".DEFINE" ) == 0) || (strcasecmp( directive, ".CONST" ) == 0) ) {
     char str[64];
 
     p = skipwhitespace( p );
-    if( *p == '\0' ) usage( "Expected label identifier" );
+    if( *p == '\0' ) usage( "Expected identifier" );
     
     memset( name, 0, sizeof(name) );
     p = copytoken( p, name );
@@ -688,7 +745,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       p = copytoken( p, str );
     }
     
-    if( f == NULL ) addlabel( name, strtoul( str, NULL, 0 ) );
+    addconst( name, strtoul( str, NULL, 0 ) );
     
     return 0;    
   } else if( strcasecmp( directive, ".EXPORT" ) == 0 ) {
@@ -764,7 +821,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     FILE *incfile;
     char *q;
     char labelname[64];
-    struct label *addedlabels = NULL, *al, *nextal;
+    struct constdef *addedconsts = NULL, *ac, *nextac;
     
     p = skipwhitespace( p );
     if( *p == '\0' ) usage( "Unexpected end of line" );
@@ -787,13 +844,13 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     p = skipwhitespace( p );
     while( *p ) {
       p = copytoken( p, labelname );
-      addlabel( labelname, 0 );
+      addconst( labelname, 0 );
 
-      al = malloc( sizeof(*al) );
-      memset( al, 0, sizeof(*al) );
-      strcpy( al->name, labelname );
-      al->next = addedlabels;      
-      addedlabels = al;
+      ac = malloc( sizeof(*ac) );
+      memset( ac, 0, sizeof(*ac) );
+      strcpy( ac->name, labelname );
+      ac->next = addedconsts;      
+      addedconsts = ac;
     }
     
 
@@ -803,12 +860,12 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     parse_file( incfile, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
     fclose( incfile );
 
-    al = addedlabels;
-    while( al ) {
-      nextal = al->next;
-      undeflabel( al->name );      
-      free( al );
-      al = nextal;
+    ac = addedconsts;
+    while( ac ) {
+      nextac = ac->next;
+      undefconst( ac->name );      
+      free( ac );
+      ac = nextac;
     }
     
     return 0;
@@ -825,9 +882,9 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
     ifdef = (strcasecmp( directive, ".IFDEF" ) == 0);
     if( ifdef ) {
-      skip = getlabel( name ) ? 0 : 1;
+      skip = getconst( name ) ? 0 : 1;
     } else {
-      skip = getlabel( name ) ? 1 : 0;
+      skip = getconst( name ) ? 1 : 0;
     }
 
     fvmc_printf( 1, "adding if clause name=%s skip=%u\n", name, skip );
@@ -857,7 +914,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 
     if( !f ) {
       fvmc_printf( 2, "Undefining label %s\n", name );
-      undeflabel( name );
+      undefconst( name );
     }
 
     return 0;
@@ -1153,8 +1210,13 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 		  else if( arg[1] == '+' ) j = (addr + 4 + getlabeladdr( arg + 2 )) + 0x10000;
 		  else usage( "Bad operator %c", arg[1] );
 		} else {
-		  fvmc_printf( 2, "Bad constant or unknown label \"%s\"\n", arg );
-		  goto cont;
+		  struct constdef *c = getconst( arg );
+		  if( !c ) {
+		    fvmc_printf( 2, "Bad constant or unknown label \"%s\"\n", arg );
+		    goto cont;
+		  } else {
+		    j = c->val;
+		  }
 		}
 	      }
 	    }

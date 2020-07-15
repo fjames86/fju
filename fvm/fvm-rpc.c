@@ -1064,6 +1064,8 @@ int fvm_cluster_update( struct fvm_module *module ) {
   int sts;
   struct raft_cluster cl;
 
+  if( !module->clusterid ) return -1;
+  
   fvm_log( LOG_LVL_INFO, "Updating cluster for program %s %u:%u cluster %"PRIx64"",
 	   module->header.name,
 	   module->header.progid,

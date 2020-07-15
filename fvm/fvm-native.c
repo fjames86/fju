@@ -465,6 +465,74 @@ static int native_yield( struct fvm_s *state, uint32_t reg ) {
   return 0;
 }
 
+static int native_getsym( struct fvm_s *state, uint32_t reg ) {
+  /* int getsym(progid,name) */
+  uint32_t progid, nameaddr, addr;
+  char name[64];
+  struct fvm_module *m;
+  
+  progid = ntohl( fvm_stack_read( state, 4 ) );
+  nameaddr = ntohl( fvm_stack_read( state, 8 ) );
+  native_readstr( state, nameaddr, name, sizeof(name) );
+  
+  m = fvm_module_by_progid( progid );
+  if( !m ) return -1;
+
+  addr = fvm_symbol_addr( m, name );
+  if( !addr ) return -1;
+  
+  return addr;
+}
+
+static int native_ldvirt( struct fvm_s *state, uint32_t reg ) {  
+  /* int ldvirt(progid,addr,bufp,count) */
+  uint32_t progid, addr, bufaddr, count;
+  char *buf;
+  struct fvm_module *m;
+  
+  progid = ntohl( fvm_stack_read( state, 4 ) );
+  addr = ntohl( fvm_stack_read( state, 8 ) );
+  bufaddr = ntohl( fvm_stack_read( state, 12 ) );
+  buf = fvm_getaddr( state, bufaddr );
+  if( !buf ) return -1;
+  count = ntohl( fvm_stack_read( state, 16 ) );
+
+  m = fvm_module_by_progid( progid );
+  if( !m ) return -1;
+
+  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + m->header.datasize - count)) ) {
+    memcpy( buf, m->data + addr - FVM_ADDR_DATA, count );
+  } else if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + m->header.textsize - count)) ) {
+    memcpy( buf, m->text + addr - FVM_ADDR_TEXT, count );
+  } else return -1;
+  
+  return count;
+}
+
+static int native_stvirt( struct fvm_s *state, uint32_t reg ) {
+  /* int stvirt(progid,addr,bufp,count) */
+  uint32_t progid, addr, bufaddr, count;
+  char *buf;
+  struct fvm_module *m;
+  
+  progid = ntohl( fvm_stack_read( state, 4 ) );
+  addr = ntohl( fvm_stack_read( state, 8 ) );
+  bufaddr = ntohl( fvm_stack_read( state, 12 ) );
+  buf = fvm_getaddr( state, bufaddr );
+  if( !buf ) return -1;
+  count = ntohl( fvm_stack_read( state, 16 ) );
+
+  m = fvm_module_by_progid( progid );
+  if( !m ) return -1;
+
+  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + m->header.datasize - count)) ) {
+    memcpy( m->data + addr - FVM_ADDR_DATA, buf, count );
+    fvm_cluster_update( m );
+  } else return -1;
+  
+  return count;
+}
+
 
 static struct fvm_native_proc native_procs[] =
   {
@@ -484,6 +552,9 @@ static struct fvm_native_proc native_procs[] =
    { 13, native_fregput_buf },
    { 14, native_sprintf },   
    { 15, native_yield },
+   { 16, native_getsym },
+   { 17, native_ldvirt },
+   { 18, native_stvirt },
    
    { 0, NULL }
   };

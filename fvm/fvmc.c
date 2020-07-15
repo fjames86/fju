@@ -1069,8 +1069,8 @@ static struct {
 	{ "ROR",  0x32, 0x00020000 },   /* ROR RX RY */
 	{ "ROR",  0x33, 0x00020002 },   /* ROR RX const */
 	{ "CALLVIRT", 0x34, 0x00030000 }, /* CALLVIRT RX RY RZ. call a function in a remote module. rx=module name, ry=function. rz=argsize */
-	{ "LDVIRT", 0x35, 0x00030000 },   /* LDVIRT RX RY RZ. load from remote module. rx=module name, ry=symbol rz=receives value */
-	{ "STVIRT", 0x36, 0x00030000 },   /* STVIRT RX RY RZ. store into remote module. rx=module, ry=symbol rz=value */
+	{ "RESV1", 0x35, 0x00000000 },   /* Reserved. Unused instruction */
+	{ "RESV2", 0x36, 0x00000000 },   /* Reserved, UNused instruction */
 	{ "LEASP", 0x37, 0x00020002 },   /* LEASP RX const. load address from stack pointer with offset */
 	{ "ADDSP", 0x38, 0x00010000 },  /* ADDSP RX */
 	{ "ADDSP", 0x39, 0x00010001 },  /* ADDSP const. adjust on stack. +ve allocate, -ve frees. */

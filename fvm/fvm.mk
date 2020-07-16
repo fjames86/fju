@@ -14,7 +14,7 @@ ${LIBDIR}/libfvm.a: ${libfvm_source} include/fju/fvm.h fvm/fvm-private.h
 	${AR} rcs $@ fvm-module.o fvm-state.o fvm-opcodes.o fvm-native.o fvm-rpc.o fvm-audit.o
 
 fvmc_deps+=
-${BINDIR}/fvmc: fvm/fvmc.c
+${BINDIR}/fvmc: fvm/fvmc.c include/fju/sec.h 
 	${CC} -o $@ fvm/fvmc.c ${CFLAGS} ${LFLAGS} 
 
 fvm_deps+=${LIBDIR}/libfvm.a

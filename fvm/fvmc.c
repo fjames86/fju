@@ -15,6 +15,8 @@
 #include <stdint.h>
 #include <time.h>
 
+#include <fju/sec.h>
+
 #include "fvm-private.h"
 
 static void usage( char *fmt, ... ) {
@@ -1255,7 +1257,16 @@ static void emit_header( FILE *f, uint32_t addr ) {
   }
   if( nsyms != glob.exportidx ) usage( "bad export number?" );
   
-  if( !glob.progid ) glob.progid = 0x20000000 + (time( NULL ) % 0x20000000);
+  if( !glob.progid ) {
+    uint32_t val;
+    if( glob.modulename[0] ) {
+      val = sec_crc32( 0, glob.modulename, strlen( glob.modulename ) );
+    } else {
+      val = time( NULL );
+    }
+    
+    glob.progid = 0x20000000 + (val % 0x20000000);
+  }
   if( !glob.modulename[0] ) sprintf( glob.modulename, "%08x", glob.progid );
   
   memset( &header, 0, sizeof(header) );

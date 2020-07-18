@@ -1,5 +1,5 @@
 
-program bob;
+program bob(123123,1);
 begin
 
    const fred := 123;
@@ -12,10 +12,13 @@ begin
       myvar := 321
    else if myvar = 321 Then
       myvar := 111
+   else if myvar <> 321 Then
+      goto fred
    else
       myvar := 222;
    
-   Call bob(myvar)   
+   Call bob(myvar)   ;
+   goto fred
 end
 
 end

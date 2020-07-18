@@ -112,7 +112,7 @@ var fred : array[15] of int
 #include <stdarg.h>
 
 static char whitespacechars[] = { ' ', '\n', '\t', '\r', '\0' };
-static char terminalchars[] = { '+', '-', '*', '/', ';', '.', '{', '}', ' ', '\n', '\t', '\r', '(', ')', ':', '[', ']', '\0' };
+static char terminalchars[] = { '+', '-', '*', '/', ';', '.', '{', '}', ' ', '\n', '\t', '\r', '(', ')', ':', '[', ']', ',', '\0' };
 
 static int skipcomment( FILE *f ) {
   char c;
@@ -286,6 +286,7 @@ typedef enum {
 	      TOK_NEQ,
 	      TOK_LABEL,
 	      TOK_CONST,
+	      TOK_GOTO,
 } token_t;
 static struct {
   char *keyword;
@@ -325,9 +326,10 @@ static struct {
 		     { "%", TOK_MOD },
 		     { "+", TOK_PLUS },
 		     { "-", TOK_MINUS },
-		     { "!=", TOK_NEQ },
+		     { "<>", TOK_NEQ },
 		     { "LABEL", TOK_LABEL },
 		     { "CONST", TOK_CONST },
+		     { "GOTO", TOK_GOTO },
 		     
 		     { NULL, 0 }
 };
@@ -406,6 +408,7 @@ static int expecttok( token_t type ) {
   usage( "Unexpected symbol %u %s", glob.tok.type, glob.tok.token );
   return 0;
 }
+#define expectok(type) expecttok(type)
 
 static struct var *getvar( char *name ) {
   struct var *v;
@@ -600,8 +603,13 @@ static void parsestatement( void ) {
     expecttok( TOK_COLON );
     expecttok( TOK_EQ );
     if( glob.tok.type != TOK_VALINTEGER ) usage( "Failed to parse const statement" );
-    printf( ".CONST %s %u\n", nametok.token, (unsigned int)strtoul( glob.tok.token, NULL, 0 ) );
+    printf( "\t.CONST\t%s\t%u\n", nametok.token, (unsigned int)strtoul( glob.tok.token, NULL, 0 ) );
     expecttok( TOK_VALINTEGER );
+  } else if( accepttok( TOK_GOTO ) ) {
+    struct token nametok = glob.tok;
+    if( nametok.type != TOK_NAME ) usage( "Failed to parse goto" );
+    printf( "\tJMP\t%s\n", nametok.token );
+    expectok( TOK_NAME );
   } else usage( "failed to parse statement. token=\"%s\"", glob.tok.token );
 }
 
@@ -621,6 +629,16 @@ static void parseprogram( void ) {
     printf( "\t.MODULE\t%s\n", glob.tok.token );
   }
   expecttok( TOK_NAME );
+  if( accepttok( TOK_OPENPAREN ) ) {
+    struct token progid, versid;
+    progid = glob.tok;
+    expectok( TOK_VALINTEGER );
+    expectok( TOK_COMMA );
+    versid = glob.tok;
+    expectok( TOK_VALINTEGER );
+    printf( "\t.PROGRAM\t%u\t%u\n", (int)strtoul( progid.token, NULL, 0 ), (int)strtoul( versid.token, NULL, 0 ) );
+    expectok( TOK_CLOSEPAREN );
+  }
   expecttok( TOK_SEMICOLON );
 
   parseblock();
@@ -640,19 +658,6 @@ int main( int argc, char **argv ) {
   f = fopen( filename, "r" );
 
   printf( ";; -------------- lexing -------------- \n" );
-  
-  sts = getnexttoken( f, token, sizeof(token) );
-  if( sts ) usage( "Failed to read first token" );
-
-  if( strcasecmp( token, "PROGRAM" ) != 0 ) {
-    usage( "First token \"%s\" expected to be PROGRAM", token );
-  }
-
-  sts = getnexttoken( f, token, sizeof(token) );
-  if( sts ) usage( "Bad token" );
-  sts = getnexttoken( f, token, sizeof(token) );
-  if( sts ) usage( "Bad token" );
-  if( strcmp( token, ";" ) != 0 ) usage( "Expected ; got %s\n", token );
   
   /* process until . */ 
   while( 1 ) {

@@ -255,8 +255,6 @@ typedef enum {
 	      TOK_IF,
 	      TOK_ELSE,
 	      TOK_THEN,
-	      TOK_ELSEIF,
-	      TOK_ENDIF,
 	      TOK_PROCEDURE,
 	      TOK_BEGIN,
 	      TOK_END,
@@ -286,6 +284,8 @@ typedef enum {
 	      TOK_PLUS,
 	      TOK_MINUS,
 	      TOK_NEQ,
+	      TOK_LABEL,
+	      TOK_CONST,
 } token_t;
 static struct {
   char *keyword;
@@ -297,9 +297,7 @@ static struct {
 		     { ";", TOK_SEMICOLON },
 		     { "IF", TOK_IF },
 		     { "THEN", TOK_THEN },
-		     { "ELSEIF", TOK_ELSEIF },
 		     { "ELSE", TOK_ELSE },
-		     { "ENDIF", TOK_ENDIF },
 		     { "PROCEDURE", TOK_PROCEDURE },
 		     { "BEGIN", TOK_BEGIN },
 		     { "END", TOK_END },
@@ -328,6 +326,8 @@ static struct {
 		     { "+", TOK_PLUS },
 		     { "-", TOK_MINUS },
 		     { "!=", TOK_NEQ },
+		     { "LABEL", TOK_LABEL },
+		     { "CONST", TOK_CONST },
 		     
 		     { NULL, 0 }
 };
@@ -515,7 +515,7 @@ static void parsestatement( void ) {
   /* 
      name := expression 
      call name(expr, ... )
-     if condition then body [elseif condition then body] [else body] endif 
+     if condition then statement [else statement]  
      while condition do statement 
      begin statement [ ; statement ] end 
    */
@@ -559,22 +559,11 @@ static void parsestatement( void ) {
     printf( "\tJPN\t%s\n", elselabel );
     parsestatement();
     printf( "\tJMP\t%s\n", endiflabel );
-    printf( "%s:\n", elselabel );    
-    while( accepttok( TOK_ELSEIF ) ) {
-      strcpy( elselabel, genlabel( "ELSE" ) );
-      
-      parsecondition();
-      expecttok( TOK_THEN );
-      printf( "\tJPN\t%s\n", elselabel );      
-      parsestatement();
-      printf( "\tJMP\t%s\n", endiflabel );      
-      printf( "%s:\n", elselabel );
-    }
+    printf( "%s:\n", elselabel );
     if( accepttok( TOK_ELSE ) ) {
       parsestatement();
     }
     printf( "%s:\n", endiflabel );
-    expecttok( TOK_ENDIF );
   } else if( accepttok( TOK_PROCEDURE ) ) {
     int vartype = 0;
     
@@ -598,6 +587,21 @@ static void parsestatement( void ) {
     expecttok( TOK_CLOSEPAREN );
     parseblock();    
     printf( "\tRET\n" );
+  } else if( accepttok( TOK_LABEL ) ) {
+    if( glob.tok.type != TOK_NAME ) usage( "Failed to parse label statement" );
+    printf( "%s:\n", glob.tok.token );
+    expecttok( TOK_NAME );
+  } else if( accepttok( TOK_CONST ) ) {
+    struct token nametok;
+
+    if( glob.tok.type != TOK_NAME ) usage( "Failed to parse const statement" );
+    nametok = glob.tok;    
+    expecttok( TOK_NAME );
+    expecttok( TOK_COLON );
+    expecttok( TOK_EQ );
+    if( glob.tok.type != TOK_VALINTEGER ) usage( "Failed to parse const statement" );
+    printf( ".CONST %s %u\n", nametok.token, (unsigned int)strtoul( glob.tok.token, NULL, 0 ) );
+    expecttok( TOK_VALINTEGER );
   } else usage( "failed to parse statement. token=\"%s\"", glob.tok.token );
 }
 

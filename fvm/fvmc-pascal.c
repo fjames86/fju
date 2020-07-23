@@ -463,9 +463,20 @@ static struct var *getvar( char *name ) {
 
 /* ----- */
 
+
 static void parseblock( void );
 static void parseexpr( int reg );
-static void parsecondition( void );
+
+typedef enum {
+	      OP_NONE,
+	      OP_EQ,
+	      OP_NEQ,
+	      OP_GT,
+	      OP_GTE,
+	      OP_LT,
+	      OP_LTE,
+} op_t;
+static op_t parsecondition( void );
 static void parsestatement( void );
 static void parseprogram( void );
 
@@ -530,26 +541,32 @@ static void parseexpr( int reg ) {
   } else usage( "Unable to parse expression" );
   
 }
-static void parsecondition( void ) {
-  int op = 0;
+
+
+static op_t parsecondition( void ) {
+  op_t op;
   
   parseexpr( 0 );  
   if( accepttok( TOK_EQ ) ) {
-    op = 1; /* eq */
+    op = OP_EQ;
   } else if( accepttok( TOK_GT ) ) {
-    op = 2;
+    op = OP_GT;
   } else if( accepttok( TOK_GTE ) ) {
-    op = 3;
+    op = OP_GTE;
   } else if( accepttok( TOK_LT ) ) {
-    op = 4;
+    op = OP_LT;
   } else if( accepttok( TOK_LTE ) ) {
-    op = 5;
+    op = OP_LTE;
   } else if( accepttok( TOK_NEQ ) ) {
-    op = 6;
-  } else usage( "Bad comparison operator" );
+    op = OP_NEQ;
+  } else {
+    op = OP_NONE;
+    return op;
+  }
+  
   parseexpr( 1 );
   printf( "\tSUB\tR0\tR1\n" );
-  /*XXX TODO */
+  return op;
 }
 
 static void parseprocedurebody( void ) {
@@ -708,12 +725,23 @@ static void parsestatement( void ) {
     expecttok( TOK_END );
   } else if( accepttok( TOK_IF ) ) {
     char elselabel[64], endiflabel[64];
+    op_t op;
+    
     strcpy( elselabel, genlabel( "ELSE" ) );
     strcpy( endiflabel, genlabel( "ENDIF" ) );
     
-    parsecondition();
+    op = parsecondition();
     expecttok( TOK_THEN );
-    printf( "\tJPN\t%s\n", elselabel );
+    printf( "\t%s\t%s\n",
+	    op == OP_NONE ? "JPN" :
+	    op == OP_EQ ? "JZ" :
+	    op == OP_NEQ ? "JPN" : 
+	    op == OP_GT ? "JP" :
+	    op == OP_GTE ? "JPZ" :
+	    op == OP_LT ? "JZ" :
+	    op == OP_LTE ? "JNZ" :
+	    (usage( "Bad operator" ), ""),
+	    elselabel );
     parsestatement();
     printf( "\tJMP\t%s\n", endiflabel );
     printf( "%s:\n", elselabel );

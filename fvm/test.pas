@@ -14,7 +14,7 @@ begin
    myvar := 123; 
    if myvar = 123 Then
       myvar  := 321
-   else if myvar = 321 Then
+   else if myvar > 321 Then
       myvar  := 111
    else if myvar <> 321 Then
       goto fred

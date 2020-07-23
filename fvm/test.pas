@@ -1,3 +1,4 @@
+{ -*- mode:text -*- }
 
 program bob(123123,1);
 begin
@@ -7,7 +8,7 @@ begin
    var globu32 : integer := 123;
    var globalstr : string[64];
    
-procedure fred(x : integer) { this is a comment }
+procedure procname(x : integer, var y : integer) { this is a comment }
 begin
    var local : integer;
       
@@ -17,14 +18,20 @@ begin
    else if myvar > 321 Then
       myvar  := 111
    else if myvar <> 321 Then
-      goto fred
+      goto fred2
    else
       myvar := 222;
 
+   while myvar = 123 do
+   begin
+     myvar := 12
+   end;
+   
  fred: 
      Call bob(myvar);
-    goto fred 
+    goto fred1
 end
 
-end
-.
+
+
+end.

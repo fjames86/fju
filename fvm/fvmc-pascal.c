@@ -328,6 +328,8 @@ typedef enum {
 	      TOK_CONST,
 	      TOK_GOTO,
 	      TOK_ASSIGN,
+	      TOK_DO,
+	      TOK_WHILE,
 } token_t;
 static struct {
   char *keyword;
@@ -371,6 +373,8 @@ static struct {
 		     { "CONST", TOK_CONST },
 		     { "GOTO", TOK_GOTO },
 		     { ":=", TOK_ASSIGN },
+		     { "DO", TOK_DO },
+		     { "WHILE", TOK_WHILE },
 		     
 		     { NULL, 0 }
 };
@@ -749,6 +753,16 @@ static void parsestatement( void ) {
       parsestatement();
     }
     printf( "%s:\n", endiflabel );
+  } else if( accepttok( TOK_WHILE ) ) {
+    /* while condition do statement */
+    parsecondition();
+    expectok( TOK_DO );
+    parsestatement();
+  } else if( accepttok( TOK_DO ) ) {
+    /* do statement while condition */
+    parsestatement();
+    expectok( TOK_WHILE );
+    parsecondition();
   } else if( accepttok( TOK_GOTO ) ) {
     struct token nametok = glob.tok;
     if( nametok.type != TOK_NAME ) usage( "Failed to parse goto" );

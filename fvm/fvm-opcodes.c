@@ -191,9 +191,13 @@ static int opcode_popreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uin
 
 static int opcode_ret( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* RET */
-  uint32_t addr = ntohl( fvm_pop( state ) );
-  state->reg[FVM_REG_PC] = limitaddr( addr, FVM_ADDR_TEXT, FVM_MAX_TEXT );
-  state->frame--;
+  uint32_t addr;
+  state->frame--;  
+  if( state->frame > 0 ) {
+    add = ntohl( fvm_pop( state ) );
+    state->reg[FVM_REG_PC] = limitaddr( addr, FVM_ADDR_TEXT, FVM_MAX_TEXT );
+  }
+  
   return 0;
 }
 
@@ -823,7 +827,7 @@ int fvm_step( struct fvm_s *state ) {
   
   pc = state->reg[FVM_REG_PC];
   if( pc < FVM_ADDR_TEXT || (pc >= (FVM_ADDR_TEXT + state->textsize)) ) {
-    printf( "xx bad pc %x\n", pc );
+    fvm_printf( "bad pc %x\n", pc );
     return -1;
   }
   

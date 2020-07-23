@@ -24,7 +24,7 @@ begin
 
    while myvar = 123 do
    begin
-     myvar := 12
+     myvar := 12 xor 123
    end;
    
  fred: 

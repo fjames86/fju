@@ -302,6 +302,7 @@ typedef enum {
 	      TOK_VAR,
 	      TOK_INTEGER,
 	      TOK_STRING,
+	      TOK_OPAQUE,
 	      TOK_OPENARRAY,
 	      TOK_CLOSEARRAY,
 	      TOK_RETURN,
@@ -330,6 +331,8 @@ typedef enum {
 	      TOK_ASSIGN,
 	      TOK_DO,
 	      TOK_WHILE,
+	      TOK_XOR,
+	      TOK_OR,
 } token_t;
 static struct {
   char *keyword;
@@ -375,6 +378,9 @@ static struct {
 		     { ":=", TOK_ASSIGN },
 		     { "DO", TOK_DO },
 		     { "WHILE", TOK_WHILE },
+		     { "XOR", TOK_XOR },
+		     { "OR", TOK_OR },
+		     { "OPAQUE", TOK_OPAQUE },
 		     
 		     { NULL, 0 }
 };
@@ -407,7 +413,7 @@ struct token {
 };
 
 typedef enum {
-	      VAR_UINT32,
+	      VAR_INTEGER,
 	      VAR_STRING,
 	      VAR_STRINGBUF,
 	      VAR_OPAQUE,
@@ -418,6 +424,9 @@ struct var {
   struct var *next;
   char name[64];
   var_t type;
+  uint32_t flags;
+#define VAR_ISVAR   0x00010000
+#define VAR_ISPARAM 0x00020000
   uint32_t size;
   uint32_t offset;
 };
@@ -476,15 +485,17 @@ static struct var *getvar( char *name ) {
   }
   return NULL;
 }
-static void addvar( char *name, var_t type, uint32_t size, uint32_t offset ) {
+static struct var *addvar( char *name, var_t type, uint32_t size, uint32_t offset, uint32_t flags ) {
   struct var *v = malloc( sizeof(*v) );
   memset( v, 0, sizeof(*v) );
   strcpy( v->name, name );
   v->type = type;
   v->size = size;
   v->offset = offset;
+  v->flags = flags;
   v->next = glob.vars;
   glob.vars = v;
+  return v;
 }
 static void adjustvars( uint32_t offset ) {
   struct var *v = glob.vars;
@@ -564,23 +575,58 @@ static void parseterm( void ) {
   } else if( accepttok( TOK_AND ) ) {
     parsefactor( 1 );
     printf( "\tAND\tR0\tR1\n" );
+  } else if( accepttok( TOK_XOR ) ) {
+    parsefactor( 1 );
+    printf( "\tXOR\tR0\tR1\n" );
   } 
 }
 
 static void parseexpr( int reg ) {
   struct token tok;
   struct var *v;
-  
+
+  /* valinteger | constant | ( expr ) | expr operator expr */  
   tok = glob.tok;
   if( accepttok( TOK_VALINTEGER ) ) {
-    printf( "\tLDI\tR%u\t%u\n", reg, (int)strtoul( tok.token, NULL, 0 ) );
+    printf( "\tLDI\tR%u\t%u\n", reg, (unsigned int)strtoul( tok.token, NULL, 0 ) );
   } else if( accepttok( TOK_NAME ) ) {
+    /* check if constant ? */
     v = getvar( tok.token );
-    if( v ) printf( "\tLEASP\tR%u\t-%u\n", reg, v->offset );
-    else {
-      printf( "\tLD\tR%u\t%s\n", reg, tok.token );
-    }
-  } else usage( "Unable to parse expression" );
+    if( v ) printf( "\tLDSP\tR%u\t-%u\n", reg, v->offset );
+    else printf( "\tLDI\tR%u\t%s\n", reg, tok.token );
+  } else if( accepttok( TOK_OPENPAREN ) ) {
+    parseexpr( reg );
+    expectok( TOK_CLOSEPAREN );
+  } else if( accepttok( TOK_NOT ) ) {
+    parseexpr( reg );
+    printf( "\tNOT\tR%u\n", reg );
+  }
+
+  if( accepttok( TOK_PLUS ) ) {
+    parseexpr( reg + 1 );
+    printf( "\tADD\tR%u\tR%u\n", reg, reg + 1 );
+  } else if( accepttok( TOK_MINUS ) ) {
+    parseexpr( reg + 1 );
+    printf( "\tSUB\tR%u\tR%u\n", reg, reg + 1 );    
+  } else if( accepttok( TOK_MUL ) ) {
+    parseexpr( reg + 1 );
+    printf( "\tMUL\tR%u\tR%u\n", reg, reg + 1 );    
+  } else if( accepttok( TOK_DIV ) ) {
+    parseexpr( reg + 1 );
+    printf( "\tDIV\tR%u\tR%u\n", reg, reg + 1 );    
+  } else if( accepttok( TOK_MOD ) ) {
+    parseexpr( reg + 1 );
+    printf( "\tMOD\tR%u\tR%u\n", reg, reg + 1 );    
+  } else if( accepttok( TOK_AND ) ) {
+    parseexpr( reg + 1 );
+    printf( "\tAND\tR%u\tR%u\n", reg, reg + 1 );    
+  } else if( accepttok( TOK_OR ) ) {
+    parseexpr( reg + 1 );
+    printf( "\tOR\tR%u\tR%u\n", reg, reg + 1 );    
+  } else if( accepttok( TOK_XOR ) ) {
+    parseexpr( reg + 1 );
+    printf( "\tXOR\tR%u\tR%u\n", reg, reg + 1 );    
+  } 
   
 }
 
@@ -617,6 +663,8 @@ static void parseprocedurebody( void ) {
    * statement
    */
   struct token nametok;
+  int nargs = 0;
+  int argsize = 0;
   
   while( accepttok( TOK_VAR ) ) {
     /* var name : type */
@@ -624,15 +672,48 @@ static void parseprocedurebody( void ) {
     expectok( TOK_NAME );
     expectok( TOK_COLON );
     if( accepttok( TOK_INTEGER ) ) {
+      adjustvars( 4 );
+      addvar( nametok.token, VAR_INTEGER, 4, 0, 0 );
+      argsize += 4;
     } else if( accepttok( TOK_STRING ) ) {
+      if( accepttok( TOK_OPENARRAY ) ) {
+	int size;
+	expectok( TOK_VALINTEGER );
+	expectok( TOK_CLOSEARRAY );
+	size = strtoul( glob.tok.token, NULL, 0 );
+	adjustvars( 4 + size );
+	addvar( nametok.token, VAR_STRINGBUF, 4 + size, 0, 0 );
+	argsize += 4 + size;	
+      } else {
+	adjustvars( 4 );	
+	addvar( nametok.token, VAR_STRING, 4, 0, 0 );
+	argsize += 4;	
+      }
+    } else if( accepttok( TOK_OPAQUE ) ) {
+      if( accepttok( TOK_OPENARRAY ) ) {
+	int size;
+	expectok( TOK_VALINTEGER );
+	expectok( TOK_CLOSEARRAY );
+	size = strtoul( glob.tok.token, NULL, 0 );
+	adjustvars( size );
+	addvar( nametok.token, VAR_OPAQUEBUF, size, 0, 0 );
+	argsize += size;	
+      } else {
+	adjustvars( 4 );
+	addvar( nametok.token, VAR_OPAQUE, 4, 0, 0 );
+	argsize += 4;	
+      }
     } else usage( "Unexpected var type %s", glob.tok.token );
+    nargs++;
     
     if( !accepttok( TOK_SEMICOLON ) ) return;
   }
 
+  if( nargs > 0 ) printf( "\tADDSP\t%u\n", argsize );
   do {
     parsestatement();
   } while( accepttok( TOK_SEMICOLON ) );
+  printf( "\tSUBSP\t%u\n", argsize );
   
 }
 
@@ -659,6 +740,7 @@ static int parsedeclaration( void ) {
   } else if( accepttok( TOK_PROCEDURE ) ) {
     int vartype = 0;
     struct token nametok;
+    int nargs = 0;
     
     printf( ";; parsing procedure\n" );
     nametok = glob.tok;
@@ -674,14 +756,18 @@ static int parsedeclaration( void ) {
       expecttok( TOK_NAME );
       expecttok( TOK_COLON );
       if( accepttok( TOK_INTEGER ) ) {
+	addvar( nametok.token, VAR_INTEGER, 4, 4 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
       } else if( accepttok( TOK_STRING ) ) {
+	addvar( nametok.token, VAR_STRING, 4, 4 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
       } else usage( "unrecognized type \"%s\"", glob.tok.token );
+      nargs++;
     } while( accepttok( TOK_COMMA ) );
     expecttok( TOK_CLOSEPAREN );
     expectok( TOK_BEGIN );
     parseprocedurebody();
     expectok( TOK_END );
-    printf( "\tRET\n" );    
+    printf( "\tRET\n" );
+    freevars();
   } else if( accepttok( TOK_VAR ) ) {
     /* 
      * var name : integer

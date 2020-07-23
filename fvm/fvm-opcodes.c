@@ -194,7 +194,7 @@ static int opcode_ret( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32
   uint32_t addr;
   state->frame--;  
   if( state->frame > 0 ) {
-    add = ntohl( fvm_pop( state ) );
+    addr = ntohl( fvm_pop( state ) );
     state->reg[FVM_REG_PC] = limitaddr( addr, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }
   

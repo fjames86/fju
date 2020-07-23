@@ -593,7 +593,10 @@ static void parseexpr( int reg ) {
     /* check if constant ? */
     v = getvar( tok.token );
     if( v ) printf( "\tLDSP\tR%u\t-%u\n", reg, v->offset );
-    else printf( "\tLDI\tR%u\t%s\n", reg, tok.token );
+    else {
+      printf( "\tLDI\tR%u\t%s\n", reg, tok.token );
+      printf( "\tLD\tR%u\tR%u\n", reg, reg );
+    }
   } else if( accepttok( TOK_OPENPAREN ) ) {
     parseexpr( reg );
     expectok( TOK_CLOSEPAREN );
@@ -673,7 +676,7 @@ static void parseprocedurebody( void ) {
     expectok( TOK_COLON );
     if( accepttok( TOK_INTEGER ) ) {
       adjustvars( 4 );
-      addvar( nametok.token, VAR_INTEGER, 4, 0, 0 );
+      addvar( nametok.token, VAR_INTEGER, 4, 4, 0 );
       argsize += 4;
     } else if( accepttok( TOK_STRING ) ) {
       if( accepttok( TOK_OPENARRAY ) ) {
@@ -682,11 +685,11 @@ static void parseprocedurebody( void ) {
 	expectok( TOK_VALINTEGER );
 	expectok( TOK_CLOSEARRAY );
 	adjustvars( 4 + size );
-	addvar( nametok.token, VAR_STRINGBUF, 4 + size, 0, 0 );
+	addvar( nametok.token, VAR_STRINGBUF, 4 + size, 4, 0 );
 	argsize += 4 + size;	
       } else {
 	adjustvars( 4 );	
-	addvar( nametok.token, VAR_STRING, 4, 0, 0 );
+	addvar( nametok.token, VAR_STRING, 4, 4, 0 );
 	argsize += 4;	
       }
     } else if( accepttok( TOK_OPAQUE ) ) {
@@ -696,11 +699,11 @@ static void parseprocedurebody( void ) {
 	expectok( TOK_VALINTEGER );
 	expectok( TOK_CLOSEARRAY );
 	adjustvars( size );
-	addvar( nametok.token, VAR_OPAQUEBUF, size, 0, 0 );
+	addvar( nametok.token, VAR_OPAQUEBUF, size, 4, 0 );
 	argsize += size;	
       } else {
 	adjustvars( 4 );
-	addvar( nametok.token, VAR_OPAQUE, 4, 0, 0 );
+	addvar( nametok.token, VAR_OPAQUE, 4, 4, 0 );
 	argsize += 4;	
       }
     } else usage( "Unexpected var type %s", glob.tok.token );
@@ -756,9 +759,9 @@ static int parsedeclaration( void ) {
       expecttok( TOK_NAME );
       expecttok( TOK_COLON );
       if( accepttok( TOK_INTEGER ) ) {
-	addvar( nametok.token, VAR_INTEGER, 4, 4 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
+	addvar( nametok.token, VAR_INTEGER, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
       } else if( accepttok( TOK_STRING ) ) {
-	addvar( nametok.token, VAR_STRING, 4, 4 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
+	addvar( nametok.token, VAR_STRING, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
       } else usage( "unrecognized type \"%s\"", glob.tok.token );
       nargs++;
     } while( accepttok( TOK_COMMA ) );
@@ -829,9 +832,11 @@ static void parsestatement( void ) {
     parseexpr( 0 );
     /* R0 contains result of expression */
     v = getvar( name );
-    if( v ) printf( "\tLEASP\tR1\t-%u\n", v->offset );
-    else printf( "\tLDI\tR1\t%s\n", name );
-    printf( "\tST\tR1\tR0\n" );
+    if( v ) printf( "\tSTSP\tR0\t-%u\n", v->offset );
+    else {
+      printf( "\tLDI\tR1\t%s\n", name );
+      printf( "\tST\tR1\tR0\n" );
+    }
   } else if( accepttok( TOK_CALL ) ) {
     char name[64];
     int nargs = 0;
@@ -879,14 +884,18 @@ static void parsestatement( void ) {
     printf( "%s:\n", endiflabel );
   } else if( accepttok( TOK_WHILE ) ) {
     /* while condition do statement */
-    parsecondition();
+    op_t op;
+    op = parsecondition();
     expectok( TOK_DO );
     parsestatement();
+    /* TODO */
   } else if( accepttok( TOK_DO ) ) {
     /* do statement while condition */
+    op_t op;
     parsestatement();
     expectok( TOK_WHILE );
-    parsecondition();
+    op = parsecondition();
+    /* TODO */
   } else if( accepttok( TOK_GOTO ) ) {
     struct token nametok = glob.tok;
     if( nametok.type != TOK_NAME ) usage( "Failed to parse goto" );

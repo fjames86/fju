@@ -35,8 +35,21 @@ end;
 
 procedure myfunc(x : integer, var y : integer)
 begin
+	var fred : integer;	
 	localv1 := x;
-	y := localv1
+	y := localv1;
+	fred := 0;
+
+	while fred < 10 do
+	begin
+		fred := fred + 1
+	end;
+
+	fred := 0;
+	do
+	fred := fred + 1
+	while fred < 12
+
 end
 
 

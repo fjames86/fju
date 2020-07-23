@@ -21,6 +21,10 @@ fvm_deps+=${LIBDIR}/libfvm.a
 ${BINDIR}/fvm: fvm/fvm-main.c ${LIBDIR}/libfvm.a 
 	${CC} -o $@ fvm/fvm-main.c ${CFLAGS} ${LFLAGS} 
 
+${BINDIR}/fvmc-pascal: fvm/fvmc-pascal.c
+	${CC} -o $@ fvm/fvmc-pascal.c ${CFLAGS} ${LFLAGS} 
+PROGRAMS+=fvmc-pascal
+
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.asm fvm/programs/test-service.asm
 	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm -I fvm/stdlib/ fvm/programs/test-rpc.asm
 	${BINDIR}/fvmc -o fvm/programs/test-service.fvm -I fvm/stdlib/ fvm/programs/test-service.asm

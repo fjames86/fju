@@ -406,10 +406,19 @@ struct token {
   token_t type;
 };
 
+typedef enum {
+	      VAR_UINT32,
+	      VAR_STRING,
+	      VAR_STRINGBUF,
+	      VAR_OPAQUE,
+	      VAR_OPAQUEBUF,
+} var_t;
+
 struct var {
   struct var *next;
   char name[64];
-  uint32_t type;
+  var_t type;
+  uint32_t size;
   uint32_t offset;
 };
 
@@ -418,6 +427,9 @@ static struct {
   FILE *f;
   struct var *vars;
 } glob;
+
+
+
 
 static int nexttok( void ) {
   struct token tok;
@@ -463,6 +475,32 @@ static struct var *getvar( char *name ) {
     v = v->next;
   }
   return NULL;
+}
+static void addvar( char *name, var_t type, uint32_t size, uint32_t offset ) {
+  struct var *v = malloc( sizeof(*v) );
+  memset( v, 0, sizeof(*v) );
+  strcpy( v->name, name );
+  v->type = type;
+  v->size = size;
+  v->offset = offset;
+  v->next = glob.vars;
+  glob.vars = v;
+}
+static void adjustvars( uint32_t offset ) {
+  struct var *v = glob.vars;
+  while( v ) {
+    v->offset += offset;
+    v = v->next;
+  }
+}
+static void freevars( void ) {
+  struct var *v = glob.vars, *next;
+  while( v ) {
+    next = v->next;
+    free( v );
+    v = next;
+  }
+  glob.vars = NULL;
 }
 
 /* ----- */

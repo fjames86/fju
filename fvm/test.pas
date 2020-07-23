@@ -7,11 +7,12 @@ begin
    const conststr := "fred";
    var globu32 : integer := 123;
    var globalstr : string[64];
-   
+
 procedure procname(x : integer, var y : integer) { this is a comment }
 begin
    var local : integer;
-      
+   var mystr : string[64];
+   
    myvar := 123; 
    if myvar = 123 Then
       myvar  := 321
@@ -30,7 +31,15 @@ begin
  fred: 
      Call bob(myvar);
     goto fred1
+end;
+
+procedure myfunc(x : integer, var y : integer)
+begin
+	localv1 := x;
+	y := localv1
 end
+
+
 
 
 

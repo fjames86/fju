@@ -678,9 +678,9 @@ static void parseprocedurebody( void ) {
     } else if( accepttok( TOK_STRING ) ) {
       if( accepttok( TOK_OPENARRAY ) ) {
 	int size;
+	size = strtoul( glob.tok.token, NULL, 0 );	
 	expectok( TOK_VALINTEGER );
 	expectok( TOK_CLOSEARRAY );
-	size = strtoul( glob.tok.token, NULL, 0 );
 	adjustvars( 4 + size );
 	addvar( nametok.token, VAR_STRINGBUF, 4 + size, 0, 0 );
 	argsize += 4 + size;	
@@ -692,9 +692,9 @@ static void parseprocedurebody( void ) {
     } else if( accepttok( TOK_OPAQUE ) ) {
       if( accepttok( TOK_OPENARRAY ) ) {
 	int size;
+	size = strtoul( glob.tok.token, NULL, 0 );	
 	expectok( TOK_VALINTEGER );
 	expectok( TOK_CLOSEARRAY );
-	size = strtoul( glob.tok.token, NULL, 0 );
 	adjustvars( size );
 	addvar( nametok.token, VAR_OPAQUEBUF, size, 0, 0 );
 	argsize += size;	
@@ -713,7 +713,7 @@ static void parseprocedurebody( void ) {
   do {
     parsestatement();
   } while( accepttok( TOK_SEMICOLON ) );
-  printf( "\tSUBSP\t%u\n", argsize );
+  if( nargs > 0 ) printf( "\tSUBSP\t%u\n", argsize );
   
 }
 

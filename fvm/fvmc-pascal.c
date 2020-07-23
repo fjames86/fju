@@ -169,6 +169,47 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
   
   sts = skipwhitespace( f );
   if( sts ) return sts;
+
+  c = fgetc( f );
+  if( c == EOF ) {
+    printf( ";; end of file\n" );
+    return -1;
+  }
+  if( c == '"' ) {
+    /* read until " */
+    p = token;
+    *p = '"';
+    p++;
+    while( 1 ) {
+      c = fgetc( f );
+      if( c == EOF ) {
+	printf( ";; end of file\n" );
+	return -1;
+      }
+      if( toksize > 0 ) {
+	*p = c;
+	p++;
+      }
+      if( c == '"' ) break;
+      
+      toksize--;
+      if( toksize == 0 ) {
+	printf( ";; token buffer out of space\n" );
+	return -1;
+      }
+    }
+    return 0;
+  } else if( c == ':' ) {
+    c = fgetc( f );
+    if( c == '=' ) {
+      strcpy( token, ":=" );
+      return 0;
+    }
+    ungetc( c, f );    
+    strcpy( token, ":" );
+    return 0;    
+  }
+  ungetc( c, f );
   
   p = token;
   *p = '\0';
@@ -284,9 +325,9 @@ typedef enum {
 	      TOK_PLUS,
 	      TOK_MINUS,
 	      TOK_NEQ,
-	      TOK_LABEL,
 	      TOK_CONST,
 	      TOK_GOTO,
+	      TOK_ASSIGN,
 } token_t;
 static struct {
   char *keyword;
@@ -327,9 +368,9 @@ static struct {
 		     { "+", TOK_PLUS },
 		     { "-", TOK_MINUS },
 		     { "<>", TOK_NEQ },
-		     { "LABEL", TOK_LABEL },
 		     { "CONST", TOK_CONST },
 		     { "GOTO", TOK_GOTO },
+		     { ":=", TOK_ASSIGN },
 		     
 		     { NULL, 0 }
 };
@@ -511,6 +552,113 @@ static void parsecondition( void ) {
   /*XXX TODO */
 }
 
+static void parseprocedurebody( void ) {
+  /* 
+   * var name : type
+   * statement
+   */
+  struct token nametok;
+  
+  while( accepttok( TOK_VAR ) ) {
+    /* var name : type */
+    nametok = glob.tok;
+    expectok( TOK_NAME );
+    expectok( TOK_COLON );
+    if( accepttok( TOK_INTEGER ) ) {
+    } else if( accepttok( TOK_STRING ) ) {
+    } else usage( "Unexpected var type %s", glob.tok.token );
+    
+    if( !accepttok( TOK_SEMICOLON ) ) return;
+  }
+
+  do {
+    parsestatement();
+  } while( accepttok( TOK_SEMICOLON ) );
+  
+}
+
+static int parsedeclaration( void ) {
+  /* 
+   * const name := intval
+   * procedure name()
+   * var name : type
+   */
+  if( accepttok( TOK_CONST ) ) {
+    struct token nametok;
+    struct token valtok;
+    
+    if( glob.tok.type != TOK_NAME ) usage( "Failed to parse const statement" );
+    nametok = glob.tok;    
+    expecttok( TOK_NAME );
+    expecttok( TOK_ASSIGN );
+    valtok = glob.tok;
+    if( accepttok( TOK_VALINTEGER ) ) {
+      printf( "\t.CONST\t%s\t%u\n", nametok.token, (unsigned int)strtoul( valtok.token, NULL, 0 ) );
+    } else if( accepttok( TOK_VALSTRING ) ) {
+      printf( "\t.TEXT\t%s\t%s\n", nametok.token, valtok.token );
+    } else usage( "bad constant value %s", valtok.token );
+  } else if( accepttok( TOK_PROCEDURE ) ) {
+    int vartype = 0;
+    struct token nametok;
+    
+    printf( ";; parsing procedure\n" );
+    nametok = glob.tok;
+    expecttok( TOK_NAME );
+    printf( "%s:\n", nametok.token );
+    expecttok( TOK_OPENPAREN );
+    do {
+      if( accepttok( TOK_VAR ) ) {
+	/* var type parameter */
+	vartype = 1;
+      }
+      nametok = glob.tok;
+      expecttok( TOK_NAME );
+      expecttok( TOK_COLON );
+      if( accepttok( TOK_INTEGER ) ) {
+      } else if( accepttok( TOK_STRING ) ) {
+      } else usage( "unrecognized type \"%s\"", glob.tok.token );
+    } while( accepttok( TOK_COMMA ) );
+    expecttok( TOK_CLOSEPAREN );
+    expectok( TOK_BEGIN );
+    parseprocedurebody();
+    expectok( TOK_END );
+    printf( "\tRET\n" );    
+  } else if( accepttok( TOK_VAR ) ) {
+    /* 
+     * var name : integer
+     * var name : string[len]
+     */
+    struct token nametok = glob.tok;
+    expectok( TOK_NAME );
+    expectok( TOK_COLON );
+    if( accepttok( TOK_INTEGER ) ) {
+      uint32_t u32 = 0;
+      struct token valtok;
+      if( accepttok( TOK_ASSIGN ) ) {
+	valtok = glob.tok;
+	expectok( TOK_VALINTEGER );
+	u32 = strtoul( valtok.token, NULL, 0 );
+      }
+      printf( "\t.DATA\t%s\t%u\n", nametok.token, u32 );
+    } else if( accepttok( TOK_STRING ) ) {
+      int i;
+      struct token valtok;
+      
+      expectok( TOK_OPENARRAY );
+      valtok = glob.tok;
+      expectok( TOK_VALINTEGER );
+      expectok( TOK_CLOSEARRAY );
+      printf( "\t.DATA\t%s\t\"", nametok.token );      
+      for( i = 0; i < strtoul( valtok.token, NULL, 0 ); i++ ) {
+	printf( "\\0" );
+      }
+      printf( "\"\n" );
+    } else usage( "Unexpected var type %s", nametok.token );
+  } else return 0;
+
+  return 1;
+}
+
 static void parsestatement( void ) {
   char name[64];
   struct var *v;
@@ -524,9 +672,15 @@ static void parsestatement( void ) {
    */
   strcpy( name, glob.tok.token );
   if( accepttok( TOK_NAME ) ) {
+    if( accepttok( TOK_COLON ) ) {
+      printf( ";; parsing label statement\n" );
+      printf( "%s:\n", name );
+      parsestatement();
+      return;
+    }
+	
     printf( ";; parsing assignment\n" );
-    expecttok( TOK_COLON );
-    expecttok( TOK_EQ );
+    expecttok( TOK_ASSIGN );
     parseexpr( 0 );
     /* R0 contains result of expression */
     v = getvar( name );
@@ -567,57 +721,21 @@ static void parsestatement( void ) {
       parsestatement();
     }
     printf( "%s:\n", endiflabel );
-  } else if( accepttok( TOK_PROCEDURE ) ) {
-    int vartype = 0;
-    
-    printf( ";; parsing procedure\n" );
-    strcpy( name, glob.tok.token );
-    expecttok( TOK_NAME );
-    printf( "%s:\n", name );
-    expecttok( TOK_OPENPAREN );
-    do {
-      if( accepttok( TOK_VAR ) ) {
-	/* var type parameter */
-	vartype = 1;
-      }
-      strcpy( name, glob.tok.token );
-      expecttok( TOK_NAME );
-      expecttok( TOK_COLON );
-      if( accepttok( TOK_INTEGER ) ) {
-      } else if( accepttok( TOK_STRING ) ) {
-      } else usage( "unrecognized type \"%s\"", glob.tok.token );
-    } while( accepttok( TOK_COMMA ) );
-    expecttok( TOK_CLOSEPAREN );
-    parseblock();    
-    printf( "\tRET\n" );
-  } else if( accepttok( TOK_LABEL ) ) {
-    if( glob.tok.type != TOK_NAME ) usage( "Failed to parse label statement" );
-    printf( "%s:\n", glob.tok.token );
-    expecttok( TOK_NAME );
-  } else if( accepttok( TOK_CONST ) ) {
-    struct token nametok;
-
-    if( glob.tok.type != TOK_NAME ) usage( "Failed to parse const statement" );
-    nametok = glob.tok;    
-    expecttok( TOK_NAME );
-    expecttok( TOK_COLON );
-    expecttok( TOK_EQ );
-    if( glob.tok.type != TOK_VALINTEGER ) usage( "Failed to parse const statement" );
-    printf( "\t.CONST\t%s\t%u\n", nametok.token, (unsigned int)strtoul( glob.tok.token, NULL, 0 ) );
-    expecttok( TOK_VALINTEGER );
   } else if( accepttok( TOK_GOTO ) ) {
     struct token nametok = glob.tok;
     if( nametok.type != TOK_NAME ) usage( "Failed to parse goto" );
     printf( "\tJMP\t%s\n", nametok.token );
     expectok( TOK_NAME );
-  } else usage( "failed to parse statement. token=\"%s\"", glob.tok.token );
+  } else usage( "failed to parse statement. type=%u token=\"%s\"", glob.tok.type, glob.tok.token );
 }
 
 static void parseblock( void ) {
   expecttok( TOK_BEGIN );
+  
   do {
-    parsestatement();
+    if( !parsedeclaration() ) break;
   } while( accepttok( TOK_SEMICOLON ) );
+    
   expecttok( TOK_END );
 }
 

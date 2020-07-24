@@ -338,6 +338,7 @@ typedef enum {
 	      TOK_OR,
 	      TOK_DECLARE,
 	      TOK_ASM,
+	      TOK_SYSCALL,
 } token_t;
 static struct {
   char *keyword;
@@ -388,6 +389,7 @@ static struct {
 		     { "OPAQUE", TOK_OPAQUE },
 		     { "DECLARE", TOK_DECLARE },
 		     { "ASM", TOK_ASM },
+		     { "SYSCALL", TOK_SYSCALL },
 		     
 		     { NULL, 0 }
 };
@@ -442,6 +444,9 @@ struct proc {
   struct proc *next;
   char name[64];
   struct var *vars;
+  uint32_t flags;
+#define PROC_SYSCALL  0x0001
+  uint32_t syscallid;
 };
 
 static struct {
@@ -952,8 +957,11 @@ static int parsedeclaration( void ) {
     struct token nametok, partok;
     struct var *vars, *vlast, *v;
     int vartype;
+    int syscalltype = 0;
+    struct proc *proc;
     
-    if( accepttok( TOK_PROCEDURE ) ) {
+    if( glob.tok.type == TOK_SYSCALL ) syscalltype = 1;
+    if( accepttok( TOK_PROCEDURE ) || accepttok( TOK_SYSCALL ) ) {
       nametok = glob.tok;
       expectok( TOK_NAME );
       vars = NULL;
@@ -990,7 +998,13 @@ static int parsedeclaration( void ) {
       } while( accepttok( TOK_COMMA ) );
       expectok( TOK_CLOSEPAREN );
 
-      addproc( nametok.token, vars );
+      proc = addproc( nametok.token, vars );
+      if( syscalltype ) {
+	proc->flags |= PROC_SYSCALL;
+	expectok( TOK_COLON );
+	proc->syscallid = strtoul( glob.tok.token, NULL, 0 );
+	expectok( TOK_VALINTEGER );
+      }
 
     } else usage( "Unexpected declare statement \"%s\"", glob.tok.token );
     
@@ -1002,6 +1016,7 @@ static int parsedeclaration( void ) {
 static void parsestatement( void ) {
   char name[64];
   struct var *v;
+  struct token tok;
   
   /* 
      name := expression 
@@ -1010,6 +1025,7 @@ static void parsestatement( void ) {
      while condition do statement 
      begin statement [ ; statement ] end 
    */
+  tok = glob.tok;
   strcpy( name, glob.tok.token );
   if( accepttok( TOK_NAME ) ) {
     if( accepttok( TOK_COLON ) ) {
@@ -1035,7 +1051,7 @@ static void parsestatement( void ) {
       fvmc_emit( "\tLDI\tR1\t%s\n", name );
       fvmc_emit( "\tST\tR1\tR0\n" );
     }
-  } else if( accepttok( TOK_CALL ) ) {
+  } else if( accepttok( TOK_CALL ) || accepttok( TOK_SYSCALL ) ) {
     char name[64];
     int nargs = 0;
     struct var *v, *vp;
@@ -1083,7 +1099,8 @@ static void parsestatement( void ) {
     } while( accepttok( TOK_COMMA ) );
     if( v ) usage( "Insufficient parameters supplied to procedure %s", name );
     expecttok( TOK_CLOSEPAREN );
-    fvmc_emit( "\tCALL\t%s\n", name );
+    if( tok.type == TOK_SYSCALL ) fvmc_emit( "\tCALLNAT\tR7\t%u\t ; callnat %s\n", p->syscallid, p->name );
+    else fvmc_emit( "\tCALL\t%s\n", name );
     if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\n", nargs * 4 );
     glob.stackoffset = 0;
   } else if( accepttok( TOK_BEGIN ) ) {
@@ -1277,8 +1294,11 @@ int main( int argc, char **argv ) {
 
 int fvmc_compile( char *sourcefile, char *destfile ) {
   FILE *infile, *outfile;
+  int verbosemode;
 
+  verbosemode = glob.verbosemode;
   memset( &glob, 0, sizeof(glob) );
+  glob.verbosemode = verbosemode;
   
   infile = fopen( sourcefile, "r" );
   outfile = fopen( destfile, "w" );

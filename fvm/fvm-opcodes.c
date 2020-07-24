@@ -474,6 +474,7 @@ static int opcode_rorconst( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   return 0;
 }
 
+/* TODO: remove this and replace it with a native procedure */
 static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* CALLVIRT RX RY RZ */
   /* RX contains progid. RY contains proc index (index into symbol table).

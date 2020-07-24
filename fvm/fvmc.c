@@ -301,6 +301,7 @@ static FILE *opensourcefile( char *name, int firstpass ) {
       /* compile pascal file first */
       sprintf( path, "%.*s.asm", i, name );
       if( firstpass ) {
+	fvmc_pas_verbosemode( glob.verbosemode );	
 	fvmc_compile( name, path );
       }
       

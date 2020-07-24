@@ -1301,7 +1301,12 @@ int fvmc_compile( char *sourcefile, char *destfile ) {
   glob.verbosemode = verbosemode;
   
   infile = fopen( sourcefile, "r" );
+  if( !infile ) return -1;
   outfile = fopen( destfile, "w" );
+  if( !outfile ) {
+    fclose( infile );
+    return -1;
+  }
   
   glob.infile = infile;
   glob.outfile = outfile;

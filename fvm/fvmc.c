@@ -806,10 +806,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       symflags |= (getlabeladdr( symtype ) - getlabeladdr( name )) & 0xffff;
     }
 
-    printf( "exporting %s\n", name );
-    if( exportlabel( name, symflags ) ) {
-      printf( "export failed for %s\n", name );
-    }
+    exportlabel( name, symflags );
 
     return 0;
   } else if( strcasecmp( directive, ".MODULE" ) == 0 ) {

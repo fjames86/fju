@@ -1023,8 +1023,14 @@ static void parsestatement( void ) {
     parseexpr( 0 );
     /* R0 contains result of expression */
     v = getvar( name );
-    if( v ) fvmc_emit( "\tSTSP\tR0\t-%u\t ; store %s %s\n", v->offset, v->flags & VAR_ISPARAM ? "param" : "local", name );
-    else {
+    if( v ) {
+      if( v->flags & VAR_ISVAR ) {
+	fvmc_emit( "\tLDSP\tR1\t-%u\t ; get address of %s\n", v->offset, v->name );
+	fvmc_emit( "\tST\tR1\tR0\t ; store into %s\n", v->name );
+      } else {
+	fvmc_emit( "\tSTSP\tR0\t-%u\t ; store %s %s\n", v->offset, v->flags & VAR_ISPARAM ? "param" : "local", name );
+      }
+    } else {
       fvmc_emit( "\tLDI\tR1\t%s\n", name );
       fvmc_emit( "\tST\tR1\tR0\n" );
     }

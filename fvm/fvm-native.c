@@ -20,7 +20,7 @@
  * TODO: go through and sort out the calling convention. 
  * These are written assuming cdecl but we seem to be settling on pascal calling convention.
  * cdecl: push args from right to left, R0 contains return value.
- * pascal: push args from left to right. No return value.
+ * pascal: push args from left to right. No return value. Any return values are passed as pointers.
  */
 
 static uint32_t fvm_stack_read( struct fvm_s *state, int depth ) {

@@ -447,6 +447,7 @@ static struct {
   struct var *vars;
   int verbosemode;
   struct proc *procs;
+  struct var *globals;
 } glob;
 
 
@@ -583,6 +584,27 @@ static struct proc *getproc( char *procname ) {
   return NULL;
 }
 
+static struct var *addglobal( char *name, var_t type, uint32_t flags ) {
+  struct var *v;
+  v = malloc( sizeof(*v) );
+  memset( v, 0, sizeof(*v) );
+  strcpy( v->name, name );
+  v->type = type;
+  v->flags = flags;
+  v->next = glob.globals;
+  glob.globals = v;
+  return v;
+}
+static struct var *getglobal( char *name ) {
+  struct var *v;
+  v = glob.globals;
+  while( v ) {
+    if( strcasecmp( v->name, name ) == 0 ) return v;
+    v = v->next;
+  }
+  return NULL;
+}
+
 /* ----- */
 
 
@@ -672,8 +694,18 @@ static void parseexpr( int reg ) {
 	printf( "\tLD\tR%u\tR%u\n", reg, reg );
       }
     } else {
-      printf( "\tLDI\tR%u\t%s\n", reg, tok.token );
-      printf( "\tLD\tR%u\tR%u\n", reg, reg );
+      /* assume a global */
+      v = getglobal( tok.token );
+      if( v ) {
+	if( v->type == VAR_STRINGBUF || v->type == VAR_OPAQUEBUF ) {
+	  printf( "\tLDI\tR%u\t%s\n", reg, v->name );
+	} else {
+	  printf( "\tLD\tR%u\t%s\n", reg, v->name );
+	}
+      } else {
+	/* not a known global, assume constant */
+	printf( "\tLDI\tR%u\t%s\n", reg, tok.token );
+      }
     }
   } else if( accepttok( TOK_VALSTRING ) ) {
     char jmplabel[64], strlabel[64];
@@ -838,6 +870,7 @@ static int parsedeclaration( void ) {
       printf( "\t.CONST\t%s\t%u\n", nametok.token, (unsigned int)strtoul( valtok.token, NULL, 0 ) );
     } else if( accepttok( TOK_VALSTRING ) ) {
       printf( "\t.TEXT\t%s\t%s\n", nametok.token, valtok.token );
+      addglobal( nametok.token, VAR_STRINGBUF, 0 );
     } else usage( "bad constant value %s", valtok.token );
   } else if( accepttok( TOK_PROCEDURE ) ) {
     int vartype = 0;
@@ -922,6 +955,7 @@ static int parsedeclaration( void ) {
 	u32 = strtoul( valtok.token, NULL, 0 );
       }
       printf( "\t.DATA\t%s\t%u\n", nametok.token, u32 );
+      addglobal( nametok.token, VAR_INTEGER, 0 );
     } else if( accepttok( TOK_STRING ) ) {
       int i;
       struct token valtok;
@@ -935,6 +969,7 @@ static int parsedeclaration( void ) {
 	printf( "\\0" );
       }
       printf( "\"\n" );
+      addglobal( nametok.token, VAR_STRINGBUF, 0 );
     } else usage( "Unexpected var type %s", nametok.token );
   } else if( accepttok( TOK_DECLARE ) ) {
     /* declare procedure name(params) */

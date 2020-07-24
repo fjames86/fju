@@ -1,6 +1,6 @@
 
 
-fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm ${BINDIR}/fvmc-pascal
+fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm 
 
 libfvm_source+=fvm/fvm-module.c
 libfvm_source+=fvm/fvm-state.c
@@ -14,16 +14,12 @@ ${LIBDIR}/libfvm.a: ${libfvm_source} include/fju/fvm.h fvm/fvm-private.h
 	${AR} rcs $@ fvm-module.o fvm-state.o fvm-opcodes.o fvm-native.o fvm-rpc.o fvm-audit.o
 
 fvmc_deps+=
-${BINDIR}/fvmc: fvm/fvmc.c include/fju/sec.h 
-	${CC} -o $@ fvm/fvmc.c ${CFLAGS} ${LFLAGS} 
+${BINDIR}/fvmc: fvm/fvmc.c include/fju/sec.h fvm/fvmc-pascal.c 
+	${CC} -o $@ fvm/fvmc.c fvm/fvmc-pascal.c ${CFLAGS} ${LFLAGS} 
 
 fvm_deps+=${LIBDIR}/libfvm.a
 ${BINDIR}/fvm: fvm/fvm-main.c ${LIBDIR}/libfvm.a 
 	${CC} -o $@ fvm/fvm-main.c ${CFLAGS} ${LFLAGS} 
-
-${BINDIR}/fvmc-pascal: fvm/fvmc-pascal.c
-	${CC} -o $@ fvm/fvmc-pascal.c ${CFLAGS} ${LFLAGS} 
-PROGRAMS+=fvmc-pascal
 
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.asm fvm/programs/test-service.asm
 	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm -I fvm/stdlib/ fvm/programs/test-rpc.asm

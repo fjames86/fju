@@ -112,6 +112,7 @@ var fred : array[15] of int
 #include <stdarg.h>
 
 static void fvmc_printf( int lvl, char *fmt, ... );
+static void fvmc_emit( char *fmt, ... );
 
 static char whitespacechars[] = { ' ', '\n', '\t', '\r', '\0' };
 static char terminalchars[] = { '+', '-', '*', '/', ';', '.', '{', '}', ' ', '\n', '\t', '\r', '(', ')', ':', '[', ']', ',', '\0' };
@@ -445,11 +446,13 @@ struct proc {
 
 static struct {
   struct token tok;
-  FILE *f;
+  FILE *infile;
+  FILE *outfile;
   struct var *vars;
   int verbosemode;
   struct proc *procs;
   struct var *globals;
+  int labelidx;
 } glob;
 
 
@@ -460,7 +463,7 @@ static int nexttok( void ) {
   int sts;
 
   memset( tok.token, 0, sizeof(tok.token) );
-  sts = getnexttoken( glob.f, tok.token, sizeof(tok.token) );
+  sts = getnexttoken( glob.infile, tok.token, sizeof(tok.token) );
   if( sts ) return sts;
 
   tok.type = gettokentype( tok.token );
@@ -629,9 +632,8 @@ static void parseprogram( void );
 
 static char *genlabel( char *prefix ) {
   static char labelname[64];
-  static int labelidx;
 
-  sprintf( labelname, "L%s%s%s%u", prefix ? "-" : "", prefix ? prefix : "", prefix ? "-" : "", ++labelidx );
+  sprintf( labelname, "L%s%s%s%u", prefix ? "-" : "", prefix ? prefix : "", prefix ? "-" : "", ++glob.labelidx );
   return labelname;
 }
 
@@ -643,74 +645,74 @@ static void parseexpr( int reg ) {
   /* valinteger | constant | ( expr ) | expr operator expr */  
   tok = glob.tok;
   if( accepttok( TOK_VALINTEGER ) ) {
-    printf( "\tLDI\tR%u\t%u\n", reg, (unsigned int)strtoul( tok.token, NULL, 0 ) );
+    fvmc_emit( "\tLDI\tR%u\t%u\n", reg, (unsigned int)strtoul( tok.token, NULL, 0 ) );
   } else if( accepttok( TOK_NAME ) ) {
     /* check if constant ? */
     v = getvar( tok.token );
     if( v ) {
       if( v->type == VAR_STRINGBUF || v->type == VAR_OPAQUEBUF ) {
-	printf( "\tLEASP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );	
+	fvmc_emit( "\tLEASP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );	
       } else {
-	printf( "\tLDSP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );
+	fvmc_emit( "\tLDSP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );
       }
       if( v->flags & VAR_ISVAR ) {
 	/* var type parameters are really pointers, dereference it now */
-	printf( "\tLD\tR%u\tR%u\n", reg, reg );
+	fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
       }
     } else {
       /* assume a global */
       v = getglobal( tok.token );
       if( v ) {
 	if( v->type == VAR_STRINGBUF || v->type == VAR_OPAQUEBUF ) {
-	  printf( "\tLDI\tR%u\t%s\n", reg, v->name );
+	  fvmc_emit( "\tLDI\tR%u\t%s\n", reg, v->name );
 	} else {
-	  printf( "\tLD\tR%u\t%s\n", reg, v->name );
+	  fvmc_emit( "\tLD\tR%u\t%s\n", reg, v->name );
 	}
       } else {
 	/* not a known global, assume constant */
-	printf( "\tLDI\tR%u\t%s\n", reg, tok.token );
+	fvmc_emit( "\tLDI\tR%u\t%s\n", reg, tok.token );
       }
     }
   } else if( accepttok( TOK_VALSTRING ) ) {
     char jmplabel[64], strlabel[64];
     strcpy( jmplabel, genlabel( NULL ) );
     strcpy( strlabel, genlabel( NULL ) );    
-    printf( "\tJMP\t%s\n", jmplabel );
-    printf( "\t.TEXT\t%s\t%s\n", strlabel, tok.token );
-    printf( "%s:\n", jmplabel );
-    printf( "\tLDI\tR%u\t%s\n", reg, strlabel );
+    fvmc_emit( "\tJMP\t%s\n", jmplabel );
+    fvmc_emit( "\t.TEXT\t%s\t%s\n", strlabel, tok.token );
+    fvmc_emit( "%s:\n", jmplabel );
+    fvmc_emit( "\tLDI\tR%u\t%s\n", reg, strlabel );
   } else if( accepttok( TOK_OPENPAREN ) ) {
     parseexpr( reg );
     expectok( TOK_CLOSEPAREN );
   } else if( accepttok( TOK_NOT ) ) {
     parseexpr( reg );
-    printf( "\tNOT\tR%u\n", reg );
+    fvmc_emit( "\tNOT\tR%u\n", reg );
   }
 
   if( accepttok( TOK_PLUS ) ) {
     parseexpr( reg + 1 );
-    printf( "\tADD\tR%u\tR%u\n", reg, reg + 1 );
+    fvmc_emit( "\tADD\tR%u\tR%u\n", reg, reg + 1 );
   } else if( accepttok( TOK_MINUS ) ) {
     parseexpr( reg + 1 );
-    printf( "\tSUB\tR%u\tR%u\n", reg, reg + 1 );    
+    fvmc_emit( "\tSUB\tR%u\tR%u\n", reg, reg + 1 );    
   } else if( accepttok( TOK_MUL ) ) {
     parseexpr( reg + 1 );
-    printf( "\tMUL\tR%u\tR%u\n", reg, reg + 1 );    
+    fvmc_emit( "\tMUL\tR%u\tR%u\n", reg, reg + 1 );    
   } else if( accepttok( TOK_DIV ) ) {
     parseexpr( reg + 1 );
-    printf( "\tDIV\tR%u\tR%u\n", reg, reg + 1 );    
+    fvmc_emit( "\tDIV\tR%u\tR%u\n", reg, reg + 1 );    
   } else if( accepttok( TOK_MOD ) ) {
     parseexpr( reg + 1 );
-    printf( "\tMOD\tR%u\tR%u\n", reg, reg + 1 );    
+    fvmc_emit( "\tMOD\tR%u\tR%u\n", reg, reg + 1 );    
   } else if( accepttok( TOK_AND ) ) {
     parseexpr( reg + 1 );
-    printf( "\tAND\tR%u\tR%u\n", reg, reg + 1 );    
+    fvmc_emit( "\tAND\tR%u\tR%u\n", reg, reg + 1 );    
   } else if( accepttok( TOK_OR ) ) {
     parseexpr( reg + 1 );
-    printf( "\tOR\tR%u\tR%u\n", reg, reg + 1 );    
+    fvmc_emit( "\tOR\tR%u\tR%u\n", reg, reg + 1 );    
   } else if( accepttok( TOK_XOR ) ) {
     parseexpr( reg + 1 );
-    printf( "\tXOR\tR%u\tR%u\n", reg, reg + 1 );    
+    fvmc_emit( "\tXOR\tR%u\tR%u\n", reg, reg + 1 );    
   } 
   
 }
@@ -738,12 +740,12 @@ static op_t parsecondition( void ) {
   }
   
   parseexpr( 1 );
-  printf( "\tSUB\tR0\tR1\n" );
+  fvmc_emit( "\tSUB\tR0\tR1\n" );
   return op;
 }
 
 static void printconditionjump( op_t op, char *label ) {
-  printf( "\t%s\t%s\n",
+  fvmc_emit( "\t%s\t%s\n",
 	  op == OP_NONE ? "JPN" :
 	  op == OP_EQ ? "JZ" :
 	  op == OP_NEQ ? "JPN" : 
@@ -807,11 +809,11 @@ static void parseprocedurebody( void ) {
     if( !accepttok( TOK_SEMICOLON ) ) return;
   }
 
-  if( nargs > 0 ) printf( "\tADDSP\t%u\t ; allocate locals\n", argsize );
+  if( nargs > 0 ) fvmc_emit( "\tADDSP\t%u\t ; allocate locals\n", argsize );
   do {
     parsestatement();
   } while( accepttok( TOK_SEMICOLON ) );
-  if( nargs > 0 ) printf( "\tSUBSP\t%u\n", argsize );
+  if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\n", argsize );
   
 }
 
@@ -831,9 +833,9 @@ static int parsedeclaration( void ) {
     expecttok( TOK_ASSIGN );
     valtok = glob.tok;
     if( accepttok( TOK_VALINTEGER ) ) {
-      printf( "\t.CONST\t%s\t%u\n", nametok.token, (unsigned int)strtoul( valtok.token, NULL, 0 ) );
+      fvmc_emit( "\t.CONST\t%s\t%u\n", nametok.token, (unsigned int)strtoul( valtok.token, NULL, 0 ) );
     } else if( accepttok( TOK_VALSTRING ) ) {
-      printf( "\t.TEXT\t%s\t%s\n", nametok.token, valtok.token );
+      fvmc_emit( "\t.TEXT\t%s\t%s\n", nametok.token, valtok.token );
       addglobal( nametok.token, VAR_STRINGBUF, 0 );
     } else usage( "bad constant value %s", valtok.token );
   } else if( accepttok( TOK_PROCEDURE ) ) {
@@ -848,8 +850,8 @@ static int parsedeclaration( void ) {
     fvmc_printf( 1, " parsing procedure\n" );
     nametok = glob.tok;
     expecttok( TOK_NAME );
-    printf( "\n" );
-    printf( ";; ----- PROCEDURE %s(", nametok.token );
+    fvmc_emit( "\n" );
+    fvmc_emit( ";; ----- PROCEDURE %s(", nametok.token );
     expecttok( TOK_OPENPAREN );
     do {
       if( glob.tok.type == TOK_CLOSEPAREN ) break;
@@ -862,7 +864,7 @@ static int parsedeclaration( void ) {
       partok = glob.tok;
       expecttok( TOK_NAME );
       expecttok( TOK_COLON );
-      printf( "%s", nargs > 0 ? ", " : "" );
+      fvmc_emit( "%s", nargs > 0 ? ", " : "" );
 
       v = malloc( sizeof(*v) );
       memset( v, 0, sizeof(*v) );
@@ -871,13 +873,13 @@ static int parsedeclaration( void ) {
       if( vartype ) v->flags |= VAR_ISVAR;
       
       if( accepttok( TOK_INTEGER ) ) {
-	printf( "%s%s : INTEGER", vartype ? "VAR " : "", partok.token );
+	fvmc_emit( "%s%s : INTEGER", vartype ? "VAR " : "", partok.token );
 	v->type = VAR_INTEGER;	
       } else if( accepttok( TOK_STRING ) ) {
-	printf( "%s%s : STRING", vartype ? "VAR " : "", partok.token );	
+	fvmc_emit( "%s%s : STRING", vartype ? "VAR " : "", partok.token );	
 	v->type = VAR_STRING;	
       } else if( accepttok( TOK_OPAQUE ) ) {
-	printf( "%s%s : OPAQUE", vartype ? "VAR " : "", partok.token );	
+	fvmc_emit( "%s%s : OPAQUE", vartype ? "VAR " : "", partok.token );	
 	v->type = VAR_OPAQUE;	
       } else usage( "unrecognized type \"%s\"", glob.tok.token );
       nargs++;
@@ -888,7 +890,7 @@ static int parsedeclaration( void ) {
       
     } while( accepttok( TOK_COMMA ) );
     expecttok( TOK_CLOSEPAREN );
-    printf( ") ----- \n\n" );
+    fvmc_emit( ") ----- \n\n" );
 
     addproc( nametok.token, vars );
     for( i = 0; i < nargs; i++ ) {
@@ -905,11 +907,11 @@ static int parsedeclaration( void ) {
     }
     
     expectok( TOK_BEGIN );
-    printf( "%s:\n", nametok.token );    
+    fvmc_emit( "%s:\n", nametok.token );    
     parseprocedurebody();
     expectok( TOK_END );
-    printf( "\tRET\n" );
-    printf( "\n" );
+    fvmc_emit( "\tRET\n" );
+    fvmc_emit( "\n" );
     freevars();
   } else if( accepttok( TOK_VAR ) ) {
     /* 
@@ -927,7 +929,7 @@ static int parsedeclaration( void ) {
 	expectok( TOK_VALINTEGER );
 	u32 = strtoul( valtok.token, NULL, 0 );
       }
-      printf( "\t.DATA\t%s\t%u\n", nametok.token, u32 );
+      fvmc_emit( "\t.DATA\t%s\t%u\n", nametok.token, u32 );
       addglobal( nametok.token, VAR_INTEGER, 0 );
     } else if( accepttok( TOK_STRING ) ) {
       int i;
@@ -937,11 +939,11 @@ static int parsedeclaration( void ) {
       valtok = glob.tok;
       expectok( TOK_VALINTEGER );
       expectok( TOK_CLOSEARRAY );
-      printf( "\t.DATA\t%s\t\"", nametok.token );      
+      fvmc_emit( "\t.DATA\t%s\t\"", nametok.token );      
       for( i = 0; i < strtoul( valtok.token, NULL, 0 ); i++ ) {
-	printf( "\\0" );
+	fvmc_emit( "\\0" );
       }
-      printf( "\"\n" );
+      fvmc_emit( "\"\n" );
       addglobal( nametok.token, VAR_STRINGBUF, 0 );
     } else usage( "Unexpected var type %s", nametok.token );
   } else if( accepttok( TOK_DECLARE ) ) {
@@ -1011,7 +1013,7 @@ static void parsestatement( void ) {
   if( accepttok( TOK_NAME ) ) {
     if( accepttok( TOK_COLON ) ) {
       fvmc_printf( 1, " parsing label statement\n" );
-      printf( "%s:\n", name );
+      fvmc_emit( "%s:\n", name );
       parsestatement();
       return;
     }
@@ -1021,10 +1023,10 @@ static void parsestatement( void ) {
     parseexpr( 0 );
     /* R0 contains result of expression */
     v = getvar( name );
-    if( v ) printf( "\tSTSP\tR0\t-%u\t ; store %s %s\n", v->offset, v->flags & VAR_ISPARAM ? "param" : "local", name );
+    if( v ) fvmc_emit( "\tSTSP\tR0\t-%u\t ; store %s %s\n", v->offset, v->flags & VAR_ISPARAM ? "param" : "local", name );
     else {
-      printf( "\tLDI\tR1\t%s\n", name );
-      printf( "\tST\tR1\tR0\n" );
+      fvmc_emit( "\tLDI\tR1\t%s\n", name );
+      fvmc_emit( "\tST\tR1\tR0\n" );
     }
   } else if( accepttok( TOK_CALL ) ) {
     char name[64];
@@ -1050,30 +1052,30 @@ static void parsestatement( void ) {
 	if( vp ) {
 	  if( vp->flags & VAR_ISVAR ) {
 	    /* already a var parameter so just pass it through */
-	    printf( "\tLDSP\tR0\t-%u\n", vp->offset );
+	    fvmc_emit( "\tLDSP\tR0\t-%u\n", vp->offset );
 	  } else {
 	    /* get address of the parameter */
-	    printf( "\tLEASP\tR0\t-%u\n", vp->offset );	    	    
+	    fvmc_emit( "\tLEASP\tR0\t-%u\n", vp->offset );	    	    
 	  }
 	} else {
 	  /* assume global */
 	  if( vp->flags & VAR_ISVAR ) {
-	    printf( "\tLDI\tR0\t%s\n", vartok.token );	    
+	    fvmc_emit( "\tLDI\tR0\t%s\n", vartok.token );	    
 	  } else {
-	    printf( "\tLD\tR0\t%s\n", vartok.token );
+	    fvmc_emit( "\tLD\tR0\t%s\n", vartok.token );
 	  }
 	}
       } else {
 	parseexpr( 0 );
       }
-      printf( "\tPUSH\tR0\n" );
+      fvmc_emit( "\tPUSH\tR0\n" );
       nargs++;
       v = v->next;
     } while( accepttok( TOK_COMMA ) );
     if( v ) usage( "Insufficient parameters supplied to procedure %s", name );
     expecttok( TOK_CLOSEPAREN );
-    printf( "\tCALL\t%s\n", name );
-    if( nargs > 0 ) printf( "\tSUBSP\t%u\n", nargs * 4 );
+    fvmc_emit( "\tCALL\t%s\n", name );
+    if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\n", nargs * 4 );
   } else if( accepttok( TOK_BEGIN ) ) {
     do {
       parsestatement();
@@ -1090,12 +1092,12 @@ static void parsestatement( void ) {
     expecttok( TOK_THEN );
     printconditionjump( op, elselabel );
     parsestatement();
-    printf( "\tJMP\t%s\n", endiflabel );
-    printf( "%s:\n", elselabel );
+    fvmc_emit( "\tJMP\t%s\n", endiflabel );
+    fvmc_emit( "%s:\n", elselabel );
     if( accepttok( TOK_ELSE ) ) {
       parsestatement();
     }
-    printf( "%s:\n", endiflabel );
+    fvmc_emit( "%s:\n", endiflabel );
   } else if( accepttok( TOK_WHILE ) ) {
     /* while condition do statement */
     op_t op;
@@ -1104,15 +1106,15 @@ static void parsestatement( void ) {
     strcpy( whilelabel, genlabel( "WHILE" ) );
     strcpy( donelabel, genlabel( "DONE" ) );
     
-    printf( "%s:\n", startlabel );
+    fvmc_emit( "%s:\n", startlabel );
     op = parsecondition();
     printconditionjump( op, whilelabel );
-    printf( "\tJMP\t%s\n", donelabel );
-    printf( "%s:\n", whilelabel );
+    fvmc_emit( "\tJMP\t%s\n", donelabel );
+    fvmc_emit( "%s:\n", whilelabel );
     expectok( TOK_DO );
     parsestatement();
-    printf( "\tJMP\t%s\n", startlabel );
-    printf( "%s:\n", donelabel );
+    fvmc_emit( "\tJMP\t%s\n", startlabel );
+    fvmc_emit( "%s:\n", donelabel );
 
   } else if( accepttok( TOK_DO ) ) {
     /* do statement while condition */
@@ -1120,7 +1122,7 @@ static void parsestatement( void ) {
     char dolabel[64];
     strcpy( dolabel, genlabel( "DO" ) );
 
-    printf( "%s:\n", dolabel );
+    fvmc_emit( "%s:\n", dolabel );
     parsestatement();
     expectok( TOK_WHILE );
     op = parsecondition();
@@ -1129,13 +1131,13 @@ static void parsestatement( void ) {
   } else if( accepttok( TOK_GOTO ) ) {
     struct token nametok = glob.tok;
     if( nametok.type != TOK_NAME ) usage( "Failed to parse goto" );
-    printf( "\tJMP\t%s\n", nametok.token );
+    fvmc_emit( "\tJMP\t%s\n", nametok.token );
     expectok( TOK_NAME );
   } else if( accepttok( TOK_ASM ) ) {
     /* asm stringval */
     struct token strtok = glob.tok;
     expectok( TOK_VALSTRING );
-    printf( "\t%.*s\n", (int)strlen( strtok.token ) - 2, strtok.token + 1 );
+    fvmc_emit( "\t%.*s\n", (int)strlen( strtok.token ) - 2, strtok.token + 1 );
   } else if( accepttok( TOK_SEMICOLON ) ) {
     fvmc_printf( 1, " empty statement\n" );
   } else if( glob.tok.type == TOK_END ) {
@@ -1154,10 +1156,19 @@ static void parseblock( void ) {
 }
 
 static void parseprogram( void ) {
+  struct var *vars, *v, *next, *vlast;
+
+  vars = NULL;
+  vlast = NULL;
+  
+  fvmc_emit( ";;;\n"
+	     ";;; This file was generated by fvmc pascal compiler\n"
+	     ";;; Date: "__TIME__ " "  __DATE__ "\n" 
+	     ";;; \n" );
   
   expecttok( TOK_PROGRAM );
   if( glob.tok.type == TOK_NAME ) {
-    printf( "\t.MODULE\t\t%s\n", glob.tok.token );
+    fvmc_emit( "\t.MODULE\t\t%s\n", glob.tok.token );
   }
   expecttok( TOK_NAME );
   if( accepttok( TOK_OPENPAREN ) ) {
@@ -1167,12 +1178,16 @@ static void parseprogram( void ) {
     expectok( TOK_COMMA );
     versid = glob.tok;
     expectok( TOK_VALINTEGER );
-    printf( "\t.PROGRAM\t%u\t%u\n", (int)strtoul( progid.token, NULL, 0 ), (int)strtoul( versid.token, NULL, 0 ) );
+    fvmc_emit( "\t.PROGRAM\t%u\t%u\n", (int)strtoul( progid.token, NULL, 0 ), (int)strtoul( versid.token, NULL, 0 ) );
 
     while( accepttok( TOK_COMMA ) ) {
+      v = malloc( sizeof(*v) );
       progid = glob.tok;
       expectok( TOK_NAME );
-      printf( "\t.EXPORT\t\t%s\n", progid.token );
+      strcpy( v->name, progid.token );
+      if( vlast ) vlast->next = v;
+      else vars = v;
+      vlast = v;
     }
     
     expectok( TOK_CLOSEPAREN );
@@ -1183,10 +1198,18 @@ static void parseprogram( void ) {
 
   expecttok( TOK_PERIOD );
 
+  v = vars;
+  while( v ) {
+    next = v->next;
+    fvmc_emit( "\t.EXPORT\t\t%s\n", v->name );
+    free( v );
+    v = next;
+  }
+  
 }
 
 
-
+#if 0
 int main( int argc, char **argv ) {
   char *filename;
   FILE *f;
@@ -1217,7 +1240,7 @@ int main( int argc, char **argv ) {
 
     sts = getnexttoken( f, token, sizeof(token) );
     if( sts ) {
-      printf( "bad token\n" );
+      fvmc_printf( ";; bad token\n" );
       break;
     }
     
@@ -1232,7 +1255,7 @@ int main( int argc, char **argv ) {
 
   fvmc_printf( 1, " -------- parsing ------ \n" );
 
-  glob.f = f;
+  glob.infile = f;
   nexttok();
   parseprogram();
    
@@ -1240,6 +1263,27 @@ int main( int argc, char **argv ) {
 
   return 0;
 }
+#endif
+
+int fvmc_compile( char *sourcefile, char *destfile ) {
+  FILE *infile, *outfile;
+
+  memset( &glob, 0, sizeof(glob) );
+  
+  infile = fopen( sourcefile, "r" );
+  outfile = fopen( destfile, "w" );
+  
+  glob.infile = infile;
+  glob.outfile = outfile;
+  nexttok();
+  parseprogram();
+   
+  fclose( infile );
+  fclose( outfile );
+
+  return 0;
+}
+
 
 static void fvmc_printf( int lvl, char *fmt, ... ) {
   va_list args;
@@ -1249,5 +1293,13 @@ static void fvmc_printf( int lvl, char *fmt, ... ) {
   printf( ";;" );
   va_start( args, fmt );
   vprintf( fmt, args );
+  va_end( args );
+}
+
+static void fvmc_emit( char *fmt, ... ) {
+  va_list args;
+
+  va_start( args, fmt );
+  vfprintf( glob.outfile, fmt, args );
   va_end( args );
 }

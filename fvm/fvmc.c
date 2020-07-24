@@ -19,6 +19,8 @@
 
 #include "fvm-private.h"
 
+int fvmc_compile( char *sourcefile, char *destfile );
+
 static void usage( char *fmt, ... ) {
   va_list args;
   
@@ -284,12 +286,31 @@ static void resetconsts( void ) {
   glob.constdefs = NULL;
 }
 
-static FILE *opensourcefile( char *name ) {
+
+
+static FILE *opensourcefile( char *name, int firstpass ) {
   static char path[256];
   
   FILE *f;
   struct searchpath *sp;
+  int i;
 
+  for( i = strlen( name ) - 1; i >= 0; i-- ) {
+    if( (name[i] == '.') && (strcasecmp( &name[i], ".pas" ) == 0) ) {
+      /* compile pascal file first */
+      sprintf( path, "%.*s.asm", i, name );
+      if( firstpass ) {
+	fvmc_compile( name, path );
+      }
+      
+      f = fopen( path, "r" );
+      if( !f ) usage( "Failed to compile file?" );
+      glob.currentfileidx++;      
+      return f;
+    }
+  }
+
+   
   f = fopen( name, "r" );
   if( f ) {
     glob.currentfileidx++;
@@ -415,7 +436,7 @@ int main( int argc, char **argv ) {
       continue;
     }
     
-    f = opensourcefile( argv[i] );
+    f = opensourcefile( argv[i], 1 );
     parse_file( f, &addr, 0, NULL );    
     fclose( f );
     i++;
@@ -470,7 +491,7 @@ int main( int argc, char **argv ) {
   glob.currentfileidx = 0;      
   i = starti;
   while( i < argc ) {
-    f = opensourcefile( argv[i] );
+    f = opensourcefile( argv[i], 0 );
     parse_file( f, &addr, 1, outfile );
     fclose( f );
     i++;
@@ -480,7 +501,7 @@ int main( int argc, char **argv ) {
   glob.currentfileidx = 0;
   i = starti;
   while( i < argc ) {
-    f = opensourcefile( argv[i] );
+    f = opensourcefile( argv[i], 0 );
     parse_file( f, &addr, 2, outfile );
     fclose( f );
     i++;
@@ -784,8 +805,11 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       symflags &= 0xffff0000;
       symflags |= (getlabeladdr( symtype ) - getlabeladdr( name )) & 0xffff;
     }
-    
-    if( exportlabel( name, symflags ) ) usage( "Unknown label \"%s\"", name );
+
+    printf( "exporting %s\n", name );
+    if( exportlabel( name, symflags ) ) {
+      printf( "export failed for %s\n", name );
+    }
 
     return 0;
   } else if( strcasecmp( directive, ".MODULE" ) == 0 ) {
@@ -856,7 +880,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
     }
     
 
-    incfile = opensourcefile( name );
+    incfile = opensourcefile( name, f == NULL ? 1 : 0 );
     if( !incfile ) usage( "failed to open include file \"%s\"", name );
     fvmc_printf( 2, "including \"%s\"\n", name );
     parse_file( incfile, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
@@ -1204,6 +1228,9 @@ static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpas
 	    if( firstpass ) j = 0;
 	    else {
 	      struct label *l = getlabel( arg );
+	      if( l ) fvmc_printf( 2, "Got label %s addr=%x\n", arg, l->addr );
+	      else fvmc_printf( 2, "Failed to get label %s\n", arg );
+	      
 	      if( l ) {
 		j = l->addr;
 	      } else {

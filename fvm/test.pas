@@ -54,5 +54,27 @@ Begin
 
 End;
 
+Procedure Syscall(id : integer, var result : integer)
+Begin
+	ASM "LDSP	R0	-12";
+	ASM "POP	R7";
+	ASM "CALLNAT 	R0	R1";
+	ASM "PUSH	R7";
+	ASM "STSP	R0	-8"
+End;
+
+Const NativeYield := 12;
+
+Procedure Yield(timeout : integer, flags : integer)
+Begin
+	var result : integer;
+	var argtimeout : integer;
+	var argflags : integer;
+
+	argtimeout := timeout;
+	argflags := flags;
+	
+	Call Syscall(NativeYield, result);
+End;
 
 End.

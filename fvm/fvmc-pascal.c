@@ -453,6 +453,7 @@ static struct {
   struct proc *procs;
   struct var *globals;
   int labelidx;
+  int stackoffset;
 } glob;
 
 
@@ -651,9 +652,9 @@ static void parseexpr( int reg ) {
     v = getvar( tok.token );
     if( v ) {
       if( v->type == VAR_STRINGBUF || v->type == VAR_OPAQUEBUF ) {
-	fvmc_emit( "\tLEASP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );	
+	fvmc_emit( "\tLEASP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );	
       } else {
-	fvmc_emit( "\tLDSP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );
+	fvmc_emit( "\tLDSP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );
       }
       if( v->flags & VAR_ISVAR ) {
 	/* var type parameters are really pointers, dereference it now */
@@ -1025,10 +1026,10 @@ static void parsestatement( void ) {
     v = getvar( name );
     if( v ) {
       if( v->flags & VAR_ISVAR ) {
-	fvmc_emit( "\tLDSP\tR1\t-%u\t ; get address of %s\n", v->offset, v->name );
+	fvmc_emit( "\tLDSP\tR1\t-%u\t ; get address of %s\n", v->offset + glob.stackoffset, v->name );
 	fvmc_emit( "\tST\tR1\tR0\t ; store into %s\n", v->name );
       } else {
-	fvmc_emit( "\tSTSP\tR0\t-%u\t ; store %s %s\n", v->offset, v->flags & VAR_ISPARAM ? "param" : "local", name );
+	fvmc_emit( "\tSTSP\tR0\t-%u\t ; store %s %s\n", v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", name );
       }
     } else {
       fvmc_emit( "\tLDI\tR1\t%s\n", name );
@@ -1049,6 +1050,7 @@ static void parsestatement( void ) {
     expecttok( TOK_OPENPAREN );
     /* TODO: this is pushing from left to right. it is much easier to push from left to right, but we want to push from right to left? */
 
+    glob.stackoffset = 0;
     do {
       if( v->flags & VAR_ISVAR ) {
 	vartok = glob.tok;
@@ -1058,30 +1060,32 @@ static void parsestatement( void ) {
 	if( vp ) {
 	  if( vp->flags & VAR_ISVAR ) {
 	    /* already a var parameter so just pass it through */
-	    fvmc_emit( "\tLDSP\tR0\t-%u\n", vp->offset );
+	    fvmc_emit( "\tLDSP\tR0\t-%u\t ; arg %s\n", vp->offset + glob.stackoffset, v->name );
 	  } else {
 	    /* get address of the parameter */
-	    fvmc_emit( "\tLEASP\tR0\t-%u\n", vp->offset );	    	    
+	    fvmc_emit( "\tLEASP\tR0\t-%u\t ; arg %s\n", vp->offset + glob.stackoffset, v->name );
 	  }
 	} else {
 	  /* assume global */
 	  if( vp->flags & VAR_ISVAR ) {
-	    fvmc_emit( "\tLDI\tR0\t%s\n", vartok.token );	    
+	    fvmc_emit( "\tLDI\tR0\t%s\t ; arg %s\n", vartok.token, v->name );  
 	  } else {
-	    fvmc_emit( "\tLD\tR0\t%s\n", vartok.token );
+	    fvmc_emit( "\tLD\tR0\t%s\t ; arg %s\n", vartok.token, v->name );
 	  }
 	}
       } else {
 	parseexpr( 0 );
       }
-      fvmc_emit( "\tPUSH\tR0\n" );
+      fvmc_emit( "\tPUSH\tR0\t\t ; arg %s\n", v->name );
       nargs++;
+      glob.stackoffset += 4;
       v = v->next;
     } while( accepttok( TOK_COMMA ) );
     if( v ) usage( "Insufficient parameters supplied to procedure %s", name );
     expecttok( TOK_CLOSEPAREN );
     fvmc_emit( "\tCALL\t%s\n", name );
     if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\n", nargs * 4 );
+    glob.stackoffset = 0;
   } else if( accepttok( TOK_BEGIN ) ) {
     do {
       parsestatement();
@@ -1290,6 +1294,9 @@ int fvmc_compile( char *sourcefile, char *destfile ) {
   return 0;
 }
 
+void fvmc_pas_verbosemode( int lvl ) {
+  glob.verbosemode = lvl;
+}
 
 static void fvmc_printf( int lvl, char *fmt, ... ) {
   va_list args;

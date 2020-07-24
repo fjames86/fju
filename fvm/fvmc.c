@@ -20,6 +20,7 @@
 #include "fvm-private.h"
 
 int fvmc_compile( char *sourcefile, char *destfile );
+void fvmc_pas_verbosemode( int lvl );
 
 static void usage( char *fmt, ... ) {
   va_list args;
@@ -422,6 +423,8 @@ int main( int argc, char **argv ) {
     i++;
   }
 
+  fvmc_pas_verbosemode( glob.verbosemode );
+  
   addr = 0;
 
   fvmc_printf( 1, "\n ------ first pass ------- \n" );

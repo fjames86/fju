@@ -335,6 +335,7 @@ typedef enum {
 	      TOK_WHILE,
 	      TOK_XOR,
 	      TOK_OR,
+	      TOK_DECLARE,
 } token_t;
 static struct {
   char *keyword;
@@ -383,6 +384,7 @@ static struct {
 		     { "XOR", TOK_XOR },
 		     { "OR", TOK_OR },
 		     { "OPAQUE", TOK_OPAQUE },
+		     { "DECLARE", TOK_DECLARE },
 		     
 		     { NULL, 0 }
 };
@@ -436,7 +438,7 @@ struct var {
 struct proc {
   struct proc *next;
   char name[64];
-  struct var *params;
+  struct var *vars;
 };
 
 static struct {
@@ -547,11 +549,13 @@ static struct proc *addproc( char *procname, struct var *vars ) {
       v1 = p->vars;
       v2 = vars;
       while( v1 && v2 ) {
-	if( strcasecmp( v1->name, v2->name ) != 0 ) usage( "Incompatible duplicate procedure definitions: parameters different names" );
-	if( v1->type != v2->type ) usage( "Incompatible duplicate procedure definitions: parameters different types" );
+	if( strcasecmp( v1->name, v2->name ) != 0 ) usage( "Incompatible duplicate procedure %s: parameters different names", procname );
+	if( v1->type != v2->type ) usage( "Incompatible duplicate procedure %s: parameter %s different types", procname, v1->name );
+	if( v1->flags != v2->flags ) usage( "Incompatible duplicate procedure %s: parameter %s different flags", procname, v1->name );
 	v1 = v1->next;
 	v2 = v2->next;
       }
+      if( v1 || v2 ) usage( "Incompatible duplicate procedure %s: different number of parameters", procname );
       return p;
     }
     pprev = p;
@@ -565,25 +569,15 @@ static struct proc *addproc( char *procname, struct var *vars ) {
   p->vars = vars;
   if( pprev ) pprev->next = p;
   else glob.procs = p;
+
+  return p;
 }
 
-static struct var *getprocvar( char *procname, int index ) {
+static struct proc *getproc( char *procname ) {
   struct proc *p;
-  struct var *v;
-  int i;
-
   p = glob.procs;
   while( p ) {
-    if( strcasecmp( p->name, procname ) == 0 ) {
-      v = p->vars;
-      i = 0;
-      while( v ) {
-	if( i == index ) return v;
-	i++;
-	v = v->next;
-      }
-      return NULL;
-    }
+    if( strcasecmp( p->name, procname ) == 0 ) return p;
     p = p->next;
   }
   return NULL;
@@ -612,7 +606,7 @@ static char *genlabel( char *prefix ) {
   static char labelname[64];
   static int labelidx;
 
-  sprintf( labelname, "L-%s-%u", prefix ? prefix : "", ++labelidx );
+  sprintf( labelname, "L%s%s%s%u", prefix ? "-" : "", prefix ? prefix : "", prefix ? "-" : "", ++labelidx );
   return labelname;
 }
 
@@ -668,15 +662,27 @@ static void parseexpr( int reg ) {
     /* check if constant ? */
     v = getvar( tok.token );
     if( v ) {
-      printf( "\tLDSP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );      
+      if( v->type == VAR_STRINGBUF || v->type == VAR_OPAQUEBUF ) {
+	printf( "\tLEASP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );	
+      } else {
+	printf( "\tLDSP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );
+      }
       if( v->flags & VAR_ISVAR ) {
-	/* var type parameters are really pointers, do reference it now */
+	/* var type parameters are really pointers, dereference it now */
 	printf( "\tLD\tR%u\tR%u\n", reg, reg );
       }
     } else {
       printf( "\tLDI\tR%u\t%s\n", reg, tok.token );
       printf( "\tLD\tR%u\tR%u\n", reg, reg );
     }
+  } else if( accepttok( TOK_VALSTRING ) ) {
+    char jmplabel[64], strlabel[64];
+    strcpy( jmplabel, genlabel( NULL ) );
+    strcpy( strlabel, genlabel( NULL ) );    
+    printf( "\tJMP\t%s\n", jmplabel );
+    printf( "\t.TEXT\t%s\t%s\n", strlabel, tok.token );
+    printf( "%s:\n", jmplabel );
+    printf( "\tLDI\tR%u\t%s\n", reg, strlabel );
   } else if( accepttok( TOK_OPENPAREN ) ) {
     parseexpr( reg );
     expectok( TOK_CLOSEPAREN );
@@ -778,7 +784,7 @@ static void parseprocedurebody( void ) {
 	expectok( TOK_VALINTEGER );
 	expectok( TOK_CLOSEARRAY );
 	adjustvars( 4 + size );
-	addvar( nametok.token, VAR_STRINGBUF, 4 + size, 4, 0 );
+	addvar( nametok.token, VAR_STRINGBUF, 4 + size, 4 + size, 0 );
 	argsize += 4 + size;	
       } else {
 	adjustvars( 4 );	
@@ -792,7 +798,7 @@ static void parseprocedurebody( void ) {
 	expectok( TOK_VALINTEGER );
 	expectok( TOK_CLOSEARRAY );
 	adjustvars( size );
-	addvar( nametok.token, VAR_OPAQUEBUF, size, 4, 0 );
+	addvar( nametok.token, VAR_OPAQUEBUF, size, size, 0 );
 	argsize += size;	
       } else {
 	adjustvars( 4 );
@@ -837,6 +843,10 @@ static int parsedeclaration( void ) {
     int vartype = 0;
     struct token nametok, partok;
     int nargs = 0;
+    struct var *vars, *vlast, *v;
+
+    vars = NULL;
+    vlast = NULL;
     
     fvmc_printf( 1, " parsing procedure\n" );
     nametok = glob.tok;
@@ -845,6 +855,9 @@ static int parsedeclaration( void ) {
     printf( ";; ----- PROCEDURE %s(", nametok.token );
     expecttok( TOK_OPENPAREN );
     do {
+      if( glob.tok.type == TOK_CLOSEPAREN ) break;
+
+      vartype = 0;
       if( accepttok( TOK_VAR ) ) {
 	/* var type parameter */
 	vartype = 1;
@@ -853,20 +866,38 @@ static int parsedeclaration( void ) {
       expecttok( TOK_NAME );
       expecttok( TOK_COLON );
       printf( "%s", nargs > 0 ? ", " : "" );
+
+      v = malloc( sizeof(*v) );
+      memset( v, 0, sizeof(*v) );
+      strcpy( v->name, partok.token );
+      v->flags |= VAR_ISPARAM;
+      if( vartype ) v->flags |= VAR_ISVAR;
+      
       if( accepttok( TOK_INTEGER ) ) {
 	printf( "%s%s : INTEGER", vartype ? "VAR " : "", partok.token );
 	addvar( partok.token, VAR_INTEGER, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
+	v->type = VAR_INTEGER;	
       } else if( accepttok( TOK_STRING ) ) {
 	printf( "%s%s : STRING", vartype ? "VAR " : "", partok.token );	
 	addvar( partok.token, VAR_STRING, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
+	v->type = VAR_STRING;	
       } else if( accepttok( TOK_OPAQUE ) ) {
 	printf( "%s%s : OPAQUE", vartype ? "VAR " : "", partok.token );	
-	addvar( partok.token, VAR_OPAQUE, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );	
+	addvar( partok.token, VAR_OPAQUE, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
+	v->type = VAR_OPAQUE;	
       } else usage( "unrecognized type \"%s\"", glob.tok.token );
       nargs++;
+	
+      if( vlast ) vlast->next = v;
+      else vars = v;	
+      vlast = v;
+      
     } while( accepttok( TOK_COMMA ) );
     expecttok( TOK_CLOSEPAREN );
     printf( ") ----- \n\n" );
+
+    addproc( nametok.token, vars );
+    
     expectok( TOK_BEGIN );
     printf( "%s:\n", nametok.token );    
     parseprocedurebody();
@@ -905,6 +936,53 @@ static int parsedeclaration( void ) {
       }
       printf( "\"\n" );
     } else usage( "Unexpected var type %s", nametok.token );
+  } else if( accepttok( TOK_DECLARE ) ) {
+    /* declare procedure name(params) */
+    struct token nametok, partok;
+    struct var *vars, *vlast, *v;
+    int vartype;
+    
+    if( accepttok( TOK_PROCEDURE ) ) {
+      nametok = glob.tok;
+      expectok( TOK_NAME );
+      vars = NULL;
+      vlast = NULL;
+      expecttok( TOK_OPENPAREN );
+      do {
+	if( glob.tok.type == TOK_CLOSEPAREN ) break;
+
+	vartype = 0;
+	if( accepttok( TOK_VAR ) ) {
+	  /* var type parameter */
+	  vartype = 1;
+	}
+	partok = glob.tok;
+	expecttok( TOK_NAME );
+	expecttok( TOK_COLON );
+	v = malloc( sizeof(*v) );
+	memset( v, 0, sizeof(*v) );
+	strcpy( v->name, partok.token );
+	v->flags |= VAR_ISPARAM;
+	if( vartype ) v->flags |= VAR_ISVAR;
+	if( accepttok( TOK_INTEGER ) ) {
+	  v->type = VAR_INTEGER;
+	} else if( accepttok( TOK_STRING ) ) {
+	  v->type = VAR_STRING;
+	} else if( accepttok( TOK_OPAQUE ) ) {
+	  v->type = VAR_STRING;
+	} else usage( "unrecognized type \"%s\"", glob.tok.token );
+	
+	if( vlast ) vlast->next = v;
+	else vars = v;	
+	vlast = v;
+	
+      } while( accepttok( TOK_COMMA ) );
+      expectok( TOK_CLOSEPAREN );
+
+      addproc( nametok.token, vars );
+
+    } else usage( "Unexpected declare statement \"%s\"", glob.tok.token );
+    
   } else return 0;
 
   return 1;
@@ -943,17 +1021,51 @@ static void parsestatement( void ) {
   } else if( accepttok( TOK_CALL ) ) {
     char name[64];
     int nargs = 0;
+    struct var *v, *vp;
+    struct proc *p;
+    struct token vartok;
+    
     strcpy( name, glob.tok.token );
+    p = getproc( name );
+    if( !p ) usage( "Unknown procedure %s", name );
+    v = p->vars;
     expecttok( TOK_NAME );
     expecttok( TOK_OPENPAREN );
+    /* TODO: this is pushing from left to right. it is much easier to push from left to right, but we want to push from right to left? */
+
     do {
-      parseexpr( 0 );
+      if( v->flags & VAR_ISVAR ) {
+	vartok = glob.tok;
+	if( glob.tok.type != TOK_NAME ) usage( "Parameter %s is a VAR and expects a variable reference, not %s", v->name, glob.tok.token );
+	expectok( TOK_NAME );
+	vp = getvar( vartok.token );
+	if( vp ) {
+	  if( vp->flags & VAR_ISVAR ) {
+	    /* already a var parameter so just pass it through */
+	    printf( "\tLDSP\tR0\t-%u\n", vp->offset );
+	  } else {
+	    /* get address of the parameter */
+	    printf( "\tLEASP\tR0\t-%u\n", vp->offset );	    	    
+	  }
+	} else {
+	  /* assume global */
+	  if( vp->flags & VAR_ISVAR ) {
+	    printf( "\tLDI\tR0\t%s\n", vartok.token );	    
+	  } else {
+	    printf( "\tLD\tR0\t%s\n", vartok.token );
+	  }
+	}
+      } else {
+	parseexpr( 0 );
+      }
       printf( "\tPUSH\tR0\n" );
       nargs++;
+      v = v->next;
     } while( accepttok( TOK_COMMA ) );
+    if( v ) usage( "Insufficient parameters supplied to procedure %s", name );
     expecttok( TOK_CLOSEPAREN );
     printf( "\tCALL\t%s\n", name );
-    printf( "\tSUBSP\t%u\n", nargs * 4 );
+    if( nargs > 0 ) printf( "\tSUBSP\t%u\n", nargs * 4 );
   } else if( accepttok( TOK_BEGIN ) ) {
     do {
       parsestatement();
@@ -1028,11 +1140,10 @@ static void parseblock( void ) {
 }
 
 static void parseprogram( void ) {
-  int sts;
   
   expecttok( TOK_PROGRAM );
   if( glob.tok.type == TOK_NAME ) {
-    printf( "\t.MODULE\t%s\n", glob.tok.token );
+    printf( "\t.MODULE\t\t%s\n", glob.tok.token );
   }
   expecttok( TOK_NAME );
   if( accepttok( TOK_OPENPAREN ) ) {
@@ -1043,6 +1154,13 @@ static void parseprogram( void ) {
     versid = glob.tok;
     expectok( TOK_VALINTEGER );
     printf( "\t.PROGRAM\t%u\t%u\n", (int)strtoul( progid.token, NULL, 0 ), (int)strtoul( versid.token, NULL, 0 ) );
+
+    while( accepttok( TOK_COMMA ) ) {
+      progid = glob.tok;
+      expectok( TOK_NAME );
+      printf( "\t.EXPORT\t\t%s\n", progid.token );
+    }
+    
     expectok( TOK_CLOSEPAREN );
   }
   expecttok( TOK_SEMICOLON );
@@ -1050,6 +1168,7 @@ static void parseprogram( void ) {
   parseblock();
 
   expecttok( TOK_PERIOD );
+
 }
 
 

@@ -1,59 +1,30 @@
 { -*- mode:text -*- }
 
-program bob(123123,1);
-begin
+Program bob(123123,1, ProcNull, ProcHello);
+Begin
 
-   const fred := 123;
-   const conststr := "fred";
-   var globu32 : integer := 123;
-   var globalstr : string[64];
 
-procedure procname(x : integer, var y : integer) { this is a comment }
-begin
-   var local : integer;
-   var mystr : string[64];
-   
-   myvar := 123; 
-   if myvar = 123 Then
-      myvar  := 321
-   else if myvar > 321 Then
-      myvar  := 111
-   else if myvar <> 321 Then
-      goto fred2
-   else
-      myvar := 222;
+Const hellostring := "Hello";
 
-   while myvar = 123 do
-   begin
-     myvar := 12 xor 123
-   end;
-   
- fred: 
-     Call bob(myvar);
-    goto fred1
-end;
+Procedure ProcNull(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
+Begin
+	rescount := 0;
+	resbuf := 0;
+End;
 
-procedure myfunc(x : integer, var y : integer)
-begin
-	var fred : integer;	
-	localv1 := x;
-	y := localv1;
-	fred := 0;
+Declare Procedure strcpy( var dest : string, source : string);
 
-	while fred < 10 do
-	begin
-		fred := fred + 1
-	end;
+Procedure ProcHello(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
+Begin
+	var resb : string[64];
 
-	fred := 0;
-	do
-	fred := fred + 1
-	while fred < 12;
-
-end
+	Call strcpy( resb, hellostring );
+	rescount := 10;
+	resbuf := resb;
+	
+End;
 
 
 
 
-
-end.
+End.

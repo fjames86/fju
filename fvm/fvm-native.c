@@ -15,6 +15,14 @@
 #include <fju/log.h>
 #include <fju/freg.h>
 
+
+/*
+ * TODO: go through and sort out the calling convention. 
+ * These are written assuming cdecl but we seem to be settling on pascal calling convention.
+ * cdecl: push args from right to left, R0 contains return value.
+ * pascal: push args from left to right. No return value.
+ */
+
 static uint32_t fvm_stack_read( struct fvm_s *state, int depth ) {
   return fvm_read( state, state->reg[FVM_REG_SP] - depth );
 }

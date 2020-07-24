@@ -111,6 +111,8 @@ var fred : array[15] of int
 #include <string.h>
 #include <stdarg.h>
 
+static void fvmc_printf( int lvl, char *fmt, ... );
+
 static char whitespacechars[] = { ' ', '\n', '\t', '\r', '\0' };
 static char terminalchars[] = { '+', '-', '*', '/', ';', '.', '{', '}', ' ', '\n', '\t', '\r', '(', ')', ':', '[', ']', ',', '\0' };
 
@@ -133,7 +135,7 @@ static int skipwhitespace( FILE *f ) {
   while( 1 ) {
     c = fgetc( f );
     if( c == EOF ) {
-      printf( ";; skipwhitespace EOF\n" );
+      fvmc_printf( 1, " skipwhitespace EOF\n" );
       return -1;
     }
 
@@ -148,7 +150,7 @@ static int skipwhitespace( FILE *f ) {
     if( found ) continue;
 
     if( c == '{' ) {
-      printf( ";; skipping comment\n" );
+      fvmc_printf( 1, " skipping comment\n" );
       skipcomment( f );
       continue;
     }
@@ -172,7 +174,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
 
   c = fgetc( f );
   if( c == EOF ) {
-    printf( ";; end of file\n" );
+    fvmc_printf( 1, " end of file\n" );
     return -1;
   }
   if( c == '"' ) {
@@ -183,7 +185,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
     while( 1 ) {
       c = fgetc( f );
       if( c == EOF ) {
-	printf( ";; end of file\n" );
+	fvmc_printf( 1, " end of file\n" );
 	return -1;
       }
       if( toksize > 0 ) {
@@ -194,7 +196,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
       
       toksize--;
       if( toksize == 0 ) {
-	printf( ";; token buffer out of space\n" );
+	fvmc_printf( 1, " token buffer out of space\n" );
 	return -1;
       }
     }
@@ -216,7 +218,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
   while( 1 ) {
     c = fgetc( f );
     if( c == EOF ) {
-      printf( ";; getnexttoken EOF\n" );
+      fvmc_printf( 1, " getnexttoken EOF\n" );
       if( strlen( token ) == 0 ) return -1;
       break;
     }
@@ -232,7 +234,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
     if( found ) {
       if( strlen( token ) == 0 ) {
 	if( c == '{' ) {
-	  printf( ";; skipping comment\n" );
+	  fvmc_printf( 1, " skipping comment\n" );
 	  skipcomment( f );
 	  continue;
 	}
@@ -250,7 +252,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
     p++;
     toksize--;
     if( toksize == 0 ) {
-      printf( ";; token \"%s\" too large\n", token );
+      fvmc_printf( 1, " token \"%s\" too large\n", token );
       return -1;
     }
   }
@@ -431,10 +433,18 @@ struct var {
   uint32_t offset;
 };
 
+struct proc {
+  struct proc *next;
+  char name[64];
+  struct var *params;
+};
+
 static struct {
   struct token tok;
   FILE *f;
   struct var *vars;
+  int verbosemode;
+  struct proc *procs;
 } glob;
 
 
@@ -449,7 +459,7 @@ static int nexttok( void ) {
 
   tok.type = gettokentype( tok.token );
   glob.tok = tok;
-  printf( ";; token %u %s\n", tok.type, tok.token );
+  fvmc_printf( 1, " token %u %s\n", tok.type, tok.token );
   return 0;
 }
 
@@ -512,6 +522,71 @@ static void freevars( void ) {
     v = next;
   }
   glob.vars = NULL;
+}
+
+static struct proc *addproc( char *procname, struct var *vars ) {
+  struct proc *p, *pprev;
+  struct var *v1, *v2;
+
+  /* check parameters are ok */
+  v1 = vars;
+  while( v1 ) {
+    v2 = vars;
+    while( v2 ) {
+      if( (v1 != v2) && (strcasecmp( v1->name, v2->name ) == 0) ) usage( "Duplicate parameter names in procedure definition" );
+      v2 = v2->next;
+    }
+    v1 = v1->next;
+  }
+
+  /* check for duplicate definition */
+  p = glob.procs;
+  pprev = NULL;
+  while( p ) {
+    if( strcasecmp( p->name, procname ) == 0 ) {
+      v1 = p->vars;
+      v2 = vars;
+      while( v1 && v2 ) {
+	if( strcasecmp( v1->name, v2->name ) != 0 ) usage( "Incompatible duplicate procedure definitions: parameters different names" );
+	if( v1->type != v2->type ) usage( "Incompatible duplicate procedure definitions: parameters different types" );
+	v1 = v1->next;
+	v2 = v2->next;
+      }
+      return p;
+    }
+    pprev = p;
+    p = p->next;
+  }
+
+  /* push onto list */
+  p = malloc( sizeof(*p) );
+  memset( p, 0, sizeof(*p) );
+  strcpy( p->name, procname );
+  p->vars = vars;
+  if( pprev ) pprev->next = p;
+  else glob.procs = p;
+}
+
+static struct var *getprocvar( char *procname, int index ) {
+  struct proc *p;
+  struct var *v;
+  int i;
+
+  p = glob.procs;
+  while( p ) {
+    if( strcasecmp( p->name, procname ) == 0 ) {
+      v = p->vars;
+      i = 0;
+      while( v ) {
+	if( i == index ) return v;
+	i++;
+	v = v->next;
+      }
+      return NULL;
+    }
+    p = p->next;
+  }
+  return NULL;
 }
 
 /* ----- */
@@ -592,8 +667,13 @@ static void parseexpr( int reg ) {
   } else if( accepttok( TOK_NAME ) ) {
     /* check if constant ? */
     v = getvar( tok.token );
-    if( v ) printf( "\tLDSP\tR%u\t-%u\n", reg, v->offset );
-    else {
+    if( v ) {
+      printf( "\tLDSP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );      
+      if( v->flags & VAR_ISVAR ) {
+	/* var type parameters are really pointers, do reference it now */
+	printf( "\tLD\tR%u\tR%u\n", reg, reg );
+      }
+    } else {
       printf( "\tLDI\tR%u\t%s\n", reg, tok.token );
       printf( "\tLD\tR%u\tR%u\n", reg, reg );
     }
@@ -660,6 +740,19 @@ static op_t parsecondition( void ) {
   return op;
 }
 
+static void printconditionjump( op_t op, char *label ) {
+  printf( "\t%s\t%s\n",
+	  op == OP_NONE ? "JPN" :
+	  op == OP_EQ ? "JZ" :
+	  op == OP_NEQ ? "JPN" : 
+	  op == OP_GT ? "JP" :
+	  op == OP_GTE ? "JPZ" :
+	  op == OP_LT ? "JZ" :
+	  op == OP_LTE ? "JNZ" :
+	  (usage( "Bad operator" ), ""),
+	  label );
+}
+
 static void parseprocedurebody( void ) {
   /* 
    * var name : type
@@ -712,7 +805,7 @@ static void parseprocedurebody( void ) {
     if( !accepttok( TOK_SEMICOLON ) ) return;
   }
 
-  if( nargs > 0 ) printf( "\tADDSP\t%u\n", argsize );
+  if( nargs > 0 ) printf( "\tADDSP\t%u\t ; allocate locals\n", argsize );
   do {
     parsestatement();
   } while( accepttok( TOK_SEMICOLON ) );
@@ -742,34 +835,44 @@ static int parsedeclaration( void ) {
     } else usage( "bad constant value %s", valtok.token );
   } else if( accepttok( TOK_PROCEDURE ) ) {
     int vartype = 0;
-    struct token nametok;
+    struct token nametok, partok;
     int nargs = 0;
     
-    printf( ";; parsing procedure\n" );
+    fvmc_printf( 1, " parsing procedure\n" );
     nametok = glob.tok;
     expecttok( TOK_NAME );
-    printf( "%s:\n", nametok.token );
+    printf( "\n" );
+    printf( ";; ----- PROCEDURE %s(", nametok.token );
     expecttok( TOK_OPENPAREN );
     do {
       if( accepttok( TOK_VAR ) ) {
 	/* var type parameter */
 	vartype = 1;
       }
-      nametok = glob.tok;
+      partok = glob.tok;
       expecttok( TOK_NAME );
       expecttok( TOK_COLON );
+      printf( "%s", nargs > 0 ? ", " : "" );
       if( accepttok( TOK_INTEGER ) ) {
-	addvar( nametok.token, VAR_INTEGER, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
+	printf( "%s%s : INTEGER", vartype ? "VAR " : "", partok.token );
+	addvar( partok.token, VAR_INTEGER, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
       } else if( accepttok( TOK_STRING ) ) {
-	addvar( nametok.token, VAR_STRING, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
+	printf( "%s%s : STRING", vartype ? "VAR " : "", partok.token );	
+	addvar( partok.token, VAR_STRING, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
+      } else if( accepttok( TOK_OPAQUE ) ) {
+	printf( "%s%s : OPAQUE", vartype ? "VAR " : "", partok.token );	
+	addvar( partok.token, VAR_OPAQUE, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );	
       } else usage( "unrecognized type \"%s\"", glob.tok.token );
       nargs++;
     } while( accepttok( TOK_COMMA ) );
     expecttok( TOK_CLOSEPAREN );
+    printf( ") ----- \n\n" );
     expectok( TOK_BEGIN );
+    printf( "%s:\n", nametok.token );    
     parseprocedurebody();
     expectok( TOK_END );
     printf( "\tRET\n" );
+    printf( "\n" );
     freevars();
   } else if( accepttok( TOK_VAR ) ) {
     /* 
@@ -821,13 +924,13 @@ static void parsestatement( void ) {
   strcpy( name, glob.tok.token );
   if( accepttok( TOK_NAME ) ) {
     if( accepttok( TOK_COLON ) ) {
-      printf( ";; parsing label statement\n" );
+      fvmc_printf( 1, " parsing label statement\n" );
       printf( "%s:\n", name );
       parsestatement();
       return;
     }
 	
-    printf( ";; parsing assignment\n" );
+    fvmc_printf( 1, " parsing assignment\n" );
     expecttok( TOK_ASSIGN );
     parseexpr( 0 );
     /* R0 contains result of expression */
@@ -865,16 +968,7 @@ static void parsestatement( void ) {
     
     op = parsecondition();
     expecttok( TOK_THEN );
-    printf( "\t%s\t%s\n",
-	    op == OP_NONE ? "JPN" :
-	    op == OP_EQ ? "JZ" :
-	    op == OP_NEQ ? "JPN" : 
-	    op == OP_GT ? "JP" :
-	    op == OP_GTE ? "JPZ" :
-	    op == OP_LT ? "JZ" :
-	    op == OP_LTE ? "JNZ" :
-	    (usage( "Bad operator" ), ""),
-	    elselabel );
+    printconditionjump( op, elselabel );
     parsestatement();
     printf( "\tJMP\t%s\n", endiflabel );
     printf( "%s:\n", elselabel );
@@ -885,22 +979,41 @@ static void parsestatement( void ) {
   } else if( accepttok( TOK_WHILE ) ) {
     /* while condition do statement */
     op_t op;
+    char whilelabel[64], donelabel[64];
+    strcpy( whilelabel, genlabel( "WHILE" ) );
+    strcpy( donelabel, genlabel( "DONE" ) );
+    
+    printf( "%s:\n", genlabel( "WHILE" ) );
     op = parsecondition();
+    printconditionjump( op, whilelabel );
+    printf( "\tJMP\t%s\n", donelabel );
+    printf( "%s:\n", whilelabel );
     expectok( TOK_DO );
     parsestatement();
-    /* TODO */
+    printf( "\tJMP\t%s\n", whilelabel );
+    printf( "%s:\n", donelabel );
+
   } else if( accepttok( TOK_DO ) ) {
     /* do statement while condition */
     op_t op;
+    char dolabel[64];
+    strcpy( dolabel, genlabel( "DO" ) );
+
+    printf( "%s:\n", dolabel );
     parsestatement();
     expectok( TOK_WHILE );
     op = parsecondition();
-    /* TODO */
+    printconditionjump( op, dolabel );
+
   } else if( accepttok( TOK_GOTO ) ) {
     struct token nametok = glob.tok;
     if( nametok.type != TOK_NAME ) usage( "Failed to parse goto" );
     printf( "\tJMP\t%s\n", nametok.token );
     expectok( TOK_NAME );
+  } else if( accepttok( TOK_SEMICOLON ) ) {
+    fvmc_printf( 1, " empty statement\n" );
+  } else if( glob.tok.type == TOK_END ) {
+    fvmc_printf( 1, " empty statement\n" );
   } else usage( "failed to parse statement. type=%u token=\"%s\"", glob.tok.type, glob.tok.token );
 }
 
@@ -945,18 +1058,27 @@ int main( int argc, char **argv ) {
   char *filename;
   FILE *f;
   char token[64];
-  int sts;
-  
-  filename = argv[1];
+  int sts, i;
+
+  i = 1;
+  while( i < argc ) {
+    if( strcmp( argv[i], "-v" ) == 0 ) {
+      glob.verbosemode++;
+    } else break;
+    i++;
+  }
+
+  if( i >= argc ) usage( NULL );
+  filename = argv[i];
   f = fopen( filename, "r" );
 
-  printf( ";; -------------- lexing -------------- \n" );
+  fvmc_printf( 1, " -------------- lexing -------------- \n" );
   
   /* process until . */ 
   while( 1 ) {
     sts = skipwhitespace( f );
     if( sts ) {
-      printf( ";; end of file\n" );
+      fvmc_printf( 1, " end of file\n" );
       break;
     }
 
@@ -966,16 +1088,16 @@ int main( int argc, char **argv ) {
       break;
     }
     
-    printf( ";; token \"%s\"\n", token );
+    fvmc_printf( 1, " token \"%s\"\n", token );
     if( strcmp( token, "." ) == 0 ) {
-      printf( ";; done\n" );
+      fvmc_printf( 1, " done\n" );
       break;
     }
   }
 
   fseek( f, 0, SEEK_SET );
 
-  printf( ";; -------- parsing ------ \n" );
+  fvmc_printf( 1, " -------- parsing ------ \n" );
 
   glob.f = f;
   nexttok();
@@ -984,4 +1106,15 @@ int main( int argc, char **argv ) {
   fclose( f );
 
   return 0;
+}
+
+static void fvmc_printf( int lvl, char *fmt, ... ) {
+  va_list args;
+
+  if( glob.verbosemode < lvl ) return;
+
+  printf( ";;" );
+  va_start( args, fmt );
+  vprintf( fmt, args );
+  va_end( args );
 }

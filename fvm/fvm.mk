@@ -1,6 +1,6 @@
 
 
-fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm
+fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm ${BINDIR}/fvmc-pascal
 
 libfvm_source+=fvm/fvm-module.c
 libfvm_source+=fvm/fvm-state.c

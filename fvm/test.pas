@@ -48,7 +48,7 @@ begin
 	fred := 0;
 	do
 	fred := fred + 1
-	while fred < 12
+	while fred < 12;
 
 end
 

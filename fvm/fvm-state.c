@@ -36,17 +36,43 @@ int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid ) {
   state->text = m->text;
   state->reg[FVM_REG_PC] = addr;
   state->reg[FVM_REG_SP] = FVM_ADDR_STACK;
+
+  fvm_set_args( state, NULL, 0 );
   
   return 0;
 }
 
 int fvm_set_args( struct fvm_s *state, char *buf, int len ) {
-  if( len > FVM_MAX_STACK ) return -1;
+  uint32_t rescountp, resbufp;
   
+  if( len > FVM_MAX_STACK ) return -1;
+
+  /* signature: procedure( int argcount, void *argbuf, int *rescount, void **resbuf ); */
   memcpy( state->stack, buf, len );
   state->reg[FVM_REG_SP] = FVM_ADDR_STACK + len;
-  state->reg[FVM_REG_R0] = htonl( len );
-  state->reg[FVM_REG_R1] = ntohl( FVM_ADDR_STACK ); /* for consistency with getres */
+
+  /* allocate space for result buf pointer and result count */
+  rescountp = state->reg[FVM_REG_SP];
+  fvm_write( state, rescountp, 0 );
+  state->reg[FVM_REG_SP] += 4;
+  resbufp = state->reg[FVM_REG_SP];
+  fvm_write( state, resbufp, 0 );  
+  state->reg[FVM_REG_SP] += 4;
+  
+  fvm_write( state, state->reg[FVM_REG_SP], htonl( len ) );
+  state->reg[FVM_REG_SP] += 4;
+  fvm_write( state, state->reg[FVM_REG_SP], htonl( FVM_ADDR_STACK ) );
+  state->reg[FVM_REG_SP] += 4;
+
+  /* reserve space for rescount/resbuf */
+  fvm_write( state, state->reg[FVM_REG_SP], htonl( rescountp ) );
+  state->reg[FVM_REG_SP] += 4;
+  fvm_write( state, state->reg[FVM_REG_SP], htonl( resbufp ) );
+  state->reg[FVM_REG_SP] += 4;
+
+  /* dummy var for return address. this is for consistency so that toplevel procs are the same as internal procs */
+  fvm_write( state, state->reg[FVM_REG_SP], 0 );
+  state->reg[FVM_REG_SP] += 4;
   
   return 0;
 }
@@ -54,11 +80,15 @@ int fvm_set_args( struct fvm_s *state, char *buf, int len ) {
 int fvm_get_res( struct fvm_s *state, char **buf ) {
   int lenp;
   char *bufp;
+  uint32_t addr;
   
   if( buf ) *buf = NULL;
-  
-  lenp = ntohl( state->reg[FVM_REG_R0] );
-  bufp = fvm_getaddr( state, ntohl( state->reg[FVM_REG_R1] ) );
+
+  addr = state->reg[FVM_REG_SP] - 28; // rescount
+  lenp = ntohl( fvm_read( state, addr ) );
+  addr = state->reg[FVM_REG_SP] - 24; // resbufp
+  addr = ntohl( fvm_read( state, addr ) );
+  bufp = fvm_getaddr( state, addr );
   if( !bufp ) lenp = 0;
 
   if( buf ) *buf = bufp;

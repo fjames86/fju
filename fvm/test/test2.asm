@@ -28,15 +28,6 @@ MAIN:
 	JPN		TEST-FAIL
 	SUBSP		R2 	; clean stack 
 	
-	LDI		R0		10000
-	LDI		R1		2
-	PUSH		123
-	LDI		R2		4
-	CALLVIRT	R0		R1		R2
-	CMP		R2 		-1
-	JZ		TEST-FAIL
-	SUBSP		R2
-	
 	PUSH		test2-success
 	CALLNAT		R5		NATIVE-PUTS
 	SUBSP		4

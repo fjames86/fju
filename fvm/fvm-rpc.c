@@ -64,6 +64,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   struct fvm_s state;
   int sts, handle, arglength, count;
   struct fvm_module *m;
+  char *resp;
   
   progid = inc->msg.u.call.prog;
   m = fvm_module_by_progid( progid );
@@ -96,14 +97,11 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
     
     fvm_log( LOG_LVL_TRACE, "success reply length %d", ntohl( state.reg[FVM_REG_R0] ) );
     rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-    /* R0 contains length, R1 contains address of buffer */
-    count = ntohl( state.reg[FVM_REG_R0] );
+    
+    count = fvm_get_res( &state, &resp );
     if( count > 0 && count < FVM_MAX_STACK ) {
-      char *p = fvm_getaddr( &state, ntohl( state.reg[FVM_REG_R1] ) );
-      if( p ) {
-	sts = xdr_encode_fixed( &inc->xdr, (uint8_t *)p, count );
-	if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-      }
+      sts = xdr_encode_fixed( &inc->xdr, (uint8_t *)resp, count );
+      if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
     }
     rpc_complete_accept_reply( inc, handle );
     break;

@@ -24,17 +24,24 @@ PROC-NULL:
 	
 	.DATA		hello		"Hello, world!\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"	
 PROC-HELLO:
-	LDI		R1		hello ;pointer to buffer
-	LD		R0		hello ; count 
-	ADD		R0		4	
+	LDSP		R0		-8    ; resp
+	ST		R0		hello ; set result buffer
+	LDSP		R0		-12   ; rescountp
+	LD		R1		hello
+	ADD		R1		4
+	ST		R0		R1
 	RET
 
 ;;; ------------------------------------------
 	
 PROC-ECHO:
 	;; Echo args back to caller
-	SUBSP		R0	; clear stack 
-	LEASP		R1		0  ; set r1 to buffer, r0 is count but that was already set for us	
+	LDSP		R0		-8 ;resp
+	LDSP		R1		-16 ; argp
+	ST		R0		R1  ; set result buffer
+	LDSP		R0		-12 ; rescount
+	LDSP		R1		-20 ; argcount
+	ST		R0		R1 
 	RET
 
 ;;; ------------------------------------------
@@ -47,9 +54,12 @@ PROC-COUNTER:
 	LDI		R2		counter
 	ST		R2		R1
 
-	;; return incremented value 
-	LDI		R1		counter
-	LDI		R0		4
+	;; return incremented value
+	LDSP		R0		-8
+	ST		R0		counter
+	LDSP		R0		-12
+	ST		R0		4
+
 	RET
 	
 ;;; ------------------------------------------

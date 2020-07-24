@@ -14,7 +14,8 @@ MAIN:
 	PUSH		2
 	PUSH 		5
 	CALL		TEST-ADD
-
+	SUBSP		12
+	
 	PUSH		8
 	PUSH		3
 	PUSH		5
@@ -130,15 +131,29 @@ TEST-FAIL:
 	
 
 TEST-ADDPROC:
-	;;  R0 = length R1 = pointer 
-	LD		R2		R1 ; get a number 
+	;; addproc(int argcount,void *argp, int *rescount, void **resp)
+	;;  sp-4: resbuf, sp-8 := return address
+	;;  sp-12 := resp, sp-16 := rescount, sp-20 := argp sp-24 := argcount
+	ADDSP		4		   ; allocate result buffer 
+	LDSP		R1		-20 ; get argp 
+	LD		R2		R1 ; get a number from args 
 	ADD		R2		1
-	ST		R1		R2 ; set results
-	;; R0 = length (unchanged) R1 = pointer (unchanged)
+
+	LEASP		R0		-4
+	ST		R0		R1 ; store number into result buffer
+
+	LDSP		R1		-12 ; get pointer to result buffer
+	ST		R1		R0  ; set result buffer 
+
+	LDI		R0		4
+	LDSP		R1		-16 
+	ST		R1		R0 ; set result count 
+
+	SUBSP		4 	; free locals 
 	RET
 	
 	.EXPORT		MAIN
 	.EXPORT		TEST-ADDPROC
-	.EXPORT		TEST-ADD
+
 	
 	

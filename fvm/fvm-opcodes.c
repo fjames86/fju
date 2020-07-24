@@ -193,7 +193,7 @@ static int opcode_ret( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32
   /* RET */
   uint32_t addr;
   state->frame--;  
-  if( state->frame > 0 ) {
+  if( state->frame >= 0 ) {
     addr = ntohl( fvm_pop( state ) );
     state->reg[FVM_REG_PC] = limitaddr( addr, FVM_ADDR_TEXT, FVM_MAX_TEXT );
   }
@@ -545,7 +545,7 @@ static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, u
     state->reg[rz] = htonl( -1 );
     return 0;
   }
-
+  printf( "callvirt return result resp=%p len=%d\n", resp, ressize );
   memcpy( res, resp, ressize );
   state->reg[rz] = htonl( ressize );
   state->reg[FVM_REG_SP] += ressize;

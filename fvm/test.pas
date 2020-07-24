@@ -5,6 +5,7 @@ Begin
 
 
 Const hellostring := "Hello";
+Const MYCONSTANT := 123;
 
 var myglobalint : integer;
 var myglobalstring : string[64];
@@ -41,7 +42,7 @@ Begin
 	var len : integer;
 
 	Call strlen(source, len);
-	len := len + 4;
+	len := len + MYCONSTANT;
 	q := source;
 	p := dest;	
 	While len > 0 Do

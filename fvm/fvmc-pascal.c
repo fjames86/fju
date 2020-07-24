@@ -81,28 +81,8 @@ procedure | program
 
 
 /*
-
-Minipascal might be a good option:
-
-program name
-
-begin procedure name([var] name:type)
-end
-
-if statement then
-else
-endif
-
-var name : type
-
-
-
-
-var fred : int
-var fred : array[15] of int 
-
-
-
+ TODO: need some way of including other files or at least allow parsing some header code
+ that contains e.g. declarations / consts
  */
 
 #include <stdio.h>
@@ -1296,9 +1276,9 @@ int fvmc_compile( char *sourcefile, char *destfile ) {
   FILE *infile, *outfile;
   int verbosemode;
 
-  verbosemode = glob.verbosemode;
-  memset( &glob, 0, sizeof(glob) );
-  glob.verbosemode = verbosemode;
+  //  verbosemode = glob.verbosemode;
+  //  memset( &glob, 0, sizeof(glob) );
+  //  glob.verbosemode = verbosemode;
   
   infile = fopen( sourcefile, "r" );
   if( !infile ) return -1;

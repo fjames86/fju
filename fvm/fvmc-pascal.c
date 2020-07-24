@@ -636,45 +636,6 @@ static char *genlabel( char *prefix ) {
 }
 
 
-static void parsefactor( int reg ) {
-  /* variable | literal | ( expression ) | not factor */
-  if( accepttok( TOK_NAME ) ) {
-    /* varaiable */
-  } else if( accepttok( TOK_VALINTEGER ) ) {
-    /* literal integer */
-  } else if( accepttok( TOK_STRING ) ) {
-    /* literal string */
-  } else if( accepttok( TOK_OPENPAREN ) ) {
-    parseexpr( reg );
-    expecttok( TOK_CLOSEPAREN );
-  } else if( accepttok( TOK_NOT ) ) {
-    /* not factor */
-    parsefactor( reg );
-    printf( "\tNOT\tR%u\n", reg );
-  } else usage( "Unable to parse factor" );  
-
-}
-
-static void parseterm( void ) {
-  parsefactor( 0 );
-  if( accepttok( TOK_MUL ) ) {
-    parsefactor( 1 );
-    printf( "\tMUL\tR0\tR1\n" );
-  } else if( accepttok( TOK_DIV ) ) {
-    parsefactor( 1 );
-    printf( "\tDIV\tR0\tR1\n" );    
-  } else if( accepttok( TOK_MOD ) ) {
-    parsefactor( 1 );
-    printf( "\tMOD\tR0\tR1\n" );
-  } else if( accepttok( TOK_AND ) ) {
-    parsefactor( 1 );
-    printf( "\tAND\tR0\tR1\n" );
-  } else if( accepttok( TOK_XOR ) ) {
-    parsefactor( 1 );
-    printf( "\tXOR\tR0\tR1\n" );
-  } 
-}
-
 static void parseexpr( int reg ) {
   struct token tok;
   struct var *v;
@@ -878,7 +839,7 @@ static int parsedeclaration( void ) {
   } else if( accepttok( TOK_PROCEDURE ) ) {
     int vartype = 0;
     struct token nametok, partok;
-    int nargs = 0;
+    int nargs = 0, i, j;
     struct var *vars, *vlast, *v;
 
     vars = NULL;
@@ -911,15 +872,12 @@ static int parsedeclaration( void ) {
       
       if( accepttok( TOK_INTEGER ) ) {
 	printf( "%s%s : INTEGER", vartype ? "VAR " : "", partok.token );
-	addvar( partok.token, VAR_INTEGER, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
 	v->type = VAR_INTEGER;	
       } else if( accepttok( TOK_STRING ) ) {
 	printf( "%s%s : STRING", vartype ? "VAR " : "", partok.token );	
-	addvar( partok.token, VAR_STRING, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
 	v->type = VAR_STRING;	
       } else if( accepttok( TOK_OPAQUE ) ) {
 	printf( "%s%s : OPAQUE", vartype ? "VAR " : "", partok.token );	
-	addvar( partok.token, VAR_OPAQUE, 4, 8 + nargs*4, VAR_ISPARAM|(vartype ? VAR_ISVAR : 0) );
 	v->type = VAR_OPAQUE;	
       } else usage( "unrecognized type \"%s\"", glob.tok.token );
       nargs++;
@@ -933,6 +891,18 @@ static int parsedeclaration( void ) {
     printf( ") ----- \n\n" );
 
     addproc( nametok.token, vars );
+    for( i = 0; i < nargs; i++ ) {
+      v = vars;
+      j = 0;
+      while( v ) {
+	if( i == (nargs - 1 - j) ) break;
+	v = v->next;
+	j++;
+      }
+
+      if( !v ) usage( "Bad args" );
+      addvar( v->name, v->type, 4, 8 + i*4, v->flags );
+    }
     
     expectok( TOK_BEGIN );
     printf( "%s:\n", nametok.token );    
@@ -1051,7 +1021,7 @@ static void parsestatement( void ) {
     parseexpr( 0 );
     /* R0 contains result of expression */
     v = getvar( name );
-    if( v ) printf( "\tSTSP\tR0\t-%u\n", v->offset );
+    if( v ) printf( "\tSTSP\tR0\t-%u\t ; store %s %s\n", v->offset, v->flags & VAR_ISPARAM ? "param" : "local", name );
     else {
       printf( "\tLDI\tR1\t%s\n", name );
       printf( "\tST\tR1\tR0\n" );

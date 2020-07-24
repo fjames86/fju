@@ -336,6 +336,7 @@ typedef enum {
 	      TOK_XOR,
 	      TOK_OR,
 	      TOK_DECLARE,
+	      TOK_ASM,
 } token_t;
 static struct {
   char *keyword;
@@ -385,6 +386,7 @@ static struct {
 		     { "OR", TOK_OR },
 		     { "OPAQUE", TOK_OPAQUE },
 		     { "DECLARE", TOK_DECLARE },
+		     { "ASM", TOK_ASM },
 		     
 		     { NULL, 0 }
 };
@@ -457,6 +459,7 @@ static int nexttok( void ) {
   struct token tok;
   int sts;
 
+  memset( tok.token, 0, sizeof(tok.token) );
   sts = getnexttoken( glob.f, tok.token, sizeof(tok.token) );
   if( sts ) return sts;
 
@@ -1126,18 +1129,19 @@ static void parsestatement( void ) {
   } else if( accepttok( TOK_WHILE ) ) {
     /* while condition do statement */
     op_t op;
-    char whilelabel[64], donelabel[64];
+    char startlabel[64], whilelabel[64], donelabel[64];
+    strcpy( startlabel, genlabel( "START" ) );
     strcpy( whilelabel, genlabel( "WHILE" ) );
     strcpy( donelabel, genlabel( "DONE" ) );
     
-    printf( "%s:\n", genlabel( "WHILE" ) );
+    printf( "%s:\n", startlabel );
     op = parsecondition();
     printconditionjump( op, whilelabel );
     printf( "\tJMP\t%s\n", donelabel );
     printf( "%s:\n", whilelabel );
     expectok( TOK_DO );
     parsestatement();
-    printf( "\tJMP\t%s\n", whilelabel );
+    printf( "\tJMP\t%s\n", startlabel );
     printf( "%s:\n", donelabel );
 
   } else if( accepttok( TOK_DO ) ) {
@@ -1157,6 +1161,11 @@ static void parsestatement( void ) {
     if( nametok.type != TOK_NAME ) usage( "Failed to parse goto" );
     printf( "\tJMP\t%s\n", nametok.token );
     expectok( TOK_NAME );
+  } else if( accepttok( TOK_ASM ) ) {
+    /* asm stringval */
+    struct token strtok = glob.tok;
+    expectok( TOK_VALSTRING );
+    printf( "\t%.*s\n", (int)strlen( strtok.token ) - 2, strtok.token + 1 );
   } else if( accepttok( TOK_SEMICOLON ) ) {
     fvmc_printf( 1, " empty statement\n" );
   } else if( glob.tok.type == TOK_END ) {

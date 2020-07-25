@@ -13,7 +13,7 @@ Begin
    Const NativeReadLog := 8; 
    Const NativeYield := 10;
    
-   Const NativeFork := 1;
+   Const YieldFork := 1;
       
    Declare Syscall Puts(str : string) : 1;
    Declare Syscall Rand(var r : integer) : 2;

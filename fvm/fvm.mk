@@ -30,10 +30,11 @@ fvmtest_source+=fvm/test/test2.asm
 fvmtest_source+=fvm/test/test3.asm
 #fvmtest_source+=fvm/test/test4.asm
 #fvmtest_source+=fvm/test/test5.asm
-fvmtest_source+=fvm/test/test6.pas
 fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm ${fvmtest_source}
 	for x in ${fvmtest_source}; do ${BINDIR}/fvmc -I fvm/stdlib/ $$x; done 
 
+fvm/test/test6.fvm: ${BINDIR}/fvmc fvm/test/test6.pas
+	${BINDIR}/fvmc fvm/stdlib/native.pas fvm/test/test6.pas
 
 PROGRAMS+=fvmc
 LIBRARIES+=fvm

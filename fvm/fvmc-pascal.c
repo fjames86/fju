@@ -1189,8 +1189,10 @@ static void parseprogram( void ) {
 
     while( accepttok( TOK_COMMA ) ) {
       v = malloc( sizeof(*v) );
+      memset( v, 0, sizeof(*v) );
       progid = glob.tok;
       expectok( TOK_NAME );
+      fvmc_printf( 1, ";; exporting %s\n", progid.token );
       strcpy( v->name, progid.token );
       if( vlast ) vlast->next = v;
       else vars = v;

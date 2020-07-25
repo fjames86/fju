@@ -377,7 +377,7 @@ static int emit_opcode( char *buf, uint32_t *addr, int passid, FILE *outfile ) {
 	opcode = htonl( opcode );
 	fwrite( &opcode, 1, 4, outfile );
       } else {
-	fvmc_printf( 1, "emitting (%u) %04x %s\n", *addr, *addr, buf );	
+	fvmc_printf( 1, ";; emitting (%u) %04x %s\n", *addr, *addr, buf );	
 	*addr += 4;
       }
     } else {

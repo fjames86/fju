@@ -1274,11 +1274,6 @@ int main( int argc, char **argv ) {
 
 int fvmc_compile( char *sourcefile, char *destfile ) {
   FILE *infile, *outfile;
-  int verbosemode;
-
-  //  verbosemode = glob.verbosemode;
-  //  memset( &glob, 0, sizeof(glob) );
-  //  glob.verbosemode = verbosemode;
   
   infile = fopen( sourcefile, "r" );
   if( !infile ) return -1;

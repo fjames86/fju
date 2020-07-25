@@ -28,120 +28,6 @@ static uint32_t fvm_stack_read( struct fvm_s *state, int depth ) {
   return fvm_read( state, state->reg[FVM_REG_SP] - depth );
 }
 
-static void fvm_stack_write( struct fvm_s *state, int depth, uint32_t x ) {
-  fvm_write( state, state->reg[FVM_REG_SP] - depth, x );
-}
-
-typedef int (*fvm_native_cb)( struct fvm_s *state, uint32_t reg );
-
-struct fvm_native_proc {
-  uint32_t procid;
-  fvm_native_cb cb;
-};
-
-static int native_nop( struct fvm_s *state, uint32_t reg ) {
-  return 0;
-}
-
-static int native_puts( struct fvm_s *state, uint32_t reg ) {
-  /* pop stack to get address of string */
-  uint32_t sp, len;
-  char *str;
-  
-  sp = ntohl( fvm_stack_read( state, 4 ) );
-  len = ntohl( fvm_read( state, sp ) );
-  str = fvm_getaddr( state, sp + 4 );
-  if( !str ) return -1;
-
-  printf( "%.*s", len, str );
-  return 0;
-}
-
-static int native_rand( struct fvm_s *state, uint32_t reg ) {
-  /* return random number */
-  return sec_rand_uint32();
-}
-
-static int native_now( struct fvm_s *state, uint32_t reg ) {
-  /* return current time */
-  uint64_t now = rpc_now();
-  uint32_t nowaddr;
-
-  /* now(uint32_t *now) */  
-  nowaddr = ntohl( fvm_stack_read( state, -4 ) );
-
-  if( state ) {
-    fvm_write( state, nowaddr, htonl( now >> 32 ) );
-    fvm_write( state, nowaddr + 4, htonl( now & 0xffffffff ) );
-  }
-  
-  return now & 0xffffffff;
-}
-
-static int native_logstr( struct fvm_s *state, uint32_t reg ) {  
-  char *str;
-  uint32_t addr;
-
-  addr = ntohl( fvm_stack_read( state, 4 ) );
-  str = fvm_getaddr( state, addr );
-
-  if( str ) {
-    struct xdr_s xdr;
-    uint32_t len;
-    int sts;
-    
-    xdr_init( &xdr, (uint8_t *)str, 4 );
-    sts = xdr_decode_uint32( &xdr, &len );
-    if( !sts ) log_writef( NULL, LOG_LVL_INFO, "%.*s", len, str + 4 );
-  }
-  
-  return 0;
-}
-
-static int native_read( struct fvm_s *state, uint32_t reg ) {
-  uint32_t progid, addr;
-  struct fvm_module *m;
-
-  /* read(progid,addr) */
-  progid = ntohl( fvm_stack_read( state, 4 ) );
-  addr = ntohl( fvm_stack_read( state, 8 ) );
-  m = fvm_module_by_progid( progid );
-  if( !m ) {
-    return 0;
-  }
-  
-  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize) ) {
-    return *(uint32_t *)(m->data + (addr - FVM_ADDR_DATA));
-  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize) ) {
-    return *(uint32_t *)(m->text + (addr - FVM_ADDR_TEXT));
-  }
-  
-  return 0;
-}
-
-static int native_write( struct fvm_s *state, uint32_t reg ) {
-  uint32_t progid, addr, val;
-  struct fvm_module *m;
-
-  /* write(progid,addr,val) */
-  progid = ntohl( fvm_stack_read( state, 4 ) );
-  addr = ntohl( fvm_stack_read( state, 8 ) );
-  val = fvm_stack_read( state, 12 );
-  
-  m = fvm_module_by_progid( progid );
-  if( !m ) {
-    return 0;
-  }
-  
-  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize) ) {
-    *(uint32_t *)(m->data + (addr - FVM_ADDR_DATA)) = val;
-  } else if( addr >= FVM_ADDR_TEXT && addr < (FVM_ADDR_TEXT + m->header.textsize) ) {
-    *(uint32_t *)(m->text + (addr - FVM_ADDR_TEXT)) = val;
-  } 
-
-  return 0;
-}
-
 static int native_readstr( struct fvm_s *state, uint32_t addr, char *str, int size ) {
   int strlen, i;
   uint32_t *up;
@@ -161,32 +47,123 @@ static int native_readstr( struct fvm_s *state, uint32_t addr, char *str, int si
   return strlen;
 }
 
-static int native_progid_by_name( struct fvm_s *state, uint32_t reg ) {
-  uint32_t progid;
+typedef int (*fvm_native_cb)( struct fvm_s *state );
+
+struct fvm_native_proc {
+  uint32_t procid;
+  fvm_native_cb cb;
+};
+
+static int native_nop( struct fvm_s *state ) {
+  return 0;
+}
+
+/* procedure puts(str : string ) */
+static int native_puts( struct fvm_s *state ) {
+  /* pop stack to get address of string */
+  uint32_t sp, len;
+  char *str;
+  
+  sp = ntohl( fvm_stack_read( state, 4 ) );
+  len = ntohl( fvm_read( state, sp ) );
+  str = fvm_getaddr( state, sp + 4 );
+  if( !str ) return -1;
+
+  printf( "%.*s", len, str );
+  return 0;
+}
+
+/* procedure rand(var r : integer) */
+static int native_rand( struct fvm_s *state ) {
+  /* return random number */
+  uint32_t addr = ntohl( fvm_stack_read( state, 4 ) );
+  fvm_write( state, addr, sec_rand_uint32() );
+  return 0;
+}
+
+/* procedure now(var nowhigh : integer, var nowlow : integer) */
+static int native_now( struct fvm_s *state ) {
+  /* return current time */
+  uint32_t addrl, addrh;
+  uint64_t now = rpc_now();
+  
+  /* now(uint32_t *now) */  
+  addrh = ntohl( fvm_stack_read( state, 8 ) );
+  addrl = ntohl( fvm_stack_read( state, 4 ) );  
+
+  fvm_write( state, addrh, htonl( now >> 32 ) );
+  fvm_write( state, addrl, htonl( now & 0xffffffff ) );
+  
+  return 0;
+}
+
+/* procedure logstr(str : string) */
+static int native_logstr( struct fvm_s *state ) {  
+  char *str;
+  uint32_t addr;
+
+  addr = ntohl( fvm_stack_read( state, 4 ) );
+  str = fvm_getaddr( state, addr );
+
+  if( str ) {
+    struct xdr_s xdr;
+    uint32_t len;
+    int sts;
+    
+    xdr_init( &xdr, (uint8_t *)str, 4 );
+    sts = xdr_decode_uint32( &xdr, &len );
+    if( !sts ) log_writef( NULL, LOG_LVL_INFO, "%.*s", len, str + 4 );
+  }
+  
+  return 0;
+}
+
+/* procedure ProgidByName( str : string, var progid : integer ) */
+static int native_progid_by_name( struct fvm_s *state ) {
+  uint32_t progid, addr;
   char str[FVM_MAX_NAME];
 
-  /*progidbyname(name) */
-  native_readstr( state, ntohl( fvm_stack_read( state, 4 ) ), str, sizeof(str) );
-  progid = fvm_progid_by_name( str );  
-  return progid;
+  addr = ntohl( fvm_stack_read( state, 4 ) );  
+  native_readstr( state, ntohl( fvm_stack_read( state, 8 ) ), str, sizeof(str) );
+  
+  progid = fvm_progid_by_name( str );
+  fvm_write( state, addr, htonl( progid ) );
+  return 0;
+}
+
+/* procedure ProcidByName( progid : integer, str : string, var procid : integer ) */
+static int native_procid_by_name( struct fvm_s *state ) {
+  uint32_t progid, addr, procid;
+  char str[FVM_MAX_NAME];
+  struct fvm_module *m;
+  
+  addr = ntohl( fvm_stack_read( state, 4 ) );  
+  native_readstr( state, ntohl( fvm_stack_read( state, 8 ) ), str, sizeof(str) );
+  progid = ntohl( fvm_stack_read( state, 12 ) );
+
+  m = fvm_module_by_progid( progid );
+  if( !m ) return -1;
+  
+  procid = fvm_symbol_index( m, str );
+  fvm_write( state, addr, htonl( procid ) );
+  return 0;
 }
 
 static struct log_s prevlog;
 static char prevlogname[64];
 
-static int native_writelog( struct fvm_s *state, uint32_t reg ) {
+/* procedure writelog(logname : string, buf : opaque, count : integer) */
+static int native_writelog( struct fvm_s *state ) {
   int sts;
   uint32_t bufcount, bufaddr;
   char *bufp;
   char str[FVM_MAX_NAME];
 
-  /* int writelog(logname, buf, count) */
-
-  native_readstr( state, ntohl( fvm_stack_read( state, 4 ) ), str, sizeof(str) );
+  native_readstr( state, ntohl( fvm_stack_read( state, 12 ) ), str, sizeof(str) );
   bufaddr = ntohl( fvm_stack_read( state, 8 ) );
   bufp = fvm_getaddr( state, bufaddr );
   if( !bufp ) return -1;  
-  bufcount = ntohl( fvm_stack_read( state, 12 ) );
+  bufcount = ntohl( fvm_stack_read( state, 4 ) );
 
   if( strcmp( prevlogname, str ) != 0 ) {
     if( prevlog.pid ) log_close( &prevlog );
@@ -207,30 +184,32 @@ static int native_writelog( struct fvm_s *state, uint32_t reg ) {
   return 0;
 }
 
-static int native_readlog( struct fvm_s *state, uint32_t reg ) {
+/* procedure readlog(logname : string, idhigh : integer, idlow : integer, buf : opaque, var count : integer ) */
+static int native_readlog( struct fvm_s *state ) {
   int sts, msglen;
-  uint32_t bufcount, bufaddr;
+  uint32_t bufaddr, countaddr, count;
   char *bufp;
   char str[FVM_MAX_NAME];
   uint64_t id;
   struct log_entry entry;
   struct log_iov iov[1];
-  
-  /* readlog(logname, idhigh, idlow, buf, count) */
 
-  native_readstr( state, ntohl( fvm_stack_read( state, 4 ) ), str, sizeof(str) );
-  id = ntohl( fvm_stack_read( state, 8 ) );
+  native_readstr( state, ntohl( fvm_stack_read( state, 20 ) ), str, sizeof(str) );
+  id = ntohl( fvm_stack_read( state, 16 ) );
   id = (id << 32) | ntohl( fvm_stack_read( state, 12 ) );
-  bufaddr = ntohl( fvm_stack_read( state, 16 ) );  
-  bufcount = ntohl( fvm_stack_read( state, 20 ) );
-
+  bufaddr = ntohl( fvm_stack_read( state, 8 ) );
+  bufp = fvm_getaddr( state, bufaddr );
+  if( !bufp ) return -1;  
+  countaddr = ntohl( fvm_stack_read( state, 4 ) );
+  count = ntohl( fvm_read( state, countaddr ) );
+  
   if( strcmp( prevlogname, str ) != 0 ) {
     if( prevlog.pid ) log_close( &prevlog );
     memset( &prevlog, 0, sizeof(prevlog) );
     strcpy( prevlogname, str );  
     strcat( str, ".log" );
 
-    fvm_printf( "native_writelog opening file \"%s\" count=%u\n", str, bufcount );
+    fvm_printf( "native_writelog opening file \"%s\" count=%u\n", str, count );
     sts = log_open( mmf_default_path( str, NULL ), NULL, &prevlog );
     if( sts ) {
       strcpy( prevlogname, "" );
@@ -238,110 +217,25 @@ static int native_readlog( struct fvm_s *state, uint32_t reg ) {
     }
   }
   
-  bufp = fvm_getaddr( state, bufaddr );
-  if( !bufp ) return -1;
   
   memset( &entry, 0, sizeof(entry) );
   iov[0].buf = bufp;
-  iov[0].len = bufcount;
+  iov[0].len = count;
   entry.iov = iov;
   entry.niov = 1;
   msglen = log_read_entry( &prevlog, id, &entry );
   if( msglen == 0 ) {
     msglen = entry.msglen;
-    fvm_stack_write( state, 16, htonl( entry.id >> 32 ) );
-    fvm_stack_write( state, 12, htonl( entry.id & 0xffffffff ) );
-  }
-  
-  return msglen;
-}
-
-static int native_fregget_u32( struct fvm_s *state, uint32_t reg ) {
-  uint32_t nameaddr, val;
-  char name[1024];
-  int sts, lenp;
-  
-  /* fregget-u32( char *name ) */
-  nameaddr = ntohl( fvm_stack_read( state, 4 ) );  
-  sts = native_readstr( state, nameaddr, name, sizeof(name) );
-  
-  sts = freg_get_by_name( NULL, 0, name, FREG_TYPE_UINT32, (char *)&val, sizeof(val), &lenp );
-  if( sts ) {
-    fvm_printf( "freg_get_by_name failed name=%s\n", name );
-    return -1;
   }
 
-  return val;
-}
-
-static int native_fregput_u32( struct fvm_s *state, uint32_t reg ) {
-  uint32_t nameaddr, val;
-  char name[1024];
-  int sts;
-  
-  /* fregput-u32( char *name, uint32_t val ) */
-  nameaddr = ntohl( fvm_stack_read( state, 4 ) );  
-  native_readstr( state, nameaddr, name, sizeof(name) );  
-  val = ntohl( fvm_stack_read( state, 8 ) );
-
-  sts = freg_put( NULL, 0, name, FREG_TYPE_UINT32, (char *)&val, sizeof(val), NULL );
-  if( sts ) {
-    fvm_printf( "freg_put failed name=%s\n", name );
-    return -1;
-  }
-  
+  fvm_write( state, countaddr, htonl( msglen ) );
   return 0;
 }
 
-static int native_fregget_buf( struct fvm_s *state, uint32_t reg ) {
-  uint32_t size, bufaddr, nameaddr, flags;
-  char *buf;
-  char name[1024];
-  int sts, lenp;
-  
-  /* freg_getbuf( char *name, uint32_t flags, char *buf, int size ) */
-  nameaddr = ntohl( fvm_stack_read( state, 4 ) );  
-  native_readstr( state, nameaddr, name, sizeof(name) );
-  flags = ntohl( fvm_stack_read( state, 8 ) );
-  bufaddr = ntohl( fvm_stack_read( state, 12 ) );
-  buf = fvm_getaddr( state, bufaddr );
-  if( !buf ) {
-    fvm_printf( "Bad name address\n" );
-    return -1;
-  }
-  size = ntohl( fvm_stack_read( state, 16 ) );
-  
-  sts = freg_get_by_name( NULL, 0, name, flags, buf, size, &lenp );
-  if( sts ) {
-    fvm_printf( "freg_get_by_name failed name=%s flags=%x size=%u\n", name, flags, size );
-    return -1;
-  }
-  
-  return lenp;  
-}
 
-static int native_fregput_buf( struct fvm_s *state, uint32_t reg ) {
-  uint32_t size, bufaddr, nameaddr, flags;
-  char *buf;
-  char name[1024];
-  int sts;
+#if 0
 
-  /* freg_put( char *name, uint32_t flags, char *buf, int size ) */
-  nameaddr = ntohl( fvm_stack_read( state, 4 ) );  
-  native_readstr( state, nameaddr, name, sizeof(name) );
-  flags = ntohl( fvm_stack_read( state, 8 ) );
-  bufaddr = ntohl( fvm_stack_read( state, 12 ) );
-  buf = fvm_getaddr( state, bufaddr );
-  if( !buf ) return -1;  
-  size = ntohl( fvm_stack_read( state, 16 ) );
-      
-  sts = freg_put( NULL, 0, name, flags, buf, size, NULL );
-  if( sts ) return -1;
-  
-  return 0;  
-}
-
-static int native_sprintf( struct fvm_s *state, uint32_t reg ) {
+static int native_sprintf( struct fvm_s *state ) {
   uint32_t bufaddr, fmtaddr, bufsize;
   char fmt[1024];
   char argstr[256];
@@ -414,6 +308,7 @@ static int native_sprintf( struct fvm_s *state, uint32_t reg ) {
   return blen;
 }
 
+#endif
 
 struct fvm_yield_iterator {
   struct rpc_iterator iter;
@@ -431,11 +326,12 @@ static void fvm_yield_cb( struct rpc_iterator *iter ) {
   
   free( it );  
 }
-  
-static int native_yield( struct fvm_s *state, uint32_t reg ) {
+
+/* procedure yield( timeout : integer, flags : integer, var result ) */
+static int native_yield( struct fvm_s *state ) {
   /* save state to an interator, which gets scheduled to run immediately. */
   struct fvm_yield_iterator *iter;
-  uint32_t flags, timeout;
+  uint32_t flags, timeout, resultaddr;
 
   /* yield(timeout, flags) */
   
@@ -445,22 +341,24 @@ static int native_yield( struct fvm_s *state, uint32_t reg ) {
     return 0;
   }
 
-  fvm_log( LOG_LVL_DEBUG, "Yielding state" ); 
+  resultaddr = ntohl( fvm_stack_read( state, 4 ) );
+  flags = ntohl( fvm_stack_read( state, 8 ) );
+  timeout = ntohl( fvm_stack_read( state, 12 ) );
+  
+  fvm_log( LOG_LVL_DEBUG, "Yielding state timeout=%u flags=%x", timeout, flags ); 
   
   iter = malloc( sizeof(*iter) );
   memset( iter, 0, sizeof(*iter) );
   memcpy( &iter->state, state, sizeof(*state) );
-  iter->state.reg[reg] = ntohl( 1 ); /* result register receives 1 if resuming from yield */
+  /* result register receives 1 if resuming from yield */  
+  fvm_write( &iter->state, resultaddr, htonl( 1 ) );
   
-  timeout = ntohl( fvm_stack_read( state, 4 ) );
-  fvm_log( LOG_LVL_DEBUG, "Yield timeout %u", timeout );
   iter->iter.timeout = timeout ? rpc_now() + timeout : 0;
   iter->iter.period = timeout;
   iter->iter.cb = fvm_yield_cb;
 
   rpc_iterator_register( &iter->iter );
 
-  flags = ntohl( fvm_stack_read( state, 8 ) );
   if( flags & 1 ) {
     /* fork flag - continue execution i.e. don't yield */
     fvm_log( LOG_LVL_DEBUG, "Yield fork" );
@@ -471,76 +369,11 @@ static int native_yield( struct fvm_s *state, uint32_t reg ) {
   }
 
   /* if forking, execution will continue and result register receives 0, as opposed to child that receives 1 */
+  fvm_write( state, resultaddr, 0 );
+  
   return 0;
 }
 
-static int native_getsym( struct fvm_s *state, uint32_t reg ) {
-  /* int getsym(progid,name) */
-  uint32_t progid, nameaddr, addr;
-  char name[64];
-  struct fvm_module *m;
-  
-  progid = ntohl( fvm_stack_read( state, 4 ) );
-  nameaddr = ntohl( fvm_stack_read( state, 8 ) );
-  native_readstr( state, nameaddr, name, sizeof(name) );
-  
-  m = fvm_module_by_progid( progid );
-  if( !m ) return -1;
-
-  addr = fvm_symbol_addr( m, name );
-  if( !addr ) return -1;
-  
-  return addr;
-}
-
-static int native_ldvirt( struct fvm_s *state, uint32_t reg ) {  
-  /* int ldvirt(progid,addr,bufp,count) */
-  uint32_t progid, addr, bufaddr, count;
-  char *buf;
-  struct fvm_module *m;
-  
-  progid = ntohl( fvm_stack_read( state, 4 ) );
-  addr = ntohl( fvm_stack_read( state, 8 ) );
-  bufaddr = ntohl( fvm_stack_read( state, 12 ) );
-  buf = fvm_getaddr( state, bufaddr );
-  if( !buf ) return -1;
-  count = ntohl( fvm_stack_read( state, 16 ) );
-
-  m = fvm_module_by_progid( progid );
-  if( !m ) return -1;
-
-  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + m->header.datasize - count)) ) {
-    memcpy( buf, m->data + addr - FVM_ADDR_DATA, count );
-  } else if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + m->header.textsize - count)) ) {
-    memcpy( buf, m->text + addr - FVM_ADDR_TEXT, count );
-  } else return -1;
-  
-  return count;
-}
-
-static int native_stvirt( struct fvm_s *state, uint32_t reg ) {
-  /* int stvirt(progid,addr,bufp,count) */
-  uint32_t progid, addr, bufaddr, count;
-  char *buf;
-  struct fvm_module *m;
-  
-  progid = ntohl( fvm_stack_read( state, 4 ) );
-  addr = ntohl( fvm_stack_read( state, 8 ) );
-  bufaddr = ntohl( fvm_stack_read( state, 12 ) );
-  buf = fvm_getaddr( state, bufaddr );
-  if( !buf ) return -1;
-  count = ntohl( fvm_stack_read( state, 16 ) );
-
-  m = fvm_module_by_progid( progid );
-  if( !m ) return -1;
-
-  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + m->header.datasize - count)) ) {
-    memcpy( m->data + addr - FVM_ADDR_DATA, buf, count );
-    fvm_cluster_update( m );
-  } else return -1;
-  
-  return count;
-}
 
 
 static struct fvm_native_proc native_procs[] =
@@ -550,30 +383,22 @@ static struct fvm_native_proc native_procs[] =
    { 2, native_rand },
    { 3, native_now },
    { 4, native_logstr },
-   { 5, native_read },
-   { 6, native_write },
-   { 7, native_progid_by_name },
-   { 8, native_writelog },
-   { 9, native_readlog },
-   { 10, native_fregget_u32 },
-   { 11, native_fregput_u32 },   
-   { 12, native_fregget_buf },
-   { 13, native_fregput_buf },
-   { 14, native_sprintf },   
-   { 15, native_yield },
-   { 16, native_getsym },
-   { 17, native_ldvirt },
-   { 18, native_stvirt },
+   { 5, native_progid_by_name },
+   { 6, native_procid_by_name },   
+   { 7, native_writelog },
+   { 8, native_readlog },
+   //   { 9, native_sprintf },   
+   { 10, native_yield },
    
    { 0, NULL }
   };
 
-int fvm_native_call( struct fvm_s *state, uint32_t procid, uint32_t reg ) {
+int fvm_native_call( struct fvm_s *state, uint32_t procid ) {
   int i;
   i = 0;
   while( native_procs[i].cb ) {
     if( native_procs[i].procid == procid ) {
-      return native_procs[i].cb( state, reg );
+      return native_procs[i].cb( state );
     }
     i++;
   }

@@ -1002,7 +1002,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	}
 
 	if( strcasecmp( directive, ".CALL" ) == 0 ) sprintf( inststr, "CALL %s", name );
-	else if( strcasecmp( directive, ".CALLNAT" ) == 0 ) sprintf( inststr, "CALLNAT R0 %s", name );
+	else if( strcasecmp( directive, ".CALLNAT" ) == 0 ) sprintf( inststr, "CALLNAT %s", name );
 	emit_opcode( inststr, addr, 2, f );	
 
 	sprintf( inststr, "SUBSP %u", nargs * 4 );
@@ -1111,8 +1111,8 @@ static struct {
 	{ "SUBSP", 0x41, 0x00010000 },  /* SUB RX */
 	{ "SUBSP", 0x42, 0x00010001 },  /* SUB const. adjust on stack. +ve frees, -ve allocates. */
 	{ "LEASP", 0x43, 0x00020000 },   /* LEASP RX RY. load address from stack pointer with offset */
-	{ "CALLNAT", 0x44, 0x00020000 }, /* CALLVNAT RX RY. call native function, const is the proc identifier. RX receives result status */
-	{ "CALLNAT", 0x45, 0x00020002 }, /* CALLVNAT RX const. call native function, const is the proc identifier. RX receives result status */
+	{ "CALLNAT", 0x44, 0x00010000 }, /* CALLVNAT RX. call native function */
+	{ "CALLNAT", 0x45, 0x00010001 }, /* CALLVNAT const. call native function */
 	{ "HALT", 0x46, 0x00000000 }, /* HALT stop execution immediatly */
 	{ "CALLZ", 0x47, 0x00010000 }, /* CALLZ RX call if zero flag set */
 	{ "CALLZ", 0x48, 0x00010001 }, /* CALLZ const call if zero flag set */

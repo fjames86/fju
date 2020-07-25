@@ -654,20 +654,20 @@ static int opcode_subspconst( struct fvm_s *state, uint32_t flags, uint32_t reg,
 static int opcode_callnatreg( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   int sts;
   
-  /* CALLNAT RX RY */ 
-  sts = fvm_native_call( state, ntohl( state->reg[data & 0x7] ), reg );
-  fvm_printf( "callnative %u result %d\n", ntohl( state->reg[data & 0x7] ), sts );
-  state->reg[reg] = htonl( sts );
+  /* CALLNAT RX */ 
+  sts = fvm_native_call( state, ntohl( state->reg[reg] ) );
+  fvm_printf( "callnative %u result %d\n", ntohl( state->reg[reg] ), sts );
+
   return 0;
 }
 
 static int opcode_callnatconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   int sts;
   
-  /* CALLNAT RX const */ 
-  sts = fvm_native_call( state, data, reg );
+  /* CALLNAT const */ 
+  sts = fvm_native_call( state, data );
   fvm_printf( "callnative %u result %d\n", data, sts );
-  state->reg[reg] = htonl( sts );
+
   return 0;
 }
 

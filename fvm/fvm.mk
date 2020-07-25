@@ -34,7 +34,7 @@ fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm ${fvmtest_source}
 	for x in ${fvmtest_source}; do ${BINDIR}/fvmc -I fvm/stdlib/ $$x; done 
 
 fvm/test/test6.fvm: ${BINDIR}/fvmc fvm/test/test6.pas
-	${BINDIR}/fvmc fvm/stdlib/native.pas fvm/test/test6.pas
+	${BINDIR}/fvmc -o fvm/test/test6.fvm fvm/stdlib/native.pas fvm/test/test6.pas
 
 PROGRAMS+=fvmc
 LIBRARIES+=fvm

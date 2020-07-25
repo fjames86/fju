@@ -16,7 +16,7 @@ MAIN:
 	JPN		TEST-FAIL
 
 	PUSH		test2-success
-	CALLNAT		R5		NATIVE-PUTS
+	CALLNAT		NATIVEPUTS
 	SUBSP		4
 	
 	LDI		R0		10000
@@ -29,7 +29,7 @@ MAIN:
 	SUBSP		R2 	; clean stack 
 	
 	PUSH		test2-success
-	CALLNAT		R5		NATIVE-PUTS
+	CALLNAT		NATIVEPUTS
 	SUBSP		4
 
 	LDI		R0 		0

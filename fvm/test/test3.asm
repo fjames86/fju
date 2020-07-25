@@ -61,7 +61,7 @@ testlogging:
 	PUSH		4
 	PUSH		bufp	
 	PUSH		testlogname	
-	CALLNAT		R0		NATIVE-WRITELOG
+	CALLNAT		NATIVEWRITELOG
 	SUBSP		12
 
 	PUSH		4
@@ -69,7 +69,7 @@ testlogging:
 	PUSH		0
 	PUSH		0	
 	PUSH		testlogname
-	CALLNAT		R0		NATIVE-READLOG
+	CALLNAT		NATIVEREADLOG
 	SUBSP		16
 
 	RET

@@ -12,13 +12,13 @@ LOGF:
 	PUSH		256 	; length
 	LEASP		R1	4 ; set buffer to current stack pointer
 	PUSH		R1	; buffer
-	CALLNAT		R0	NATIVE-SPRINTF ; format string
+;;;  CALLNAT		NATIVESPRINTF ;;;;; ;;;;;format string
 	SUBSP		8
 	
 	PUSH		R7	; restore return address
 	
 	PUSH		R1 
-	CALLNAT		R1	NATIVE-LOGSTR
+	CALLNAT		NATIVELOGSTR
 	SUBSP		4
 	
 	RET

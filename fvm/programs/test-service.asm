@@ -20,7 +20,7 @@
 SERVICE:
 	
 ;; 	PUSH		logmsg
-;; 	CALLNAT		R3		NATIVE-LOGSTR
+;; 	CALLNAT		NATIVELOGSTR
 
 	LD		R3		progid
 	CALLZ		GETPROGID
@@ -42,14 +42,18 @@ SERVICE:
 INIT:
 	CALL		GETPROGID
 
-	PUSH		YIELD-FORK ; fork i.e. yield but also continue  
-	PUSH		5000	   ; timeout - child is executed after 5000ms 
-	CALLNAT		R0		NATIVE-YIELD
+	ADDSP		4
+	PUSH		5000
+	PUSH		YIELDFORK ; fork i.e. yield but also continue
+	LEASP		R0 	-4
+	PUSH		R0
+	CALLNAT		NATIVEYIELD
+	LDSP		R0		-4 
 	CMP		R0		1 ; R0 receives 1 in child, 0 in parent 
 	JPN		noyield 
 
 	PUSH		yieldmsg
-	CALLNAT		R0		NATIVE-LOGSTR 
+	CALLNAT		NATIVELOGSTR 
 	
 noyield:	
 	LDI		R0		0
@@ -63,7 +67,7 @@ noyield:
 	
 GETPROGID:
 	PUSH		progname
-	CALLNAT		R3 		NATIVE-GETPROGID
+	CALLNAT		NATIVEPROGIDBYNAME
 	SUBSP		4 
 	LDI		R4		progid
 	ST		R4		R3

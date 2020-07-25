@@ -1079,7 +1079,7 @@ static void parsestatement( void ) {
     } while( accepttok( TOK_COMMA ) );
     if( v ) usage( "Insufficient parameters supplied to procedure %s", name );
     expecttok( TOK_CLOSEPAREN );
-    if( tok.type == TOK_SYSCALL ) fvmc_emit( "\tCALLNAT\tR7\t%u\t ; callnat %s\n", p->syscallid, p->name );
+    if( tok.type == TOK_SYSCALL ) fvmc_emit( "\tCALLNAT\t%u\t ; callnat %s\n", p->syscallid, p->name );
     else fvmc_emit( "\tCALL\t%s\n", name );
     if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\n", nargs * 4 );
     glob.stackoffset = 0;
@@ -1216,6 +1216,27 @@ static void parseprogram( void ) {
 }
 
 
+static int parsefile( void ) {
+  if( glob.tok.type == TOK_PROGRAM ) {
+    parseprogram();
+  } else if( glob.tok.type == TOK_DECLARE ) {
+    /* declare begin end. */
+    expectok( TOK_DECLARE );
+    expectok( TOK_BEGIN );
+
+    do {
+      if( glob.tok.type == TOK_END ) break;
+      if( !parsedeclaration() ) usage( "Only declaration statements in toplevel declare unit" );
+    } while( accepttok( TOK_SEMICOLON ) );
+    
+    expectok( TOK_END );
+    expectok( TOK_PERIOD );
+  } else usage( "Unexpected toplevel token %s", glob.tok.token );
+
+  return 0;
+}
+
+
 #if 0
 int main( int argc, char **argv ) {
   char *filename;
@@ -1286,7 +1307,7 @@ int fvmc_compile( char *sourcefile, char *destfile ) {
   glob.infile = infile;
   glob.outfile = outfile;
   nexttok();
-  parseprogram();
+  parsefile();
    
   fclose( infile );
   fclose( outfile );

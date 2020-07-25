@@ -37,7 +37,7 @@ MAIN:
 	CALL		TEST-DIV
 
 	PUSH		test-success
-	CALLNAT		R6	NATIVE-PUTS
+	CALLNAT	 	NATIVEPUTS
 	SUBSP		4
 	
 	;; Set result registers
@@ -48,7 +48,7 @@ MAIN:
 	.TEXT		test-add-name "TEST-ADD\n"
 TEST-ADD:
 	PUSH		test-add-name
-	CALLNAT		R6	NATIVE-PUTS
+	CALLNAT		NATIVEPUTS
 	SUBSP		4
 	
 	POP		R7
@@ -64,7 +64,7 @@ TEST-ADD:
 	.TEXT		test-sub-name 	"TEST-SUB\n"
 TEST-SUB:
 	PUSH		test-sub-name
-	CALLNAT		R6	NATIVE-PUTS
+	CALLNAT		NATIVEPUTS
 	SUBSP		4
 	
 	POP		R7
@@ -80,7 +80,7 @@ TEST-SUB:
 	.TEXT		test-mul-name 	"TEST-MUL\n"
 TEST-MUL:
 	PUSH		test-mul-name
-	CALLNAT		R6	NATIVE-PUTS
+	CALLNAT		NATIVEPUTS
 	SUBSP		4
 	
 	POP		R7
@@ -96,7 +96,7 @@ TEST-MUL:
 	.TEXT		test-mod-name 	"TEST-MOD\n"
 TEST-MOD:
 	PUSH		test-mod-name
-	CALLNAT		R6	NATIVE-PUTS
+	CALLNAT		NATIVEPUTS
 	SUBSP		4
 	
 	POP		R7
@@ -112,7 +112,7 @@ TEST-MOD:
 	.TEXT		test-div-name 	"TEST-DIV\n"
 TEST-DIV:
 	PUSH		test-div-name
-	CALLNAT		R6	NATIVE-PUTS
+	CALLNAT		NATIVEPUTS
 	SUBSP		4
 	
 	POP		R7

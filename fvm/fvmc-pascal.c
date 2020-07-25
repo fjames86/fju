@@ -1,88 +1,11 @@
 
 /*
- * Aim: take as input some text in a form of BASIC (?) and produce as output an 
- * assembly file suitable for input to fvmc. 
+ * TODO: 
+ * - better register allocation.
+ * - some way of encoding/decoding from buffers? maybe we don't need this if we can dereference pointers
+ * - do we want function calls? 
+ * - arrays e.g. var x : array[length] of integer. arrays are same as string i.e. have a length prefix. would need two new types, array and array[] 
  * 
- * We want the following: 
- *  - types: int, string, pointer
- *  - define procedures 
- *  
- *  - associate symbolic name with location in stack 
-
-
-Syntax of Mini-Pascal (Welsh & McKeag, 1980)
-Syntax in recursive descent order
-<program> ::= 	program <identifier> ; <block> .
-<block> ::= 	<variable declaration part>
-<procedure declaration part>
-<statement part>
-<variable declaration part> ::= 	<empty> |
-var <variable declaration> ;
-    { <variable declaration> ; }
-<variable declaration> ::= 	<identifier > { , <identifier> } : <type>
-<type> ::= 	<simple type> | <array type>
-<array type> ::= 	array [ <index range> ] of <simple type>
-<index range> ::= 	<integer constant> .. <integer constant>
-<simple type> ::= 	<type identifier>
-<type identifier> ::= 	<identifier>
-<procedure declaration part> ::= 	{ <procedure declaration> ; }
-<procedure declaration> ::= 	procedure <identifier> ; <block>
-<statement part> ::= 	<compound statement>
-<compound statement> ::= 	begin <statement>{ ; <statement> } end
-<statement> ::= 	<simple statement> | <structured statement>
-<simple statement> ::= 	<assignment statement> | <procedure statement> |
-<read statement> | <write statement>
-<assignment statement> ::= 	<variable> := <expression>
-<procedure statement> ::= 	<procedure identifier>
-<procedure identifier> ::= 	<identifier>
-<read statement> ::= 	read ( <input variable> { , <input variable> } )
-<input variable> ::= 	<variable>
-<write statement> ::= 	write ( <output value> { , <output value> } )
-<output value> ::= 	<expression>
-<structured statement> ::= 	<compound statement> | <if statement> |
-<while statement>
-<if statement> ::= 	if <expression> then <statement> |
-if <expression> then <statement> else <statement>
-<while statement> ::= 	while <expression> do <statement>
-<expression> ::= 	<simple expression> |
-<simple expression> <relational operator> <simple expression>
-<simple expression> ::= 	<sign> <term> { <adding operator> <term> }
-<term> ::= 	<factor> { <multiplying operator> <factor> }
-<factor> ::= 	<variable> | <constant> | ( <expression> ) | not <factor>
-<relational operator> ::= 	= | <> | < | <= | >= | >
-<sign> ::= 	+ | - | <empty>
-<adding operator> ::= 	+ | - | or
-<multiplying operator> ::= 	* | div | and
-<variable> ::= 	<entire variable> | <indexed variable>
-<indexed variable> ::= 	<array variable> [ <expression> ]
-<array variable> ::= 	<entire variable>
-<entire variable> ::= 	<variable identifier>
-<variable identifier> ::= 	<identifier>
-Lexical grammar
-<constant> ::= 	<integer constant> | <character constant> | <constant identifier>
-<constant identifier> ::= 	<identifier>
-<identifier> ::= 	<letter> { <letter or digit> }
-<letter or digit> ::= 	<letter> | <digit>
-<integer constant> ::= 	<digit> { <digit> }
-<character constant> ::= 	'< any character other than ' >'  |  ''''
-<letter> ::= 	a | b | c | d | e | f | g | h | i | j | k | l | m | n | o |
-p | q | r | s | t | u | v | w | x | y | z | A | B | C |
-D | E | F | G | H | I | J | K | L | M | N | O | P
-| Q | R | S | T | U | V | W | X | Y | Z
-<digit> ::= 	0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
-<special symbol> ::= 	+ | - | * | = | <> | < | > | <= | >= |
-( | ) | [ | ] | := | . | , | ; | : | .. | div | or |
-and | not | if | then | else | of | while | do |
-begin | end | read | write | var | array |
-procedure | program
-<predefined identifier> ::= 	integer | Boolean | true | false 
-
- */
-
-
-/*
- TODO: need some way of including other files or at least allow parsing some header code
- that contains e.g. declarations / consts
  */
 
 #include <stdio.h>
@@ -95,7 +18,7 @@ static void fvmc_printf( int lvl, char *fmt, ... );
 static void fvmc_emit( char *fmt, ... );
 
 static char whitespacechars[] = { ' ', '\n', '\t', '\r', '\0' };
-static char terminalchars[] = { '+', '-', '*', '/', ';', '.', '{', '}', ' ', '\n', '\t', '\r', '(', ')', ':', '[', ']', ',', '\0' };
+static char terminalchars[] = { '+', '-', '*', '/', ';', '.', '{', '}', ' ', '\n', '\t', '\r', '(', ')', ':', '[', ']', ',', '^', '\0' };
 
 static int skipcomment( FILE *f ) {
   char c;
@@ -319,6 +242,7 @@ typedef enum {
 	      TOK_DECLARE,
 	      TOK_ASM,
 	      TOK_SYSCALL,
+	      TOK_CARET,
 } token_t;
 static struct {
   char *keyword;
@@ -370,6 +294,7 @@ static struct {
 		     { "DECLARE", TOK_DECLARE },
 		     { "ASM", TOK_ASM },
 		     { "SYSCALL", TOK_SYSCALL },
+		     { "^", TOK_CARET },
 		     
 		     { NULL, 0 }
 };
@@ -673,6 +598,26 @@ static void parseexpr( int reg ) {
   } else if( accepttok( TOK_NOT ) ) {
     parseexpr( reg );
     fvmc_emit( "\tNOT\tR%u\n", reg );
+  } else if( accepttok( TOK_CARET ) ) {
+    /* ^var */
+    tok = glob.tok;
+    expecttok( TOK_NAME );
+    v = getvar( tok.token );
+    if( v ) {
+      if( v->type != VAR_STRING && v->type != VAR_OPAQUE ) usage( "deference must be a variable of pointer type" );
+
+      fvmc_emit( "\tLDSP\tR%u\t-%u\n", reg, v->offset + glob.stackoffset );
+      fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
+      
+      if( v->flags & VAR_ISVAR ) {
+	fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
+      }
+      
+    } else {
+      /* assume global */
+      fvmc_emit( "\tLD\tR%u\t%s\n", reg, tok.token );
+      fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
+    }
   }
 
   if( accepttok( TOK_PLUS ) ) {
@@ -1031,6 +976,34 @@ static void parsestatement( void ) {
       fvmc_emit( "\tLDI\tR1\t%s\n", name );
       fvmc_emit( "\tST\tR1\tR0\n" );
     }
+  } else if( accepttok( TOK_CARET ) ) {
+    /* ^var := expr */
+    struct var *v;
+    struct token nametok = glob.tok;
+    expectok( TOK_NAME );
+    expectok( TOK_ASSIGN );
+    parseexpr( 0 );
+    v = getvar( nametok.token );
+    if( v ) {
+      /* var must be a pointer type */
+      if( (v->type != VAR_STRING) && (v->type != VAR_OPAQUE) ) usage( "Var type not a pointer" );
+      
+      if( v->flags & VAR_ISVAR ) {
+	/* var already a pointer */
+	fvmc_emit( "\tLDSP\tR1\t-%u\n", v->offset + glob.stackoffset );
+	fvmc_emit( "\tLD\tR1\tR1\n" );
+	fvmc_emit( "\tST\tR1\tR0 ; store into %s\n", v->name );	
+      } else {
+	fvmc_emit( "\tLDSP\tR1\t-%u ; load %s\n", v->offset + glob.stackoffset, v->name );
+	fvmc_emit( "\tST\tR1\tR0 ; store into %s\n", v->name );
+      }
+      
+    } else {
+      /* assume global */
+      fvmc_emit( "\tLD\tR1\t%s\n", nametok.token );
+      fvmc_emit( "\tST\tR1\tR0\n" );
+    }
+    
   } else if( accepttok( TOK_CALL ) || accepttok( TOK_SYSCALL ) ) {
     char name[64];
     int nargs = 0;

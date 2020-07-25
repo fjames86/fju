@@ -11,5 +11,11 @@ Begin
    Syscall Puts("hello world");
 End;
 
+Procedure Proc1(op :  opaque)
+Begin		   
+   var i : integer;
+   i := ^op;
+      
+End;	 
    
 End.

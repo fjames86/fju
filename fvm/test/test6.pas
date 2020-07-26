@@ -15,12 +15,15 @@ End;
 
 Declare var mymissingglob : integer;
 
+var mystring : string;
+
 Procedure Proc1(op :  opaque)
 Begin		   
    var i : integer;
    i := ^op;
    i := mymissingglob;
-      
+   mystring := 123;
+   
 End;	 
 
 var mymissingglob : integer;

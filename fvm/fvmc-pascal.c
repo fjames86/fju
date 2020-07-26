@@ -399,7 +399,7 @@ static int expecttok( token_t type ) {
   if( accepttok( type ) ) {
     return 1;
   }
-  usage( "Unexpected symbol %u %s", glob.tok.type, glob.tok.token );
+  usage( "Unexpected symbol %u %s, expected %u", glob.tok.type, glob.tok.token, type );
   return 0;
 }
 #define expectok(type) expecttok(type)
@@ -867,17 +867,34 @@ static int parsedeclaration( void ) {
     } else if( accepttok( TOK_STRING ) ) {
       int i;
       struct token valtok;
-      
-      expectok( TOK_OPENARRAY );
-      valtok = glob.tok;
-      expectok( TOK_VALINTEGER );
-      expectok( TOK_CLOSEARRAY );
-      fvmc_emit( "\t.DATA\t%s\t\"", nametok.token );      
-      for( i = 0; i < strtoul( valtok.token, NULL, 0 ); i++ ) {
-	fvmc_emit( "\\0" );
+
+      if( accepttok( TOK_OPENARRAY ) ) {
+	valtok = glob.tok;
+	expectok( TOK_VALINTEGER );
+	expectok( TOK_CLOSEARRAY );
+	fvmc_emit( "\t.DATA\t%s\t\"", nametok.token );      
+	for( i = 0; i < strtoul( valtok.token, NULL, 0 ); i++ ) {
+	  fvmc_emit( "\\0" );
+	}
+	fvmc_emit( "\"\n" );
+	addglobal( nametok.token, VAR_STRINGBUF, 0 );
+      } else {
+	fvmc_emit( "\t.DATA\t%s\t0\n", nametok.token );
+	addglobal( nametok.token, VAR_STRING, 0 );
       }
-      fvmc_emit( "\"\n" );
-      addglobal( nametok.token, VAR_STRINGBUF, 0 );
+      
+    } else if( accepttok( TOK_OPAQUE ) ) {
+      if( accepttok( TOK_OPENARRAY ) ) {
+	struct token valtok;
+	valtok = glob.tok;
+	expectok( TOK_VALINTEGER );
+	fvmc_emit( "\t.DATA\t%s\tARRAY %u\n", nametok.token, strtoul( valtok.token, NULL, 0 ) );
+	expectok( TOK_CLOSEARRAY );
+	addglobal( nametok.token, VAR_OPAQUEBUF, 0 );
+      } else {
+	fvmc_emit( "\t.DATA\t%s\t0\n", nametok.token );
+	addglobal( nametok.token, VAR_OPAQUE, 0 );
+      }
     } else usage( "Unexpected var type %s", nametok.token );
   } else if( accepttok( TOK_DECLARE ) ) {
     /* declare procedure name(params) */

@@ -12,7 +12,7 @@ Declare Procedure Proc1(op : opaque);
 
 Procedure Main(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque)
 Begin
-   Syscall Puts("hello world");
+   Syscall Puts("hello world\n");
    Call Proc1(0);
 End;
 
@@ -35,7 +35,7 @@ Begin
    ^argp := 123;
    argp := argp + 4;
    ^argp := 321;
-   Syscall sprintf( mystr, 64, "fred %u:%u", args );
+   Syscall sprintf( mystr, 64, "fred %u:%u\n", args );
 
    Syscall Puts(mystr);
 End;	 

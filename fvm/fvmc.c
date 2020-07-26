@@ -463,27 +463,10 @@ int main( int argc, char **argv ) {
   fvmc_printf( 1, "\n ------ second pass ------- \n" );
 
   /* second pass emits output */
-
   if( !outfilename[0] ) {
-    if( starti < argc ) {
-      char outfilename2[252];
-      char *pp = argv[starti];
-      char *qq = outfilename2;
-
-      fvmc_printf( 3, "Taking outfilename from first file \"%s\"\n", argv[starti] );
-      
-      memset( outfilename2, 0, sizeof(outfilename2) );
-      while( *pp != '\0' && *pp != '.' ) {
-	*qq = *pp;
-	pp++;
-	qq++;
-      }
-      sprintf( outfilename, "%s.fvm", outfilename2 );
-    } else {
-      fvmc_printf( 3, "Taking outfilename from module name \"%s\"\n", glob.modulename );
-      sprintf( outfilename, "%s.fvm", glob.modulename );
-    }
+    strcpy( outfilename, "out.fvm" );
   }
+
   fvmc_printf( 1, ";; Opening outfile \"%s\"\n", outfilename );
   outfile = fopen( outfilename, "w" );
   if( !outfile ) usage( "Failed to open outfile \"%s\"", outfilename );

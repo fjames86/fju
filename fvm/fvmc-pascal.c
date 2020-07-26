@@ -462,7 +462,7 @@ static void voidregisters( void ) {
     v = v->next;
   }
 }
-static uint32_t assignregister( void ) {
+static uint32_t allocregister( void ) {
   struct var *v;
   uint32_t reg, found;
   for( reg = 0; reg < 8; reg++ ) {
@@ -600,10 +600,20 @@ static void parseexpr( int reg ) {
     /* check if constant ? */
     v = getvar( tok.token );
     if( v ) {
+#if 0
+      if( v->reg != -1 ) {
+	/* variable already in a register */
+	if( v->reg != reg ) {
+	  fvmc_emit( "\tMOV\tR%u\tR%u\n", reg, v->reg );
+	}
+      } else
+#endif
       if( v->type == VAR_STRINGBUF || v->type == VAR_OPAQUEBUF ) {
-	fvmc_emit( "\tLEASP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );	
+	fvmc_emit( "\tLEASP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );
+	//assignreg( v, reg );
       } else {
 	fvmc_emit( "\tLDSP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );
+	//assignreg( v, reg );
       }
       if( v->flags & VAR_ISVAR ) {
 	/* var type parameters are really pointers, dereference it now */

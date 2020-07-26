@@ -739,6 +739,8 @@ static void parseprocedurebody( void ) {
   struct token nametok;
   int nargs = 0;
   int argsize = 0;
+
+  voidregisters();
   
   while( accepttok( TOK_VAR ) ) {
     /* var name : type */
@@ -1018,6 +1020,7 @@ static void parsestatement( void ) {
   char name[64];
   struct var *v;
   struct token tok;
+  uint32_t reg;
   
   /* 
      name := expression 
@@ -1131,7 +1134,10 @@ static void parsestatement( void ) {
     if( v ) usage( "Insufficient parameters supplied to procedure %s", name );
     expecttok( TOK_CLOSEPAREN );
     if( tok.type == TOK_SYSCALL ) fvmc_emit( "\tCALLNAT\t%u\t ; callnat %s\n", p->syscallid, p->name );
-    else fvmc_emit( "\tCALL\t%s\n", name );
+    else {
+      fvmc_emit( "\tCALL\t%s\n", name );
+      voidregisters();
+    }
     if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\n", nargs * 4 );
     glob.stackoffset = 0;
   } else if( accepttok( TOK_BEGIN ) ) {

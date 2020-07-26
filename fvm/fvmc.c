@@ -35,7 +35,7 @@ static void usage( char *fmt, ... ) {
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
-    printf( "Error: " );
+    printf( "Assembler Error: " );
     vprintf( fmt, args );
     va_end( args );
     printf( "\n" );

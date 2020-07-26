@@ -1,4 +1,6 @@
 
+{ -*- text -*- }
+
 {
  This shows how to implement a simple program that prints a string 
 }
@@ -11,11 +13,16 @@ Begin
    Syscall Puts("hello world");
 End;
 
+Declare var mymissingglob : integer;
+
 Procedure Proc1(op :  opaque)
 Begin		   
    var i : integer;
    i := ^op;
+   i := mymissingglob;
       
 End;	 
-   
+
+var mymissingglob : integer;
+
 End.

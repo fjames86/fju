@@ -39,7 +39,7 @@ static int skipwhitespace( FILE *f ) {
   while( 1 ) {
     c = fgetc( f );
     if( c == EOF ) {
-      fvmc_printf( 1, " skipwhitespace EOF\n" );
+      fvmc_printf( 1, "skipwhitespace EOF\n" );
       return -1;
     }
 
@@ -54,7 +54,7 @@ static int skipwhitespace( FILE *f ) {
     if( found ) continue;
 
     if( c == '{' ) {
-      fvmc_printf( 1, " skipping comment\n" );
+      fvmc_printf( 1, "skipping comment\n" );
       skipcomment( f );
       continue;
     }
@@ -78,7 +78,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
 
   c = fgetc( f );
   if( c == EOF ) {
-    fvmc_printf( 1, " end of file\n" );
+    fvmc_printf( 1, "end of file\n" );
     return -1;
   }
   if( c == '"' ) {
@@ -89,7 +89,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
     while( 1 ) {
       c = fgetc( f );
       if( c == EOF ) {
-	fvmc_printf( 1, " end of file\n" );
+	fvmc_printf( 1, "end of file\n" );
 	return -1;
       }
       if( toksize > 0 ) {
@@ -100,7 +100,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
       
       toksize--;
       if( toksize == 0 ) {
-	fvmc_printf( 1, " token buffer out of space\n" );
+	fvmc_printf( 1, "token buffer out of space\n" );
 	return -1;
       }
     }
@@ -122,7 +122,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
   while( 1 ) {
     c = fgetc( f );
     if( c == EOF ) {
-      fvmc_printf( 1, " getnexttoken EOF\n" );
+      fvmc_printf( 1, "getnexttoken EOF\n" );
       if( strlen( token ) == 0 ) return -1;
       break;
     }
@@ -138,7 +138,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
     if( found ) {
       if( strlen( token ) == 0 ) {
 	if( c == '{' ) {
-	  fvmc_printf( 1, " skipping comment\n" );
+	  fvmc_printf( 1, "skipping comment\n" );
 	  skipcomment( f );
 	  continue;
 	}
@@ -156,7 +156,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
     p++;
     toksize--;
     if( toksize == 0 ) {
-      fvmc_printf( 1, " token \"%s\" too large\n", token );
+      fvmc_printf( 1, "token \"%s\" too large\n", token );
       return -1;
     }
   }
@@ -180,11 +180,9 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
 static void usage( char *fmt, ... ) {
   va_list args;
   
-  printf( "fvmc OPTIONS file...\n"
-	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
-    printf( "Error: " );
+    printf( "Syntax Error: " );
     vprintf( fmt, args );
     va_end( args );
     printf( "\n" );
@@ -379,7 +377,7 @@ static int nexttok( void ) {
 
   tok.type = gettokentype( tok.token );
   glob.tok = tok;
-  fvmc_printf( 1, " token %u %s\n", tok.type, tok.token );
+  fvmc_printf( 1, "token %u %s\n", tok.type, tok.token );
   return 0;
 }
 
@@ -581,6 +579,7 @@ static void parseexpr( int reg ) {
 	}
       } else {
 	/* not a known global, assume constant */
+	fvmc_printf( 0, "Unknown variable %s, assuming constant\n", tok.token );
 	fvmc_emit( "\tLDI\tR%u\t%s\n", reg, tok.token );
       }
     }
@@ -615,6 +614,9 @@ static void parseexpr( int reg ) {
       
     } else {
       /* assume global */
+      v = getglobal( tok.token );
+      if( !v ) usage( "Unknown global %s", tok.token );
+      
       fvmc_emit( "\tLD\tR%u\t%s\n", reg, tok.token );
       fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
     }
@@ -778,7 +780,7 @@ static int parsedeclaration( void ) {
     vars = NULL;
     vlast = NULL;
     
-    fvmc_printf( 1, " parsing procedure\n" );
+    fvmc_printf( 1, "parsing procedure\n" );
     nametok = glob.tok;
     expecttok( TOK_NAME );
     fvmc_emit( "\n" );
@@ -931,6 +933,22 @@ static int parsedeclaration( void ) {
 	expectok( TOK_VALINTEGER );
       }
 
+    } else if( accepttok( TOK_VAR ) ) {
+      /* declare var name : type */
+      var_t type = 0;
+      
+      nametok = glob.tok;
+      expectok( TOK_NAME );
+      expectok( TOK_COLON );
+      if( accepttok( TOK_INTEGER ) ) {
+	type = VAR_INTEGER;
+      } else if( accepttok( TOK_STRING ) ) {
+	type = VAR_STRING;
+      } else if( accepttok( TOK_OPAQUE ) ) {
+	type = VAR_OPAQUE;
+      } else usage( "Bad declare var type %s", glob.tok.token );
+      
+      addglobal( nametok.token, type, 0 );
     } else usage( "Unexpected declare statement \"%s\"", glob.tok.token );
     
   } else return 0;
@@ -954,13 +972,13 @@ static void parsestatement( void ) {
   strcpy( name, glob.tok.token );
   if( accepttok( TOK_NAME ) ) {
     if( accepttok( TOK_COLON ) ) {
-      fvmc_printf( 1, " parsing label statement\n" );
+      fvmc_printf( 1, "parsing label statement\n" );
       fvmc_emit( "%s:\n", name );
       parsestatement();
       return;
     }
 	
-    fvmc_printf( 1, " parsing assignment\n" );
+    fvmc_printf( 1, "parsing assignment\n" );
     expecttok( TOK_ASSIGN );
     parseexpr( 0 );
     /* R0 contains result of expression */
@@ -999,6 +1017,9 @@ static void parsestatement( void ) {
       }
       
     } else {
+      v = getglobal( nametok.token );
+      if( !v ) usage( "Unknown variable %s", nametok.token );
+      
       /* assume global */
       fvmc_emit( "\tLD\tR1\t%s\n", nametok.token );
       fvmc_emit( "\tST\tR1\tR0\n" );
@@ -1036,11 +1057,10 @@ static void parsestatement( void ) {
 	  }
 	} else {
 	  /* assume global */
-	  if( vp->flags & VAR_ISVAR ) {
-	    fvmc_emit( "\tLDI\tR0\t%s\t ; arg %s\n", vartok.token, v->name );  
-	  } else {
-	    fvmc_emit( "\tLD\tR0\t%s\t ; arg %s\n", vartok.token, v->name );
-	  }
+	  vp = getglobal( vartok.token );
+	  if( !vp ) usage( "Unknown variable %s", vartok.token );
+	  
+	  fvmc_emit( "\tLDI\tR0\t%s\t ; arg %s\n", vartok.token, v->name );  
 	}
       } else {
 	parseexpr( 0 );
@@ -1119,9 +1139,9 @@ static void parsestatement( void ) {
     expectok( TOK_VALSTRING );
     fvmc_emit( "\t%.*s\n", (int)strlen( strtok.token ) - 2, strtok.token + 1 );
   } else if( accepttok( TOK_SEMICOLON ) ) {
-    fvmc_printf( 1, " empty statement\n" );
+    fvmc_printf( 1, "empty statement\n" );
   } else if( glob.tok.type == TOK_END ) {
-    fvmc_printf( 1, " empty statement\n" );
+    fvmc_printf( 1, "empty statement\n" );
   } else usage( "failed to parse statement. type=%u token=\"%s\"", glob.tok.type, glob.tok.token );
 }
 
@@ -1165,7 +1185,7 @@ static void parseprogram( void ) {
       memset( v, 0, sizeof(*v) );
       progid = glob.tok;
       expectok( TOK_NAME );
-      fvmc_printf( 1, ";; exporting %s\n", progid.token );
+      fvmc_printf( 1, "exporting %s\n", progid.token );
       strcpy( v->name, progid.token );
       if( vlast ) vlast->next = v;
       else vars = v;
@@ -1237,19 +1257,19 @@ int main( int argc, char **argv ) {
   while( 1 ) {
     sts = skipwhitespace( f );
     if( sts ) {
-      fvmc_printf( 1, " end of file\n" );
+      fvmc_printf( 1, "end of file\n" );
       break;
     }
 
     sts = getnexttoken( f, token, sizeof(token) );
     if( sts ) {
-      fvmc_printf( ";; bad token\n" );
+      fvmc_printf( 1, "bad token\n" );
       break;
     }
     
-    fvmc_printf( 1, " token \"%s\"\n", token );
+    fvmc_printf( 1, "token \"%s\"\n", token );
     if( strcmp( token, "." ) == 0 ) {
-      fvmc_printf( 1, " done\n" );
+      fvmc_printf( 1, "done\n" );
       break;
     }
   }
@@ -1299,7 +1319,7 @@ static void fvmc_printf( int lvl, char *fmt, ... ) {
 
   if( glob.verbosemode < lvl ) return;
 
-  printf( ";;" );
+  printf( ";; " );
   va_start( args, fmt );
   vprintf( fmt, args );
   va_end( args );

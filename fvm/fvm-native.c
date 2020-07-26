@@ -382,19 +382,25 @@ static int native_invoke( struct fvm_s *state ) {
   rescountaddr = ntohl( fvm_stack_read( state, 4 ) );
   rescount = ntohl( fvm_read( state, rescountaddr ) );
   resaddr = ntohl( fvm_stack_read( state, 8 ) );
-  resp = fvm_getaddr( state, resaddr );
-  if( !resp ) goto bad;
+  if( rescount > 0 ) {
+    resp = fvm_getaddr( state, resaddr );
+    if( !resp ) goto bad;
+  }
   argcount = ntohl( fvm_stack_read( state, 12 ) );
   argaddr = ntohl( fvm_stack_read( state, 16 ) );
-  argp = fvm_getaddr( state, argaddr );
-  if( !argp ) goto bad;
+  if( argcount > 0 ) {
+    argp = fvm_getaddr( state, argaddr );
+    if( !argp ) goto bad;
+  }
   procid = ntohl( fvm_stack_read( state, 20 ) );
   progid = ntohl( fvm_stack_read( state, 24 ) );
 
   sts = fvm_state_init( &state2, progid, procid );
   if( sts ) goto bad;
   state2.nsteps = state->nsteps;
-  fvm_set_args( &state2, argp, argcount );
+  if( argcount > 0 ) {
+    fvm_set_args( &state2, argp, argcount );
+  }
   sts = fvm_run( &state2, 0 );
   state->nsteps = state2.nsteps;
   if( sts ) goto bad;

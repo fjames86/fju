@@ -8,4 +8,5 @@
 	.CONST	NativeWriteLog	7
 	.CONST	NativeReadLog	8
 	.CONST	NativeYield	10
+	.CONST	NativeInvoke	11
 	.CONST	YieldFork	1

@@ -8,26 +8,33 @@
 	.TEXT		test2-success	"Test2 Success\n"
 	
 MAIN:
-	LDI		R0		10000
-	LDI		R1		0
-	LDI		R2		0
-;;; CALLVIRT	R0		R1		R2 ; ;R2 contains arg length (0) and receives result length 
-	CMP		R2		0
-	JPN		TEST-FAIL
+	PUSH		10000 	;progid
+	PUSH		0	;procid
+	PUSH		0	;args
+	PUSH		0	;argcount
+	PUSH		0	;res
+	PUSH		0	;rescount
+	CALLNAT		NATIVEINVOKE
+	SUBSP		24 
 
 	PUSH		test2-success
 	CALLNAT		NATIVEPUTS
 	SUBSP		4
-	
-	LDI		R0		10000
-	LDI		R1		1
-	PUSH		123
-	LDI		R2		4
-;;; 	CALLVIRT	R0		R1		R2
-	CMP		R2		4
-	JPN		TEST-FAIL
-	SUBSP		R2 	; clean stack 
-	
+
+	ADDSP		4	;allocate local
+	LDI		R0		123
+	STSP		R0		-4	
+	PUSH		10000
+	PUSH		1
+	LEASP		R0		-12
+	PUSH		R0
+	PUSH		4
+	PUSH		0
+	PUSH		0
+	CALLNAT		NATIVEINVOKE
+	SUBSP		24
+	SUBSP		4 
+
 	PUSH		test2-success
 	CALLNAT		NATIVEPUTS
 	SUBSP		4

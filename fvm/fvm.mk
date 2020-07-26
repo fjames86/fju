@@ -1,6 +1,6 @@
 
 
-fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm 
+fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/programs/test-rpc.fvm fvm/test/test1.fvm fvm/test/test2.fvm fvm/test/test3.fvm 
 
 libfvm_source+=fvm/fvm-module.c
 libfvm_source+=fvm/fvm-state.c
@@ -25,13 +25,15 @@ fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.asm fvm/programs
 	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm -I fvm/stdlib/ fvm/programs/test-rpc.asm
 	${BINDIR}/fvmc -o fvm/programs/test-service.fvm -I fvm/stdlib/ fvm/programs/test-service.asm
 
-fvmtest_source+=fvm/test/test1.asm
-fvmtest_source+=fvm/test/test2.asm
-fvmtest_source+=fvm/test/test3.asm
-#fvmtest_source+=fvm/test/test4.asm
-#fvmtest_source+=fvm/test/test5.asm
-fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm ${fvmtest_source}
-	for x in ${fvmtest_source}; do ${BINDIR}/fvmc -I fvm/stdlib/ $$x; done 
+fvm/stdlib/native.asm: fvm/stdlib/native.pas ${BINDIR}/fvmc
+	${BINDIR}/fvmc fvm/stdlib/native.pas
+
+fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test1.asm fvm/stdlib/native.asm
+	${BINDIR}/fvmc -o fvm/test/test1.fvm -I fvm/stdlib/ fvm/test/test1.asm
+fvm/test/test2.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test2.asm fvm/stdlib/native.asm
+	${BINDIR}/fvmc -o fvm/test/test2.fvm -I fvm/stdlib/ fvm/test/test2.asm
+fvm/test/test3.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test3.asm fvm/stdlib/native.asm
+	${BINDIR}/fvmc -o fvm/test/test3.fvm -I fvm/stdlib/ fvm/test/test3.asm	
 
 fvm/test/test6.fvm: ${BINDIR}/fvmc fvm/test/test6.pas
 	${BINDIR}/fvmc -o fvm/test/test6.fvm fvm/stdlib/native.pas fvm/test/test6.pas

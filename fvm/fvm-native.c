@@ -372,7 +372,46 @@ static int native_yield( struct fvm_s *state ) {
   return 0;
 }
 
+/* procedure invoke(progid : integer, procid : integer, args : opaque, argcount : integer, res : opaque, var rescount : integer); */
+static int native_invoke( struct fvm_s *state ) {
+  uint32_t progid, procid, argaddr, argcount, resaddr, rescountaddr, rescount, ressize;
+  char *argp, *resp, *p;
+  int sts;
+  struct fvm_s state2;
+  
+  rescountaddr = ntohl( fvm_stack_read( state, 4 ) );
+  rescount = ntohl( fvm_read( state, rescountaddr ) );
+  resaddr = ntohl( fvm_stack_read( state, 8 ) );
+  resp = fvm_getaddr( state, resaddr );
+  if( !resp ) goto bad;
+  argcount = ntohl( fvm_stack_read( state, 12 ) );
+  argaddr = ntohl( fvm_stack_read( state, 16 ) );
+  argp = fvm_getaddr( state, argaddr );
+  if( !argp ) goto bad;
+  procid = ntohl( fvm_stack_read( state, 20 ) );
+  progid = ntohl( fvm_stack_read( state, 24 ) );
 
+  sts = fvm_state_init( &state2, progid, procid );
+  if( sts ) goto bad;
+  state2.nsteps = state->nsteps;
+  fvm_set_args( &state2, argp, argcount );
+  sts = fvm_run( &state2, 0 );
+  state->nsteps = state2.nsteps;
+  if( sts ) goto bad;
+
+  ressize = fvm_get_res( &state2, &p );
+  if( ressize != -1 ) {
+    if( ressize > rescount ) ressize = rescount;
+    memcpy( resp, p, ressize );
+  }
+  fvm_write( state, rescountaddr, htonl( ressize ) );
+  
+  return 0;
+  
+ bad:
+  fvm_write( state, rescountaddr, htonl( -1 ) );
+  return 0;
+}
 
 static struct fvm_native_proc native_procs[] =
   {
@@ -387,6 +426,7 @@ static struct fvm_native_proc native_procs[] =
    { 8, native_readlog },
    { 9, native_sprintf },   
    { 10, native_yield },
+   { 11, native_invoke },
    
    { 0, NULL }
   };

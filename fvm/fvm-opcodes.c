@@ -474,87 +474,6 @@ static int opcode_rorconst( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   return 0;
 }
 
-/* TODO: remove this and replace it with a native procedure */
-static int opcode_callvirt( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
-  /* CALLVIRT RX RY RZ */
-  /* RX contains progid. RY contains proc index (index into symbol table).
-   * RZ contains arg length, receives result length. arg/res on stack 
-   */
-  uint32_t addr; 
-  int sts;
-  struct fvm_module *m;
-  uint32_t rx, ry, rz;
-  struct fvm_s state2;
-  char *args, *res, *resp;
-  int argsize, ressize;
-  uint32_t sp;
-  
-  rx = reg;
-  ry = data & 0x7;
-  rz = (data >> 4) & 0x7;
-
-  argsize = ntohl( state->reg[rz] );
-  if( (argsize > (state->reg[FVM_REG_SP] - FVM_ADDR_STACK)) ) {
-    fvm_printf( "args too large %d > %u \n", argsize, state->reg[FVM_REG_SP] - FVM_ADDR_STACK );
-    return -1;
-  }
-  
-  sp = state->reg[FVM_REG_SP] - argsize;
-  args = (char *)&state->stack[sp - FVM_ADDR_STACK];
-  res = (char *)&state->stack[sp - FVM_ADDR_STACK];
-  ressize = FVM_MAX_STACK - (sp - FVM_ADDR_STACK);
-
-  /* clean stack */
-  state->reg[FVM_REG_SP] -= argsize;
-  
-  m = fvm_module_by_progid( ntohl( state->reg[rx] ) );
-  if( !m ) {
-    fvm_printf( "callvirt unknown progid %u\n", ntohl( state->reg[rx] ) );
-    state->reg[rz] = htonl( -1 );
-    return 0;
-  }
-
-  addr = fvm_symbol_by_index( m, ntohl( state->reg[ry] ) );
-  if( addr == 0 ) {
-    fvm_printf( "callvirt unknown procid %u\n", ntohl( state->reg[ry] ) );
-    state->reg[rz] = htonl( -1 );
-    return 0;
-  }
-
-  memset( &state2, 0, sizeof(state2) );
-  state2.nsteps = state->nsteps;
-  state2.module = m;
-  state2.datasize = m->header.datasize;
-  state2.textsize = m->header.textsize;
-  state2.data = m->data;
-  state2.text = m->text;
-  state2.reg[FVM_REG_PC] = addr;
-  /* copy args onto stack */
-  fvm_set_args( &state2, args, argsize );
-  sts = fvm_run( &state2, 0 );
-  state->nsteps = state2.nsteps;
-  if( sts ) {
-    fvm_printf( "callvirt run failed\n" );
-    state->reg[rz] = htonl( -1 );
-    return 0;
-  }
-
-  /* extract result data. Calling convention is R0 contains result length, R1 contains address of results, typically SP - R0  */
-  ressize = fvm_get_res( &state2, &resp );
-  if( ressize == -1 ) {
-    fvm_printf( "callvirt return failure\n" );
-    state->reg[rz] = htonl( -1 );
-    return 0;
-  }
-  printf( "callvirt return result resp=%p len=%d\n", resp, ressize );
-  memcpy( res, resp, ressize );
-  state->reg[rz] = htonl( ressize );
-  state->reg[FVM_REG_SP] += ressize;
-  fvm_printf( "callvirt success\n" );
-  return 0;
-}
-
-
 static int opcode_leaspconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
   /* LEASP RX const */
   state->reg[reg] = htonl( state->reg[FVM_REG_SP] + sign_extend( data ) );
@@ -790,7 +709,7 @@ static struct opcode_def opcodes[FVM_MAX_OPCODE] =
    { opcode_rolconst, "ROL" },
    { opcode_rorreg, "ROR" },
    { opcode_rorconst, "ROR" },
-   { opcode_callvirt, "CALLVIRT" },
+   { NULL, "Unused" },
    { NULL, "Unused" },
    { NULL, "Unused" },
    { opcode_leaspconst, "LEASP" },

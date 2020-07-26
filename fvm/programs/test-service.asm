@@ -28,7 +28,7 @@ SERVICE:
 	LD		R0		progid 
 	LDI		R1		0 ; PROC-NULL
 	LDI		R2		0 ; arg length 
-	CALLVIRT	R0		R1		R2
+	;; CALLVIRT	R0		R1		R2
 
 	;; ret 
 	LDI		R0		0

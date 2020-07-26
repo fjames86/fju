@@ -11,7 +11,7 @@ MAIN:
 	LDI		R0		10000
 	LDI		R1		0
 	LDI		R2		0
-	CALLVIRT	R0		R1		R2 ; R2 contains arg length (0) and receives result length 
+;;; CALLVIRT	R0		R1		R2 ; ;R2 contains arg length (0) and receives result length 
 	CMP		R2		0
 	JPN		TEST-FAIL
 
@@ -23,7 +23,7 @@ MAIN:
 	LDI		R1		1
 	PUSH		123
 	LDI		R2		4
-	CALLVIRT	R0		R1		R2
+;;; 	CALLVIRT	R0		R1		R2
 	CMP		R2		4
 	JPN		TEST-FAIL
 	SUBSP		R2 	; clean stack 

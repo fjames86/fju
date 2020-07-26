@@ -1,4 +1,8 @@
 
+/*
+ * TODO:
+ * 
+ */
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #include <WinSock2.h>
@@ -1001,7 +1005,7 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
 	p = skipwhitespace( p );
       }
 
-      fvmc_printf( 2, ";; .CALL/.CALLVIRT size nargs=%u adding %u addr=%u\n", nargs, 8 + 4*nargs, *addr );
+      fvmc_printf( 2, ";; .CALL size nargs=%u adding %u addr=%u\n", nargs, 8 + 4*nargs, *addr );
       *addr = *addr + 8 + 4*nargs; /* call + n*push + subsp*/
       fvmc_printf( 2, ";; current addr=%u (0x%04x)\n", *addr, *addr );
     }
@@ -1078,7 +1082,7 @@ static struct {
 	{ "ROL",  0x31, 0x00020002 },   /* ROL RX const */
 	{ "ROR",  0x32, 0x00020000 },   /* ROR RX RY */
 	{ "ROR",  0x33, 0x00020002 },   /* ROR RX const */
-	{ "CALLVIRT", 0x34, 0x00030000 }, /* CALLVIRT RX RY RZ. call a function in a remote module. rx=module name, ry=function. rz=argsize */
+	{ "RESV3", 0x34, 0x00000000 },   /* Reserved. Unused instruction */
 	{ "RESV1", 0x35, 0x00000000 },   /* Reserved. Unused instruction */
 	{ "RESV2", 0x36, 0x00000000 },   /* Reserved, UNused instruction */
 	{ "LEASP", 0x37, 0x00020002 },   /* LEASP RX const. load address from stack pointer with offset */

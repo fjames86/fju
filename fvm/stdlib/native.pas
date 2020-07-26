@@ -13,6 +13,7 @@ Begin
    Const NativeWriteLog := 7;
    Const NativeReadLog := 8; 
    Const NativeYield := 10;
+   Const NativeInvoke := 11;
    
    Const YieldFork := 1;
       
@@ -26,5 +27,6 @@ Begin
    Declare Syscall ReadLog(logname : string, idhigh : integer, idlow : integer, buf : opaque, var count	: integer) : 8;
    Declare Syscall Sprintf(dest : string, destsize : integer, fmt : string, args : opaque) : 9;
    Declare Syscall Yield(timeout : integer, flags : integer) : 10;
+   Declare Syscall Invoke(progid : integer, procid : integer, args : opaque, argcount : integer, res : opaque, var rescount : integer) : 11;
    
 End.

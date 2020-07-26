@@ -2,8 +2,6 @@
 /*
  * TODO: 
  * - better register allocation.
- * - some way of encoding/decoding from buffers? maybe we don't need this if we can dereference pointers
- * - do we want function calls? 
  * - arrays e.g. var x : array[length] of integer. arrays are same as string i.e. have a length prefix. would need two new types, array and array[] 
  * 
  */
@@ -341,6 +339,7 @@ struct var {
 #define VAR_ISPARAM 0x00020000
   uint32_t size;
   uint32_t offset;
+  uint32_t reg;
 };
 
 struct proc {
@@ -441,6 +440,48 @@ static void freevars( void ) {
   }
   glob.vars = NULL;
 }
+static void assignreg( struct var *v, uint32_t reg ) {
+  struct var *vv;
+
+  vv = glob.vars;
+  while( vv ) {
+    if( vv == v ) {
+      v->reg = reg;
+    } else if( vv->reg == reg ) {
+      vv->reg = -1;
+    }
+    vv = vv->next;
+  }
+      
+}
+static void voidregisters( void ) {
+  struct var *v;
+  v = glob.vars;
+  while( v ) {
+    v->reg = -1;
+    v = v->next;
+  }
+}
+static uint32_t assignregister( void ) {
+  struct var *v;
+  uint32_t reg, found;
+  for( reg = 0; reg < 8; reg++ ) {
+    v = glob.vars;
+    found = 0;
+    while( v ) {
+      if( v->reg == reg ) {
+	found = 1;
+	break;
+      }
+      v = v->next;
+    }
+    
+    if( !found ) return reg;
+  }
+  
+  return -1;
+}
+
 
 static struct proc *addproc( char *procname, struct var *vars ) {
   struct proc *p, *pprev;

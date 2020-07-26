@@ -38,6 +38,10 @@ Begin
    Syscall sprintf( mystr, 64, "fred %u:%u\n", args );
 
    Syscall Puts(mystr);
+
+   i := i + i + i + i + i + i ;
+
+   i := address i;
 End;	 
 
 var mymissingglob : integer;

@@ -239,6 +239,7 @@ typedef enum {
 	      TOK_ASM,
 	      TOK_SYSCALL,
 	      TOK_CARET,
+	      TOK_ADDRESS,
 } token_t;
 static struct {
   char *keyword;
@@ -291,6 +292,7 @@ static struct {
 		     { "ASM", TOK_ASM },
 		     { "SYSCALL", TOK_SYSCALL },
 		     { "^", TOK_CARET },
+		     { "ADDRESS", TOK_ADDRESS },
 		     
 		     { NULL, 0 }
 };
@@ -465,7 +467,7 @@ static void voidregisters( void ) {
 static uint32_t allocregister( void ) {
   struct var *v;
   uint32_t reg, found;
-  for( reg = 0; reg < 8; reg++ ) {
+  for( reg = 7; reg >= 0; reg-- ) {
     v = glob.vars;
     found = 0;
     while( v ) {
@@ -587,15 +589,26 @@ static char *genlabel( char *prefix ) {
   return labelname;
 }
 
+static void emitldimmediate( int reg, uint32_t u32 ) {
+  if( u32 <= 0xffff ) {
+    fvmc_emit( "\tLDI\tR%u\t%u\n", reg, u32 );
+  } else {
+    fvmc_emit( "\tLDI\tR%u\t%u\n", reg, u32 >> 16 );
+    fvmc_emit( "\tSHL\tR%u\t16\n", reg );
+    fvmc_emit( "\tOR\tR%u\t%u\n", reg, u32 & 0xffff );
+  }
+}
 
 static void parseexpr( int reg ) {
   struct token tok;
   struct var *v;
 
+  if( reg >= 8 ) usage( "Bad register %u", reg );
+  
   /* valinteger | constant | ( expr ) | expr operator expr */  
   tok = glob.tok;
   if( accepttok( TOK_VALINTEGER ) ) {
-    fvmc_emit( "\tLDI\tR%u\t%u\n", reg, (unsigned int)strtoul( tok.token, NULL, 0 ) );
+    emitldimmediate( reg, (unsigned int)strtoul( tok.token, NULL, 0 ) );
   } else if( accepttok( TOK_NAME ) ) {
     /* check if constant ? */
     v = getvar( tok.token );
@@ -671,32 +684,101 @@ static void parseexpr( int reg ) {
       fvmc_emit( "\tLD\tR%u\t%s\n", reg, tok.token );
       fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
     }
+  } else if( accepttok( TOK_ADDRESS ) ) {
+    /* address var */
+    tok = glob.tok;
+    expecttok( TOK_NAME );
+    v = getvar( tok.token );
+    if( v ) {
+      fvmc_emit( "\tLEASP\tR%u\t-%u\n", reg, v->offset + glob.stackoffset );
+    } else {
+      v = getglobal( tok.token );      
+      if( !v ) usage( "address operator expects a variable name, not %s", tok.token );
+      fvmc_emit( "\tLDI\tR%u\t%s\n", reg, tok.token );
+    }
   }
 
+ again:
   if( accepttok( TOK_PLUS ) ) {
-    parseexpr( reg + 1 );
-    fvmc_emit( "\tADD\tR%u\tR%u\n", reg, reg + 1 );
+    uint32_t u32 = strtoul( glob.tok.token, NULL, 0 );
+    if( glob.tok.type == TOK_VALINTEGER && u32 <= 0xffff ) {
+      fvmc_emit( "\tADD\tR%u\t%u\n", reg, u32 );
+      expecttok( TOK_VALINTEGER );
+      goto again;
+    } else {    
+      parseexpr( reg + 1 );
+      fvmc_emit( "\tADD\tR%u\tR%u\n", reg, reg + 1 );
+    }
   } else if( accepttok( TOK_MINUS ) ) {
-    parseexpr( reg + 1 );
-    fvmc_emit( "\tSUB\tR%u\tR%u\n", reg, reg + 1 );    
+    uint32_t u32 = strtoul( glob.tok.token, NULL, 0 );    
+    if( glob.tok.type == TOK_VALINTEGER && u32 <= 0xffff ) {
+      fvmc_emit( "\tSUB\tR%u\t%u\n", reg, u32 );
+      expecttok( TOK_VALINTEGER );
+      goto again;
+    } else {
+      parseexpr( reg + 1 );
+      fvmc_emit( "\tSUB\tR%u\tR%u\n", reg, reg + 1 );
+    }
   } else if( accepttok( TOK_MUL ) ) {
-    parseexpr( reg + 1 );
-    fvmc_emit( "\tMUL\tR%u\tR%u\n", reg, reg + 1 );    
+    uint32_t u32 = strtoul( glob.tok.token, NULL, 0 );    
+    if( glob.tok.type == TOK_VALINTEGER && u32 <= 0xffff ) {
+      fvmc_emit( "\tMUL\tR%u\t%u\n", reg, u32 );
+      expecttok( TOK_VALINTEGER );
+      goto again;
+    } else {
+      parseexpr( reg + 1 );
+      fvmc_emit( "\tMUL\tR%u\tR%u\n", reg, reg + 1 );
+    }
   } else if( accepttok( TOK_DIV ) ) {
-    parseexpr( reg + 1 );
-    fvmc_emit( "\tDIV\tR%u\tR%u\n", reg, reg + 1 );    
+    uint32_t u32 = strtoul( glob.tok.token, NULL, 0 );    
+    if( glob.tok.type == TOK_VALINTEGER && u32 <= 0xffff ) {
+      fvmc_emit( "\tDIV\tR%u\t%u\n", reg, u32 );
+      expecttok( TOK_VALINTEGER );
+      goto again;
+    } else {    
+      parseexpr( reg + 1 );
+      fvmc_emit( "\tDIV\tR%u\tR%u\n", reg, reg + 1 );
+    }
   } else if( accepttok( TOK_MOD ) ) {
-    parseexpr( reg + 1 );
-    fvmc_emit( "\tMOD\tR%u\tR%u\n", reg, reg + 1 );    
+    uint32_t u32 = strtoul( glob.tok.token, NULL, 0 );    
+    if( glob.tok.type == TOK_VALINTEGER && u32 <= 0xffff ) {
+      fvmc_emit( "\tMOD\tR%u\t%u\n", reg, u32 );
+      expecttok( TOK_VALINTEGER );
+      goto again;
+    } else {    
+      parseexpr( reg + 1 );
+      fvmc_emit( "\tMOD\tR%u\tR%u\n", reg, reg + 1 );
+    }
   } else if( accepttok( TOK_AND ) ) {
-    parseexpr( reg + 1 );
-    fvmc_emit( "\tAND\tR%u\tR%u\n", reg, reg + 1 );    
+    uint32_t u32 = strtoul( glob.tok.token, NULL, 0 );    
+    if( glob.tok.type == TOK_VALINTEGER && u32 <= 0xffff ) {
+      fvmc_emit( "\tAND\tR%u\t%u\n", reg, u32 );
+      expecttok( TOK_VALINTEGER );
+      goto again;
+    } else {    
+      parseexpr( reg + 1 );
+      fvmc_emit( "\tAND\tR%u\tR%u\n", reg, reg + 1 );
+    }
   } else if( accepttok( TOK_OR ) ) {
-    parseexpr( reg + 1 );
-    fvmc_emit( "\tOR\tR%u\tR%u\n", reg, reg + 1 );    
+    uint32_t u32 = strtoul( glob.tok.token, NULL, 0 );    
+    if( glob.tok.type == TOK_VALINTEGER && u32 <= 0xffff ) {
+      fvmc_emit( "\tOR\tR%u\t%u\n", reg, u32 );
+      expecttok( TOK_VALINTEGER );
+      goto again;
+    } else {    
+      parseexpr( reg + 1 );
+      fvmc_emit( "\tOR\tR%u\tR%u\n", reg, reg + 1 );
+    }
   } else if( accepttok( TOK_XOR ) ) {
-    parseexpr( reg + 1 );
-    fvmc_emit( "\tXOR\tR%u\tR%u\n", reg, reg + 1 );    
+    uint32_t u32 = strtoul( glob.tok.token, NULL, 0 );    
+    if( glob.tok.type == TOK_VALINTEGER && u32 <= 0xffff ) {
+      fvmc_emit( "\tXOR\tR%u\t%u\n", reg, u32 );
+      expecttok( TOK_VALINTEGER );
+      goto again;
+    } else {    
+      parseexpr( reg + 1 );
+      fvmc_emit( "\tXOR\tR%u\tR%u\n", reg, reg + 1 );
+    }
   } 
   
 }
@@ -1109,8 +1191,8 @@ static void parsestatement( void ) {
     v = p->vars;
     expecttok( TOK_NAME );
     expecttok( TOK_OPENPAREN );
-    /* TODO: this is pushing from left to right. it is much easier to push from left to right, but we want to push from right to left? */
 
+    /* push args from left to right */
     glob.stackoffset = 0;
     do {
       if( v->flags & VAR_ISVAR ) {

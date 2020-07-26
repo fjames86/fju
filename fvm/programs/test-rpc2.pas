@@ -16,7 +16,8 @@ Begin
 	var p : opaque;
 	p := HelloWorld;
 	
-	rescount := ^p;
+	rescount := ^p; { get string length }
+	rescount := rescount + 4;
 	resbuf := HelloWorld;
 End;
 
@@ -24,15 +25,9 @@ var counter : integer;
 
 Procedure ProcCounter(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
 Begin
-	var p : opaque[4];
-	var pp : opaque;
-
-	pp := p;
-	^pp := counter;
-
 	counter := counter + 1;
 
-	resbuf := p;
+	resbuf := address counter;
 	rescount := 4;
 End;
 

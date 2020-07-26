@@ -337,7 +337,7 @@ static FILE *opensourcefile( char *name, int firstpass ) {
 
 
 static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
-  char buf[256];
+  char buf[1024];
   char *p;
 
   glob.currentline = 0;

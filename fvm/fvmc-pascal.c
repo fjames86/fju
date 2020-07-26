@@ -466,7 +466,7 @@ static struct proc *addproc( char *procname, struct var *vars ) {
       v2 = vars;
       while( v1 && v2 ) {
 	if( strcasecmp( v1->name, v2->name ) != 0 ) usage( "Incompatible duplicate procedure %s: parameters different names", procname );
-	if( v1->type != v2->type ) usage( "Incompatible duplicate procedure %s: parameter %s different types", procname, v1->name );
+	if( v1->type != v2->type ) usage( "Incompatible duplicate procedure %s: parameter %s different types %u != %u", procname, v1->name, v1->type, v2->type );
 	if( v1->flags != v2->flags ) usage( "Incompatible duplicate procedure %s: parameter %s different flags", procname, v1->name );
 	v1 = v1->next;
 	v2 = v2->next;
@@ -932,7 +932,7 @@ static int parsedeclaration( void ) {
 	} else if( accepttok( TOK_STRING ) ) {
 	  v->type = VAR_STRING;
 	} else if( accepttok( TOK_OPAQUE ) ) {
-	  v->type = VAR_STRING;
+	  v->type = VAR_OPAQUE;
 	} else usage( "unrecognized type \"%s\"", glob.tok.token );
 	
 	if( vlast ) vlast->next = v;

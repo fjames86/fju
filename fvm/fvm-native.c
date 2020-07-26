@@ -232,21 +232,19 @@ static int native_readlog( struct fvm_s *state ) {
   return 0;
 }
 
-
-#if 0
-
+/* declare procdure(dest :string, destsize : integer, fmt : string, args : opaque) */
 static int native_sprintf( struct fvm_s *state ) {
-  uint32_t bufaddr, fmtaddr, bufsize;
+  uint32_t bufaddr, fmtaddr, bufsize, argsaddr;
   char fmt[1024];
   char argstr[256];
   char *p, *q, *buf;
   int n, argi, blen;
   
   /* sprintf( buf, bufsize, fmt, ... ) */
-  bufaddr = ntohl( fvm_stack_read( state, 4 ) );
+  bufaddr = ntohl( fvm_stack_read( state, 16 ) );
   buf = fvm_getaddr( state, bufaddr );
   if( !buf ) return -1;  
-  bufsize = ntohl( fvm_stack_read( state, 8 ) );
+  bufsize = ntohl( fvm_stack_read( state, 12 ) );
   
   /* check buffer */
   if( !((bufaddr >= FVM_ADDR_DATA && bufaddr < (FVM_ADDR_DATA + state->datasize - bufsize)) ||
@@ -255,9 +253,11 @@ static int native_sprintf( struct fvm_s *state ) {
     return -1;
   }
   
-  fmtaddr = ntohl( fvm_stack_read( state, 12 ) );
+  fmtaddr = ntohl( fvm_stack_read( state, 8 ) );
   native_readstr( state, fmtaddr, fmt, sizeof(fmt) );
-  
+
+  argsaddr = ntohl( fvm_stack_read( state, 4 ) );
+
   /* parse format string, getting args when required */
   p = fmt;
   q = buf + 4;
@@ -268,26 +268,26 @@ static int native_sprintf( struct fvm_s *state ) {
       p++;
       switch( *p ) {
       case 's':
-	native_readstr( state, ntohl( fvm_stack_read( state, 16 + argi*4 ) ), argstr, sizeof(argstr) );
+	native_readstr( state, ntohl( fvm_read( state, argsaddr + argi*4 ) ), argstr, sizeof(argstr) );
 	n = sprintf( q, "%s", argstr );
 	blen += n;
 	q += n;
 	p++;
 	break;
       case 'd':
-	n = sprintf( q, "%d", ntohl( fvm_stack_read( state, 16 + argi*4 ) ) );
+	n = sprintf( q, "%d", ntohl( fvm_read( state, argsaddr + argi*4 ) ) );
 	blen += n;
 	q += n;
 	p++;	
 	break;
       case 'u':
-	n = sprintf( q, "%u", ntohl( fvm_stack_read( state, 16 + argi*4 ) ) );
+	n = sprintf( q, "%u", ntohl( fvm_read( state, argsaddr + argi*4 ) ) );
 	blen += n;
 	q += n;
 	p++;		
 	break;
       case 'x':
-	n = sprintf( q, "%x", ntohl( fvm_stack_read( state, 16 + argi*4 ) ) );
+	n = sprintf( q, "%x", ntohl( fvm_read( state, argsaddr + argi*4 ) ) );
 	blen += n;
 	q += n;
 	p++;		
@@ -305,10 +305,8 @@ static int native_sprintf( struct fvm_s *state ) {
   }
 
   *((uint32_t *)buf) = htonl( blen );
-  return blen;
+  return 0;
 }
-
-#endif
 
 struct fvm_yield_iterator {
   struct rpc_iterator iter;
@@ -387,7 +385,7 @@ static struct fvm_native_proc native_procs[] =
    { 6, native_procid_by_name },   
    { 7, native_writelog },
    { 8, native_readlog },
-   //   { 9, native_sprintf },   
+   { 9, native_sprintf },   
    { 10, native_yield },
    
    { 0, NULL }

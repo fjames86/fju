@@ -1,3 +1,4 @@
+{ -*- text -*- }
 
 Declare
 Begin
@@ -22,7 +23,8 @@ Begin
    Declare Syscall ProgidByName(str : string, var progid : integer) : 5;
    Declare Syscall ProcidByName(progid : integer, str : string, var procid : integer) : 6;
    Declare Syscall WriteLog(logname : string, buf : opaque, count : integer) : 7;
-   Declare Syscall ReadLog(logname : string, idhigh : integer, idlow : integer, buf : opaque, var count : integer) : 8;
+   Declare Syscall ReadLog(logname : string, idhigh : integer, idlow : integer, buf : opaque, var count	: integer) : 8;
+   Declare Syscall Sprintf(dest : string, destsize : integer, fmt : string, args : opaque) : 9;
    Declare Syscall Yield(timeout : integer, flags : integer) : 10;
    
 End.

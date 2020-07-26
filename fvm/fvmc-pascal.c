@@ -604,7 +604,7 @@ static void parseexpr( int reg ) {
     expecttok( TOK_NAME );
     v = getvar( tok.token );
     if( v ) {
-      if( v->type != VAR_STRING && v->type != VAR_OPAQUE ) usage( "deference must be a variable of pointer type" );
+      if( v->type != VAR_OPAQUE ) usage( "deference must be a variable of pointer type" );
 
       fvmc_emit( "\tLDSP\tR%u\t-%u\n", reg, v->offset + glob.stackoffset );
       fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
@@ -986,7 +986,7 @@ static void parsestatement( void ) {
     v = getvar( nametok.token );
     if( v ) {
       /* var must be a pointer type */
-      if( (v->type != VAR_STRING) && (v->type != VAR_OPAQUE) ) usage( "Var type not a pointer" );
+      if( (v->type != VAR_OPAQUE) ) usage( "Var type not a pointer" );
       
       if( v->flags & VAR_ISVAR ) {
 	/* var already a pointer */

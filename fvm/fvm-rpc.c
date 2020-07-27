@@ -994,6 +994,8 @@ static void fvm_call_write_donecb( struct xdr_s *xdr, void *cxt ) {
     if( m && sts == 0 && retry > 0 ) {
       fvm_call_write( &cl, cl.leaderid, m, retry, (w->timeout * 3) / 2 );
     }
+  } else {
+    fvm_log( LOG_LVL_DEBUG, "fvm_call_write success" );
   }
 
   free( w );
@@ -1083,7 +1085,11 @@ int fvm_cluster_update( struct fvm_module *module ) {
     fvm_send_pings( &cl, module );
   } else {
     /* send write to leader */
-    if( !cl.leaderid ) return -1;
+    if( !cl.leaderid ) {
+      fvm_log( LOG_LVL_WARN, "fvm_cluster_update cluster %"PRIx64" missing leader", cl.id );
+      return -1;
+    }
+    
     sts = fvm_call_write( &cl, cl.leaderid, module, 3, 500 );
     if( sts ) return sts;
   }

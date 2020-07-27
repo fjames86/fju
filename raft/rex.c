@@ -84,7 +84,7 @@ static void rex_state_save( uint64_t clid, char *buf, int size ) {
   sts = mmf_open( mmf_default_path( "rex", name, NULL ), &mmf );  
   if( sts ) return;
 
-  rex_log( LOG_LVL_DEBUG, "rex_state_save: size=%u\n", size );
+  rex_log( LOG_LVL_DEBUG, "rex_state_save: size=%u", size );
   mmf_write( &mmf, buf, size, 0 );
   mmf_truncate( &mmf, size );
   mmf_sync( &mmf, 1 );

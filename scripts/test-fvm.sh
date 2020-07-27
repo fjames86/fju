@@ -2,9 +2,9 @@
 
 set -eu
 
-freg put fju/fvm/modules/test-rpc key
-freg put fju/fvm/modules/test-rpc/path str /root/fju/fvm/programs/test-rpc.fvm
-freg put fju/fvm/programs/test-rpc str test-rpc
+#freg put fju/fvm/modules/test-rpc key
+#freg put fju/fvm/modules/test-rpc/path str /root/fju/fvm/programs/test-rpc.fvm
+#freg put fju/fvm/programs/test-rpc str test-rpc
 
 echo "------------- TEST1 -------------------------- "
 fvm fvm/test/test1.fvm

@@ -5,7 +5,6 @@ set -eu
 freg put fju/fvm/modules/test-rpc key
 freg put fju/fvm/modules/test-rpc/path str /root/fju/fvm/programs/test-rpc.fvm
 freg put fju/fvm/programs/test-rpc str test-rpc
-rpclt fvm.load filename=/root/fju/fvm/programs/test-rpc2.fvm register=true
 
 echo "------------- TEST1 -------------------------- "
 fvm fvm/test/test1.fvm

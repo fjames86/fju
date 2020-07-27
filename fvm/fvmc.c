@@ -608,6 +608,11 @@ static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment 
       p = skipwhitespace( p );
       if( *p == '\0' ) return 0;
 
+      {
+	struct label *l = getlabel( name );
+	if( l ) l->symflags |= FVM_SYMBOL_STRING;
+      }
+      
       size = 0;
       if( *p == '"' ) {
 	p++;

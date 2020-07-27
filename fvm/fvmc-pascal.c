@@ -813,7 +813,7 @@ static op_t parsecondition( void ) {
 
 static void printconditionjump( op_t op, char *label ) {
   fvmc_emit( "\t%s\t%s\n",
-	  op == OP_NONE ? "JPN" :
+	  op == OP_NONE ? "JZ" :
 	  op == OP_EQ ? "JZ" :
 	  op == OP_NEQ ? "JPN" : 
 	  op == OP_GT ? "JP" :

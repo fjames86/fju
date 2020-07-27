@@ -363,6 +363,7 @@ static struct {
   struct var *globals;
   int labelidx;
   int stackoffset;
+  int currentargsize;
 } glob;
 
 
@@ -877,11 +878,12 @@ static void parseprocedurebody( void ) {
     if( !accepttok( TOK_SEMICOLON ) ) return;
   }
 
+  glob.currentargsize = argsize;
   if( nargs > 0 ) fvmc_emit( "\tADDSP\t%u\t ; allocate locals\n", argsize );
   do {
     parsestatement();
-  } while( accepttok( TOK_SEMICOLON ) );
-  if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\n", argsize );
+  } while( accepttok( TOK_SEMICOLON ) );  
+  if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\t ; free locals\n", argsize );
   
 }
 
@@ -1294,6 +1296,9 @@ static void parsestatement( void ) {
     struct token strtok = glob.tok;
     expectok( TOK_VALSTRING );
     fvmc_emit( "\t%.*s\n", (int)strlen( strtok.token ) - 2, strtok.token + 1 );
+  } else if( accepttok( TOK_RETURN ) ) {
+      fvmc_emit( "\tSUBSP\t%u\t ; free locals\n", glob.currentargsize );
+      fvmc_emit( "\tRET\n" );
   } else if( accepttok( TOK_SEMICOLON ) ) {
     fvmc_printf( 1, "empty statement\n" );
   } else if( glob.tok.type == TOK_END ) {

@@ -24,6 +24,7 @@ ${BINDIR}/fvm: fvm/fvm-main.c ${LIBDIR}/libfvm.a
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.asm fvm/programs/test-service.asm
 	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm -I fvm/stdlib/ fvm/programs/test-rpc.asm
 	${BINDIR}/fvmc -o fvm/programs/test-service.fvm -I fvm/stdlib/ fvm/programs/test-service.asm
+	${BINDIR}/fvmc -o fvm/programs/test-rpc2.fvm fvm/stdlib/native.pas fvm/programs/test-rpc2.pas
 
 fvm/stdlib/native.asm: fvm/stdlib/native.pas ${BINDIR}/fvmc
 	${BINDIR}/fvmc fvm/stdlib/native.pas

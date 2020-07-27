@@ -7,9 +7,13 @@ freg put fju/fvm/modules/test-rpc/path str /root/fju/fvm/programs/test-rpc.fvm
 freg put fju/fvm/programs/test-rpc str test-rpc
 #rpclt fvm.load filename=/root/fju/fvm/programs/test-rpc.fvm register=true
 
+echo "------------- TEST1 -------------------------- "
 fvm fvm/test/test1.fvm
+echo "------------- TEST2 -------------------------- "
 fvm -m test2 -s MAIN fvm/test/test1.fvm fvm/test/test2.fvm
+echo "------------- TEST3 -------------------------- "
 fvm fvm/test/test3.fvm
+echo "------------- TEST6 -------------------------- "
 fvm fvm/test/test6.fvm
 
 	

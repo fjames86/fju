@@ -12,7 +12,7 @@ Declare Procedure Proc1(op : opaque);
 
 Procedure Main(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque)
 Begin
-   Syscall Puts("hello world\n");
+   Syscall Puts("hello world from fvmc pascal compiler! \n");
    Call Proc1(0);
 End;
 

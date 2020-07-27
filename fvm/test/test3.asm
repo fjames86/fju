@@ -58,20 +58,26 @@ FN2:
 	.TEXT		testlogname 	"test3"
 	.TEXT		bufp 		0x12345678
 testlogging:
-	PUSH		4
+	PUSH		testlogname		
 	PUSH		bufp	
-	PUSH		testlogname	
+	PUSH		4
 	CALLNAT		NATIVEWRITELOG
 	SUBSP		12
 
-	PUSH		4
-	PUSH		bufp
+	ADDSP		4
+	LDI		R0	4
+	STSP		R0 	-4
+	
+	PUSH		testlogname
 	PUSH		0
 	PUSH		0	
-	PUSH		testlogname
-	CALLNAT		NATIVEREADLOG
+	PUSH		bufp
+	LEASP		R0	-20
+	PUSH		R0
+	CALLNAT		NATIVEREADLOG	
 	SUBSP		16
-
+	SUBSP		4
+	
 	RET
 
 

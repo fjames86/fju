@@ -15,6 +15,11 @@ fvm fvm/test/test3.fvm
 echo "------------- TEST6 -------------------------- "
 fvm fvm/test/test6.fvm
 
+echo "Waiting for cluster to come online..."
+while [ $(raft | grep leader | awk '{print $5}' | sed 's/leader=//') = "0" ]
+do
+    sleep 0.1
+done
 	
 echo "------------- FVM.LIST -------------------------- "
 rpclt fvm.list

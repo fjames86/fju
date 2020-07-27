@@ -5,9 +5,15 @@ Begin
 
 Procedure Service()
 Begin
+	  Syscall LogStr("Example service routine");
+End;
+
+Procedure Init()
+Begin
 	  var result : integer;
 	  
-	  Syscall LogStr("Example service routine");
+	  Syscall LogStr("testService initializing");
+	  
 	  Syscall Yield(0, YieldFork, result);
 	  If result Then
 	  Begin
@@ -17,11 +23,6 @@ Begin
 	  Begin
 	     Syscall LogStr("Parent from yield");
 	  End;
-End;
-
-Procedure Init()
-Begin
-	Syscall LogStr("testService initializing");
 End;
    
 End.

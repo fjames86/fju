@@ -884,7 +884,7 @@ static void parseprocedurebody( void ) {
     parsestatement();
   } while( accepttok( TOK_SEMICOLON ) );  
   if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\t ; free locals\n", argsize );
-  
+  glob.currentargsize = 0;
 }
 
 static int parsedeclaration( void ) {

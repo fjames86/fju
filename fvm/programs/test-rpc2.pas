@@ -1,6 +1,6 @@
 { -*- text -*- }
 
-Program testRpc(444444,1,ProcNull,ProcHello,ProcCounter);
+Program testRpc(2444444,1,ProcNull,ProcHello,ProcEcho,ProcCounter);
 Begin
 
 Procedure ProcNull(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
@@ -19,6 +19,13 @@ Begin
 	rescount := ^p; { get string length }
 	rescount := rescount + 4;
 	resbuf := HelloWorld;
+End;
+
+
+Procedure ProcEcho(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
+Begin
+	rescount := argcount;
+	resbuf := argbuf;
 End;
 
 var counter : integer;

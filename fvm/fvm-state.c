@@ -115,7 +115,7 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
   end = rpc_now();
   fvm_log( LOG_LVL_DEBUG, "fvm_run name=%s progid=%u took %"PRIu64"ms in %u steps", state->module->header.name, state->module->header.progid, end - start, ns );
   
-  if( sts ) return sts;
+  //if( sts ) return sts;
 
   /* if clustered then send pings etc */
   if( (state->flags & FVM_STATE_DIRTY) && state->module->clusterid ) {

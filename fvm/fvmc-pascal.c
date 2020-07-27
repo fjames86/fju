@@ -1006,13 +1006,28 @@ static int parsedeclaration( void ) {
       struct token valtok;
 
       if( accepttok( TOK_OPENARRAY ) ) {
+	uint32_t len;
 	valtok = glob.tok;
 	expectok( TOK_VALINTEGER );
+	len = strtoul( valtok.token, NULL, 0 );
 	expectok( TOK_CLOSEARRAY );
-	fvmc_emit( "\t.DATA\t%s\t\"", nametok.token );      
-	for( i = 0; i < strtoul( valtok.token, NULL, 0 ); i++ ) {
-	  fvmc_emit( "\\0" );
+	fvmc_emit( "\t.DATA\t%s\t\"", nametok.token );
+	if( accepttok( TOK_ASSIGN ) ) {
+	  uint32_t slen;
+	  valtok = glob.tok;
+	  expecttok( TOK_VALSTRING );
+	  slen = strlen( valtok.token + 1 ) - 1;
+	  fvmc_emit("%.*s", slen > len ? len : slen, valtok.token + 1);
+	  for( i = strlen( valtok.token ); i < len; i++ ) {
+	    fvmc_emit( "\\0" );
+	  }
+	} else {
+	  /* populate with 0 characters */
+	  for( i = 0; i < len; i++ ) {
+	    fvmc_emit( "\\0" );
+	  }
 	}
+	
 	fvmc_emit( "\"\n" );
 	addglobal( nametok.token, VAR_STRINGBUF, 0 );
       } else {

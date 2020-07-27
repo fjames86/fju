@@ -3,7 +3,7 @@
 Program testRpc(2333333,1,ProcNull,ProcHello,ProcEcho,ProcCounter,hello);
 Begin
 
-var hello : string[64];
+var hello : string[64] := "Hello world";
 
 Procedure ProcNull(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
 Begin

@@ -340,6 +340,7 @@ struct var {
   uint32_t flags;
 #define VAR_ISVAR   0x00010000
 #define VAR_ISPARAM 0x00020000
+#define VAR_ISCONST 0x00040000
   uint32_t size;
   uint32_t offset;
   uint32_t reg;
@@ -560,7 +561,16 @@ static struct var *getglobal( char *name ) {
   struct var *v;
   v = glob.globals;
   while( v ) {
-    if( strcasecmp( v->name, name ) == 0 ) return v;
+    if( ((v->flags & VAR_ISCONST) == 0) && (strcasecmp( v->name, name ) == 0) ) return v;
+    v = v->next;
+  }
+  return NULL;
+}
+static struct var *getconst( char *name ) {
+  struct var *v;
+  v = glob.globals;
+  while( v ) {
+    if( ((v->flags & VAR_ISCONST) != 0) && (strcasecmp( v->name, name ) == 0) ) return v;
     v = v->next;
   }
   return NULL;
@@ -646,7 +656,8 @@ static void parseexpr( int reg ) {
 	}
       } else {
 	/* not a known global, assume constant */
-	fvmc_printf( 0, "Unknown variable %s, assuming constant\n", tok.token );
+	v = getconst( tok.token );
+	if( !v ) fvmc_printf( 0, "Unknown variable %s, assuming constant\n", tok.token );
 	fvmc_emit( "\tLDI\tR%u\t%s\n", reg, tok.token );
       }
     }
@@ -906,6 +917,7 @@ static int parsedeclaration( void ) {
     valtok = glob.tok;
     if( accepttok( TOK_VALINTEGER ) ) {
       fvmc_emit( "\t.CONST\t%s\t%u\n", nametok.token, (unsigned int)strtoul( valtok.token, NULL, 0 ) );
+      addglobal( nametok.token, VAR_INTEGER, VAR_ISCONST );
     } else if( accepttok( TOK_VALSTRING ) ) {
       fvmc_emit( "\t.TEXT\t%s\t%s\n", nametok.token, valtok.token );
       addglobal( nametok.token, VAR_STRINGBUF, 0 );

@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdarg.h>
+#include <time.h>
 
 static void fvmc_printf( int lvl, char *fmt, ... );
 static void fvmc_emit( char *fmt, ... );
@@ -468,7 +469,7 @@ static void voidregisters( void ) {
 static uint32_t allocregister( void ) {
   struct var *v;
   uint32_t reg, found;
-  for( reg = 7; reg >= 0; reg-- ) {
+  for( reg = 7; reg >= 2; reg-- ) {
     v = glob.vars;
     found = 0;
     while( v ) {
@@ -481,8 +482,9 @@ static uint32_t allocregister( void ) {
     
     if( !found ) return reg;
   }
-  
-  return -1;
+
+  /* choose a "random" register in range 2-7*/
+  return 2 + (time( NULL ) % 6);
 }
 
 
@@ -1150,20 +1152,27 @@ static void parsestatement( void ) {
 	
     fvmc_printf( 1, "parsing assignment\n" );
     expecttok( TOK_ASSIGN );
-    parseexpr( 0 );
-    /* R0 contains result of expression */
     v = getvar( name );
+
+    /* choose a register to get the result of the expression */
+    if( v && v->reg != -1 ) reg = v->reg;
+    else reg = allocregister();
+    reg = 0; //removeme
+    parseexpr( reg );
+    
     if( v ) {
       if( v->flags & VAR_ISVAR ) {
 	fvmc_emit( "\tLDSP\tR1\t-%u\t ; get address of %s\n", v->offset + glob.stackoffset, v->name );
-	fvmc_emit( "\tST\tR1\tR0\t ; store into %s\n", v->name );
+	fvmc_emit( "\tST\tR1\tR%u\t ; store into %s\n", reg, v->name );	
       } else {
-	fvmc_emit( "\tSTSP\tR0\t-%u\t ; store %s %s\n", v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", name );
+	fvmc_emit( "\tSTSP\tR%u\t-%u\t ; store %s %s\n", reg, v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", name );
       }
     } else {
       fvmc_emit( "\tLDI\tR1\t%s\n", name );
-      fvmc_emit( "\tST\tR1\tR0\n" );
+      fvmc_emit( "\tST\tR1\tR%u\n", reg );
     }
+    assignreg( v, reg );
+    assignreg( NULL, 1 );
   } else if( accepttok( TOK_CARET ) ) {
     /* ^var := expr */
     struct var *v;

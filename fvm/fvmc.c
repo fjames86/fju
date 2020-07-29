@@ -26,6 +26,8 @@
 int fvmc_compile( char *sourcefile, char *destfile );
 void fvmc_pas_verbosemode( int lvl );
 
+static FILE *openoutfile;
+
 static void usage( char *fmt, ... ) {
   va_list args;
   
@@ -44,7 +46,8 @@ static void usage( char *fmt, ... ) {
     va_end( args );
     printf( "\n" );
   }
-   
+
+  if( openoutfile ) fclose( openoutfile );
   exit( 1 );
 }
 
@@ -472,9 +475,10 @@ int main( int argc, char **argv ) {
   }
 
   fvmc_printf( 1, ";; Opening outfile \"%s\"\n", outfilename );
-  outfile = fopen( outfilename, "w" );
+  outfile = fopen( outfilename, "w" );  
   if( !outfile ) usage( "Failed to open outfile \"%s\"", outfilename );
-
+  openoutfile = outfile;
+  
   /* write header */
   emit_header( outfile, addr );
 

@@ -5,13 +5,14 @@ fvm_programs+=fvm/programs/test-service.fvm
 
 fvm_stdlib+=fvm/stdlib/native.asm
 fvm_stdlib+=fvm/stdlib/xdr.asm
+fvm_stdlib+=fvm/stdlib/clusterinvoke.fvm
 
 fvm_test+=fvm/test/test1.fvm
 fvm_test+=fvm/test/test2.fvm
 fvm_test+=fvm/test/test3.fvm
 fvm_test+=fvm/test/test6.fvm
 
-fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm ${fvm_programs} ${fvm_stdlib} ${fvm_test}
+fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm ${fvm_programs} ${fvm_stdlib} ${fvm_test} 
 
 libfvm_source+=fvm/fvm-module.c
 libfvm_source+=fvm/fvm-state.c
@@ -35,6 +36,8 @@ fvm/stdlib/native.asm: ${BINDIR}/fvmc fvm/stdlib/native.pas
 	${BINDIR}/fvmc fvm/stdlib/native.pas
 fvm/stdlib/xdr.asm: ${BINDIR}/fvmc fvm/stdlib/xdr.pas
 	${BINDIR}/fvmc fvm/stdlib/xdr.pas
+fvm/stdlib/clusterinvoke.fvm: ${BINDIR}/fvmc fvm/stdlib/clusterinvoke.pas 
+	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/stdlib/clusterinvoke.pas 
 
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.pas 
 	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm fvm/stdlib/native.pas fvm/programs/test-rpc.pas

@@ -1,6 +1,6 @@
 { -*- text -*- }
 
-Declare
+Program ClusterInvoke(10000,1,ClusterInvoke,Service);
 Begin
 
 var scheduled : opaque[256]; { max of 8 entries } 
@@ -43,7 +43,12 @@ End;
 { Callback methods are invoked with no arguments and receive no results }
 Procedure InvokeMethod(progid : integer, procid : integer)
 Begin
+	  var msgbuf : string[64];
 	  var rescount : integer;
+
+	  Syscall Sprintf(msgbuf, 64, "Invoking %u:%u", AddressOf progid);
+	  Syscall LogStr(msgbuf);
+	  
 	  Syscall Invoke(progid, procid, 0, 0, 0, rescount);
 End;
 

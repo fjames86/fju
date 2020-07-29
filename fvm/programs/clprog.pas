@@ -1,62 +1,81 @@
 { -*- text -*- }
 
-Program ClusterProc(2333335,1,ProgNull,ProgInvoke);
+Program ClusterProc(2333335,1,ProcNull,ProcInvoke,Service);
 Begin
 
+{ null proc for rpc interface }
 Procedure ProcNull(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
 Begin
-   
 End;
 
-var scheduled : opaque[64];
+var scheduled : opaque[256]; { max of 8 entries } 
 var count : integer;
-var seqno : integer;
+var seqno : integer; { next index is seqno % 8 }
 
+{ Insert an entry into the log }
+Procedure WriteEntry(progid : integer, procid : integer)
+Begin
+	var i : integer;
+	var p : opaque;
+	
+	i := (seqno % 8) * 8;
+	p := scheduled + i;
+	^p := progid;
+	p := p + 4;
+	^p := procid;
+	seqno := seqno + 1;
+	If count < 8 Then count := count + 1;
+End;
+
+{
+Register for a method to be invoked.
+}
 Procedure ProcInvoke(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
 Begin
-	var p1 : opaque;
-	var p2 : opaque;
-	var i : integer;
+	var p : opaque;
+	var progid, procid : integer;
 
 	If argcount <> 8 Then
 	   Return;
-	
-	p1 := argbuf;
-	p2 := scheduled;
-	p2 := p2 + 8*count;
-	^p2 := ^p1;
-	p2 := p2 + 4;
-	p1 := p1 + 4;
-	^p2 := ^p1;
-	
-	
+
+	p := argbuf;
+	progid := ^p;
+	p := p + 4;
+	procid := ^p;
+	Call WriteEntry(procid, procid);
 End;
 
+{ Callback methods are invoked with no arguments and receive no results }
 Procedure InvokeMethod(progid : integer, procid : integer)
+Begin
 	  var rescount : integer;
 	  Syscall Invoke(progid, procid, 0, 0, 0, rescount);
-Begin
 End;
 
+{
+The service routine does NOT get called in the standard way (being registered as a service routine).
+Instead, it is registered as an initialization routine. It then periodically yields with a timeout.
+This has the same effect, but it allows the service routine to keep local variables.
+}
 Procedure Service()
 Begin
-	var progid : integer;
-	var procid : integer;
+	var seq, progid, procid, i : integer;
 	var p : opaque;
 
 again:
-	p := scheduled;
-
-	While count > 0 Do
+	While seq < seqno Do
 	Begin
+		i := (seq % 8) * 8;
+		p := scheduled + i;
 		progid := ^p;
 		p := p + 4;
 		procid := ^p;
-		p := p + 4;
-		count := count - 1;
 		Call InvokeMethod(progid, procid);
+
+		seq := seq + 1;
 	End;
 
+	Syscall Yield(1000, 0, i);
 	goto again;
 End;
 

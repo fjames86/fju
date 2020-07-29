@@ -2,6 +2,7 @@
 
 fvm_programs+=fvm/programs/test-rpc.fvm
 fvm_programs+=fvm/programs/test-service.fvm
+fvm_programs+=fvm/programs/clprog.fvm
 
 fvm_stdlib+=fvm/stdlib/native.asm
 fvm_stdlib+=fvm/stdlib/xdr.asm
@@ -40,6 +41,8 @@ fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.pas
 	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm fvm/stdlib/native.pas fvm/programs/test-rpc.pas
 fvm/programs/test-service.fvm: ${BINDIR}/fvmc fvm/programs/test-service.pas
 	${BINDIR}/fvmc -o fvm/programs/test-service.fvm fvm/stdlib/native.pas fvm/programs/test-service.pas
+fvm/programs/clprog.fvm: ${BINDIR}/fvmc fvm/programs/clprog.pas
+	${BINDIR}/fvmc -o fvm/programs/clprog.fvm fvm/stdlib/native.pas fvm/programs/clprog.pas
 
 fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test1.asm fvm/stdlib/native.asm
 	${BINDIR}/fvmc -o fvm/test/test1.fvm -I fvm/stdlib/ fvm/test/test1.asm

@@ -843,33 +843,50 @@ static void parseprocedurebody( void ) {
    * statement
    */
   struct token nametok;
-  int nargs = 0;
   int argsize = 0;
-
+  char names[8][64];
+  int i, nnames;
+  
   voidregisters();
   
   while( accepttok( TOK_VAR ) ) {
     /* var name : type */
     nametok = glob.tok;
     expectok( TOK_NAME );
+    strcpy( names[0], nametok.token );
+    nnames = 1;    
+    while( accepttok( TOK_COMMA ) ) {
+      if( nnames >= 8 ) usage( "Max 8 names in same var declaration" );      
+      nametok = glob.tok;
+      expecttok( TOK_NAME );
+      strcpy( names[nnames], nametok.token );
+      nnames++;
+    }
+    
     expectok( TOK_COLON );
     if( accepttok( TOK_INTEGER ) ) {
-      adjustvars( 4 );
-      addvar( nametok.token, VAR_INTEGER, 4, 4, 0 );
-      argsize += 4;
+      for( i = 0; i < nnames; i++ ) {
+	adjustvars( 4 );
+	addvar( names[i], VAR_INTEGER, 4, 4, 0 );
+	argsize += 4;	
+      }
     } else if( accepttok( TOK_STRING ) ) {
       if( accepttok( TOK_OPENARRAY ) ) {
 	int size;
 	size = strtoul( glob.tok.token, NULL, 0 );	
 	expectok( TOK_VALINTEGER );
 	expectok( TOK_CLOSEARRAY );
-	adjustvars( 4 + size );
-	addvar( nametok.token, VAR_STRINGBUF, 4 + size, 4 + size, 0 );
-	argsize += 4 + size;	
+	for( i = 0; i < nnames; i++ ) {	
+	  adjustvars( 4 + size );
+	  addvar( names[i], VAR_STRINGBUF, 4 + size, 4 + size, 0 );
+	  argsize += 4 + size;
+	}
       } else {
-	adjustvars( 4 );	
-	addvar( nametok.token, VAR_STRING, 4, 4, 0 );
-	argsize += 4;	
+	for( i = 0; i < nnames; i++ ) {
+	  adjustvars( 4 );	
+	  addvar( names[i], VAR_STRING, 4, 4, 0 );
+	  argsize += 4;
+	}
       }
     } else if( accepttok( TOK_OPAQUE ) ) {
       if( accepttok( TOK_OPENARRAY ) ) {
@@ -877,26 +894,29 @@ static void parseprocedurebody( void ) {
 	size = strtoul( glob.tok.token, NULL, 0 );	
 	expectok( TOK_VALINTEGER );
 	expectok( TOK_CLOSEARRAY );
-	adjustvars( size );
-	addvar( nametok.token, VAR_OPAQUEBUF, size, size, 0 );
-	argsize += size;	
+	for( i = 0; i < nnames; i++ ) {
+	  adjustvars( size );
+	  addvar( names[i], VAR_OPAQUEBUF, size, size, 0 );
+	  argsize += size;
+	}
       } else {
-	adjustvars( 4 );
-	addvar( nametok.token, VAR_OPAQUE, 4, 4, 0 );
-	argsize += 4;	
+	for( i = 0; i < nnames; i++ ) {
+	  adjustvars( 4 );
+	  addvar( names[i], VAR_OPAQUE, 4, 4, 0 );
+	  argsize += 4;
+	}
       }
     } else usage( "Unexpected var type %s", glob.tok.token );
-    nargs++;
     
     if( !accepttok( TOK_SEMICOLON ) ) return;
   }
 
   glob.currentargsize = argsize;
-  if( nargs > 0 ) fvmc_emit( "\tADDSP\t%u\t ; allocate locals\n", argsize );
+  if( argsize > 0 ) fvmc_emit( "\tADDSP\t%u\t ; allocate locals\n", argsize );
   do {
     parsestatement();
   } while( accepttok( TOK_SEMICOLON ) );  
-  if( nargs > 0 ) fvmc_emit( "\tSUBSP\t%u\t ; free locals\n", argsize );
+  if( argsize > 0 ) fvmc_emit( "\tSUBSP\t%u\t ; free locals\n", argsize );
   glob.currentargsize = 0;
 }
 

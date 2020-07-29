@@ -293,7 +293,7 @@ static struct {
 		     { "ASM", TOK_ASM },
 		     { "SYSCALL", TOK_SYSCALL },
 		     { "^", TOK_CARET },
-		     { "ADDRESS", TOK_ADDRESS },
+		     { "ADDRESSOF", TOK_ADDRESS },
 		     
 		     { NULL, 0 }
 };
@@ -1153,7 +1153,6 @@ static int parsedeclaration( void ) {
       
       addglobal( nametok.token, type, 0 );
     } else usage( "Unexpected declare statement \"%s\"", glob.tok.token );
-    
   } else return 0;
 
   return 1;

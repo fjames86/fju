@@ -36,7 +36,7 @@ Procedure ProcCounter(argcount : integer, argbuf : opaque, var rescount : intege
 Begin
 	counter := counter + 1;
 
-	resbuf := address counter;
+	resbuf := AddressOf counter;
 	rescount := 4;
 End;
 

@@ -1,12 +1,7 @@
 { -*- text -*- }
 
-Program ClusterProc(2333335,1,ProcNull,ProcInvoke,Service);
+Declare
 Begin
-
-{ null proc for rpc interface }
-Procedure ProcNull(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
-Begin
-End;
 
 var scheduled : opaque[256]; { max of 8 entries } 
 var count : integer;
@@ -30,7 +25,7 @@ End;
 {
 Register for a method to be invoked.
 }
-Procedure ProcInvoke(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
+Procedure ClusterInvoke(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
 Begin
 	var p : opaque;
 	var progid, procid : integer;

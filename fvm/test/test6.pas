@@ -41,7 +41,7 @@ Begin
 
    i := i + i + i + i + i + i ;
 
-   i := address i;
+   i := AddressOf i;
 End;	 
 
 var mymissingglob : integer;

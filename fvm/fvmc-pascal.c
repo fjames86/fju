@@ -637,6 +637,13 @@ static void parseexpr( int reg ) {
   if( accepttok( TOK_VALINTEGER ) ) {
     emitldimmediate( reg, (unsigned int)strtoul( tok.token, NULL, 0 ) );
   } else if( accepttok( TOK_NAME ) ) {
+    uint32_t arrayindex = -1;
+
+    if( accepttok( TOK_OPENARRAY ) ) {
+      arrayindex = parseconstant();
+      expecttok( TOK_CLOSEARRAY );
+    }
+    
     /* check if constant ? */
     v = getvar( tok.token );
     if( v ) {
@@ -648,6 +655,9 @@ static void parseexpr( int reg ) {
 	}
       } else
 #endif
+
+      /* TODO if accepttok( TOK_OPENARRAY ) then compute index into array */
+	
       if( v->type == VAR_STRINGBUF || v->type == VAR_OPAQUEBUF ) {
 	fvmc_emit( "\tLEASP\tR%u\t-%u\t ; load %s %s\n", reg, v->offset + glob.stackoffset, v->flags & VAR_ISPARAM ? "param" : "local", v->name );
 	//assignreg( v, reg );
@@ -659,19 +669,29 @@ static void parseexpr( int reg ) {
 	/* var type parameters are really pointers, dereference it now */
 	fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
       }
+      if( arrayindex != -1 ) {
+	if( v->type != VAR_OPAQUE && v->type != VAR_STRING && v->type != VAR_STRINGBUF && v->type != VAR_OPAQUEBUF ) usage( "Cannot index into variable of wrong type" );
+	fvmc_emit( "\tADD\tR%u\t%u\n", reg, (v->type == VAR_STRING && v->type == VAR_STRINGBUF ? 4 : 0) + arrayindex );
+	fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
+	fvmc_emit( "\tAND\tR%u\t0xff\n", reg );
+      }
+      
     } else {
       /* assume a global */
       v = getglobal( tok.token );
       if( v ) {
 	if( v->type == VAR_STRINGBUF || v->type == VAR_OPAQUEBUF ) {
 	  fvmc_emit( "\tLDI\tR%u\t%s\n", reg, v->name );
+	  if( arrayindex != -1 ) fvmc_emit( "\tADD\tR%u\t%u\n", reg, arrayindex );
 	} else {
 	  fvmc_emit( "\tLD\tR%u\t%s\n", reg, v->name );
+	  if( arrayindex != -1 ) fvmc_emit( "\tADD\tR%u\t%u\n", reg, arrayindex );	  
 	}
-      } else {
-	/* not a known global, assume constant */
+      } else {	
+	/* not a known global, check constant */
 	v = getconst( tok.token );
 	if( !v ) fvmc_printf( 0, "Unknown variable %s, assuming constant\n", tok.token );
+	if( arrayindex != -1 ) usage( "Cannot index into constant" );
 	fvmc_emit( "\tLDI\tR%u\t%s\n", reg, tok.token );
       }
     }

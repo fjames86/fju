@@ -37,22 +37,21 @@ fvm/stdlib/native.asm: ${BINDIR}/fvmc fvm/stdlib/native.pas
 fvm/stdlib/xdr.asm: ${BINDIR}/fvmc fvm/stdlib/xdr.pas
 	${BINDIR}/fvmc fvm/stdlib/xdr.pas
 fvm/stdlib/clusterinvoke.fvm: ${BINDIR}/fvmc fvm/stdlib/clusterinvoke.pas 
-	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/stdlib/clusterinvoke.pas 
+	${BINDIR}/fvmc -o $@ fvm/stdlib/constants.pas fvm/stdlib/native.pas fvm/stdlib/clusterinvoke.pas 
 
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.pas 
-	${BINDIR}/fvmc -o fvm/programs/test-rpc.fvm fvm/stdlib/native.pas fvm/programs/test-rpc.pas
+	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/programs/test-rpc.pas
 fvm/programs/test-service.fvm: ${BINDIR}/fvmc fvm/programs/test-service.pas
-	${BINDIR}/fvmc -o fvm/programs/test-service.fvm fvm/stdlib/native.pas fvm/programs/test-service.pas
+	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/programs/test-service.pas
 
 fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test1.asm fvm/stdlib/native.asm
-	${BINDIR}/fvmc -o fvm/test/test1.fvm -I fvm/stdlib/ fvm/test/test1.asm
+	${BINDIR}/fvmc -o $@ -I fvm/stdlib/ fvm/test/test1.asm
 fvm/test/test2.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test2.asm fvm/stdlib/native.asm
-	${BINDIR}/fvmc -o fvm/test/test2.fvm -I fvm/stdlib/ fvm/test/test2.asm
+	${BINDIR}/fvmc -o $@ -I fvm/stdlib/ fvm/test/test2.asm
 fvm/test/test3.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test3.asm fvm/stdlib/native.asm
-	${BINDIR}/fvmc -o fvm/test/test3.fvm -I fvm/stdlib/ fvm/test/test3.asm	
-
+	${BINDIR}/fvmc -o $@ -I fvm/stdlib/ fvm/test/test3.asm	
 fvm/test/test6.fvm: ${BINDIR}/fvmc fvm/test/test6.pas
-	${BINDIR}/fvmc -o fvm/test/test6.fvm fvm/stdlib/native.pas fvm/test/test6.pas
+	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/test/test6.pas
 
 LIBRARIES+=fvm
 PROGRAMS+=fvm

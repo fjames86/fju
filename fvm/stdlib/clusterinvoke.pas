@@ -1,7 +1,11 @@
 { -*- text -*- }
 
-Program ClusterInvoke(10000,1,ClusterInvoke,Service);
+Program ClusterInvoke(PROG_CLUSTERINVOKE, 1, ClusterInvoke, Service);
 Begin
+
+Const EntrySize := 8;
+Const MaxEntry := 8;
+Const ServicePeriod := 1000;
 
 var scheduled : opaque[256]; { max of 8 entries } 
 var count : integer;
@@ -13,13 +17,13 @@ Begin
 	var i : integer;
 	var p : opaque;
 	
-	i := (seqno % 8) * 8;
+	i := (seqno % MaxEntry) * EntrySize;
 	p := scheduled + i;
 	^p := progid;
 	p := p + 4;
 	^p := procid;
 	seqno := seqno + 1;
-	If count < 8 Then count := count + 1;
+	If count < MaxEntry Then count := count + 1;
 End;
 
 {
@@ -65,7 +69,7 @@ Begin
 again:
 	While seq < seqno Do
 	Begin
-		i := (seq % 8) * 8;
+		i := (seq % MaxEntry) * EntrySize;
 		p := scheduled + i;
 		progid := ^p;
 		p := p + 4;
@@ -75,7 +79,7 @@ again:
 		seq := seq + 1;
 	End;
 
-	Syscall Yield(1000, 0, i);
+	Syscall Yield(ServicePeriod, 0, i);
 	goto again;
 End;
 

@@ -265,8 +265,6 @@ static struct {
 		     { "CALL", TOK_CALL },
 		     { "(", TOK_OPENPAREN },
 		     { ")", TOK_CLOSEPAREN },
-		     { "[", TOK_OPENARRAY },
-		     { "]", TOK_CLOSEARRAY },
 		     { "=", TOK_EQ },
 		     { ">", TOK_GT },
 		     { ">=", TOK_GTE },
@@ -555,8 +553,11 @@ static struct var *addglobal( char *name, var_t type, uint32_t flags ) {
   v->flags = flags;
   v->next = glob.globals;
   glob.globals = v;
+
+  if( flags & VAR_ISCONST ) fvmc_emit( 0, "defining constant %s", name );
   return v;
 }
+
 static struct var *getglobal( char *name ) {
   struct var *v;
   v = glob.globals;
@@ -570,10 +571,23 @@ static struct var *getconst( char *name ) {
   struct var *v;
   v = glob.globals;
   while( v ) {
-    if( ((v->flags & VAR_ISCONST) != 0) && (strcasecmp( v->name, name ) == 0) ) return v;
+    if( (v->flags & VAR_ISCONST) && (strcasecmp( v->name, name ) == 0) ) return v;
     v = v->next;
   }
   return NULL;
+}
+static uint32_t parseconstant( void ) {
+  struct token tok;
+  tok = glob.tok;
+  if( accepttok( TOK_VALINTEGER ) ) {
+    return strtoul( tok.token, NULL, 0 );
+  } else if( accepttok( TOK_NAME ) ) {
+    struct var *v;
+    v = getconst( tok.token );
+    if( !v ) usage( "Unknown constant %s", tok.token );
+    return v->offset;
+  } else usage( "Version expected an integer or named constant, not %s", tok.token );
+  return 0;
 }
 
 /* ----- */
@@ -873,8 +887,7 @@ static void parseprocedurebody( void ) {
     } else if( accepttok( TOK_STRING ) ) {
       if( accepttok( TOK_OPENARRAY ) ) {
 	int size;
-	size = strtoul( glob.tok.token, NULL, 0 );	
-	expectok( TOK_VALINTEGER );
+	size = parseconstant();
 	expectok( TOK_CLOSEARRAY );
 	for( i = 0; i < nnames; i++ ) {	
 	  adjustvars( 4 + size );
@@ -891,8 +904,7 @@ static void parseprocedurebody( void ) {
     } else if( accepttok( TOK_OPAQUE ) ) {
       if( accepttok( TOK_OPENARRAY ) ) {
 	int size;
-	size = strtoul( glob.tok.token, NULL, 0 );	
-	expectok( TOK_VALINTEGER );
+	size = parseconstant();
 	expectok( TOK_CLOSEARRAY );
 	for( i = 0; i < nnames; i++ ) {
 	  adjustvars( size );
@@ -936,8 +948,10 @@ static int parsedeclaration( void ) {
     expecttok( TOK_ASSIGN );
     valtok = glob.tok;
     if( accepttok( TOK_VALINTEGER ) ) {
+      struct var *v;
       fvmc_emit( "\t.CONST\t%s\t%u\n", nametok.token, (unsigned int)strtoul( valtok.token, NULL, 0 ) );
-      addglobal( nametok.token, VAR_INTEGER, VAR_ISCONST );
+      v = addglobal( nametok.token, VAR_INTEGER, VAR_ISCONST );
+      v->offset = strtoul( valtok.token, NULL, 0 );
     } else if( accepttok( TOK_VALSTRING ) ) {
       fvmc_emit( "\t.TEXT\t%s\t%s\n", nametok.token, valtok.token );
       addglobal( nametok.token, VAR_STRINGBUF, 0 );
@@ -1041,9 +1055,7 @@ static int parsedeclaration( void ) {
 
       if( accepttok( TOK_OPENARRAY ) ) {
 	uint32_t len;
-	valtok = glob.tok;
-	expectok( TOK_VALINTEGER );
-	len = strtoul( valtok.token, NULL, 0 );
+	len = parseconstant();
 	expectok( TOK_CLOSEARRAY );
 	fvmc_emit( "\t.DATA\t%s\t\"", nametok.token );
 	if( accepttok( TOK_ASSIGN ) ) {
@@ -1071,10 +1083,9 @@ static int parsedeclaration( void ) {
       
     } else if( accepttok( TOK_OPAQUE ) ) {
       if( accepttok( TOK_OPENARRAY ) ) {
-	struct token valtok;
-	valtok = glob.tok;
-	expectok( TOK_VALINTEGER );
-	fvmc_emit( "\t.DATA\t%s\tARRAY %u\n", nametok.token, strtoul( valtok.token, NULL, 0 ) );
+	uint32_t val;
+	val = parseconstant();
+	fvmc_emit( "\t.DATA\t%s\tARRAY %u\n", nametok.token, val );
 	expectok( TOK_CLOSEARRAY );
 	addglobal( nametok.token, VAR_OPAQUEBUF, 0 );
       } else {
@@ -1388,21 +1399,21 @@ static void parseprogram( void ) {
   }
   expecttok( TOK_NAME );
   if( accepttok( TOK_OPENPAREN ) ) {
-    struct token progid, versid;
-    progid = glob.tok;
-    expectok( TOK_VALINTEGER );
+    uint32_t pg, vs;
+    struct token tok;
+    
+    pg = parseconstant();
     expectok( TOK_COMMA );
-    versid = glob.tok;
-    expectok( TOK_VALINTEGER );
-    fvmc_emit( "\t.PROGRAM\t%u\t%u\n", (int)strtoul( progid.token, NULL, 0 ), (int)strtoul( versid.token, NULL, 0 ) );
+    vs = parseconstant();
+    fvmc_emit( "\t.PROGRAM\t%u\t%u\n", pg, vs );
 
     while( accepttok( TOK_COMMA ) ) {
       v = malloc( sizeof(*v) );
       memset( v, 0, sizeof(*v) );
-      progid = glob.tok;
+      tok = glob.tok;
       expectok( TOK_NAME );
-      fvmc_printf( 1, "exporting %s\n", progid.token );
-      strcpy( v->name, progid.token );
+      fvmc_printf( 1, "exporting %s\n", tok.token );
+      strcpy( v->name, tok.token );
       if( vlast ) vlast->next = v;
       else vars = v;
       vlast = v;

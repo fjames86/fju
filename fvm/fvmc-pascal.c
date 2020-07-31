@@ -554,7 +554,7 @@ static struct var *addglobal( char *name, var_t type, uint32_t flags ) {
   v->next = glob.globals;
   glob.globals = v;
 
-  if( flags & VAR_ISCONST ) fvmc_emit( 0, "defining constant %s", name );
+  if( flags & VAR_ISCONST ) fvmc_printf( 2, "Defining constant %s\n", name );
   return v;
 }
 
@@ -1545,6 +1545,7 @@ int fvmc_compile( char *sourcefile, char *destfile ) {
     fclose( infile );
     return -1;
   }
+  fprintf( outfile, "\n" );
   
   glob.infile = infile;
   glob.outfile = outfile;

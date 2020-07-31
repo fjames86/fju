@@ -313,7 +313,7 @@ static FILE *opensourcefile( char *name, int firstpass ) {
       }
       
       f = fopen( path, "r" );
-      if( !f ) usage( "Failed to compile file?" );
+      if( !f ) usage( "Failed to compile file %s?", name );
       glob.currentfileidx++;      
       return f;
     }

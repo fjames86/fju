@@ -14,12 +14,14 @@
 #define FVM_FLAG_NEG  0x2
 #define FVM_FLAG_ZERO 0x4
 
+struct fvm_module;
+
 struct fvm_header {
   uint32_t magic;
 #define FVM_MAGIC    0xf412a91c
   uint32_t version;
 #define FVM_VERSION  1
-  uint32_t flags;
+  uint32_t flags; /* header flags */
   uint32_t progid;
   uint32_t versid;  
   uint32_t symcount;
@@ -39,9 +41,8 @@ struct fvm_module {
   uint8_t *text;
   
   uint64_t clusterid;
-  uint32_t flags;
-#define FVM_MODULE_AUDIT        0x0001
-  
+  uint32_t flags; /* module flags */
+  char path[256];
 };
 
 typedef enum {
@@ -93,6 +94,7 @@ int fvm_audit_write( uint32_t progid, uint32_t procid, char *args, int len );
 uint64_t fvm_audit_read( uint64_t nextid, uint32_t *progid, uint32_t *procid, char *args, int len, int *lenp );
 int fvm_audit_replay( void );
 int fvm_audit_reset( void );
-		  
+int fvm_module_save_data( struct fvm_module *m );
+
 #endif
 

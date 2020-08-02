@@ -128,8 +128,14 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
   //if( sts ) return sts;
 
   /* if clustered then send pings etc */
-  if( (state->flags & FVM_STATE_DIRTY) && state->module->clusterid ) {
-    fvm_cluster_update( state->module );
+  if( state->flags & FVM_STATE_DIRTY ) {
+    if( state->module->clusterid ) {
+      fvm_cluster_update( state->module );
+    }
+
+    if( state->module->header.flags & FVM_MODULE_PERSISTENT ) {
+      fvm_module_save_data( state->module );
+    }
   }
   state->flags &= ~FVM_STATE_DIRTY;
   

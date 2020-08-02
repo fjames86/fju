@@ -61,6 +61,7 @@ int fvm_module_load_file( char *filename, uint32_t *progid ) {
   
   
   m = malloc( sizeof(*m) + header.symcount*sizeof(struct fvm_symbol) + header.datasize + header.textsize );
+  memset( m, 0, sizeof(*m) );  
   m->header = header;
   m->symbols = (struct fvm_symbol *)(((char *)m) + sizeof(*m));
   m->data = (uint8_t *)(((char *)m->symbols) + header.symcount*sizeof(struct fvm_symbol));
@@ -70,10 +71,12 @@ int fvm_module_load_file( char *filename, uint32_t *progid ) {
   mmf_read( &mmf, (char *)m->data, header.datasize, sizeof(header) + header.symcount * sizeof(struct fvm_symbol) );
   mmf_read( &mmf, (char *)m->text, header.textsize, sizeof(header) + header.symcount * sizeof(struct fvm_symbol) + header.datasize );
 
+  strncpy( m->path, filename, sizeof(m->path) - 1 );
+  
   m->next = modules;
   modules = m;
   sts = 0;
-	       
+  
  done:
   mmf_close( &mmf );
   return sts;
@@ -97,6 +100,8 @@ int fvm_module_load_buffer( char *buf, int size, uint32_t *progid ) {
 
   
   m = malloc( sizeof(*m) + header.symcount*sizeof(struct fvm_symbol) + header.datasize + header.textsize );
+  memset( m, 0, sizeof(*m) );
+  
   m->header = header;
   m->symbols = (struct fvm_symbol *)(((char *)m) + sizeof(*m));
   m->data = (uint8_t *)(((char *)m->symbols) + header.symcount*sizeof(struct fvm_symbol));
@@ -194,6 +199,26 @@ struct fvm_module *fvm_module_by_progid( uint32_t progid ) {
   }
   return NULL;
 }
+
+int fvm_module_save_data( struct fvm_module *m ) {
+  FILE *f;
+  uint32_t offset;
+  
+  if( m->path[0] == '\0' ) return -1;
+
+  offset = sizeof(struct fvm_header) + sizeof(struct fvm_symbol)*m->header.symcount;
+  
+  f = fopen( m->path, "wb" );
+  if( !f ) return -1;
+
+  fseek( f, offset, SEEK_SET );
+  fwrite( m->data, 1, m->header.datasize, f ); 
+  
+  fclose( f );
+
+  return 0;
+}
+
 
 uint32_t fvm_progid_by_name( char *name ) {
   struct fvm_module *m;

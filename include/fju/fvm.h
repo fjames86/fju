@@ -70,6 +70,7 @@ int fvm_module_info( uint32_t progid, struct fvm_module_info *minfo );
 int fvm_module_list( struct fvm_module_info *minfo, int n );
 int fvm_module_symbols( uint32_t progid, struct fvm_symbol *sym, int n );
 uint32_t fvm_procid_by_name( uint32_t progid, char *procname );
+int fvm_module_set_flags( uint32_t progid, uint32_t flags, uint32_t mask );
 
 /* initialize runtime state */
 int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid );

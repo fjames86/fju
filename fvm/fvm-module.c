@@ -219,6 +219,13 @@ int fvm_module_save_data( struct fvm_module *m ) {
   return 0;
 }
 
+int fvm_module_set_flags( uint32_t progid, uint32_t flags, uint32_t mask ) {
+  struct fvm_module *m;
+  m = fvm_module_by_progid( progid );
+  if( !m ) return -1;
+  m->flags = (m->flags & ~mask) | (flags & mask);
+  return 0;
+}
 
 uint32_t fvm_progid_by_name( char *name ) {
   struct fvm_module *m;

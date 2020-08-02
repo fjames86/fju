@@ -767,7 +767,7 @@ void fvm_rpc_register( void ) {
 	if( !sts ) {
 	  fvm_log( LOG_LVL_INFO, "FVM loading module %s", path );
 	  sts = fvm_module_load_file( path, &progid );
-	  if( sts ) fvm_log( LOG_LVL_ERROR, "Failed to load module %s", path );
+ 	  if( sts ) fvm_log( LOG_LVL_ERROR, "Failed to load module %s", path );
 	}
 	
 	sts = freg_get_by_name( NULL, entry.id, "cluster", FREG_TYPE_UINT64, (char *)&clid, sizeof(clid), NULL );
@@ -779,9 +779,8 @@ void fvm_rpc_register( void ) {
 
 	sts = freg_get_by_name( NULL, entry.id, "flags", FREG_TYPE_UINT32, (char *)&flags, sizeof(flags), NULL );
 	if( !sts ) {
-	  m = fvm_module_by_progid( progid );
-	  if( m ) m->flags = flags;
-	  else fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
+	  sts = fvm_module_set_flags( progid, flags, flags );
+	  if( sts ) fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
 	}
 	
       }

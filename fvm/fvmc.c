@@ -38,6 +38,7 @@ static void usage( char *fmt, ... ) {
 	  "   -v verbmose mode\n"
 	  "   -d Disassemble\n"
 	  "   -I include path\n"
+	  "   -F flags\n" 
 	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
@@ -123,6 +124,7 @@ static struct {
   struct ifclause *ifclause;
   struct defmacro *macros;
   struct constdef *constdefs;
+  uint32_t headerflags;
 } glob;
 
 
@@ -423,6 +425,10 @@ int main( int argc, char **argv ) {
       sp->path = argv[i];
       sp->next = glob.searchpaths;
       glob.searchpaths = sp;
+    } else if( strcmp( argv[i], "-F" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      glob.headerflags = strtoul( argv[i], NULL, 0 );
     } else if( strcmp( argv[i], "-h" ) == 0 ) {
       usage( NULL );
     } else if( strcmp( argv[i], "--help" ) == 0 ) {
@@ -1223,6 +1229,7 @@ static void emit_header( FILE *f, uint32_t addr ) {
   strcpy( header.name, glob.modulename );
   header.progid = glob.progid;
   header.versid = glob.versid;
+  header.flags = glob.headerflags;
   fwrite( &header, 1, sizeof(header), f );
 
   for( idx = 0; idx < glob.exportidx; idx++ ) {

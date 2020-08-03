@@ -33,16 +33,19 @@ int fvm_module_load_file( char *filename, uint32_t *progid ) {
 
   memset( &header, 0, sizeof(header) );
   sts = mmf_read( &mmf, (char *)&header, sizeof(header), 0 );
-  if( sts != sizeof(header) ) {    
+  if( sts != sizeof(header) ) {
+    fvm_log( LOG_LVL_ERROR, "Bad file size %d != %d", sts, sizeof(header) );
     sts = -1;
     goto done;
   }
 
   if( header.magic != FVM_MAGIC ) {
+    fvm_log( LOG_LVL_ERROR, "Bad header magic" );
     sts = -1;
     goto done;
   }
   if( header.version != FVM_VERSION ) {
+    fvm_log( LOG_LVL_ERROR, "Bad header version" );    
     sts = -1;
     goto done;
   }      
@@ -50,11 +53,13 @@ int fvm_module_load_file( char *filename, uint32_t *progid ) {
   if( progid ) *progid = header.progid;
   
   if( fvm_module_by_name( header.name ) ) {
+    fvm_log( LOG_LVL_ERROR, "Module with name %s already loaded", header.name );    
     sts = -1;
     goto done;
   }
 
   if( fvm_module_by_progid( header.progid ) ) {
+    fvm_log( LOG_LVL_ERROR, "Module with progid %u already loaded", header.progid ) ;   
     sts = -1;
     goto done;
   }
@@ -66,7 +71,8 @@ int fvm_module_load_file( char *filename, uint32_t *progid ) {
   m->symbols = (struct fvm_symbol *)(((char *)m) + sizeof(*m));
   m->data = (uint8_t *)(((char *)m->symbols) + header.symcount*sizeof(struct fvm_symbol));
   m->text = (uint8_t *)(((char *)m->data) + header.datasize);
-
+  m->flags = header.flags;
+  
   mmf_read( &mmf, (char *)m->symbols, sizeof(struct fvm_symbol) * header.symcount, sizeof(struct fvm_header) );
   mmf_read( &mmf, (char *)m->data, header.datasize, sizeof(header) + header.symcount * sizeof(struct fvm_symbol) );
   mmf_read( &mmf, (char *)m->text, header.textsize, sizeof(header) + header.symcount * sizeof(struct fvm_symbol) + header.datasize );
@@ -76,7 +82,7 @@ int fvm_module_load_file( char *filename, uint32_t *progid ) {
   m->next = modules;
   modules = m;
   sts = 0;
-  
+
  done:
   mmf_close( &mmf );
   return sts;
@@ -201,20 +207,19 @@ struct fvm_module *fvm_module_by_progid( uint32_t progid ) {
 }
 
 int fvm_module_save_data( struct fvm_module *m ) {
-  FILE *f;
+  struct mmf_s mmf;
   uint32_t offset;
+  int sts;
   
   if( m->path[0] == '\0' ) return -1;
 
   offset = sizeof(struct fvm_header) + sizeof(struct fvm_symbol)*m->header.symcount;
-  
-  f = fopen( m->path, "wb" );
-  if( !f ) return -1;
 
-  fseek( f, offset, SEEK_SET );
-  fwrite( m->data, 1, m->header.datasize, f ); 
+  sts = mmf_open2( m->path, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) return sts;
   
-  fclose( f );
+  mmf_write( &mmf, (char *)m->data, m->header.datasize, offset );
+  mmf_close( &mmf );
 
   return 0;
 }

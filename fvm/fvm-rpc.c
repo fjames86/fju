@@ -779,7 +779,7 @@ void fvm_rpc_register( void ) {
 
 	sts = freg_get_by_name( NULL, entry.id, "flags", FREG_TYPE_UINT32, (char *)&flags, sizeof(flags), NULL );
 	if( !sts ) {
-	  sts = fvm_module_set_flags( progid, flags, flags );
+	  sts = fvm_module_set_flags( progid, flags, 0xffffffff );
 	  if( sts ) fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
 	}
 	

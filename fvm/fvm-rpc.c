@@ -266,11 +266,11 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
 static int fvm_proc_load( struct rpc_inc *inc ) {
   int handle;
   char *bufp;
-  int lenp, sts, registerp;
-  uint32_t progid;
+  int lenp, sts;
+  uint32_t progid, flags;
   
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
-  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &registerp );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   sts = fvm_module_load_buffer( bufp, lenp, &progid );
@@ -279,9 +279,18 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
     sts = fvm_module_load_buffer( bufp, lenp, &progid );
   }
 
-  if( registerp ) {
+  if( flags & 0x1 ) {
+    /* register as rpc program */
     fvm_unregister_program( progid );
     fvm_register_program( progid );
+  } else if( flags & 0x2 ) {
+    /* run default method and unregister */
+    struct fvm_s state;
+    sts = fvm_state_init( &state, progid, 0 );
+    if( !sts ) {
+      fvm_run( &state, -1 );
+    }
+    fvm_module_unload( progid );
   }
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );

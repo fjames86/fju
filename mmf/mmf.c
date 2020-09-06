@@ -197,7 +197,7 @@ int mmf_truncate( struct mmf_s *mmf, int size ) {
 #else
 int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 	memset( mmf, 0, sizeof(*mmf) );
-	mmf->fd = open( path, O_RDWR|(flags & MMF_OPEN_EXISTING ? 0 : O_CREAT), 0600 );
+	mmf->fd = open( path, O_RDWR|(flags & MMF_OPEN_EXISTING ? 0 : O_CREAT), 0666 );
 	if( mmf->fd < 0 ) return -1;
 	mmf->fsize = lseek( mmf->fd, 0, SEEK_END );
 	return 0;

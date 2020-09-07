@@ -56,8 +56,8 @@ static void print_host( struct hostreg_host *host );
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
 	    "          reset [full]\n" 
-            "          add [id=ID] [name=NAME] [pubkey=PUBKEY] [addr=ADDR] ]\n"
-            "          set ID [name=NAME] [pubkey=PUBKEY] [addr=ADDR] ]\n"
+            "          add [id=ID] [name=NAME] [pubkey=PUBKEY] [addr=ADDR]\n"
+            "          set ID [name=NAME] [pubkey=PUBKEY] [addr=ADDR]\n"
             "          rem ID\n"
 	    "          common ID\n"
     );

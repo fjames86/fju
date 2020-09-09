@@ -29,6 +29,6 @@ sh scripts/fjud.sh start
 ssh root@${remoteip} sh ~/fjud.sh start
 
 # run the fvm test script
-sh scripts/test-fvm.sh
+#sh scripts/test-fvm.sh
 
 

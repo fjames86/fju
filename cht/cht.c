@@ -160,7 +160,7 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
 
   /* all in use, try and evict entries and use that */
   sts = -1;
-  for( i = 0; i < 4; i++ ) {
+  for( i = 0; i < 1/*4*/; i++ ) {
     p = ((uint32_t *)key)[i] % cht->count;
     if( p == idx ) continue;
     sts = cht_evict( cht, p, rdepth + 1 );

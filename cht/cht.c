@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 
 #include <fju/mmf.h>
 #include <fju/cht.h>
@@ -30,10 +31,12 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
   
   /* check header */
   if( cht->file->header.magic == 0 ) {
+    memset( &cht->file->header, 0, sizeof(cht->file->header) );
     cht->file->header.magic = CHT_MAGIC;
     cht->file->header.version = CHT_VERSION;
     cht->file->header.seq = 1;
     cht->file->header.count = count;
+    mmf_write( &cht->mmf, "", 1, sizeof(struct cht_prop) + count * (sizeof(struct cht_entry) + CHT_BLOCK_SIZE) );
   } else if( cht->file->header.magic != CHT_MAGIC ) {
     goto bad;
   } else if( cht->file->header.version != CHT_VERSION ) {
@@ -41,12 +44,14 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
   } else {
     count = cht->file->header.count;
   }
-        
+
+  
   sts = mmf_remap( &cht->mmf, sizeof(struct cht_prop) + sizeof(struct cht_entry) * count );
   if( sts < 0 ) goto bad;
 
   cht->file = (struct cht_file *)cht->mmf.file;
   cht->count = count;
+  cht->rdepth = (int)sqrt( (double)count );
   
   return 0;
   
@@ -73,6 +78,16 @@ static int cht_read_block( struct cht_s *cht, int idx, char *buf, int size ) {
   return mmf_read( &cht->mmf, buf, size, sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );  
 }
 
+static int zerokey( char *key ) {
+  int i;
+  uint32_t *p = (uint32_t *)key;
+  
+  for( i = 0; i < 4; i++ ) {
+    if( p[i] ) return 0;
+  }
+  return 1;
+}
+
 int cht_read( struct cht_s *cht, char *key, struct cht_entry *entry, char *buf, int size ) {
   int sts, i;
   uint32_t idx;
@@ -83,6 +98,7 @@ int cht_read( struct cht_s *cht, char *key, struct cht_entry *entry, char *buf, 
   for( i = 0; i < 4; i++ ) {
     idx = ((uint32_t *)key)[i] % cht->count;
     if( memcmp( cht->file->entry[idx].key, key, CHT_KEY_SIZE ) == 0 ) {
+      sts = 0;
       if( entry ) *entry = cht->file->entry[idx];
       if( buf && size > 0 ) {
 	if( size > (cht->file->entry[idx].flags & CHT_SIZE_MASK) ) size = (cht->file->entry[idx].flags & CHT_SIZE_MASK);
@@ -91,8 +107,7 @@ int cht_read( struct cht_s *cht, char *key, struct cht_entry *entry, char *buf, 
       break;
     }
   }
-
-  sts = 0;
+  
   mmf_unlock( &cht->mmf );
 
   return sts;
@@ -108,8 +123,6 @@ static void cht_hash( char *key, char *buf, int size ) {
   memcpy( key, hash, CHT_KEY_SIZE );
 }
 
-#define CHT_MAX_RDEPTH 30
-
 static int cht_write_block( struct cht_s *cht, int idx, char *buf, int size ) {
   return mmf_write( &cht->mmf, buf, size, sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );  
 }
@@ -119,7 +132,7 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
   int sts, i, p;
   char buf[CHT_BLOCK_SIZE];
   
-  if( rdepth >= CHT_MAX_RDEPTH ) return -1;
+  if( rdepth >= cht->rdepth ) return -1;
 
   /* evict entry at index idx to one of its 3 other possible locations */
 
@@ -129,28 +142,44 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
     p = ((uint32_t *)key)[i] % cht->count;
     if( p == idx ) continue;
 
-    if( cht->file->entry[p].seq == 0 ) {
-      /* unallocated entry */
-      cht->file->entry[p] = cht->file->entry[idx];
+    if( zerokey( (char *)cht->file->entry[p].key ) ) {
+      /* move to unallocated entry */
+      memcpy( cht->file->entry[p].key, cht->file->entry[idx].key, CHT_KEY_SIZE );
+      cht->file->entry[p].seq++;
+      cht->file->entry[p].flags = cht->file->entry[idx].flags;
+      memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
+      
       memset( buf, 0, sizeof(buf) );
       cht_read_block( cht, idx, buf, sizeof(buf) );
       cht_write_block( cht, p, buf, sizeof(buf) );
+
+      cht->file->header.seq++;
       return 0;
     }
   }
 
   /* all in use, evict entry 0 and use that */
-  p = ((uint32_t *)key)[0] % cht->count;  
-  sts = cht_evict( cht, p, rdepth + 1 );
+  sts = -1;
+  for( i = 0; i < 4; i++ ) {
+    p = ((uint32_t *)key)[i] % cht->count;
+    if( p == idx ) continue;
+    sts = cht_evict( cht, p, rdepth + 1 );
+    if( sts == 0 ) break;
+  }
   if( sts ) {
-    /* can't evict this block, overwrite it */
+    //printf( "Unable to evict any entry, failure rdepth=%u\n", rdepth );
+    return -1;
   }
   
-  cht->file->entry[p] = cht->file->entry[idx];
+  memcpy( cht->file->entry[p].key, cht->file->entry[idx].key, CHT_KEY_SIZE );
+  cht->file->entry[p].seq++;
+  cht->file->entry[p].flags = cht->file->entry[idx].flags;
+  memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
+  
   memset( buf, 0, sizeof(buf) );
   cht_read_block( cht, idx, buf, sizeof(buf) );
   cht_write_block( cht, p, buf, sizeof(buf) );
-  
+
   return 0;  
 }
 
@@ -168,33 +197,45 @@ int cht_write( struct cht_s *cht, char *buf, int size, uint32_t flags, struct ch
   /* check each location, if unallocated then use */
   for( i = 0; i < 4; i++ ) {
     idx = ((uint32_t *)key)[i] % cht->count;
-    if( cht->file->entry[idx].seq == 0 ) {
+    if( zerokey( (char *)cht->file->entry[idx].key ) ||
+	(memcmp( cht->file->entry[idx].key, key, CHT_KEY_SIZE ) == 0) ) {
+
+      if( zerokey( (char *)cht->file->entry[idx].key ) ) {
+	cht->file->header.fill++;
+      }
+      
       memcpy( cht->file->entry[idx].key, key, CHT_KEY_SIZE );
-      cht->file->entry[idx].seq = 1;
-      cht->file->entry[idx].flags = (size & CHT_SIZE_MASK) | (entry != NULL ? entry->flags : 0);
+      cht->file->entry[idx].seq++;
+      cht->file->entry[idx].flags = size | (flags & ~CHT_SIZE_MASK);
       cht_write_block( cht, idx, buf, size );
       
       if( entry ) *entry = cht->file->entry[idx];
       sts = 0;
+      cht->file->header.seq++;
+
       goto done;
     }
   }
-
-  /* all locations in use. Evict first candidate location and use that */
-  idx = ((uint32_t *)key)[0] % cht->count;  
-  sts = cht_evict( cht, ((uint32_t *)key)[idx] % cht->count, 0 );
+  
+  /* all locations in use. Try and evict candidate locations and use that */
+  for( i = 0; i < 4; i++ ) {
+    idx = ((uint32_t *)key)[i] % cht->count;  
+    sts = cht_evict( cht, idx, 0 );
+    if( sts == 0 ) break;
+  }
   if( sts ) {
     /* failed to evict? */
-    sts = -1;
     goto done;
   }
   
   memcpy( cht->file->entry[idx].key, key, CHT_KEY_SIZE );
-  cht->file->entry[idx].seq = 1;
-  cht->file->entry[idx].flags = (size & CHT_SIZE_MASK) | flags;
-  mmf_write( &cht->mmf, buf, size, sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );
+  cht->file->entry[idx].seq++;
+  cht->file->entry[idx].flags = (size & CHT_SIZE_MASK) | (flags & ~CHT_SIZE_MASK);
+  mmf_write( &cht->mmf, buf, size, sizeof(struct cht_prop) + (sizeof(struct cht_entry) * cht->count) + (CHT_BLOCK_SIZE * idx) );
   
   if( entry ) *entry = cht->file->entry[idx];
+  cht->file->header.seq++;
+  sts = 0;
   
  done:
   mmf_unlock( &cht->mmf );
@@ -202,3 +243,47 @@ int cht_write( struct cht_s *cht, char *buf, int size, uint32_t flags, struct ch
   return sts;
 }
 
+int cht_delete( struct cht_s *cht, char *key ) {
+  int sts, i, idx;
+  
+  mmf_lock( &cht->mmf );
+
+  sts = -1;
+  for( i = 0; i < 4; i++ ) {
+    idx = ((uint32_t *)key)[i] % cht->count;
+    if( memcmp( cht->file->entry[idx].key, key, CHT_KEY_SIZE ) == 0 ) {
+      sts = 0;
+      memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
+      cht->file->entry[idx].seq++;
+      cht->file->entry[idx].flags = 0;
+      cht->file->header.fill--;
+      cht->file->header.seq++;
+      break;
+    }
+  }
+  
+  mmf_unlock( &cht->mmf );
+
+  return sts;
+}
+
+int cht_entry_by_index( struct cht_s *cht, int idx, struct cht_entry *entry ) {
+  int sts;
+  
+  if( idx >= cht->count ) return -1;
+
+  sts = -1;
+  mmf_lock( &cht->mmf );
+
+  if( !zerokey( (char *)cht->file->entry[idx].key ) ) {
+    *entry = cht->file->entry[idx];
+    sts = 0;
+  }
+  
+  mmf_unlock( &cht->mmf );
+  
+  return sts;
+}
+
+
+  

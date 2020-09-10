@@ -67,4 +67,7 @@ int sec_shamir_join( uint8_t *secret, int secretlen, struct sec_shamir_share *sh
 /* Set crc=0xffffffff on first use, pass result in to continue */
 uint32_t sec_crc32( uint32_t crc, char *buf, int len );
 
+int fju_readstdin( char *buf, int size );
+int fju_writestdout( char *buf, int size );
+
 #endif

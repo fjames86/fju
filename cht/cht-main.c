@@ -29,7 +29,8 @@ static void usage( char *fmt, ... ) {
 	  "    -r id          Read a given ID\n"
 	  "    -d id          Delete a given ID\n" 
 	  "    -w             Write\n"
-	  "    -l             List entries\n" 
+	  "    -l             List entries\n"
+	  "    -F flags       Set flags on write, valid flags are: sticky\n" 
 	  "\n"
 	  "If the -f option is provided, reading first reads an entry for the given id.\n"
 	  "This contains a list of hashes that are each used to resolve file blocks.\n"
@@ -47,6 +48,7 @@ static struct {
 
 static void print_entry( struct cht_entry *e, int printinfo );
 static void parsekey( char *idstr, char *key );
+static uint32_t parseflags( char *str );
 
 int main( int argc, char **argv ) {
   int i, sts;
@@ -60,7 +62,8 @@ int main( int argc, char **argv ) {
   char *idstr = NULL;
   struct cht_entry entry;
   struct cht_opts opts;
-
+  uint32_t flags = 0;
+  
   memset( &opts, 0, sizeof(opts) );
   
   i = 1;
@@ -94,6 +97,10 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       idstr = argv[i];      
       opdelete = 1;
+    } else if( strcmp( argv[i], "-F" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      flags = parseflags( argv[i] );
     } else usage( NULL );
     i++;
   }
@@ -129,7 +136,7 @@ int main( int argc, char **argv ) {
       if( sts ) usage( "Failed to open input file" );
       for( i = 0; i < mmf.fsize; i += CHT_BLOCK_SIZE ) {
 	sts = mmf_read( &mmf, glob.buf, CHT_BLOCK_SIZE, i );
-	sts = cht_write( &glob.cht, glob.buf, sts, 0, &entry );
+	sts = cht_write( &glob.cht, glob.buf, sts, flags, &entry );
 	if( sts ) usage( "Failed to write entry" );
 	print_entry( &entry, 0 );
       }
@@ -142,7 +149,7 @@ int main( int argc, char **argv ) {
       sts = fju_readstdin( glob.buf, sizeof(glob.buf) );
       
       /* write entry */
-      sts = cht_write( &glob.cht, glob.buf, sts, 0, &entry );
+      sts = cht_write( &glob.cht, glob.buf, sts, flags, &entry );
       if( sts ) usage( "Failed to write entry" );
       print_entry( &entry, 1 );
     }
@@ -154,7 +161,7 @@ int main( int argc, char **argv ) {
     if( sts ) usage( "Failed to delete entry" );
   } else if( oplist ) {
     for( i = 0; i < glob.cht.count; i++ ) {
-      sts = cht_entry_by_index( &glob.cht, i, &entry );
+      sts = cht_entry_by_index( &glob.cht, i, 0, &entry );
       if( sts == 0 ) print_entry( &entry, 1 );
     }
     
@@ -175,8 +182,11 @@ static void print_entry( struct cht_entry *e, int printinfo ) {
     printf( "%02x", (uint32_t)e->key[i] );
   }
   if( printinfo ) {
-    printf( " Seq %u Size %u Flags 0x%0x",
-	    e->seq, e->flags & CHT_SIZE_MASK, e->flags & ~CHT_SIZE_MASK );
+    printf( " Seq %-4u Size %-4u Flags 0x%08x %s",
+	    e->seq,
+	    e->flags & CHT_SIZE_MASK,
+	    e->flags & ~CHT_SIZE_MASK,
+	    e->flags & CHT_STICKY ? "Sticky " : "" );
   }
   printf( "\n" );
 }
@@ -206,4 +216,31 @@ static void parsekey( char *idstr, char *key ) {
     
     key[i] = x;
   }  
+}
+
+static uint32_t parseflags( char *str ) {
+  char flagstr[32];
+  char *p;
+  uint32_t flags = 0;
+
+  memset( flagstr, 0, sizeof(flagstr) );
+  p = flagstr;
+  while( 1 ) {
+    if( *str == ',' || *str == '\0' ) {
+      if( strcasecmp( flagstr, "sticky" ) == 0 ) {
+	flags |= CHT_STICKY;
+      } else usage( "Unknown flag \"%s\"", flagstr );
+      memset( flagstr, 0, sizeof(flagstr) );      
+      p = flagstr;
+
+      if( *str == '\0' ) break;
+      str++;
+      continue;
+    }
+    *p = *str;
+    str++;
+    p++;
+  }
+      
+  return flags;    
 }

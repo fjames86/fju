@@ -12,7 +12,8 @@ struct cht_entry {
   uint8_t key[CHT_KEY_SIZE];  /* content hash */
   uint32_t seq;     /* block seqno (increments on write) */
   uint32_t flags;   /* block size and other flags */
-#define CHT_SIZE_MASK 0x0000ffff /* mask block size 16k */  
+#define CHT_SIZE_MASK 0x0000ffff /* mask block size 16k */
+#define CHT_STICKY    0x00010000 /* sticky bit: never evict entry */
 };
 
 

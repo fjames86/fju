@@ -158,7 +158,7 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
     }
   }
 
-  /* all in use, evict entry 0 and use that */
+  /* all in use, try and evict entries and use that */
   sts = -1;
   for( i = 0; i < 4; i++ ) {
     p = ((uint32_t *)key)[i] % cht->count;
@@ -168,7 +168,17 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
   }
   if( sts ) {
     //printf( "Unable to evict any entry, failure rdepth=%u\n", rdepth );
-    return -1;
+    int foundidx = 0;
+    for( i = 0; i < 4; i++ ) {
+      p = ((uint32_t *)key)[i] % cht->count;
+      if( p == idx ) continue;
+      if( cht->file->entry[p].flags & CHT_STICKY ) continue;
+      foundidx = 1;
+      break;
+    }
+    if( !foundidx ) return -1;
+    //printf( "Evicting entry\n" );
+    cht->file->header.fill--;
   }
   
   memcpy( cht->file->entry[p].key, cht->file->entry[idx].key, CHT_KEY_SIZE );
@@ -235,6 +245,7 @@ int cht_write( struct cht_s *cht, char *buf, int size, uint32_t flags, struct ch
   
   if( entry ) *entry = cht->file->entry[idx];
   cht->file->header.seq++;
+  cht->file->header.fill++;
   sts = 0;
   
  done:
@@ -267,7 +278,7 @@ int cht_delete( struct cht_s *cht, char *key ) {
   return sts;
 }
 
-int cht_entry_by_index( struct cht_s *cht, int idx, struct cht_entry *entry ) {
+int cht_entry_by_index( struct cht_s *cht, int idx, uint32_t seq, struct cht_entry *entry ) {
   int sts;
   
   if( idx >= cht->count ) return -1;
@@ -276,8 +287,10 @@ int cht_entry_by_index( struct cht_s *cht, int idx, struct cht_entry *entry ) {
   mmf_lock( &cht->mmf );
 
   if( !zerokey( (char *)cht->file->entry[idx].key ) ) {
-    *entry = cht->file->entry[idx];
-    sts = 0;
+    if( !seq || cht->file->entry[idx].seq == seq ) {
+      *entry = cht->file->entry[idx];
+      sts = 0;
+    }
   }
   
   mmf_unlock( &cht->mmf );

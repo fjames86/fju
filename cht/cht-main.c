@@ -30,7 +30,8 @@ static void usage( char *fmt, ... ) {
 	  "    -d id          Delete a given ID\n" 
 	  "    -w             Write\n"
 	  "    -l             List entries\n"
-	  "    -F flags       Set flags on write, valid flags are: sticky\n" 
+	  "    -F flags       Set flags on write, valid flags are: sticky\n"
+	  "    -E key         Encrypt contents with key\n" 
 	  "\n"
 	  "If the -f option is provided, reading first reads an entry for the given id.\n"
 	  "This contains a list of hashes that are each used to resolve file blocks.\n"
@@ -101,6 +102,11 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       flags = parseflags( argv[i] );
+    } else if( strcmp( argv[i], "-E" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      parsekey( argv[i], (char *)opts.key );
+      opts.mask |= CHT_OPT_ENCRYPT;
     } else usage( NULL );
     i++;
   }
@@ -168,7 +174,7 @@ int main( int argc, char **argv ) {
   } else {
     struct cht_prop prop;
     cht_prop( &glob.cht, &prop );
-    printf( "Seq %u Count %u/%u\n", prop.seq, prop.fill, prop.count );
+    printf( "Seq %u Count %u/%u Flags 0x%x\n", prop.seq, prop.fill, prop.count, prop.flags );
   }
   
   cht_close( &glob.cht );

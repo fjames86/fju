@@ -24,12 +24,15 @@ struct cht_s {
   struct cht_file *file;
   uint32_t count;
   uint32_t rdepth;
+  uint8_t key[16];
 };
 
 struct cht_opts {
   uint32_t mask;
-#define CHT_OPT_COUNT 0x0001
+#define CHT_OPT_COUNT   0x0001
+#define CHT_OPT_ENCRYPT 0x0002
   uint32_t count;
+  uint8_t key[16];
 };
 
 int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts );
@@ -43,8 +46,11 @@ struct cht_prop {
   uint32_t seq;
   uint32_t count;
   uint32_t fill;
+  uint32_t flags;
+#define CHT_ENCRYPT   0x00000001
+  uint8_t keyhash[16];
   
-  uint32_t spare[27];
+  uint32_t spare[10];
 };
 
 int cht_prop( struct cht_s *cht, struct cht_prop *prop );

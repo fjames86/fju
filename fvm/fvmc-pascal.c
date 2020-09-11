@@ -6,6 +6,11 @@
  * 
  */
 
+ #ifdef WIN32
+ #define _CRT_SECURE_NO_WARNINGS
+ #define strcasecmp _stricmp
+ #endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>

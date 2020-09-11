@@ -1,5 +1,6 @@
 
 #ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
 #include <WinSock2.h>
 #include <Windows.h>
 #else
@@ -375,7 +376,7 @@ static int native_yield( struct fvm_s *state ) {
 /* procedure invoke(progid : integer, procid : integer, args : opaque, argcount : integer, res : opaque, var rescount : integer); */
 static int native_invoke( struct fvm_s *state ) {
   uint32_t progid, procid, argaddr, argcount, resaddr, rescountaddr, rescount, ressize;
-  char *argp, *resp, *p;
+  char *argp = NULL, *resp = NULL, *p;
   int sts;
   struct fvm_s state2;
   

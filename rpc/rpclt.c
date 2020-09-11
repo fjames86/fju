@@ -1394,7 +1394,7 @@ static void fvm_writevar_args( int argc, char **argv, int i, struct xdr_s *xdr )
   char argname[64], *argval;
   uint32_t progid, procid, type, u32;
   uint64_t u64;
-  char *str;
+  char *str = NULL;
 
   progid = 0;
   procid = 0;

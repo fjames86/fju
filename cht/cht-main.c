@@ -1,4 +1,11 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <Winsock2.h>
+#include <Windows.h>
+#define strcasecmp _stricmp
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>

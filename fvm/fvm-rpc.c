@@ -7,6 +7,8 @@
 #include <arpa/inet.h>
 #endif
 
+#include <inttypes.h>
+
 #include "fvm-private.h"
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
@@ -415,7 +417,7 @@ static int fvm_proc_write( struct rpc_inc *inc ) {
   int handle, sts, len;
   uint64_t clid;
   struct raft_cluster cl;
-  char *datap;  
+  char *datap = NULL;  
   uint32_t progid;
   struct fvm_module *m;
   int i, n;
@@ -483,7 +485,7 @@ static int fvm_proc_cluster( struct rpc_inc *inc ) {
 static int fvm_proc_run( struct rpc_inc *inc ) {
   int handle, sts;
   uint32_t progid, procid;
-  char *bufp;
+  char *bufp = NULL;
   int lenp;
   struct fvm_s state;
 

@@ -18,6 +18,8 @@ struct cht_file {
 int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
   int sts;
   uint32_t count;
+
+  if( path == NULL ) path = mmf_default_path( "cht.dat", NULL );
   
   memset( cht, 0, sizeof(*cht) );
   sts = mmf_open( path, &cht->mmf );

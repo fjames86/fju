@@ -22,17 +22,20 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
   }
 
-  printf( "cht [-p path] [-f] [-o path] [-r <id>] [-d ID] [-w] [-l]\n"
-	  "\n Where:\n"
+  printf( "Usage: cht [OPTIONS] [-r <id> | -d ID | -D | -w | -l]\n"
+	  "\n Where OPTIONS:\n"
 	  "    -p path        Path to database file\n"
 	  "    -o path        Path to input/output file\n"
 	  "    -f             Operate on whole file (default is single block)\n"
+	  "    -F flags       Set flags on write, valid flags are: sticky\n"
+	  "    -E key         Encrypt contents with key\n"
+	  "\n" 
+	  "   Commands:\n" 
 	  "    -r id          Read a given ID\n"
-	  "    -d id          Delete a given ID\n" 
+	  "    -d id          Delete a given ID\n"
+	  "    -D             Delete all non-sticky entries\n" 
 	  "    -w             Write\n"
 	  "    -l             List entries\n"
-	  "    -F flags       Set flags on write, valid flags are: sticky\n"
-	  "    -E key         Encrypt contents with key\n" 
 	  "\n"
 	  "If the -f option is provided, reading first reads an entry for the given id.\n"
 	  "This contains a list of hashes that are each used to resolve file blocks.\n"
@@ -99,6 +102,8 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       idstr = argv[i];      
       opdelete = 1;
+    } else if( strcmp( argv[i], "-D" ) == 0 ) {
+      opdelete = 2;
     } else if( strcmp( argv[i], "-F" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -111,8 +116,6 @@ int main( int argc, char **argv ) {
     } else usage( NULL );
     i++;
   }
-
-  if( path == NULL ) path = mmf_default_path( "cht.dat", NULL );
 
   sts = cht_open( path, &glob.cht, &opts );
   if( sts ) usage( "Failed to open database" );
@@ -160,12 +163,14 @@ int main( int argc, char **argv ) {
       if( sts ) usage( "Failed to write entry" );
       print_entry( &entry, 1 );
     }
-  } else if( opdelete ) {
+  } else if( opdelete == 1 ) {
     char key[CHT_KEY_SIZE];
 
     parsekey( idstr, key );
     sts = cht_delete( &glob.cht, key );
     if( sts ) usage( "Failed to delete entry" );
+  } else if( opdelete == 2 ) {
+    sts = cht_purge( &glob.cht, CHT_STICKY, 0 ); /* delete all non-sticky entries */
   } else if( oplist ) {
     for( i = 0; i < glob.cht.count; i++ ) {
       sts = cht_entry_by_index( &glob.cht, i, 0, &entry );

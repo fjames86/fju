@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 #include <fju/mmf.h>
 #include <fju/cht.h>
@@ -36,34 +37,12 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
     cht->file->header.version = CHT_VERSION;
     cht->file->header.seq = 1;
     cht->file->header.count = count;
-    if( opts && opts->mask & CHT_OPT_ENCRYPT ) {
-      uint8_t hash[20];
-      struct sec_buf iov[1];
-      
-      cht->file->header.flags |= CHT_ENCRYPT;
-      memcpy( cht->key, opts->key, 16 );
-
-      iov[0].buf = (char *)cht->key;
-      iov[0].len = 16;
-      sha1( hash, iov, 1 );
-      memcpy( cht->file->header.keyhash, hash, 16 );
-    }
-    mmf_write( &cht->mmf, "", 1, sizeof(struct cht_prop) + count * (sizeof(struct cht_entry) + CHT_BLOCK_SIZE) );
+    cht->file->header.tag = time( NULL );
+    mmf_write( &cht->mmf, "", 1, sizeof(struct cht_prop) + count * (sizeof(struct cht_entry) + CHT_BLOCK_SIZE) - 1 );
   } else if( cht->file->header.magic != CHT_MAGIC ) {
     goto bad;
   } else if( cht->file->header.version != CHT_VERSION ) {
     goto bad;
-  } else if( (cht->file->header.flags & CHT_ENCRYPT) ) {
-    uint8_t hash[20];
-    struct sec_buf iov[1];
-    
-    if( !(opts && opts->mask & CHT_OPT_ENCRYPT) ) goto bad;
-    
-    iov[0].buf = (char *)opts->key;
-    iov[0].len = 16;
-    sha1( hash, iov, 1 );
-    if( memcmp( hash, cht->file->header.keyhash, 16 ) != 0 ) goto bad;
-    
   } else {
     count = cht->file->header.count;
   }
@@ -74,6 +53,10 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
   cht->file = (struct cht_file *)cht->mmf.file;
   cht->count = count;
   cht->rdepth = (int)sqrt( (double)count );
+  if( opts && opts->mask & CHT_OPT_ENCRYPT ) {
+    memcpy( cht->ekey, opts->ekey, CHT_KEY_SIZE );
+    cht->flags |= CHT_ENCRYPT;
+  }
   
   return 0;
   
@@ -99,7 +82,13 @@ int cht_prop( struct cht_s *cht, struct cht_prop *prop ) {
 static int cht_read_block( struct cht_s *cht, int idx, char *buf, int size ) {
   int sts;
 
-  sts = mmf_read( &cht->mmf, buf, size, sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );
+  if( size > CHT_BLOCK_SIZE ) size = CHT_BLOCK_SIZE;
+  if( idx >= cht->count ) return -1;
+  
+  sts = mmf_read( &cht->mmf, buf, size,
+		  sizeof(struct cht_prop) +
+		  (sizeof(struct cht_entry) * cht->count) +
+		  (CHT_BLOCK_SIZE * idx) );
   if( sts < 0 ) return -1;
     
   return 0;
@@ -115,6 +104,22 @@ static int zerokey( char *key ) {
   return 1;
 }
 
+static void cht_hash( struct cht_s *cht, char *key, char *buf, int size ) {
+  char hash[SEC_SHA1_MAX_HASH];
+  struct sec_buf iov[1];
+
+  iov[0].len = size;
+  iov[0].buf = buf;
+  
+  if( cht->flags & CHT_ENCRYPT ) {
+    sha1_hmac( (uint8_t *)hash, cht->ekey, iov, 1 );
+  } else {
+    sha1( (uint8_t *)hash, iov, 1 );
+  }
+  
+  memcpy( key, hash, CHT_KEY_SIZE );
+}
+
 int cht_read( struct cht_s *cht, char *key, struct cht_entry *entry, char *buf, int size ) {
   int sts, i;
   uint32_t idx;
@@ -128,13 +133,26 @@ int cht_read( struct cht_s *cht, char *key, struct cht_entry *entry, char *buf, 
     if( memcmp( cht->file->entry[idx].key, key, CHT_KEY_SIZE ) == 0 ) {
       sts = 0;
       if( entry ) *entry = cht->file->entry[idx];
+
       if( buf && size > 0 ) {
-	if( size > (cht->file->entry[idx].flags & CHT_SIZE_MASK) ) size = (cht->file->entry[idx].flags & CHT_SIZE_MASK);
+	if( size > (cht->file->entry[idx].flags & CHT_SIZE_MASK) ) {
+	  size = (cht->file->entry[idx].flags & CHT_SIZE_MASK);
+	}
+	
 	sts = cht_read_block( cht, idx, ibuf, CHT_BLOCK_SIZE );
-	if( cht->file->header.flags & CHT_ENCRYPT ) {
+	if( cht->flags & CHT_ENCRYPT ) {
+	  char testkey[CHT_KEY_SIZE];
 	  int s = size;
 	  if( s % 16 ) s += 16 - (s % 16);
-	  aes_decrypt( cht->key, (uint8_t *)ibuf, s );
+
+	  cht_hash( cht, testkey, ibuf, s );
+	  if( memcmp( testkey, key, CHT_KEY_SIZE ) != 0 ) {
+	    /* checksum mismatch */
+	    sts = -1;
+	    goto done;
+	  }
+	  
+	  aes_decrypt( cht->ekey, (uint8_t *)ibuf, s );
 	}
 	memcpy( buf, ibuf, size );
       }
@@ -142,30 +160,25 @@ int cht_read( struct cht_s *cht, char *key, struct cht_entry *entry, char *buf, 
     }
   }
   
+ done:  
   mmf_unlock( &cht->mmf );
 
   return sts;
 }
 
-static void cht_hash( struct cht_s *cht, char *key, char *buf, int size ) {
-  char hash[SEC_SHA1_MAX_HASH];
-  struct sec_buf iov[1];
-
-  iov[0].len = size;
-  iov[0].buf = buf;
-  
-  if( cht->file->header.flags & CHT_ENCRYPT ) {
-    sha1_hmac( (uint8_t *)hash, cht->key, iov, 1 );
-  } else {
-    sha1( (uint8_t *)hash, iov, 1 );
-  }
-  
-  memcpy( key, hash, CHT_KEY_SIZE );
-}
 
 static int cht_write_block( struct cht_s *cht, int idx, char *buf, int size ) {
-  int sts;  
-  sts = mmf_write( &cht->mmf, buf, size, sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );
+  int sts;
+
+  if( size > CHT_BLOCK_SIZE ) size = CHT_BLOCK_SIZE;
+  if( idx >= cht->count ) return -1;
+
+  sts = mmf_write( &cht->mmf, buf, size,
+		   sizeof(struct cht_prop) +
+		   (sizeof(struct cht_entry) * cht->count) +
+		   (CHT_BLOCK_SIZE * idx) );
+  if( sts < 0 ) return -1;
+  
   return 0;
 }
 
@@ -189,8 +202,11 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
       memcpy( cht->file->entry[p].key, cht->file->entry[idx].key, CHT_KEY_SIZE );
       cht->file->entry[p].seq++;
       cht->file->entry[p].flags = cht->file->entry[idx].flags;
+      /* delete old entry */
       memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
-      
+      cht->file->entry[idx].seq++;
+
+      /* move data block */
       sts = mmf_read( &cht->mmf, buf, sizeof(buf), sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );
       sts = mmf_write( &cht->mmf, buf, sizeof(buf), sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * p );      
 
@@ -226,7 +242,8 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
   cht->file->entry[p].seq++;
   cht->file->entry[p].flags = cht->file->entry[idx].flags;
   memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
-
+  cht->file->entry[idx].seq++;
+  
   sts = mmf_read( &cht->mmf, buf, sizeof(buf), sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );
   sts = mmf_write( &cht->mmf, buf, sizeof(buf), sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * p );      
 
@@ -246,9 +263,9 @@ int cht_write( struct cht_s *cht, char *buf, int size, uint32_t flags, struct ch
   s = size;    
   if( s % 16 ) s += 16 - (s % 16);
   
-  if( cht->file->header.flags & CHT_ENCRYPT ) {
-    aes_encrypt( cht->key, (uint8_t *)ibuf, s );
-  }   
+  if( cht->flags & CHT_ENCRYPT ) {
+    aes_encrypt( cht->ekey, (uint8_t *)ibuf, s );
+  }
   cht_hash( cht, key, ibuf, s );
   
   mmf_lock( &cht->mmf );
@@ -320,6 +337,30 @@ int cht_delete( struct cht_s *cht, char *key ) {
       cht->file->header.seq++;
       break;
     }
+  }
+  
+  mmf_unlock( &cht->mmf );
+
+  return sts;
+}
+
+int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags ) {
+  int sts, i;
+  
+  mmf_lock( &cht->mmf );
+
+  sts = -1;
+  for( i = 0; i < cht->count; i++ ) {
+    if( (cht->file->entry[i].flags & mask) == flags ) {
+      memset( &cht->file->entry[i].key, 0, CHT_KEY_SIZE );
+      cht->file->entry[i].seq++;
+      cht->file->entry[i].flags = 0;
+      cht->file->header.fill--;
+      sts = 0;
+    }
+  }
+  if( !sts ) {
+    cht->file->header.seq++;
   }
   
   mmf_unlock( &cht->mmf );

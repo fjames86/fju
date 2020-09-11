@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdarg.h>
+#include <inttypes.h>
 
 #include <fju/cht.h>
 #include <fju/sec.h>
@@ -105,7 +106,7 @@ int main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-E" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      parsekey( argv[i], (char *)opts.key );
+      parsekey( argv[i], (char *)opts.ekey );
       opts.mask |= CHT_OPT_ENCRYPT;
     } else usage( NULL );
     i++;
@@ -174,7 +175,12 @@ int main( int argc, char **argv ) {
   } else {
     struct cht_prop prop;
     cht_prop( &glob.cht, &prop );
-    printf( "Seq %u Count %u/%u Flags 0x%x\n", prop.seq, prop.fill, prop.count, prop.flags );
+    printf( "Tag %0"PRIx64" Seq %"PRIu64" Count %u/%u (%u%%)\n",
+	    prop.tag,
+	    prop.seq,
+	    prop.fill,
+	    prop.count,
+	    (100 * prop.fill) / prop.count );
   }
   
   cht_close( &glob.cht );

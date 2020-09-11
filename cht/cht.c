@@ -54,7 +54,18 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
 
   cht->file = (struct cht_file *)cht->mmf.file;
   cht->count = count;
+#if 0
   cht->rdepth = (int)sqrt( (double)count );
+#else
+  {
+    int c = count;
+    cht->rdepth = 1;
+    while( c > 0 ) {
+      c >>= 2;
+      cht->rdepth <<= 1;
+    }
+  }
+#endif
   if( opts && opts->mask & CHT_OPT_ENCRYPT ) {
     memcpy( cht->ekey, opts->ekey, CHT_KEY_SIZE );
     cht->flags |= CHT_ENCRYPT;

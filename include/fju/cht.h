@@ -7,7 +7,6 @@
 #define CHT_KEY_SIZE 16 /* key into database i.e. content hash */
 #define CHT_BLOCK_SIZE (16*1024)
 #define CHT_DEFAULT_COUNT (1024)
-#define CHT_EKEY_SIZE 16
 
 struct cht_entry {
   uint8_t key[CHT_KEY_SIZE];  /* key into database, i.e. content hash */
@@ -25,18 +24,12 @@ struct cht_s {
   struct cht_file *file;
   uint32_t count;  /* database size */
   uint32_t rdepth; /* recursion depth */
-  uint32_t flags;  /* option flags */
-#define CHT_ENCRYPT 0x00000001
-  
-  uint8_t ekey[CHT_EKEY_SIZE]; /* encryption key */
 };
 
 struct cht_opts {
   uint32_t mask;
 #define CHT_OPT_COUNT   0x0001
-#define CHT_OPT_ENCRYPT 0x0002
   uint32_t count;  
-  uint8_t ekey[CHT_EKEY_SIZE];
 };
 
 int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts );
@@ -62,7 +55,7 @@ int cht_prop( struct cht_s *cht, struct cht_prop *prop );
  * entry : optional, receives block metadata
  * buf : optional, receives block data
  */
-int cht_read( struct cht_s *cht, char *key, struct cht_entry *entry, char *buf, int size );
+int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entry *entry );
 
 /* 
  * write a block. 
@@ -71,7 +64,7 @@ int cht_read( struct cht_s *cht, char *key, struct cht_entry *entry, char *buf, 
  * flags : optional, write flags
  * entry : optional, receives the newly allocated block metadata
  */
-int cht_write( struct cht_s *cht, char *buf, int size, uint32_t flags, struct cht_entry *entry );
+int cht_write( struct cht_s *cht, char *key, uint32_t flags, char *buf, int size );
 
 int cht_delete( struct cht_s *cht, char *key );
 int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags );

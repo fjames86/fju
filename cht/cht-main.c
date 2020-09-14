@@ -35,7 +35,6 @@ static void usage( char *fmt, ... ) {
 	  "    -o path        Path to input/output file\n"
 	  "    -f             Operate on whole file (default is single block)\n"
 	  "    -F flags       Set flags on write, valid flags are: sticky\n"
-	  "    -E key         Encrypt contents with key\n"
 	  "\n" 
 	  "   Commands:\n" 
 	  "    -r id          Read a given ID\n"
@@ -109,11 +108,6 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       flags = parseflags( argv[i] );
-    } else if( strcmp( argv[i], "-E" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      parsekey( argv[i], (char *)opts.ekey );
-      opts.mask |= CHT_OPT_ENCRYPT;
     } else usage( NULL );
     i++;
   }
@@ -133,7 +127,7 @@ int main( int argc, char **argv ) {
       
       parsekey( idstr, key );
             
-      sts = cht_read( &glob.cht, key, &entry, glob.buf, sizeof(glob.buf) );
+      sts = cht_read( &glob.cht, key, glob.buf, sizeof(glob.buf), &entry );
       if( sts ) usage( "Failed to read entry" );
       fju_writestdout( glob.buf, entry.flags & CHT_SIZE_MASK );
     }
@@ -143,12 +137,18 @@ int main( int argc, char **argv ) {
       
       /* read from file, writing each block */
       struct mmf_s mmf;
+      char key[CHT_KEY_SIZE];
+      
       sts = mmf_open2( fpath, &mmf, MMF_OPEN_EXISTING );
       if( sts ) usage( "Failed to open input file" );
       for( i = 0; i < mmf.fsize; i += CHT_BLOCK_SIZE ) {
 	sts = mmf_read( &mmf, glob.buf, CHT_BLOCK_SIZE, i );
-	sts = cht_write( &glob.cht, glob.buf, sts, flags, &entry );
+	memset( key, 0, sizeof(key) );
+	sts = cht_write( &glob.cht, key, flags, glob.buf, sts );
 	if( sts ) usage( "Failed to write entry" );
+
+	memset( &entry, 0, sizeof(entry) );
+	memcpy( entry.key, key, CHT_KEY_SIZE );
 	print_entry( &entry, 0 );
       }
       mmf_close( &mmf );
@@ -156,12 +156,18 @@ int main( int argc, char **argv ) {
       /* write file descriptor block? */
       //printf( "TODO: write file descriptor block\n" );
     } else {
+      char key[CHT_KEY_SIZE];
+      
       /* read from stdin */
       sts = fju_readstdin( glob.buf, sizeof(glob.buf) );
       
       /* write entry */
-      sts = cht_write( &glob.cht, glob.buf, sts, flags, &entry );
+      memset( key, 0, sizeof(key) );
+      sts = cht_write( &glob.cht, key, flags, glob.buf, sts );
       if( sts ) usage( "Failed to write entry" );
+
+      memset( &entry, 0, sizeof(entry) );
+      memcpy( entry.key, key, CHT_KEY_SIZE );      
       print_entry( &entry, 1 );
     }
   } else if( opdelete == 1 ) {

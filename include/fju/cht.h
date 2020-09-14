@@ -10,7 +10,7 @@
 
 struct cht_entry {
   uint8_t key[CHT_KEY_SIZE];  /* key into database, i.e. content hash */
-  uint32_t seq;     /* block seqno (increments on write) */
+  uint32_t seq;     /* entry seqno. starts at 1, increments on write */
   uint32_t flags;   /* block size and other entry flags */
 #define CHT_SIZE_MASK 0x0000ffff /* mask block size 16k */
 #define CHT_STICKY    0x00010000 /* sticky bit: never evict entry */
@@ -61,10 +61,9 @@ int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entr
  * write a block. 
  * buf : block data
  * size : block data size 
- * flags : optional, write flags
- * entry : optional, receives the newly allocated block metadata
+ * entry : key and flags must be set, seq receives entry seqno
  */
-int cht_write( struct cht_s *cht, char *key, uint32_t flags, char *buf, int size );
+int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size );
 
 int cht_delete( struct cht_s *cht, char *key );
 int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags );

@@ -137,18 +137,16 @@ int main( int argc, char **argv ) {
       
       /* read from file, writing each block */
       struct mmf_s mmf;
-      char key[CHT_KEY_SIZE];
       
       sts = mmf_open2( fpath, &mmf, MMF_OPEN_EXISTING );
       if( sts ) usage( "Failed to open input file" );
       for( i = 0; i < mmf.fsize; i += CHT_BLOCK_SIZE ) {
 	sts = mmf_read( &mmf, glob.buf, CHT_BLOCK_SIZE, i );
-	memset( key, 0, sizeof(key) );
-	sts = cht_write( &glob.cht, key, flags, glob.buf, sts );
+	memset( &entry, 0, sizeof(entry) );
+	entry.flags = flags;
+	sts = cht_write( &glob.cht, &entry, glob.buf, sts );
 	if( sts ) usage( "Failed to write entry" );
 
-	memset( &entry, 0, sizeof(entry) );
-	memcpy( entry.key, key, CHT_KEY_SIZE );
 	print_entry( &entry, 0 );
       }
       mmf_close( &mmf );
@@ -156,18 +154,15 @@ int main( int argc, char **argv ) {
       /* write file descriptor block? */
       //printf( "TODO: write file descriptor block\n" );
     } else {
-      char key[CHT_KEY_SIZE];
-      
       /* read from stdin */
       sts = fju_readstdin( glob.buf, sizeof(glob.buf) );
       
       /* write entry */
-      memset( key, 0, sizeof(key) );
-      sts = cht_write( &glob.cht, key, flags, glob.buf, sts );
+      memset( &entry, 0, sizeof(entry) );
+      entry.flags = flags;
+      sts = cht_write( &glob.cht, &entry, glob.buf, sts );
       if( sts ) usage( "Failed to write entry" );
 
-      memset( &entry, 0, sizeof(entry) );
-      memcpy( entry.key, key, CHT_KEY_SIZE );      
       print_entry( &entry, 1 );
     }
   } else if( opdelete == 1 ) {

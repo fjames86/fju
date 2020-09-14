@@ -173,12 +173,9 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
 
     if( zerokey( (char *)cht->file->entry[p].key ) ) {
       /* move to unallocated entry */
-      memcpy( cht->file->entry[p].key, cht->file->entry[idx].key, CHT_KEY_SIZE );
-      cht->file->entry[p].seq++;
-      cht->file->entry[p].flags = cht->file->entry[idx].flags;
+      cht->file->entry[p] = cht->file->entry[idx];
       /* delete old entry */
       memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
-      cht->file->entry[idx].seq++;
 
       /* move data block */
       sts = mmf_read( &cht->mmf, buf, sizeof(buf), sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );
@@ -211,12 +208,9 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
     //printf( "Evicting entry\n" );
     cht->file->header.fill--;
   }
-  
-  memcpy( cht->file->entry[p].key, cht->file->entry[idx].key, CHT_KEY_SIZE );
-  cht->file->entry[p].seq++;
-  cht->file->entry[p].flags = cht->file->entry[idx].flags;
+
+  cht->file->entry[p] = cht->file->entry[idx];
   memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
-  cht->file->entry[idx].seq++;
   
   sts = mmf_read( &cht->mmf, buf, sizeof(buf), sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );
   sts = mmf_write( &cht->mmf, buf, sizeof(buf), sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * p );      
@@ -224,36 +218,40 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
   return 0;  
 }
 
-int cht_write( struct cht_s *cht, char *key, uint32_t flags, char *buf, int size ) {
+int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size ) {
   int sts, i;
   uint32_t idx;
 
   if( size > CHT_BLOCK_SIZE ) return -1;
 
-  if( zerokey( key ) ) {
+  if( zerokey( (char *)entry->key ) ) {
     uint8_t hash[SEC_SHA1_MAX_HASH];
     struct sec_buf iov[1];
     iov[0].buf = buf;
     iov[0].len = size;
     sha1( hash, iov, 1 );
-    memcpy( key, hash, CHT_KEY_SIZE );
+    memcpy( entry->key, hash, CHT_KEY_SIZE );
   }
   
   mmf_lock( &cht->mmf );
 
   /* check each location, if unallocated then use */
   for( i = 0; i < 4; i++ ) {
-    idx = ((uint32_t *)key)[i] % cht->count;
+    idx = ((uint32_t *)entry->key)[i] % cht->count;
     if( zerokey( (char *)cht->file->entry[idx].key ) ||
-	(memcmp( cht->file->entry[idx].key, key, CHT_KEY_SIZE ) == 0) ) {
+	(memcmp( cht->file->entry[idx].key, entry->key, CHT_KEY_SIZE ) == 0) ) {
 
       if( zerokey( (char *)cht->file->entry[idx].key ) ) {
 	cht->file->header.fill++;
+	cht->file->entry[idx].seq = 0;	
+      } else {
+	printf( "hash collision\n" );
       }
       
-      memcpy( cht->file->entry[idx].key, key, CHT_KEY_SIZE );
+      memcpy( cht->file->entry[idx].key, entry->key, CHT_KEY_SIZE );      
       cht->file->entry[idx].seq++;
-      cht->file->entry[idx].flags = size | (flags & ~CHT_SIZE_MASK);
+      entry->seq = cht->file->entry[idx].seq;
+      cht->file->entry[idx].flags = size | (entry->flags & ~CHT_SIZE_MASK);
       cht_write_block( cht, idx, buf, size );
       
       sts = 0;
@@ -265,7 +263,7 @@ int cht_write( struct cht_s *cht, char *key, uint32_t flags, char *buf, int size
   
   /* all locations in use. Try and evict candidate locations and use that */
   for( i = 0; i < 4; i++ ) {
-    idx = ((uint32_t *)key)[i] % cht->count;  
+    idx = ((uint32_t *)entry->key)[i] % cht->count;  
     sts = cht_evict( cht, idx, 0 );
     if( sts == 0 ) break;
   }
@@ -274,9 +272,10 @@ int cht_write( struct cht_s *cht, char *key, uint32_t flags, char *buf, int size
     goto done;
   }
   
-  memcpy( cht->file->entry[idx].key, key, CHT_KEY_SIZE );
-  cht->file->entry[idx].seq++;
-  cht->file->entry[idx].flags = (size & CHT_SIZE_MASK) | (flags & ~CHT_SIZE_MASK);
+  memcpy( cht->file->entry[idx].key, entry->key, CHT_KEY_SIZE );
+  cht->file->entry[idx].seq = 1;
+  entry->seq = cht->file->entry[idx].seq;
+  cht->file->entry[idx].flags = (size & CHT_SIZE_MASK) | (entry->flags & ~CHT_SIZE_MASK);
   cht_write_block( cht, idx, buf, size );
   
   cht->file->header.seq++;
@@ -300,7 +299,7 @@ int cht_delete( struct cht_s *cht, char *key ) {
     if( memcmp( cht->file->entry[idx].key, key, CHT_KEY_SIZE ) == 0 ) {
       sts = 0;
       memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
-      cht->file->entry[idx].seq++;
+      cht->file->entry[idx].seq = 0;
       cht->file->entry[idx].flags = 0;
       cht->file->header.fill--;
       cht->file->header.seq++;
@@ -322,7 +321,7 @@ int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags ) {
   for( i = 0; i < cht->count; i++ ) {
     if( (cht->file->entry[i].flags & mask) == flags ) {
       memset( &cht->file->entry[i].key, 0, CHT_KEY_SIZE );
-      cht->file->entry[i].seq++;
+      cht->file->entry[i].seq = 0;
       cht->file->entry[i].flags = 0;
       cht->file->header.fill--;
       sts = 0;

@@ -34,7 +34,7 @@ static void usage( char *fmt, ... ) {
 	  "    -p path        Path to database file\n"
 	  "    -o path        Path to input/output file\n"
 	  "    -f             Operate on whole file (default is single block)\n"
-	  "    -F flags       Set flags on write, valid flags are: sticky\n"
+	  "    -F flags       Set flags on write, valid flags are: sticky, readonly\n"
 	  "\n" 
 	  "   Commands:\n" 
 	  "    -r id          Read a given ID\n"
@@ -201,11 +201,12 @@ static void print_entry( struct cht_entry *e, int printinfo ) {
     printf( "%02x", (uint32_t)e->key[i] );
   }
   if( printinfo ) {
-    printf( " Seq %-4u Size %-4u Flags 0x%08x %s",
+    printf( " Seq %-4u Size %-4u Flags 0x%08x %s%s",
 	    e->seq,
 	    e->flags & CHT_SIZE_MASK,
 	    e->flags & ~CHT_SIZE_MASK,
-	    e->flags & CHT_STICKY ? "Sticky " : "" );
+	    e->flags & CHT_STICKY ? "Sticky " : "",
+	    e->flags & CHT_READONLY ? "Readonly " : "" );
   }
   printf( "\n" );
 }
@@ -248,6 +249,8 @@ static uint32_t parseflags( char *str ) {
     if( *str == ',' || *str == '\0' ) {
       if( strcasecmp( flagstr, "sticky" ) == 0 ) {
 	flags |= CHT_STICKY;
+      } else if( strcasecmp( flagstr, "readonly" ) == 0 ) {
+	flags |= CHT_READONLY;	
       } else usage( "Unknown flag \"%s\"", flagstr );
       memset( flagstr, 0, sizeof(flagstr) );      
       p = flagstr;

@@ -244,8 +244,10 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
       if( zerokey( (char *)cht->file->entry[idx].key ) ) {
 	cht->file->header.fill++;
 	cht->file->entry[idx].seq = 0;	
-      } else {
-	printf( "hash collision\n" );
+      } else if( cht->file->entry[idx].flags & CHT_READONLY ) {
+	/* entry marked as readonly - cannot write */
+	sts = -1;
+	goto done;
       }
       
       memcpy( cht->file->entry[idx].key, entry->key, CHT_KEY_SIZE );      

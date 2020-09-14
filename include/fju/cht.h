@@ -14,6 +14,7 @@ struct cht_entry {
   uint32_t flags;   /* block size and other entry flags */
 #define CHT_SIZE_MASK 0x0000ffff /* mask block size 16k */
 #define CHT_STICKY    0x00010000 /* sticky bit: never evict entry */
+#define CHT_READONLY  0x00020000 /* readonly: entry can never be updated */
 };
 
 

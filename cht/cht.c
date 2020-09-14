@@ -45,18 +45,17 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
     goto bad;
   } else if( cht->file->header.version != CHT_VERSION ) {
     goto bad;
-  } else {
-    count = cht->file->header.count;
   }
+  
+  count = cht->file->header.count;
   
   sts = mmf_remap( &cht->mmf, sizeof(struct cht_prop) + sizeof(struct cht_entry) * count );
   if( sts < 0 ) goto bad;
 
   cht->file = (struct cht_file *)cht->mmf.file;
   cht->count = count;
-#if 0
-  cht->rdepth = (int)sqrt( (double)count );
-#else
+
+  /* set the recursion depth to something like sqrt(count) */
   {
     int c = count;
     cht->rdepth = 1;
@@ -65,7 +64,7 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
       cht->rdepth <<= 1;
     }
   }
-#endif
+
   if( opts && opts->mask & CHT_OPT_ENCRYPT ) {
     memcpy( cht->ekey, opts->ekey, CHT_KEY_SIZE );
     cht->flags |= CHT_ENCRYPT;

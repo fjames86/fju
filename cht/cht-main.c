@@ -43,12 +43,6 @@ static void usage( char *fmt, ... ) {
 	  "    -D             Delete all non-sticky entries\n" 
 	  "    -w             Write\n"
 	  "    -l             List entries\n"
-	  "\n"
-	  "If the -f option is provided, reading first reads an entry for the given id.\n"
-	  "This contains a list of hashes that are each used to resolve file blocks.\n"
-	  "Writing will write an entry for each block of the file and then write an entry containing\n"
-	  "all the file block hashes.\n"
-	  "Without the -f option, the contents of the block named by ID are resolved.\n" 
 	  "\n" );
   exit( 0 );
 }

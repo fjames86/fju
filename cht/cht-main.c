@@ -123,7 +123,8 @@ int main( int argc, char **argv ) {
     } else {
       /* read entry for given id */
       char key[CHT_KEY_SIZE];
-      
+
+      if( !idstr ) usage( "Need ID" );      
       parsekey( idstr, key );
             
       sts = cht_read( &glob.cht, key, glob.buf, sizeof(glob.buf), &entry );
@@ -167,7 +168,8 @@ int main( int argc, char **argv ) {
     }
   } else if( opdelete == 1 ) {
     char key[CHT_KEY_SIZE];
-
+    if( !idstr ) usage( "Need ID" );
+    
     parsekey( idstr, key );
     sts = cht_delete( &glob.cht, key );
     if( sts ) usage( "Failed to delete entry" );

@@ -29,16 +29,17 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
   }
 
-  printf( "Usage: cht [OPTIONS] [-r <id> | -d ID | -D | -w | -l]\n"
+  printf( "Usage: cht [OPTIONS] [-r | -w | -d | -D | -l]\n"
 	  "\n Where OPTIONS:\n"
 	  "    -p path        Path to database file\n"
 	  "    -o path        Path to input/output file\n"
+	  "    -I id          Entry ID\n" 
 	  "    -f             Operate on whole file (default is single block)\n"
 	  "    -F flags       Set flags on write, valid flags are: sticky, readonly\n"
 	  "\n" 
 	  "   Commands:\n" 
-	  "    -r id          Read a given ID\n"
-	  "    -d id          Delete a given ID\n"
+	  "    -r             Read a given ID\n"
+	  "    -d             Delete a given ID\n"
 	  "    -D             Delete all non-sticky entries\n" 
 	  "    -w             Write\n"
 	  "    -l             List entries\n"
@@ -83,10 +84,11 @@ int main( int argc, char **argv ) {
       fpath = argv[i];
     } else if( strcmp( argv[i], "-f" ) == 0 ) {
       opfile = 1;
-    } else if( strcmp( argv[i], "-r" ) == 0 ) {
+    } else if( strcmp( argv[i], "-I" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      idstr = argv[i];
+      idstr = argv[i];      
+    } else if( strcmp( argv[i], "-r" ) == 0 ) {
       opread = 1;
     } else if( strcmp( argv[i], "-w" ) == 0 ) {
       opwrite = 1;
@@ -98,9 +100,6 @@ int main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-l" ) == 0 ) {
       oplist = 1;
     } else if( strcmp( argv[i], "-d" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      idstr = argv[i];      
       opdelete = 1;
     } else if( strcmp( argv[i], "-D" ) == 0 ) {
       opdelete = 2;
@@ -159,6 +158,7 @@ int main( int argc, char **argv ) {
       
       /* write entry */
       memset( &entry, 0, sizeof(entry) );
+      if( idstr ) parsekey( idstr, (char *)entry.key );
       entry.flags = flags;
       sts = cht_write( &glob.cht, &entry, glob.buf, sts );
       if( sts ) usage( "Failed to write entry" );

@@ -29,7 +29,7 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
   }
 
-  printf( "Usage: cht [OPTIONS] [-r | -w | -d | -D | -l]\n"
+  printf( "Usage: cht [OPTIONS] [-r | -w | -d | -D | -l | -s]\n"
 	  "\n Where OPTIONS:\n"
 	  "    -p path        Path to database file\n"
 	  "    -o path        Path to input/output file\n"
@@ -43,6 +43,7 @@ static void usage( char *fmt, ... ) {
 	  "    -D             Delete all non-sticky entries\n" 
 	  "    -w             Write\n"
 	  "    -l             List entries\n"
+	  "    -s             Set flags\n"
 	  "\n" );
   exit( 0 );
 }
@@ -65,6 +66,7 @@ int main( int argc, char **argv ) {
   int opwrite = 0;
   int opdelete = 0;
   int oplist = 0;
+  int opsetflags = 0;
   char *idstr = NULL;
   struct cht_entry entry;
   struct cht_opts opts;
@@ -107,6 +109,8 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       flags = parseflags( argv[i] );
+    } else if( strcmp( argv[i], "-s" ) == 0 ) {
+      opsetflags = 1;
     } else usage( NULL );
     i++;
   }
@@ -180,7 +184,12 @@ int main( int argc, char **argv ) {
       sts = cht_entry_by_index( &glob.cht, i, 0, &entry );
       if( sts == 0 ) print_entry( &entry, 1 );
     }
-    
+  } else if( opsetflags ) {
+    char key[CHT_KEY_SIZE];
+    if( !idstr ) usage( "Need ID" );
+    parsekey( idstr, key );
+    sts = cht_set_flags( &glob.cht, key, 0xffff0000, flags );
+    if( sts ) usage( "Failed to set flags" );
   } else {
     struct cht_prop prop;
     cht_prop( &glob.cht, &prop );

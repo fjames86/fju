@@ -175,7 +175,7 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
       /* move to unallocated entry */
       cht->file->entry[p] = cht->file->entry[idx];
       /* delete old entry */
-      memset( cht->file->entry[idx].key, 0, CHT_KEY_SIZE );
+      memset( &cht->file->entry[idx], 0, sizeof(struct cht_entry) );
 
       /* move data block */
       sts = mmf_read( &cht->mmf, buf, sizeof(buf), sizeof(struct cht_prop) + sizeof(struct cht_entry) * cht->count + CHT_BLOCK_SIZE * idx );
@@ -362,4 +362,27 @@ int cht_entry_by_index( struct cht_s *cht, int idx, uint32_t seq, struct cht_ent
 }
 
 
+int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags ) {
+  int sts, i;
+  uint32_t idx, f;
   
+  mmf_lock( &cht->mmf );
+
+  sts = -1;
+  for( i = 0; i < 4; i++ ) {
+    idx = ((uint32_t *)key)[i] % cht->count;
+    if( memcmp( cht->file->entry[idx].key, key, CHT_KEY_SIZE ) == 0 ) {
+      sts = 0;
+      flags &= ~CHT_SIZE_MASK;
+      mask &= ~CHT_SIZE_MASK;
+      f = cht->file->entry[idx].flags;
+      
+      cht->file->entry[idx].flags = (f & CHT_SIZE_MASK) | (f & ~mask) | (flags & mask);
+      break;
+    }
+  }
+  
+  mmf_unlock( &cht->mmf );
+
+  return sts;  
+}

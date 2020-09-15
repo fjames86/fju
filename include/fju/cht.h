@@ -15,6 +15,7 @@ struct cht_entry {
 #define CHT_SIZE_MASK 0x0000ffff /* mask block size 16k */
 #define CHT_STICKY    0x00010000 /* sticky bit: never evict entry */
 #define CHT_READONLY  0x00020000 /* readonly: entry can never be updated */
+  uint32_t spare[2];
 };
 
 
@@ -68,5 +69,7 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
 
 int cht_delete( struct cht_s *cht, char *key );
 int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags );
+
+int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags );
 
 #endif

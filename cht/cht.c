@@ -1,21 +1,30 @@
 
 /*
- * cht 
+ * cht - Content addressed hash table 
+ * 
  * Provides an openaddressed hash table with the following properties:
  *  - Keys are fixed opaque 16 byte array, e.g. derived from hash of data
- *  - Client chooses the key. 
+ *  - Client chooses the key. This allows the client to stored encrypted 
+ *    data and use an hmac as the key. 
  *  - Data is opaque block of up to 16k 
  *  - Entries are allocated using cuckoo hashing
  *  - This means reads can be serviced very quicky
- *  - As the population count increases, writes may require moving entries to 
- *    alternate locations (the cuckoo hashing part). 
+ *  - As the population count increases, writes (actually allocations) may 
+ *    require moving entries to alternate locations, this is the cuckoo hashing part.
  *  - If, after recursing upto a max number of times, no entry can be moved then
  *    an entry will be deleted.
  *  - Entries can be marked "sticky" so that they are never deleted by this process. 
  *  - If no entries can be deleted the write will fail
- *  - Once allocated, the entry data can be updated. 
+ *  - Once allocated, the entry data can be updated. Entries maintain a seqno to track writes.
  *  - Entries can be marked readonly to prevent subsequent writes. 
- *  - Entries maintain a sequence number to track writes.
+ * 
+ * Intended use case is some form of distrubuted hash table (does not yet exist).
+ * 
+ * TODO: 
+ *  - some form of RPC interface? 
+ *  - store all writes into a log (only need to write the key)
+ *  - use nls to distribute the log
+ *  - nls clients can then update their local cht 
  */
 
 #include <stdlib.h>

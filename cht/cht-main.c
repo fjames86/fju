@@ -36,6 +36,7 @@ static void usage( char *fmt, ... ) {
 	  "    -I id          Entry ID\n" 
 	  "    -f             Operate on whole file (default is single block)\n"
 	  "    -F flags       Set flags on write, valid flags are: sticky, readonly\n"
+	  "    -c count       Table count\n" 
 	  "\n" 
 	  "   Commands:\n" 
 	  "    -r             Read a given ID\n"
@@ -44,6 +45,7 @@ static void usage( char *fmt, ... ) {
 	  "    -w             Write\n"
 	  "    -l             List entries\n"
 	  "    -s             Set flags\n"
+	  "    -R             Rehash. Pass -o for new table path and -c for new table count\n" 
 	  "\n" );
   exit( 0 );
 }
@@ -56,6 +58,7 @@ static struct {
 static void print_entry( struct cht_entry *e, int printinfo );
 static void parsekey( char *idstr, char *key );
 static uint32_t parseflags( char *str );
+static void cht_rehash( struct cht_s *cht, char *outpath, int newcount );
 
 int main( int argc, char **argv ) {
   int i, sts;
@@ -67,6 +70,7 @@ int main( int argc, char **argv ) {
   int opdelete = 0;
   int oplist = 0;
   int opsetflags = 0;
+  int oprehash = 0;
   char *idstr = NULL;
   struct cht_entry entry;
   struct cht_opts opts;
@@ -111,6 +115,8 @@ int main( int argc, char **argv ) {
       flags = parseflags( argv[i] );
     } else if( strcmp( argv[i], "-s" ) == 0 ) {
       opsetflags = 1;
+    } else if( strcmp( argv[i], "-R" ) == 0 ) {
+      oprehash = 1;
     } else usage( NULL );
     i++;
   }
@@ -190,6 +196,10 @@ int main( int argc, char **argv ) {
     parsekey( idstr, key );
     sts = cht_set_flags( &glob.cht, key, 0xffff0000, flags );
     if( sts ) usage( "Failed to set flags" );
+  } else if( oprehash ) {
+    if( !fpath ) usage( "Need new table path" );
+    if( !(opts.mask & CHT_OPT_COUNT) ) opts.count = (glob.cht.count * 3) / 2;
+    cht_rehash( &glob.cht, fpath, opts.count );
   } else {
     struct cht_prop prop;
     cht_prop( &glob.cht, &prop );
@@ -276,4 +286,35 @@ static uint32_t parseflags( char *str ) {
   }
       
   return flags;    
+}
+
+static void cht_rehash( struct cht_s *cht, char *outpath, int newcount ) {
+  int sts;
+  struct cht_s cht2;
+  struct cht_opts opts;
+  int i;
+  struct cht_entry entry;
+  char buf[CHT_BLOCK_SIZE];
+  
+  memset( &opts, 0, sizeof(opts) );
+  opts.mask = CHT_OPT_COUNT;
+  opts.count = newcount;
+  sts = cht_open( outpath, &cht2, &opts );
+  if( sts ) usage( "Failed to open new file" );
+
+  /* ensure new hashtable is clear */
+  cht_purge( &cht2, 0, 0 );
+
+  /* copy old entries into new table */
+  for( i = 0; i < cht->count; i++ ) {
+    sts = cht_entry_by_index( cht, i, 0, &entry );
+    if( sts ) continue;
+
+    sts = cht_read( cht, (char *)entry.key, buf, sizeof(buf), &entry );
+    if( sts ) continue;
+
+    cht_write( &cht2, &entry, buf, entry.flags & CHT_SIZE_MASK );
+  }
+  
+  cht_close( &cht2 );
 }

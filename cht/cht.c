@@ -39,6 +39,7 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
     cht->file->header.version = CHT_VERSION;
     cht->file->header.seq = 1;
     cht->file->header.count = count;
+    cht->file->header.fill = 0;
     cht->file->header.tag = time( NULL );
     mmf_write( &cht->mmf, "", 1, sizeof(struct cht_prop) + count * (sizeof(struct cht_entry) + CHT_BLOCK_SIZE) - 1 );
   } else if( cht->file->header.magic != CHT_MAGIC ) {
@@ -324,7 +325,7 @@ int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags ) {
 
   sts = -1;
   for( i = 0; i < cht->count; i++ ) {
-    if( (cht->file->entry[i].flags & mask) == flags ) {
+    if( !zerokey( (char *)cht->file->entry[i].key ) && ((cht->file->entry[i].flags & mask) == flags) ) {
       memset( &cht->file->entry[i].key, 0, CHT_KEY_SIZE );
       cht->file->entry[i].seq = 0;
       cht->file->entry[i].flags = 0;

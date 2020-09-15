@@ -9,13 +9,13 @@
 #define CHT_DEFAULT_COUNT (1024)
 
 struct cht_entry {
-  uint8_t key[CHT_KEY_SIZE];  /* key into database, i.e. content hash */
+  uint8_t key[CHT_KEY_SIZE];  /* key into database, e.g. content hash */
   uint32_t seq;     /* entry seqno. starts at 1, increments on write */
   uint32_t flags;   /* block size and other entry flags */
-#define CHT_SIZE_MASK 0x0000ffff /* mask block size 16k */
-#define CHT_STICKY    0x00010000 /* sticky bit: never evict entry */
+#define CHT_SIZE_MASK 0x0000ffff /* mask for entry size 16k */
+#define CHT_STICKY    0x00010000 /* sticky: never evict entry */
 #define CHT_READONLY  0x00020000 /* readonly: entry can never be updated */
-  uint32_t spare[2];
+  uint32_t spare[2];  /* future expansion */
 };
 
 
@@ -24,8 +24,8 @@ struct cht_file;
 struct cht_s {
   struct mmf_s mmf;
   struct cht_file *file;
-  uint32_t count;  /* database size */
-  uint32_t rdepth; /* recursion depth */
+  uint32_t count;  /* database size, max entry count */
+  uint32_t rdepth; /* recursion depth, scales as sqrt(count) */
 };
 
 struct cht_opts {
@@ -67,9 +67,20 @@ int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entr
  */
 int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size );
 
+/* 
+ * Delete an entry 
+ */ 
 int cht_delete( struct cht_s *cht, char *key );
+
+/*
+ * Delete all entries with matching flags 
+ * i.e. those entries which have entry.flags & mask == flags 
+ */
 int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags );
 
+/*
+ * Set flags on a given entry
+ */
 int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags );
 
 #endif

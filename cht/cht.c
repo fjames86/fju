@@ -1,4 +1,23 @@
 
+/*
+ * cht 
+ * Provides an openaddressed hash table with the following properties:
+ *  - Keys are fixed opaque 16 byte array, e.g. derived from hash of data
+ *  - Client chooses the key. 
+ *  - Data is opaque block of up to 16k 
+ *  - Entries are allocated using cuckoo hashing
+ *  - This means reads can be serviced very quicky
+ *  - As the population count increases, writes may require moving entries to 
+ *    alternate locations (the cuckoo hashing part). 
+ *  - If, after recursing upto a max number of times, no entry can be moved then
+ *    an entry will be deleted.
+ *  - Entries can be marked "sticky" so that they are never deleted by this process. 
+ *  - If no entries can be deleted the write will fail
+ *  - Once allocated, the entry data can be updated. 
+ *  - Entries can be marked readonly to prevent subsequent writes. 
+ *  - Entries maintain a sequence number to track writes.
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>

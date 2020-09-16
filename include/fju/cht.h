@@ -3,6 +3,7 @@
 #define CHT_H
 
 #include <fju/mmf.h>
+#include <fju/log.h>
 
 #define CHT_KEY_SIZE 16 /* key into database i.e. content hash */
 #define CHT_BLOCK_SIZE (16*1024)
@@ -26,7 +27,9 @@ struct cht_s {
   struct cht_file *file;
   uint32_t count;  /* database size, max entry count */
   uint32_t rdepth; /* recursion depth, scales as sqrt(count) */
-  struct log_s *alog;
+  uint32_t flags;
+#define CHT_AUDIT  0x0001 
+  struct log_s alog;
 };
 
 struct cht_opts {
@@ -34,7 +37,7 @@ struct cht_opts {
 #define CHT_OPT_COUNT   0x0001    /* set the initial count if creating the table */
 #define CHT_OPT_ALOG    0x0002   /* write all write/delete/purge/setflags operations to the audit log */
   uint32_t count;
-  struct log_s *alog;
+  uint64_t alog_hshare;
 };
 
 int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts );
@@ -49,8 +52,9 @@ struct cht_prop {
   uint64_t seq;     /* database seqno */
   uint32_t count;   /* database size */
   uint32_t fill;    /* database fill count */
+  uint64_t alog_hshare;
   
-  uint32_t spare[24]; /* future expansion */
+  uint32_t spare[22]; /* future expansion */
 };
 
 int cht_prop( struct cht_s *cht, struct cht_prop *prop );

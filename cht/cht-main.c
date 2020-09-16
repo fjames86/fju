@@ -15,6 +15,7 @@
 
 #include <fju/cht.h>
 #include <fju/sec.h>
+#include <fju/nls.h>
 
 #include "cht-private.h"
 
@@ -121,6 +122,8 @@ int main( int argc, char **argv ) {
     i++;
   }
 
+  nls_open();
+  
   sts = cht_open( path, &glob.cht, &opts );
   if( sts ) usage( "Failed to open database" );
 
@@ -209,10 +212,13 @@ int main( int argc, char **argv ) {
 	    prop.fill,
 	    prop.count,
 	    (100 * prop.fill) / prop.count );
+    if( prop.alog_hshare ) printf( "Audit log: %"PRIx64"\n", prop.alog_hshare );
   }
   
   cht_close( &glob.cht );
-    
+
+  nls_close();
+  
   return 0;
 }
 

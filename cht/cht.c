@@ -38,6 +38,7 @@
 #include <fju/cht.h>
 #include <fju/sec.h>
 #include <fju/log.h>
+#include <fju/nls.h>
 
 #include "cht-private.h"
 
@@ -55,7 +56,7 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
   memset( cht, 0, sizeof(*cht) );
   sts = mmf_open( path, &cht->mmf );
   if( sts ) return sts;
-
+  
   count = CHT_DEFAULT_COUNT;
   if( opts && opts->mask & CHT_OPT_COUNT ) count = opts->count;
 
@@ -72,6 +73,8 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
     cht->file->header.count = count;
     cht->file->header.fill = 0;
     cht->file->header.tag = time( NULL );
+    if( opts && opts->mask & CHT_OPT_ALOG ) cht->file->header.alog_hshare = opts->alog_hshare;
+    
     mmf_write( &cht->mmf, "", 1, sizeof(struct cht_prop) + count * (sizeof(struct cht_entry) + CHT_BLOCK_SIZE) - 1 );
   } else if( cht->file->header.magic != CHT_MAGIC ) {
     goto bad;
@@ -97,9 +100,15 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
     }
   }
 
-  if( opts && opts->mask & CHT_OPT_ALOG ) {
-    if( !opts->alog ) goto bad;
-    cht->alog = opts->alog;
+  if( cht->file->header.alog_hshare ) {
+    struct nls_share share;
+    
+    sts = nls_share_by_hshare( cht->file->header.alog_hshare, &share );
+    if( sts ) goto bad;
+    sts = nls_share_open( &share, &cht->alog );
+    if( sts ) goto bad;
+
+    cht->flags |= CHT_AUDIT;
   }
   
   return 0;
@@ -111,6 +120,10 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
 
 int cht_close( struct cht_s *cht ) {
   mmf_close( &cht->mmf );
+  if( cht->flags & CHT_AUDIT ) {
+    log_close( &cht->alog );
+  }
+  
   return 0;
 }
 
@@ -270,7 +283,7 @@ static void cht_alog_write( struct cht_s *cht, uint32_t op, struct cht_entry *en
   iov[0].len = sizeof(ae);
   le.iov = iov;
   le.niov = 1;
-  log_write( cht->alog, &le );  
+  log_write( &cht->alog, &le );  
 }
 
 int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size ) {
@@ -342,7 +355,7 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
   cht->file->header.fill++;
   sts = 0;
 
-  if( cht->alog ) {
+  if( cht->flags & CHT_AUDIT ) {
     cht_alog_write( cht, CHT_ALOG_OP_WRITE, entry );
   }
   
@@ -368,7 +381,7 @@ int cht_delete( struct cht_s *cht, char *key ) {
       cht->file->header.fill--;
       cht->file->header.seq++;
 
-      if( cht->alog ) {
+      if( cht->flags & CHT_AUDIT ) {
 	struct cht_entry entry;
 	memset( &entry, 0, sizeof(entry) );
 	memcpy( entry.key, key, CHT_KEY_SIZE );
@@ -403,7 +416,7 @@ int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags ) {
     cht->file->header.seq++;
   }
 
-  if( cht->alog ) {
+  if( cht->flags & CHT_AUDIT ) {
     struct cht_entry entry;
     memset( &entry, 0, sizeof(entry) );
     entry.flags = (flags & 0xffff0000) | (mask >> 16);
@@ -453,7 +466,7 @@ int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags )
       
       cht->file->entry[idx].flags = (f & CHT_SIZE_MASK) | (f & ~mask) | (flags & mask);
 
-      if( cht->alog ) {
+      if( cht->flags & CHT_AUDIT ) {
 	struct cht_entry entry;
 	memset( &entry, 0, sizeof(entry) );
 	memcpy( entry.key, key, CHT_KEY_SIZE );

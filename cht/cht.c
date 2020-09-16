@@ -102,7 +102,7 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
 
   if( cht->file->header.alog_hshare ) {
     struct nls_share share;
-    
+
     sts = nls_share_by_hshare( cht->file->header.alog_hshare, &share );
     if( sts ) goto bad;
     sts = nls_share_open( &share, &cht->alog );
@@ -133,6 +133,13 @@ int cht_prop( struct cht_s *cht, struct cht_prop *prop ) {
   *prop = cht->file->header;
   mmf_unlock( &cht->mmf );
 
+  return 0;
+}
+
+int cht_set_alog( struct cht_s *cht, uint64_t alog_hshare ) {
+  mmf_lock( &cht->mmf );
+  cht->file->header.alog_hshare = alog_hshare;
+  mmf_unlock( &cht->mmf );
   return 0;
 }
 
@@ -355,11 +362,12 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
   cht->file->header.fill++;
   sts = 0;
 
-  if( cht->flags & CHT_AUDIT ) {
-    cht_alog_write( cht, CHT_ALOG_OP_WRITE, entry );
-  }
-  
  done:
+
+  if( !sts && cht->flags & CHT_AUDIT ) {
+      cht_alog_write( cht, CHT_ALOG_OP_WRITE, entry );
+  }
+
   mmf_unlock( &cht->mmf );
 
   return sts;

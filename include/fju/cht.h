@@ -90,4 +90,6 @@ int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags );
  */
 int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags );
 
+int cht_set_alog( struct cht_s *cht, uint64_t alog_hshare );
+
 #endif

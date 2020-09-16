@@ -30,23 +30,24 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
   }
 
-  printf( "Usage: cht [OPTIONS] [-r | -w | -d | -D | -l | -s]\n"
+  printf( "Usage: cht [OPTIONS] COMMAND\n"
 	  "\n Where OPTIONS:\n"
 	  "    -p path        Path to database file\n"
 	  "    -o path        Path to input/output file\n"
 	  "    -I id          Entry ID\n" 
 	  "    -f             Operate on whole file (default is single block)\n"
 	  "    -F flags       Set flags on write, valid flags are: sticky, readonly\n"
-	  "    -c count       Table count\n" 
+	  "    -c count       Table count\n"
+	  "    -A hshare      Set alog hshare\n" 	  
 	  "\n" 
-	  "   Commands:\n" 
+	  "   COMMAND:\n" 
 	  "    -r             Read a given ID\n"
 	  "    -d             Delete a given ID\n"
 	  "    -D             Delete all non-sticky entries\n" 
 	  "    -w             Write\n"
 	  "    -l             List entries\n"
 	  "    -s             Set flags\n"
-	  "    -R             Rehash. Pass -o for new table path and -c for new table count\n" 
+	  "    -R             Rehash. Pass -o for new table path and -c for new table count\n"
 	  "\n" );
   exit( 0 );
 }
@@ -76,6 +77,7 @@ int main( int argc, char **argv ) {
   struct cht_entry entry;
   struct cht_opts opts;
   uint32_t flags = 0;
+  uint64_t alog_hshare = 0;
   
   memset( &opts, 0, sizeof(opts) );
   
@@ -118,11 +120,25 @@ int main( int argc, char **argv ) {
       opsetflags = 1;
     } else if( strcmp( argv[i], "-R" ) == 0 ) {
       oprehash = 1;
+    } else if( strcmp( argv[i], "-A" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      alog_hshare = strtoull( argv[i], NULL, 16 );
     } else usage( NULL );
     i++;
   }
 
   nls_open();
+
+  if( alog_hshare ) {
+    sts = cht_open( path, &glob.cht, &opts );
+    if( sts ) usage( "Failed to open database" );
+
+    cht_set_alog( &glob.cht, alog_hshare );
+
+    cht_close( &glob.cht );
+  }
+
   
   sts = cht_open( path, &glob.cht, &opts );
   if( sts ) usage( "Failed to open database" );

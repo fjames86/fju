@@ -26,12 +26,15 @@ struct cht_s {
   struct cht_file *file;
   uint32_t count;  /* database size, max entry count */
   uint32_t rdepth; /* recursion depth, scales as sqrt(count) */
+  struct log_s *alog;
 };
 
 struct cht_opts {
   uint32_t mask;
-#define CHT_OPT_COUNT   0x0001
-  uint32_t count;  
+#define CHT_OPT_COUNT   0x0001    /* set the initial count if creating the table */
+#define CHT_OPT_ALOG    0x0002   /* write all write/delete/purge/setflags operations to the audit log */
+  uint32_t count;
+  struct log_s *alog;
 };
 
 int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts );

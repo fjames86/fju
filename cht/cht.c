@@ -37,6 +37,9 @@
 #include <fju/mmf.h>
 #include <fju/cht.h>
 #include <fju/sec.h>
+#include <fju/log.h>
+
+#include "cht-private.h"
 
 struct cht_file {
   struct cht_prop header;
@@ -94,6 +97,11 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
     }
   }
 
+  if( opts && opts->mask & CHT_OPT_ALOG ) {
+    if( !opts->alog ) goto bad;
+    cht->alog = opts->alog;
+  }
+  
   return 0;
   
  bad:
@@ -247,6 +255,24 @@ static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
   return 0;  
 }
 
+static void cht_alog_write( struct cht_s *cht, uint32_t op, struct cht_entry *entry ) {
+  struct cht_alog_entry ae;
+  struct log_entry le;
+  struct log_iov iov[1];
+  
+  memset( &ae, 0, sizeof(ae) );
+  ae.op = op;
+  ae.entry = *entry;
+  
+  memset( &le, 0, sizeof(le) );
+  le.flags = LOG_BINARY;
+  iov[0].buf = (char *)&ae;
+  iov[0].len = sizeof(ae);
+  le.iov = iov;
+  le.niov = 1;
+  log_write( cht->alog, &le );  
+}
+
 int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size ) {
   int sts, i;
   uint32_t idx;
@@ -315,6 +341,10 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
   cht->file->header.seq++;
   cht->file->header.fill++;
   sts = 0;
+
+  if( cht->alog ) {
+    cht_alog_write( cht, CHT_ALOG_OP_WRITE, entry );
+  }
   
  done:
   mmf_unlock( &cht->mmf );
@@ -337,6 +367,14 @@ int cht_delete( struct cht_s *cht, char *key ) {
       cht->file->entry[idx].flags = 0;
       cht->file->header.fill--;
       cht->file->header.seq++;
+
+      if( cht->alog ) {
+	struct cht_entry entry;
+	memset( &entry, 0, sizeof(entry) );
+	memcpy( entry.key, key, CHT_KEY_SIZE );
+	cht_alog_write( cht, CHT_ALOG_OP_DELETE, &entry );
+      }
+      
       break;
     }
   }
@@ -363,6 +401,13 @@ int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags ) {
   }
   if( !sts ) {
     cht->file->header.seq++;
+  }
+
+  if( cht->alog ) {
+    struct cht_entry entry;
+    memset( &entry, 0, sizeof(entry) );
+    entry.flags = (flags & 0xffff0000) | (mask >> 16);
+    cht_alog_write( cht, CHT_ALOG_OP_PURGE, &entry );
   }
   
   mmf_unlock( &cht->mmf );
@@ -407,6 +452,15 @@ int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags )
       f = cht->file->entry[idx].flags;
       
       cht->file->entry[idx].flags = (f & CHT_SIZE_MASK) | (f & ~mask) | (flags & mask);
+
+      if( cht->alog ) {
+	struct cht_entry entry;
+	memset( &entry, 0, sizeof(entry) );
+	memcpy( entry.key, key, CHT_KEY_SIZE );
+	entry.flags = (flags & 0xffff0000) | (mask >> 16);
+	cht_alog_write( cht, CHT_ALOG_OP_SETFLAGS, &entry );
+      }
+      
       break;
     }
   }

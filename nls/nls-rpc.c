@@ -811,10 +811,9 @@ static void nls_svr_iter_cb( struct rpc_iterator *iter ) {
   now = time( NULL );
   n = nls_notify_list( notify, NLS_MAX_NOTIFY );
   for( i = 0; i < n; i++ ) {
+    seq = nls_share_seqno( notify[i].hshare, &lastid );    
     if( now > notify[i].timestamp ) {
       /* compare seqno against stored seqno */
-      seq = nls_share_seqno( notify[i].hshare, &lastid );
-      
       notify[i].timestamp = now + notify[i].period;
       nls_notify_set( &notify[i] );
     }

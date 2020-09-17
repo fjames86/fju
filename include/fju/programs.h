@@ -61,5 +61,8 @@
 #define FJUD_RPC_PROG (FJU_BASE_PROG + 7)
 #define FJUD_RPC_VERS 1
 
+#define CHT_RSYNC_RPC_PROG (FJU_BASE_PROG + 8)
+#define CHT_RSYNC_RPC_VERS 1
+
 #endif
 

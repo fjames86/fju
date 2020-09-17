@@ -10,6 +10,7 @@
 #include <fju/programs.h>
 #include <fju/hrauth.h>
 #include <fju/nls.h>
+#include <fju/freg.h>
 
 #include "cht-private.h"
 
@@ -33,6 +34,7 @@ struct cht_rsync_context {
   uint64_t log_id;
   uint64_t next_id;
   uint64_t hostid;
+  struct log_s log;
 };
 static struct cht_rsync_context *cht_contexts;
 static struct cht_rsync_context *cht_rsync_by_hshare( uint64_t hshare, int type ) {
@@ -90,7 +92,7 @@ static void cht_rsync_call_read( struct cht_rsync_context *cxt, struct cht_entry
   hrauth_call_udp_async( &hcall, &xdr, NULL );
 }
 
-static int cht_alog_read( struct cht_s *cht, uint64_t log_id, uint32_t *op, struct cht_entry *entry, uint64_t *next_id ) {
+static int cht_alog_read( struct cht_rsync_context *cxt, uint64_t log_id, uint32_t *op, struct cht_entry *entry, uint64_t *next_id ) {
   struct log_entry le;
   struct log_iov iov[2];
   int sts, ne;
@@ -100,7 +102,7 @@ static int cht_alog_read( struct cht_s *cht, uint64_t log_id, uint32_t *op, stru
   iov[0].len = sizeof(*op);
   iov[1].buf = (char *)entry;
   iov[1].len = sizeof(*entry);
-  sts = log_read( &cht->alog, log_id, &le, 1, &ne );
+  sts = log_read( &cxt->log, log_id, &le, 1, &ne );
   if( sts || !ne ) return -1;
 
   *next_id = le.id;
@@ -118,7 +120,7 @@ static void cht_rsync_update( uint64_t hshare ) {
   cxt = cht_rsync_by_hshare( hshare, CHT_RSYNC_REMOTE );
   if( !cxt ) return;
 
-  sts = cht_alog_read( &cxt->cht, cxt->log_id, &op, &centry, &cxt->next_id );
+  sts = cht_alog_read( cxt, cxt->log_id, &op, &centry, &cxt->next_id );
   if( sts ) return;
 
   switch( op ) {
@@ -224,11 +226,73 @@ static void cht_rsync_nlsevent_cb( struct rpcd_subscriber *sc, uint32_t cat, uin
 }
 
 void cht_rsync_initialize( void ) {
-
+  int sts;
+  struct cht_rsync_context *cxt;
+  struct freg_entry entry;
+  char path[256];
+  uint64_t key;
+  char *term;
+  struct nls_remote remote;
+  
   /* read shares from registry */
 
+  /* /fju/cht/local/HSHARE str /path/to/database
+   * /fju/cht/remote/HSHARE str /path/to/database 
+   */
 
+  sts = freg_subkey( NULL, 0, "/fju/cht/local", FREG_CREATE, &key );
+  if( !sts ) {
+    sts = freg_next( NULL, key, 0, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ) {
+	sts = freg_get( NULL, entry.id, NULL, path, sizeof(path), NULL );
 
+	cxt = malloc( sizeof(*cxt) );
+	memset( cxt, 0, sizeof(*cxt) );
+	cxt->hshare = strtoull( entry.name, &term, 16 );
+	sts = cht_open( path, &cxt->cht, NULL );
+	if( sts || *term ) {
+	  free( cxt );
+	} else {
+	  cxt->type = CHT_RSYNC_LOCAL;
+	  cxt->next = cht_contexts;
+	  cht_contexts = cxt;
+	}
+	
+      }
+      sts = freg_next( NULL, key, entry.id, &entry );
+    }
+  }
+  
+  sts = freg_subkey( NULL, 0, "/fju/cht/remote", FREG_CREATE, &key );
+  if( !sts ) {
+    sts = freg_next( NULL, key, 0, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ) {
+	sts = freg_get( NULL, entry.id, NULL, path, sizeof(path), NULL );
+
+	cxt = malloc( sizeof(*cxt) );
+	memset( cxt, 0, sizeof(*cxt) );
+	cxt->hshare = strtoull( entry.name, &term, 16 );
+	sts = nls_remote_by_hshare( cxt->hshare, &remote );
+	if( !sts ) sts = nls_remote_open( &remote, &cxt->log );
+	if( !sts ) sts = cht_open( path, &cxt->cht, NULL );
+	
+	if( sts || *term ) {
+	  free( cxt );
+	} else {
+	  cxt->type = CHT_RSYNC_REMOTE;	  
+	  cxt->next = cht_contexts;
+	  cxt->hostid = remote.hostid;
+	  cxt->log_id = remote.lastid;
+	  cht_contexts = cxt;
+	}	
+      }
+
+      
+      sts = freg_next( NULL, key, entry.id, &entry );
+    }
+  }
   
   /* register rpc program */
   rpc_program_register( &cht_rsync_prog );

@@ -52,12 +52,18 @@ static void call_read_donecb( struct xdr_s *xdr, void *pcxt ) {
   struct cht_rsync_context *cxt = (struct cht_rsync_context *)pcxt;
   struct cht_entry entry;
   char *bufp;
-  int lenp, sts;
+  int lenp, sts, b;
+
+  log_writef( NULL, LOG_LVL_DEBUG, "cht rsync read donecb" );
   
   if( !xdr ) {
     /* timeout */
     return;
   }
+
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) return;
+  if( !b ) return;
 
   sts = xdr_decode_fixed( xdr, entry.key, CHT_KEY_SIZE );
   if( !sts ) sts = xdr_decode_uint32( xdr, &entry.flags );
@@ -102,6 +108,8 @@ static int cht_alog_read( struct cht_rsync_context *cxt, uint64_t log_id, uint32
   iov[0].len = sizeof(*op);
   iov[1].buf = (char *)entry;
   iov[1].len = sizeof(*entry);
+  le.iov = iov;
+  le.niov = 2;
   sts = log_read( &cxt->log, log_id, &le, 1, &ne );
   if( sts || !ne ) return -1;
 
@@ -115,7 +123,7 @@ static void cht_rsync_update( uint64_t hshare ) {
   struct cht_rsync_context *cxt;
   uint32_t op;
   struct cht_entry centry;
-  
+    
   /* get table for this hshare */
   cxt = cht_rsync_by_hshare( hshare, CHT_RSYNC_REMOTE );
   if( !cxt ) return;
@@ -123,6 +131,8 @@ static void cht_rsync_update( uint64_t hshare ) {
   sts = cht_alog_read( cxt, cxt->log_id, &op, &centry, &cxt->next_id );
   if( sts ) return;
 
+  log_writef( NULL, LOG_LVL_DEBUG, "cht rsync update %"PRIx64" op=%u", hshare, op );
+  
   switch( op ) {
   case CHT_ALOG_OP_WRITE:    
   
@@ -182,6 +192,8 @@ static int cht_rsync_proc_read( struct rpc_inc *inc ) {
       xdr_encode_uint32( &inc->xdr, entry.flags ); /*24*/
       xdr_encode_uint32( &inc->xdr, entry.seq ); /*28*/
       xdr_encode_uint32( &inc->xdr, entry.flags & CHT_SIZE_MASK );/*32*/
+      inc->xdr.offset += entry.flags & CHT_SIZE_MASK;
+      if( (entry.flags & CHT_SIZE_MASK) % 4 ) inc->xdr.offset += 4 - ((entry.flags & CHT_SIZE_MASK) % 4);
     }
   } else {
     xdr_encode_boolean( &inc->xdr, 0 );
@@ -225,6 +237,27 @@ static void cht_rsync_nlsevent_cb( struct rpcd_subscriber *sc, uint32_t cat, uin
   }
 }
 
+static void cht_rsync_iter_cb( struct rpc_iterator *iter ) {
+  struct cht_rsync_context *c;
+  c = cht_contexts;
+  while( c ) {
+    if( c->type == CHT_RSYNC_REMOTE ) {
+      cht_rsync_update( c->hshare );
+    }
+    c = c->next;
+  }
+
+}
+
+static struct rpc_iterator cht_rsync_iter =
+  {
+   NULL,
+   0,
+   1000,
+   cht_rsync_iter_cb,
+   NULL
+};
+
 void cht_rsync_initialize( void ) {
   int sts;
   struct cht_rsync_context *cxt;
@@ -250,13 +283,16 @@ void cht_rsync_initialize( void ) {
 	cxt = malloc( sizeof(*cxt) );
 	memset( cxt, 0, sizeof(*cxt) );
 	cxt->hshare = strtoull( entry.name, &term, 16 );
-	sts = cht_open( path, &cxt->cht, NULL );
+	sts = -1;
+	if( !*term ) sts = cht_open( path, &cxt->cht, NULL );
 	if( sts || *term ) {
 	  free( cxt );
 	} else {
 	  cxt->type = CHT_RSYNC_LOCAL;
 	  cxt->next = cht_contexts;
 	  cht_contexts = cxt;
+
+	  log_writef( NULL, LOG_LVL_INFO, "cht-rsync loading local %"PRIx64"", cxt->hshare );
 	}
 	
       }
@@ -274,18 +310,24 @@ void cht_rsync_initialize( void ) {
 	cxt = malloc( sizeof(*cxt) );
 	memset( cxt, 0, sizeof(*cxt) );
 	cxt->hshare = strtoull( entry.name, &term, 16 );
-	sts = nls_remote_by_hshare( cxt->hshare, &remote );
+	sts = -1;
+	if( !*term ) sts = nls_remote_by_hshare( cxt->hshare, &remote );
 	if( !sts ) sts = nls_remote_open( &remote, &cxt->log );
 	if( !sts ) sts = cht_open( path, &cxt->cht, NULL );
 	
 	if( sts || *term ) {
 	  free( cxt );
 	} else {
+	  struct log_prop prop;
+	  log_prop( &cxt->log, &prop );
+	  
 	  cxt->type = CHT_RSYNC_REMOTE;	  
 	  cxt->next = cht_contexts;
 	  cxt->hostid = remote.hostid;
-	  cxt->log_id = remote.lastid;
+	  cxt->log_id = prop.last_id;
 	  cht_contexts = cxt;
+
+	  log_writef( NULL, LOG_LVL_INFO, "cht-rsync loading remote %"PRIx64"", cxt->hshare );	  
 	}	
       }
 
@@ -301,4 +343,7 @@ void cht_rsync_initialize( void ) {
   cht_rsync_nlsevent.category = cht_rsync_nlsevents;
   cht_rsync_nlsevent.cb = cht_rsync_nlsevent_cb;
   rpcd_event_subscribe( &cht_rsync_nlsevent );
+
+  /* register iterator */
+  rpc_iterator_register( &cht_rsync_iter );
 }

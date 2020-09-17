@@ -195,6 +195,7 @@ int xdr_decode_opaque( struct xdr_s *xdr, uint8_t *buf, int *n ) {
   if( sts ) return sts;
   xlen = len;
   if( xlen % 4 ) xlen += 4 - (xlen % 4);
+  if( (xdr->offset + xlen) > (uint32_t)xdr->count ) return -1;
   memcpy( buf, xdr->buf + xdr->offset, (int)len > *n ? *n : (int)len );
   xdr->offset += xlen;
   *n = (int)len;
@@ -209,6 +210,7 @@ int xdr_decode_opaque_ref( struct xdr_s *xdr, uint8_t **buf, int *n ) {
   if( sts ) return sts;
   xlen = len;
   if( xlen % 4 ) xlen += 4 - (xlen % 4);
+  if( (xdr->offset + xlen) > (uint32_t)xdr->count ) return -1;
   *buf = xdr->buf + xdr->offset;
   *n = len;
   xdr->offset += xlen;

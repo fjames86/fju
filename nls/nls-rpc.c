@@ -817,17 +817,17 @@ static void nls_svr_iter_cb( struct rpc_iterator *iter ) {
       
       notify[i].timestamp = now + notify[i].period;
       nls_notify_set( &notify[i] );
-      
-      if( notify[i].seq != seq ) {
-	notify[i].seq = seq;
-	notify[i].lastid = lastid;
-	nls_notify_set( &notify[i] );
-	
-	nls_log( LOG_LVL_DEBUG, "nls_svr_iter_cb nls_call_notify hostid=%"PRIx64"", notify[i].hostid );
-	nls_call_notify( &notify[i] );
-      }
-
     }
+    
+    if( notify[i].seq != seq ) {
+      notify[i].seq = seq;
+      notify[i].lastid = lastid;
+      nls_notify_set( &notify[i] );
+      
+      nls_log( LOG_LVL_DEBUG, "nls_svr_iter_cb nls_call_notify hostid=%"PRIx64"", notify[i].hostid );
+      nls_call_notify( &notify[i] );
+    }
+    
   }
   
 }

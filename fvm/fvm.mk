@@ -42,19 +42,23 @@ fvm/stdlib/clusterinvoke.fvm: ${BINDIR}/fvmc fvm/stdlib/clusterinvoke.pas
 
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.pas 
 	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/programs/test-rpc.pas
+	rm fvm/programs/test-rpc.asm
 fvm/programs/test-service.fvm: ${BINDIR}/fvmc fvm/programs/test-service.pas
 	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/programs/test-service.pas
+	rm fvm/programs/test-service.asm
 fvm/programs/watchdog.fvm: ${BINDIR}/fvmc fvm/programs/watchdog.pas
 	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/stdlib/constants.pas fvm/programs/watchdog.pas
+	rm fvm/programs/watchdog.asm
 
 fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test1.asm fvm/stdlib/native.asm
 	${BINDIR}/fvmc -o $@ -I fvm/stdlib/ fvm/test/test1.asm
 fvm/test/test2.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test2.asm fvm/stdlib/native.asm
 	${BINDIR}/fvmc -o $@ -I fvm/stdlib/ fvm/test/test2.asm
 fvm/test/test3.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test3.asm fvm/stdlib/native.asm
-	${BINDIR}/fvmc -o $@ -I fvm/stdlib/ fvm/test/test3.asm	
+	${BINDIR}/fvmc -o $@ -I fvm/stdlib/ fvm/test/test3.asm
 fvm/test/test6.fvm: ${BINDIR}/fvmc fvm/test/test6.pas
 	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/test/test6.pas
+	rm fvm/test/test6.asm
 
 LIBRARIES+=fvm
 PROGRAMS+=fvm

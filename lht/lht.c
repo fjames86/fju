@@ -78,7 +78,9 @@ int lht_open( char *path, struct lht_s *lht ) {
   memset( &opts, 0, sizeof(opts) );
   opts.mask = LOG_OPT_FLAGS|LOG_OPT_LBACOUNT;
   opts.lbacount = (2*1024*1024) / LOG_LBASIZE;
-  opts.flags = LOG_FLAG_FIXED;  
+  opts.flags = LOG_FLAG_FIXED;
+  strcpy( opts.cookie, "LHT" );
+  opts.mask |= LOG_OPT_COOKIE;
   sts = log_open( path ? path : "lht.dat", &opts, &lht->log );
   if( sts ) return sts;
   lht->log.flags = LOG_ASYNC; /* set flushing mode */

@@ -107,7 +107,8 @@ int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
     if( sts ) goto bad;
     sts = nls_share_open( &share, &cht->alog );
     if( sts ) goto bad;
-
+    log_set_cookie( &cht->alog, "CHT", 3 );
+    
     cht->flags |= CHT_AUDIT;
   }
   

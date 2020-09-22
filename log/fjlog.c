@@ -67,6 +67,7 @@ static struct {
   uint32_t ltag;
   int lvlflags;
   int logflags;
+  char cookie[LOG_MAX_COOKIE];
 } fju;
 
 static void usage( char *fmt, ... ) {
@@ -97,7 +98,8 @@ static void usage( char *fmt, ... ) {
 	  "     -b                                    Read/write binary.\n" 
 	  "     -i id                                 Read starting from msg ID\n" 
 	  "     -n nmsgs                              Read no more than nmsgs\n"
-	  "     -S none|sync|async                    Set log sync mode: none, sync, async\n" 
+	  "     -S none|sync|async                    Set log sync mode: none, sync, async\n"
+	  "     -C cookie                             Set log cookie\n" 
 	  "\n" );
   exit( 0 );
 }
@@ -114,6 +116,7 @@ int main( int argc, char **argv ) {
   struct log_opts opts;
   uint32_t logflags = 0;
   int setlvlflags = 0;
+  int setcookie = 0;
   
   memset( &opts, 0, sizeof(opts) );
   fju.cmd = CMD_READ;
@@ -193,7 +196,11 @@ int main( int argc, char **argv ) {
       } else if( strcmp( argv[i], "async" ) == 0 ) {
 	fju.logflags = LOG_ASYNC;
       }
-      
+    } else if( strcmp( argv[i], "-C" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      strncpy( fju.cookie, argv[i], LOG_MAX_COOKIE - 1 );
+      setcookie = 1;
     } else {
       usage( NULL );
     }
@@ -210,6 +217,10 @@ int main( int argc, char **argv ) {
   fju.log.flags = fju.logflags;
   
   if( setlvlflags && (fju.cmd != CMD_WRITE) ) log_set_lvl( &fju.log, fju.lvlflags );
+  if( setcookie ) {
+    log_set_cookie( &fju.log, fju.cookie, strlen( fju.cookie ) );
+    fju.cmd = CMD_PROP;
+  }
   
   switch( fju.cmd ) {
   case CMD_READ:
@@ -239,6 +250,7 @@ int main( int argc, char **argv ) {
 	      prop.last_id,
 	      prop.flags,
 	      lvlstr( (prop.flags & LOG_FLAG_LVLMASK) >> 4 ) );
+      if( prop.cookie[0] ) printf( "Cookie: \"%s\"\n", prop.cookie );
     }
     break;
   case CMD_TEST:

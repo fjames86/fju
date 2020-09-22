@@ -32,6 +32,7 @@
 #include <fju/mmf.h>
 
 #define LOG_LBASIZE 64               /* lba size fixed to 64 bytes */
+#define LOG_MAX_COOKIE 16
 
 /* caller data */
 struct log_s {
@@ -51,13 +52,15 @@ struct log_s {
 struct log_opts {
   uint32_t mask;                   /* bitmask of opening options */
 #define LOG_OPT_LBACOUNT 0x0001
-#define LOG_OPT_FLAGS    0x0002 
+#define LOG_OPT_FLAGS    0x0002
+#define LOG_OPT_COOKIE   0x0004 
   uint32_t lbacount;               /* if creating log (opening for first time), use this many blocks */
   uint32_t flags;                  /* log flags - persistent properties of the log itself */
 #define LOG_FLAG_CIRCULAR 0x0000   /* default - circular log */
 #define LOG_FLAG_FIXED    0x0001   /* opposite of circular - only append entries at end */
 #define LOG_FLAG_GROW     0x0002   /* dynamically grow, requires LOG_FLAG_FIXED */
 #define LOG_FLAG_LVLMASK  0x00f0   /* only log messages with at least this level */
+  char cookie[LOG_MAX_COOKIE];
 };
 
 struct log_prop {
@@ -70,6 +73,7 @@ struct log_prop {
   uint64_t last_id;
   uint32_t flags;
   uint64_t tag;
+  char cookie[LOG_MAX_COOKIE];
 };
 
 struct log_iov {
@@ -143,6 +147,9 @@ int log_write_buf( struct log_s *log, int lvl, char *buf, int len, uint64_t *id 
 
 /* set minimum lvl */
 int log_set_lvl( struct log_s *log, int lvl );
+
+/* set log cookie */
+int log_set_cookie( struct log_s *log, char *cookie, int size );
 
 #endif
 

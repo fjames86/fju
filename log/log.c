@@ -66,8 +66,9 @@ struct _header {
   uint32_t flags;
   uint32_t unused2;
   uint64_t tag;
+  char cookie[LOG_MAX_COOKIE];
   
-  uint32_t spare[48]; /* future expansion */
+  uint32_t spare[44]; /* future expansion */
 };
 
 struct _entry {
@@ -179,6 +180,9 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
     hdr->count = 0;
     hdr->tag = time( NULL );
     hdr->flags = (opts && (opts->mask & LOG_OPT_FLAGS)) ? opts->flags : 0;
+    if( opts && opts->mask & LOG_OPT_COOKIE ) {
+      memcpy( hdr->cookie, opts->cookie, LOG_MAX_COOKIE );
+    }
     
     sts = mmf_remap( &log->mmf, (sizeof(struct _header) + LOG_LBASIZE * hdr->lbacount) );
     if( sts ) goto bad;
@@ -196,7 +200,14 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   log->pid = getpid();
 #endif
 
-
+  if( opts && opts->mask & LOG_OPT_COOKIE ) {
+    hdr = (struct _header *)log->mmf.file;
+    if( memcmp( hdr->cookie, opts->cookie, LOG_MAX_COOKIE ) != 0 ) {
+      /* cookie mismatch */
+      goto bad;
+    }
+  }
+  
   log_prop( log, &prop );
   if( prop.count > prop.lbacount ) {
     log_reset( log );
@@ -206,7 +217,7 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
     log_reset( log );
     log_writef( log, LOG_LVL_FATAL, "Log corruption detected - start=%d max=%d", prop.start, prop.lbacount );
   }
-  
+
   return 0;
 
  bad:
@@ -267,6 +278,7 @@ int log_prop( struct log_s *log, struct log_prop *prop ) {
   prop->last_id = hdr->last_id;
   prop->flags = hdr->flags;
   prop->tag = hdr->tag;
+  memcpy( prop->cookie, hdr->cookie, LOG_MAX_COOKIE );
   
   log_unlock( log );
 
@@ -649,5 +661,22 @@ int log_sync( struct log_s *log, int sync ) {
   if( !log ) return -1;
   
   mmf_sync( &log->mmf, sync );
+  return 0;
+}
+
+int log_set_cookie( struct log_s *log, char *cookie, int size ) {
+  struct _header *hdr;
+  
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+
+  hdr = (struct _header *)log->mmf.file;
+  if( size > LOG_MAX_COOKIE - 1 ) size = LOG_MAX_COOKIE - 1;
+
+  log_lock( log );
+  memset( hdr->cookie, 0, LOG_MAX_COOKIE );
+  memcpy( hdr->cookie, cookie, size );    
+  log_unlock( log );
+  
   return 0;
 }

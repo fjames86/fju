@@ -320,15 +320,22 @@ void cht_rsync_initialize( void ) {
 	} else {
 	  struct log_prop prop;
 	  log_prop( &cxt->log, &prop );
-	  
-	  cxt->type = CHT_RSYNC_REMOTE;	  
-	  cxt->next = cht_contexts;
-	  cxt->hostid = remote.hostid;
-	  cxt->log_id = prop.last_id;
-	  cht_contexts = cxt;
 
-	  log_writef( NULL, LOG_LVL_INFO, "cht-rsync loading remote %"PRIx64"", cxt->hshare );	  
-	}	
+	  if( strcmp( prop.cookie, "CHT" ) != 0 ) {
+	    log_writef( NULL, LOG_LVL_WARN, "cht-rsync remote log %"PRIx64" bad cookie", cxt->hshare );
+	    free( cxt );
+	  } else {
+	  
+	    cxt->type = CHT_RSYNC_REMOTE;	  
+	    cxt->next = cht_contexts;
+	    cxt->hostid = remote.hostid;
+	    cxt->log_id = prop.last_id;
+	    cht_contexts = cxt;
+	    
+	    log_writef( NULL, LOG_LVL_INFO, "cht-rsync loading remote %"PRIx64"", cxt->hshare );	  
+	  }
+	}
+	
       }
 
       

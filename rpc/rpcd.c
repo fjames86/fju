@@ -1279,6 +1279,7 @@ static void rpcd_load_services( void ) {
   uint64_t hkey, id;
   struct freg_entry entry;
   char path[256], mainfn[64];
+  int enabled;
   
   rpc_log( RPC_LOG_DEBUG, "Loading dynamic services" );
   
@@ -1293,6 +1294,7 @@ static void rpcd_load_services( void ) {
     if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
       memset( path, 0, sizeof(path) );
       memset( mainfn, 0, sizeof(mainfn) );
+      enabled = 1;
       
       sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path) - 1, NULL );
       if( !sts ) {
@@ -1303,6 +1305,10 @@ static void rpcd_load_services( void ) {
 	}
       }
       if( !sts ) {
+	freg_get_by_name( NULL, entry.id, "enabled", FREG_TYPE_UINT32, (char *)&enabled, sizeof(enabled), NULL );
+      }
+      
+      if( !sts && enabled ) {
 	rpc_log( RPC_LOG_DEBUG, "Loading service %s from \"%s\"", entry.name, path );
 	rpcd_load_service( entry.name, path, mainfn[0] ? mainfn : NULL );
       }

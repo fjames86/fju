@@ -48,6 +48,13 @@ static void usage( char *fmt, ... ) {
 	  "    -l             List entries\n"
 	  "    -s             Set flags\n"
 	  "    -R             Rehash. Pass -o for new table path and -c for new table count\n"
+	  "\n"
+	  "Tables may be synced remoted with the following process:\n"
+	  " - On server machine create an audit log with cookie=CHT. Share it with NLS.\n"
+	  " - On server machine create an freg entry /fju/cht/local/xxx str /path/to/cht/database where xxx is the NLS share handle.\n" 
+	  " - On client machine, register this remote log with NLS. Ensure its cookie=CHT.\n"
+	  " - On client machine, create an freg entry /fju/cht/remote/xxx str /path/to/cht/database where xxx is the NLS share handle.\n"
+	  " - From this point, writes to the server's database should be sent to the client machine.\n" 
 	  "\n" );
   exit( 0 );
 }

@@ -340,6 +340,7 @@ static int nls_proc_notreg( struct rpc_inc *inc ) {
   }
   notify.seq = nls_share_seqno( notify.hshare, &notify.lastid );
   notify.period = notify_period ? notify_period : glob.prop.notify_period;
+  notify.timestamp = time( NULL ) + notify.period;
   nls_notify_set( &notify );
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );  
@@ -812,13 +813,12 @@ static void nls_svr_iter_cb( struct rpc_iterator *iter ) {
   n = nls_notify_list( notify, NLS_MAX_NOTIFY );
   for( i = 0; i < n; i++ ) {
     seq = nls_share_seqno( notify[i].hshare, &lastid );    
-    if( now > notify[i].timestamp ) {
-      /* compare seqno against stored seqno */
-      notify[i].timestamp = now + notify[i].period;
-      nls_notify_set( &notify[i] );
-    }
-    
-    if( notify[i].seq != seq ) {
+    if( (now > notify[i].timestamp) || (notify[i].seq != seq) || (notify[i].lastid != lastid) ) {
+      /* always send a notification message every period seconds, even if no change */
+      if( now > notify[i].timestamp ) {
+	notify[i].timestamp = now + notify[i].period;
+      }
+      
       notify[i].seq = seq;
       notify[i].lastid = lastid;
       nls_notify_set( &notify[i] );

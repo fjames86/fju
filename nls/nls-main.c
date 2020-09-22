@@ -54,6 +54,10 @@ static void usage( char *fmt, ... ) {
             "          rem remote HSHARE\n"
 	    "\n"
             "          rem notify TAG\n"
+	    "\n"
+	    "An NLS share is a local log file that is exposed by the RPC service.\n"
+	    "An NLS remote is a log stored on a remote machine that is copied locally.\n"
+	    "Remote logs require a notification context on the remote machine.\n" 
 	    
     );
 

@@ -99,10 +99,10 @@ struct hrauth_call {
 
 struct hrauth_call_opts {
   uint32_t mask;
-#define HRAUTH_CALL_OPT_FD           0x0001
-#define HRAUTH_CALL_OPT_TMPBUF       0x0002
-#define HRAUTH_CALL_OPT_PORT         0x0004
-#define HRAUTH_CALL_OPT_ADDRMASK     0x0008
+#define HRAUTH_CALL_OPT_FD           0x0001   /* use this file descriptor to send on */
+#define HRAUTH_CALL_OPT_TMPBUF       0x0002   /* encode xdr using this buffer */
+#define HRAUTH_CALL_OPT_PORT         0x0004   /* send to this port */
+#define HRAUTH_CALL_OPT_ADDRMASK     0x0008   /* bitmask indicating which host addresses to send to */
 #ifdef WIN32
   SOCKET fd;
 #else
@@ -116,9 +116,10 @@ int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
 
 //int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args );
 
+/* forward this call to the specified host */
 int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args );
 
-/* synchronous rpc call */
+/* synchronous rpc call - don't use these in service routines */
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 

@@ -326,12 +326,12 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
 	goto done;
       }
       
-      memcpy( cht->file->entry[idx].key, entry->key, CHT_KEY_SIZE );      
+      memcpy( cht->file->entry[idx].key, entry->key, CHT_KEY_SIZE );
       cht->file->entry[idx].seq++;
       entry->seq = cht->file->entry[idx].seq;
       cht->file->entry[idx].flags = size | (entry->flags & ~CHT_SIZE_MASK);
       entry->flags = cht->file->entry[idx].flags;
-      
+      memcpy( cht->file->entry[idx].cookie, entry->cookie, CHT_MAX_COOKIE );      
       cht_write_block( cht, idx, buf, size );
       
       sts = 0;
@@ -356,7 +356,8 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
   cht->file->entry[idx].seq = 1;
   entry->seq = cht->file->entry[idx].seq;
   cht->file->entry[idx].flags = (size & CHT_SIZE_MASK) | (entry->flags & ~CHT_SIZE_MASK);
-  entry->flags = cht->file->entry[idx].flags;  
+  entry->flags = cht->file->entry[idx].flags;
+  memcpy( cht->file->entry[idx].cookie, entry->cookie, CHT_MAX_COOKIE );  
   cht_write_block( cht, idx, buf, size );
   
   cht->file->header.seq++;
@@ -491,3 +492,4 @@ int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags )
 
   return sts;  
 }
+

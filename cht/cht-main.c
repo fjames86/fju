@@ -38,7 +38,8 @@ static void usage( char *fmt, ... ) {
 	  "    -f             Operate on whole file (default is single block)\n"
 	  "    -F flags       Set flags on write, valid flags are: sticky, readonly\n"
 	  "    -c count       Table count\n"
-	  "    -A hshare      Set alog hshare\n" 	  
+	  "    -A hshare      Set alog hshare\n"
+	  "    -C cookie      Set cookie on write\n" 
 	  "\n" 
 	  "   COMMAND:\n" 
 	  "    -r             Read a given ID\n"
@@ -85,8 +86,10 @@ int main( int argc, char **argv ) {
   struct cht_opts opts;
   uint32_t flags = 0;
   uint64_t alog_hshare = 0;
+  char cookie[CHT_MAX_COOKIE];
   
   memset( &opts, 0, sizeof(opts) );
+  memset( cookie, 0, sizeof(cookie) );
   
   i = 1;
   while( i < argc ) {
@@ -131,6 +134,10 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       alog_hshare = strtoull( argv[i], NULL, 16 );
+    } else if( strcmp( argv[i], "-C" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      strncpy( cookie, argv[i], sizeof(cookie) );
     } else usage( NULL );
     i++;
   }
@@ -178,8 +185,9 @@ int main( int argc, char **argv ) {
       if( sts ) usage( "Failed to open input file" );
       for( i = 0; i < mmf.fsize; i += CHT_BLOCK_SIZE ) {
 	sts = mmf_read( &mmf, glob.buf, CHT_BLOCK_SIZE, i );
-	memset( &entry, 0, sizeof(entry) );
+	memset( &entry, 0, sizeof(entry) );	
 	entry.flags = flags;
+	memcpy( entry.cookie, cookie, CHT_MAX_COOKIE );
 	sts = cht_write( &glob.cht, &entry, glob.buf, sts );
 	if( sts ) usage( "Failed to write entry" );
 
@@ -197,6 +205,7 @@ int main( int argc, char **argv ) {
       memset( &entry, 0, sizeof(entry) );
       if( idstr ) parsekey( idstr, (char *)entry.key );
       entry.flags = flags;
+      memcpy( entry.cookie, cookie, CHT_MAX_COOKIE );      
       sts = cht_write( &glob.cht, &entry, glob.buf, sts );
       if( sts ) usage( "Failed to write entry" );
 
@@ -257,6 +266,17 @@ static void print_entry( struct cht_entry *e, int printinfo ) {
 	    e->flags & ~CHT_SIZE_MASK,
 	    e->flags & CHT_STICKY ? "Sticky " : "",
 	    e->flags & CHT_READONLY ? "Readonly " : "" );
+    if( *((uint64_t *)e->cookie) ) {
+      printf( "Cookie " );
+      for( i = 0; i < CHT_MAX_COOKIE; i++ ) {
+	printf( "%02x", (uint32_t)e->cookie[i] );
+      }
+      printf( " (" );
+      for( i = 0; i < CHT_MAX_COOKIE; i++ ) {
+	printf( "%c", e->cookie[i] );
+      }
+      printf( ")" );
+    }
   }
   printf( "\n" );
 }

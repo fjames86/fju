@@ -8,6 +8,7 @@
 #define CHT_KEY_SIZE 16 /* key into database i.e. content hash */
 #define CHT_BLOCK_SIZE (16*1024)
 #define CHT_DEFAULT_COUNT (1024)
+#define CHT_MAX_COOKIE 8
 
 struct cht_entry {
   uint8_t key[CHT_KEY_SIZE];  /* key into database, e.g. content hash */
@@ -16,7 +17,7 @@ struct cht_entry {
 #define CHT_SIZE_MASK 0x0000ffff /* mask for entry size 16k */
 #define CHT_STICKY    0x00010000 /* sticky: never evict entry */
 #define CHT_READONLY  0x00020000 /* readonly: entry can never be updated */
-  uint32_t spare[2];  /* future expansion */
+  char cookie[CHT_MAX_COOKIE]; /* private data */
 };
 
 

@@ -65,9 +65,11 @@ static void call_read_donecb( struct xdr_s *xdr, void *pcxt ) {
   if( sts ) return;
   if( !b ) return;
 
+  memset( &entry, 0, sizeof(entry) );
   sts = xdr_decode_fixed( xdr, entry.key, CHT_KEY_SIZE );
   if( !sts ) sts = xdr_decode_uint32( xdr, &entry.flags );
   if( !sts ) sts = xdr_decode_uint32( xdr, &entry.seq );
+  if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)entry.cookie, CHT_MAX_COOKIE );
   if( !sts ) sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) return;
   
@@ -181,9 +183,9 @@ static int cht_rsync_proc_read( struct rpc_inc *inc ) {
   if( cht ) {
     /* 
      * Read by passing a buffer that points into the xdr buffer at the exact location
-     * we need. We can do this because the header is fixed size (32 bytes).
+     * we need. We can do this because the header is fixed size (40 bytes).
      */
-    sts = cht_read( &cht->cht, key, (char *)inc->xdr.buf + inc->xdr.offset + 32, CHT_BLOCK_SIZE, &entry );
+    sts = cht_read( &cht->cht, key, (char *)inc->xdr.buf + inc->xdr.offset + 40, CHT_BLOCK_SIZE, &entry );
     if( sts ) {
       xdr_encode_boolean( &inc->xdr, 0 );
     } else {
@@ -191,7 +193,8 @@ static int cht_rsync_proc_read( struct rpc_inc *inc ) {
       xdr_encode_fixed( &inc->xdr, entry.key, CHT_KEY_SIZE ); /*20*/
       xdr_encode_uint32( &inc->xdr, entry.flags ); /*24*/
       xdr_encode_uint32( &inc->xdr, entry.seq ); /*28*/
-      xdr_encode_uint32( &inc->xdr, entry.flags & CHT_SIZE_MASK );/*32*/
+      xdr_encode_fixed( &inc->xdr, (uint8_t *)entry.cookie, CHT_MAX_COOKIE ); /*36 */      
+      xdr_encode_uint32( &inc->xdr, entry.flags & CHT_SIZE_MASK );/*40*/
       inc->xdr.offset += entry.flags & CHT_SIZE_MASK;
       if( (entry.flags & CHT_SIZE_MASK) % 4 ) inc->xdr.offset += 4 - ((entry.flags & CHT_SIZE_MASK) % 4);
     }

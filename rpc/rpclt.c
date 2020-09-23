@@ -490,6 +490,7 @@ static struct {
   { RPCBIND_RPC_PROG, "rpcbind" },
   { FJUD_RPC_PROG, "fjud" },
   { SVCTEST_RPC_PROG, "svctest" },
+  { CHT_RSYNC_RPC_PROG, "cht-rsync" },
   { 0, NULL }
 };
 

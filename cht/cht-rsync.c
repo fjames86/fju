@@ -326,9 +326,16 @@ void cht_rsync_initialize( void ) {
 
 	  if( strcmp( prop.cookie, "CHT" ) != 0 ) {
 	    log_writef( NULL, LOG_LVL_WARN, "cht-rsync remote log %"PRIx64" bad cookie", cxt->hshare );
+	    cht_close( &cxt->cht );
 	    free( cxt );
 	  } else {
-	  
+
+	    /* we don't want our writes to be forwarded anywhere, so always close the audit log */
+	    if( cxt->cht.flags & CHT_AUDIT ) {
+	      cxt->cht.flags &= ~CHT_AUDIT;
+	      log_close( &cxt->cht.alog );
+	    }
+	    
 	    cxt->type = CHT_RSYNC_REMOTE;	  
 	    cxt->next = cht_contexts;
 	    cxt->hostid = remote.hostid;

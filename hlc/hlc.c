@@ -5,8 +5,11 @@
 
 int hlc_open( char *path, struct hlc_s *hlc ) {
   int sts;
-
-  sts = log_open( path, NULL, &hlc->log );
+  struct log_opts opts;
+  memset( &opts, 0, sizeof(opts) );
+  opts.mask |= LOG_OPT_COOKIE;
+  strcpy( opts.cookie, "HLC" );
+  sts = log_open( path, &opts, &hlc->log );
   if( sts ) return sts;
 
   return 0;
@@ -36,7 +39,6 @@ int hlc_read( struct hlc_s *hlc, uint64_t id, struct hlc_entry *elist, int n, in
   struct log_entry entry;
   struct log_iov iov[2];
   struct hlc_hdr hdr;
-  int ne;
   
   i = 0;
   do {
@@ -50,8 +52,8 @@ int hlc_read( struct hlc_s *hlc, uint64_t id, struct hlc_entry *elist, int n, in
     entry.iov = iov;
     entry.niov = 2;
 
-    sts = log_read( &hlc->log, id, &entry, 1, &ne );
-    if( sts || ne == 0 ) break;
+    sts = log_read_entry( &hlc->log, id, &entry );
+    if( sts ) break;
 
     elist[i].id = entry.id;
     elist[i].seq = entry.seq;

@@ -32,7 +32,7 @@ static void usage( char *fmt, ... ) {
     printf( "\n" );
     exit( 1 );
   }
-  printf( "Usage: hlc [-p path] [-r | -w]\n" );
+  printf( "Usage: hlc [-p path] [-r ID | -w]\n" );
   exit( 0 );
 }
 static void cmd_list( void );
@@ -41,7 +41,8 @@ static void cmd_read( void );
 
 int main( int argc, char **argv ) {
   int i;
-
+  int sts;
+  
   glob.cmd = CMD_LIST;
   i = 1;
   while( i < argc ) {
@@ -62,7 +63,9 @@ int main( int argc, char **argv ) {
 
   if( !glob.path ) usage( "Must specify path" );
   
-  hlc_open( glob.path, &glob.hlc );
+  sts = hlc_open( glob.path, &glob.hlc );
+  if( sts ) usage( "Failed to open database" );
+  
   switch( glob.cmd ) {
   case CMD_LIST:
     cmd_list();
@@ -101,7 +104,7 @@ static void cmd_list( void ) {
   buflen = 32*1024;
   buf = malloc( buflen );
   
-  printf( "%-16s %-16s %-16s %-8s\n", "ID", "Seq", "PrevHash", "Len" );
+  printf( "%-16s %-16s %-40s %-8s\n", "ID", "Seq", "PrevHash", "Len" );
   
   id = 0;
   do {
@@ -112,7 +115,7 @@ static void cmd_list( void ) {
     sts = hlc_read( &glob.hlc, id, &entry, 1, &ne );
     if( sts || ne == 0 ) break;
 
-    printf( "%-16"PRIx64" %-16"PRIx64" %-16s %-8u\n",
+    printf( "%-16"PRIx64" %-16"PRIx64" %-40s %-8u\n",
 	    entry.id,
 	    entry.seq,
 	    hash_str( entry.prevhash, hashstr ),

@@ -235,6 +235,13 @@ int nls_share_add( struct nls_share *share ) {
     if( glob.ocount <= 0 ) return -1;
     nls_lock();
     sts = -1;
+    for( i = 0; i < glob.file->header.share_count; i++ ) {
+      if( strcmp( glob.file->share[i].path, share->path ) == 0 ) {
+	sts = 0;
+	share->hshare = glob.file->share[i].hshare;
+	goto done;
+      }
+    }    
     if( glob.file->header.share_count < glob.file->header.share_max ) {
 	if( !share->hshare ) sec_rand( &share->hshare, sizeof(share->hshare) );
         i = glob.file->header.share_count;
@@ -243,6 +250,7 @@ int nls_share_add( struct nls_share *share ) {
         glob.file->header.seq++;
         sts = 0;
     }
+ done:
     nls_unlock();
     return sts;
 }
@@ -326,6 +334,12 @@ int nls_remote_add( struct nls_remote *remote ) {
 
     nls_lock();
     sts = -1;
+    for( i = 0; i < glob.file->header.remote_count; i++ ) {
+      if( glob.file->remote[i].hshare == remote->hshare ) {
+	sts = 0;
+	goto done;
+      }
+    }
     if( glob.file->header.remote_count < glob.file->header.remote_max ) {
         i = glob.file->header.remote_count;
 	if( !remote->notify_period ) remote->notify_period = glob.file->header.notify_period;
@@ -334,6 +348,7 @@ int nls_remote_add( struct nls_remote *remote ) {
         glob.file->header.seq++;
         sts = 0;
     }
+ done:
     nls_unlock();
     return sts;
 }

@@ -604,9 +604,40 @@ static int hrauth_proc_local( struct rpc_inc *inc ) {
 }
 static int hrauth_proc_list( struct rpc_inc *inc ) {
   int handle;
+  struct hrauth_context *hcxt;
+  struct hostreg_host *hlist;
+  int n, m;
+  
   /* XXX: reserved for future use. Should return list of registered hosts */
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, &handle );
+
+  /* check authenticated */
+  if( !inc->pvr || (inc->pvr->flavour != RPC_AUTH_HRAUTH) ) {
+    hrauth_log( LOG_LVL_WARN, "hrauth_proc_list bad authentication flavour=%u", inc->pvr ? inc->pvr->flavour : 0 );
+    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+  }
+
+  hcxt = (struct hrauth_context *)inc->pcxt;
+  if( hcxt->service != HRAUTH_SERVICE_PRIV ) {
+    /* only allow listing if encrypted */
+    hrauth_log( LOG_LVL_WARN, "hrauth_proc_list weak service level %u", hcxt->service );    
+    return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );    
+  }
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  
+  n = hostreg_host_list( NULL, 0 );
+  hlist = malloc( sizeof(*hlist) * n );
+  m = hostreg_host_list( hlist, n );
+  if( m < n ) n = m;
+  for( m = 0; m < n; m++ ) {
+    xdr_encode_boolean( &inc->xdr, 1 );
+    hostreg_encode_host( &inc->xdr, &hlist[m] );
+  }
+  xdr_encode_boolean( &inc->xdr, 0 );
+  free( hlist );
+  
   rpc_complete_accept_reply( inc, handle );
+  
   return 0;
 }
 

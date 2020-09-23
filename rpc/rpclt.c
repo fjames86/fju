@@ -71,6 +71,7 @@ static void rex_write_results( struct xdr_s *xdr );
 static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void hrauth_local_results( struct xdr_s *xdr );
+static void hrauth_list_results( struct xdr_s *xdr );
 static void clt_call( struct clt_info *info, int argc, char **argv, int i );
 static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i );
 static void raft_add_results( struct xdr_s *xdr );
@@ -110,6 +111,7 @@ static struct clt_info clt_procs[] = {
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
+    { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 2, NULL, hrauth_list_results, "hrauth.list", NULL },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_list_results, "raft.list", NULL },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, raft_add_args, raft_add_results, "raft.add", "clid=CLID" },
     { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, raft_rem_args, NULL, "raft.rem", "clid=CLID" },
@@ -256,7 +258,8 @@ int main( int argc, char **argv ) {
     sts = freg_ensure( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
     glob.timeout = 1000;
     sts = freg_ensure( NULL, 0, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(glob.timeout), NULL );
-
+    glob.service = HRAUTH_SERVICE_PRIV;
+    
     i = 1;
     while( i < argc ) {
 	if( strcmp( argv[i], "-p" ) == 0 ) {
@@ -736,6 +739,38 @@ static void hrauth_local_results( struct xdr_s *xdr ) {
 	if( sts ) goto bad;
     }
     print_host( &x );
+    
+    return;
+bad:
+    usage( "XDR error" );
+}
+
+static void hrauth_list_results( struct xdr_s *xdr ) {
+    struct hostreg_host x;
+    int sts, i, b;
+
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) goto bad;
+    while( b ) {      
+      sts = xdr_decode_uint64( xdr, &x.id );
+      if( sts ) goto bad;
+      sts = xdr_decode_string( xdr, x.name, sizeof(x.name) );
+      if( sts ) goto bad;
+      x.publen = sizeof(x.pubkey);
+      sts = xdr_decode_opaque( xdr, x.pubkey, (int *)&x.publen );
+      if( sts ) goto bad;
+      sts = xdr_decode_uint32( xdr, &x.naddr );
+      if( sts ) goto bad;
+      if( x.naddr > HOSTREG_MAX_ADDR ) goto bad;
+      for( i = 0; i < x.naddr; i++ ) {
+	sts = xdr_decode_uint32( xdr, &x.addr[i] );
+	if( sts ) goto bad;
+      }
+      print_host( &x );
+
+      sts = xdr_decode_boolean( xdr, &b );
+      if( sts ) goto bad;
+    }
     
     return;
 bad:

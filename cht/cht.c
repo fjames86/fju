@@ -20,11 +20,6 @@
  * 
  * Intended use case is some form of distrubuted hash table (does not yet exist).
  * 
- * TODO: 
- *  - some form of RPC interface? 
- *  - store all writes into a log (only need to write the key)
- *  - use nls to distribute the log
- *  - nls clients can then update their local cht 
  */
 
 #include <stdlib.h>

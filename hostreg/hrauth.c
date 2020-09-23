@@ -608,8 +608,6 @@ static int hrauth_proc_list( struct rpc_inc *inc ) {
   struct hostreg_host *hlist;
   int n, m;
   
-  /* XXX: reserved for future use. Should return list of registered hosts */
-
   /* check authenticated */
   if( !inc->pvr || (inc->pvr->flavour != RPC_AUTH_HRAUTH) ) {
     hrauth_log( LOG_LVL_WARN, "hrauth_proc_list bad authentication flavour=%u", inc->pvr ? inc->pvr->flavour : 0 );

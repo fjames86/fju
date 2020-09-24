@@ -323,6 +323,14 @@ static token_t gettokentype( char *token ) {
   return TOK_NAME;
 }
 
+static char *gettokenname(token_t tok) {
+  int i;
+  for( i = 0; keywordtokens[i].keyword != NULL; i++ ) {
+    if( keywordtokens[i].type == tok ) return keywordtokens[i].keyword;
+  }
+  return NULL;
+}
+
 struct token {
   char token[64];
   token_t type;
@@ -403,10 +411,14 @@ static int accepttok( token_t type ) {
 }
 
 static int expecttok( token_t type ) {
+  char *tokname;
+  
   if( accepttok( type ) ) {
     return 1;
   }
-  usage( "Unexpected symbol %u %s, expected %u", glob.tok.type, glob.tok.token, type );
+  tokname = gettokenname(type);
+  usage( "Unexpected symbol %s (%u), expected %s (%u)",
+	 glob.tok.token, glob.tok.type, tokname ? tokname : "other", type );
   return 0;
 }
 #define expectok(type) expecttok(type)

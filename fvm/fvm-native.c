@@ -420,6 +420,80 @@ static int native_invoke( struct fvm_s *state ) {
   return 0;
 }
 
+static int native_readregint( struct fvm_s *state ) {
+  uint32_t pathaddr, intaddr, u;
+  char path[256];
+  int sts;
+  
+  pathaddr = ntohl( fvm_stack_read( state, 8 ) );
+  intaddr = ntohl( fvm_stack_read( state, 4 ) );  
+  native_readstr( state, pathaddr, path, sizeof(path) );
+
+  u = 0;
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_UINT32, (char *)&u, sizeof(u), NULL );
+  fvm_write( state, intaddr, htonl( u ) );
+
+  return 0;
+}
+
+static int native_readregstring( struct fvm_s *state ) {
+  uint32_t pathaddr, straddr, strsize;
+  char path[256];
+  char *strp;
+  int sts;
+  
+  pathaddr = ntohl( fvm_stack_read( state, 12 ) );
+  straddr = ntohl( fvm_stack_read( state, 8 ) );
+  strp = fvm_getaddr( state, straddr );
+  if( !strp ) return 0;
+	      
+  strsize = ntohl( fvm_stack_read( state, 4 ) );    
+  native_readstr( state, pathaddr, path, sizeof(path) );
+
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, strp + 4, strsize, NULL );
+  if( sts ) {
+    fvm_write( state, straddr, 0 );
+  } else {
+    fvm_write( state, straddr, htonl( strlen( strp + 4 ) ) );
+  }
+	       
+  return 0;
+}
+
+static int native_writeregint( struct fvm_s *state ) {
+  uint32_t pathaddr, intval;
+  char path[256];
+  int sts;
+  
+  pathaddr = ntohl( fvm_stack_read( state, 8 ) );
+  intval = ntohl( fvm_stack_read( state, 4 ) );  
+  native_readstr( state, pathaddr, path, sizeof(path) );
+
+  sts = freg_ensure( NULL, 0, path, FREG_TYPE_UINT32, (char *)&intval, sizeof(intval), NULL );
+
+  return 0;
+}
+
+static int native_writeregstring( struct fvm_s *state ) {
+  uint32_t pathaddr, straddr, strsize;
+  char path[256];
+  char *strp;
+  int sts;
+  
+  pathaddr = ntohl( fvm_stack_read( state, 8 ) );
+  straddr = ntohl( fvm_stack_read( state, 4 ) );
+  strp = fvm_getaddr( state, straddr );
+  if( !strp ) return 0;
+	      
+  strsize = ntohl( fvm_read( state, straddr ) );
+  native_readstr( state, pathaddr, path, sizeof(path) );
+
+  sts = freg_ensure( NULL, 0, path, FREG_TYPE_STRING, strp + 4, strsize, NULL );
+
+	       
+  return 0;
+}
+
 static struct fvm_native_proc native_procs[] =
   {
    { 0, native_nop },
@@ -434,6 +508,10 @@ static struct fvm_native_proc native_procs[] =
    { 9, native_sprintf },   
    { 10, native_yield },
    { 11, native_invoke },
+   { 12, native_readregint },
+   { 13, native_readregstring },   
+   { 14, native_writeregint },
+   { 15, native_writeregstring },   
    
    { 0, NULL }
   };

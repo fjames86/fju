@@ -98,7 +98,15 @@ char *fvm_getaddr( struct fvm_s *state, uint32_t addr ) {
   }
   return NULL;
 }
-
+char *fvm_getaddr_writable( struct fvm_s *state, uint32_t addr ) {
+  if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + state->datasize) ) {
+    return (char *)&state->data[addr - FVM_ADDR_DATA];
+  }
+  if( addr >= FVM_ADDR_STACK && addr < (FVM_ADDR_STACK + FVM_MAX_STACK) ) {
+    return (char *)&state->stack[addr - FVM_ADDR_STACK];
+  }
+  return NULL;  
+}
 
 typedef int (*fvm_opcode_fn)( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data );
 

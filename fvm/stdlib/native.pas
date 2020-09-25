@@ -37,5 +37,8 @@ Begin
    Declare Syscall ReadRegString(path : string, str : string, size : integer ) : 13;
    Declare Syscall WriteRegInt(path : string, int : integer ) : 14;
    Declare Syscall WriteRegString(path : string, str : string) : 15;
+
+   Declare Syscall ReadCht(key : opaque, buf : opaque, var size : integer) : 16;
+   Declare Syscall WriteCht(key : opaque, buf : opaque, size : integer) : 17;
    
 End.

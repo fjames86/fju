@@ -882,7 +882,7 @@ static void printconditionjump( op_t op, char *label ) {
 	  op == OP_NEQ ? "JPN" : 
 	  op == OP_GT ? "JP" :
 	  op == OP_GTE ? "JPZ" :
-	  op == OP_LT ? "JZ" :
+	  op == OP_LT ? "JN" :
 	  op == OP_LTE ? "JNZ" :
 	  (usage( "Bad operator" ), ""),
 	  label );
@@ -1343,15 +1343,18 @@ static void parsestatement( void ) {
     } while( accepttok( TOK_SEMICOLON ) );
     expecttok( TOK_END );
   } else if( accepttok( TOK_IF ) ) {
-    char elselabel[64], endiflabel[64];
+    char thenlabel[64], elselabel[64], endiflabel[64];
     op_t op;
-    
+
+    strcpy( thenlabel, genlabel( "THEN" ) );    
     strcpy( elselabel, genlabel( "ELSE" ) );
     strcpy( endiflabel, genlabel( "ENDIF" ) );
     
     op = parsecondition();
     expecttok( TOK_THEN );
-    printconditionjump( op, elselabel );
+    printconditionjump( op, thenlabel );
+    fvmc_emit( "\tJMP\t%s\n", elselabel );
+    fvmc_emit( "%s:\n", thenlabel );
     parsestatement();
     fvmc_emit( "\tJMP\t%s\n", endiflabel );
     fvmc_emit( "%s:\n", elselabel );

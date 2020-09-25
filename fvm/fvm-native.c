@@ -15,6 +15,7 @@
 #include <fju/sec.h>
 #include <fju/log.h>
 #include <fju/freg.h>
+#include <fju/cht.h>
 
 
 /*
@@ -199,7 +200,7 @@ static int native_readlog( struct fvm_s *state ) {
   id = ntohl( fvm_stack_read( state, 16 ) );
   id = (id << 32) | ntohl( fvm_stack_read( state, 12 ) );
   bufaddr = ntohl( fvm_stack_read( state, 8 ) );
-  bufp = fvm_getaddr( state, bufaddr );
+  bufp = fvm_getaddr_writable( state, bufaddr );
   if( !bufp ) return -1;  
   countaddr = ntohl( fvm_stack_read( state, 4 ) );
   count = ntohl( fvm_read( state, countaddr ) );
@@ -228,8 +229,10 @@ static int native_readlog( struct fvm_s *state ) {
   if( msglen == 0 ) {
     msglen = entry.msglen;
   }
-
+  
   fvm_write( state, countaddr, htonl( msglen ) );
+  state->flags |= FVM_STATE_DIRTY;
+  
   return 0;
 }
 
@@ -243,7 +246,7 @@ static int native_sprintf( struct fvm_s *state ) {
   
   /* sprintf( buf, bufsize, fmt, ... ) */
   bufaddr = ntohl( fvm_stack_read( state, 16 ) );
-  buf = fvm_getaddr( state, bufaddr );
+  buf = fvm_getaddr_writable( state, bufaddr );
   if( !buf ) return -1;  
   bufsize = ntohl( fvm_stack_read( state, 12 ) );
   
@@ -444,7 +447,7 @@ static int native_readregstring( struct fvm_s *state ) {
   
   pathaddr = ntohl( fvm_stack_read( state, 12 ) );
   straddr = ntohl( fvm_stack_read( state, 8 ) );
-  strp = fvm_getaddr( state, straddr );
+  strp = fvm_getaddr_writable( state, straddr );
   if( !strp ) return 0;
 	      
   strsize = ntohl( fvm_stack_read( state, 4 ) );    
@@ -494,6 +497,71 @@ static int native_writeregstring( struct fvm_s *state ) {
   return 0;
 }
 
+static int native_readcht( struct fvm_s *state ) {
+  uint32_t keyaddr, bufaddr, sizeaddr;
+  int sts, size;
+  char *keybuf, *buf;
+  struct cht_entry entry;
+  struct cht_s cht;
+
+  sts = cht_open( NULL, &cht, NULL );
+  if( sts ) {
+    return -1;
+  }
+  
+  keyaddr = ntohl( fvm_stack_read( state, 12 ) );
+  keybuf = fvm_getaddr( state, keyaddr );
+  
+  bufaddr = ntohl( fvm_stack_read( state, 8 ) );
+  buf = fvm_getaddr_writable( state, bufaddr );
+  
+  sizeaddr = ntohl( fvm_stack_read( state, 4 ) );  
+  size = ntohl( fvm_read( state, sizeaddr ) );
+
+  if( !buf ) size = 0;
+
+  memset( &entry, 0, sizeof(entry) );
+  sts = cht_read( &cht, keybuf, buf, size, &entry );
+  if( sts ) {
+    fvm_write( state, sizeaddr, htonl( 0 ) );
+  } else {
+    fvm_write( state, sizeaddr, htonl( entry.flags & CHT_SIZE_MASK ) );
+  }
+
+  cht_close( &cht );
+  
+  return 0;
+}
+
+static int native_writecht( struct fvm_s *state ) {
+  uint32_t keyaddr, bufaddr, size;
+  int sts;
+  char *keybuf, *buf;
+  struct cht_entry entry;
+  struct cht_s cht;
+
+  sts = cht_open( NULL, &cht, NULL );
+  if( sts ) return -1;
+  
+  keyaddr = ntohl( fvm_stack_read( state, 12 ) );
+  keybuf = fvm_getaddr( state, keyaddr );
+  
+  bufaddr = ntohl( fvm_stack_read( state, 8 ) );
+  buf = fvm_getaddr_writable( state, bufaddr );
+  
+  size = ntohl( fvm_stack_read( state, 4 ) );  
+
+  if( !buf ) size = 0;
+
+  memset( &entry, 0, sizeof(entry) );
+  memcpy( entry.key, keybuf, CHT_KEY_SIZE );
+  sts = cht_write( &cht, &entry, buf, size );
+
+  cht_close( &cht );
+  
+  return 0;
+}
+
 static struct fvm_native_proc native_procs[] =
   {
    { 0, native_nop },
@@ -512,6 +580,8 @@ static struct fvm_native_proc native_procs[] =
    { 13, native_readregstring },   
    { 14, native_writeregint },
    { 15, native_writeregstring },   
+   { 16, native_readcht },
+   { 17, native_writecht },
    
    { 0, NULL }
   };

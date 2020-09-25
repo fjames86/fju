@@ -7,6 +7,9 @@ if [ ! $remoteip ]; then
     remoteip=$(freg get /remotehost)
 fi
 
+# backup registry in case something goes wrong! 
+freg dump > /opt/fju/freg-backup.txt
+
 ## stop services and rebuild all 
 sh scripts/fjud.sh stop 
 make clean all install

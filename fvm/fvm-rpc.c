@@ -832,11 +832,14 @@ void fvm_rpc_register( void ) {
 	
 	sts = freg_get_by_name( NULL, entry.id, "module", FREG_TYPE_STRING, mname, sizeof(mname), NULL );
 	if( !sts ) sts = freg_get_by_name( NULL, entry.id, "proc", FREG_TYPE_STRING, pname, sizeof(pname), NULL );
-	sts = freg_get_by_name( NULL, entry.id, "period", FREG_TYPE_UINT32, (char *)&period, sizeof(period), NULL );
-	if( sts ) {
-	  period = 1000;
-	  sts = 0;
+	if( !sts ) {
+	  sts = freg_get_by_name( NULL, entry.id, "period", FREG_TYPE_UINT32, (char *)&period, sizeof(period), NULL );
+	  if( sts ) {
+	    period = 1000;
+	    sts = 0;
+	  }
 	}
+	
 	
 	if( !sts ) {
 	  struct fvm_iterator *iter;

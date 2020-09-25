@@ -13,6 +13,8 @@ if [ ! $clusterid ]; then
 fi
 
 # write registry values
+freg put /fju/fvm key
+freg put /fju/fvm/modules key 
 freg put /fju/fvm/modules/$progname key
 freg put /fju/fvm/modules/$progname/path str $modpath
 if [ $clusterid ]; then

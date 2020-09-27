@@ -434,6 +434,7 @@ static int native_readregint( struct fvm_s *state ) {
 
   u = 0;
   sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_UINT32, (char *)&u, sizeof(u), NULL );
+  (void)(sts);
   fvm_write( state, intaddr, htonl( u ) );
 
   return 0;
@@ -473,7 +474,8 @@ static int native_writeregint( struct fvm_s *state ) {
   native_readstr( state, pathaddr, path, sizeof(path) );
 
   sts = freg_ensure( NULL, 0, path, FREG_TYPE_UINT32, (char *)&intval, sizeof(intval), NULL );
-
+  (void)(sts);
+  
   return 0;
 }
 
@@ -492,7 +494,7 @@ static int native_writeregstring( struct fvm_s *state ) {
   native_readstr( state, pathaddr, path, sizeof(path) );
 
   sts = freg_ensure( NULL, 0, path, FREG_TYPE_STRING, strp + 4, strsize, NULL );
-
+  (void)(sts);
 	       
   return 0;
 }
@@ -556,7 +558,8 @@ static int native_writecht( struct fvm_s *state ) {
   memset( &entry, 0, sizeof(entry) );
   memcpy( entry.key, keybuf, CHT_KEY_SIZE );
   sts = cht_write( &cht, &entry, buf, size );
-
+  (void)(sts);
+  
   cht_close( &cht );
   
   return 0;

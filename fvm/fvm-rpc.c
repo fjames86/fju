@@ -755,6 +755,42 @@ static struct raft_notify_context fvm_notify_cxt = {
   NULL
 };
 
+struct fvm_event_cat {
+  struct fvm_event_cat *next;
+  uint32_t cat;
+  uint32_t progid;
+  uint32_t procid;
+};
+static struct fvm_event_cat *fvm_event_cats;
+
+static void fvm_event_cb( struct rpcd_subscriber *sb, uint32_t cat, uint32_t evtid, void *parm, int parmsize ) {
+  /* find any prog/procs that were registered on this category. If so then invoke that procedure */
+  struct fvm_event_cat *c;
+  int sts;
+  struct fvm_s state;
+  
+  c = fvm_event_cats;
+  while( c ) {
+    if( c->cat == cat ) {
+      sts = fvm_state_init( &state, c->progid, c->procid );
+      if( !sts ) {
+	fvm_run( &state, -1 );
+      }
+    }
+    c = c->next;
+  }
+  
+}
+
+
+static struct rpcd_subscriber fvm_event_sb = {
+  NULL,
+  NULL,
+  fvm_event_cb,
+  NULL
+};
+
+
 void fvm_rpc_register( void ) {
   int sts;
   uint32_t nsteps;
@@ -793,7 +829,7 @@ void fvm_rpc_register( void ) {
 	  sts = fvm_module_set_flags( progid, flags, 0xffffffff );
 	  if( sts ) fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
 	}
-	
+
       }
       sts = freg_next( NULL, key, entry.id, &entry );
     }
@@ -862,6 +898,35 @@ void fvm_rpc_register( void ) {
       sts = freg_next( NULL, key, entry.id, &entry );
     }    
   }
+
+  sts = freg_subkey( NULL, 0, "/fju/fvm/events", FREG_CREATE, &key );
+  if( !sts ) {
+    sts = freg_next( NULL, key, 0, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+	uint32_t cat, progid, procid;
+	struct fvm_event_cat *ct;
+	
+	cat = 0;
+	procid = 0;
+	progid = fvm_progid_by_name( entry.name );
+	sts = freg_get_by_name( NULL, entry.id, "category", FREG_TYPE_UINT32, (char *)&cat, sizeof(cat), NULL );
+	sts = freg_get_by_name( NULL, entry.id, "procid", FREG_TYPE_UINT32, (char *)&procid, sizeof(procid), NULL );	
+
+	ct = malloc( sizeof(*ct) );
+	ct->cat = cat;
+	ct->progid = progid;
+	ct->procid = procid;
+	ct->next = fvm_event_cats;	
+	fvm_event_cats = ct;
+	
+      }
+      
+      sts = freg_next( NULL, key, entry.id, &entry );
+    }    
+  }
+
+
   
   /* set max steps to limit runaway programs blocking rpcd */
   sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxsteps", FREG_TYPE_UINT32, (char *)&nsteps, sizeof(nsteps), NULL );
@@ -899,7 +964,9 @@ void fvm_rpc_register( void ) {
 
   rpc_program_register( &fvm_prog );
 
-  raft_notify_register( &fvm_notify_cxt );  
+  raft_notify_register( &fvm_notify_cxt );
+
+  rpcd_event_subscribe( &fvm_event_sb );
 }
 
 

@@ -771,7 +771,7 @@ static void fvm_event_cb( struct rpcd_subscriber *sb, uint32_t cat, uint32_t evt
   
   c = fvm_event_cats;
   while( c ) {
-    if( c->cat == cat ) {
+    if( c->cat == 0 || c->cat == cat ) {
       sts = fvm_state_init( &state, c->progid, c->procid );
       if( !sts ) {
 	fvm_run( &state, -1 );

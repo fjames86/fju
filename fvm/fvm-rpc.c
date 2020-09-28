@@ -755,40 +755,42 @@ static struct raft_notify_context fvm_notify_cxt = {
   NULL
 };
 
-struct fvm_event_cat {
-  struct fvm_event_cat *next;
-  uint32_t cat;
+struct fvm_event_desc {
+  struct fvm_event_desc *next;
+  uint32_t eventid;
   uint32_t progid;
   uint32_t procid;
 };
-static struct fvm_event_cat *fvm_event_cats;
+static struct fvm_event_desc *fvm_event_descs;
 
-static void fvm_event_cb( struct rpcd_subscriber *sb, uint32_t cat, uint32_t evtid, void *parm, int parmsize ) {
+static void fvm_event_cb( uint32_t eventid, struct xdr_s *args, void *cxt ) {
   /* find any prog/procs that were registered on this category. If so then invoke that procedure */
-  struct fvm_event_cat *c;
+  struct fvm_event_desc *d;
   int sts;
   struct fvm_s state;
+  struct xdr_s argbufs[2];
+  uint8_t eventxdrbuf[4];
   
-  c = fvm_event_cats;
-  while( c ) {
-    if( c->cat == 0 || c->cat == cat ) {
-      sts = fvm_state_init( &state, c->progid, c->procid );
+  xdr_init( &argbufs[0], eventxdrbuf, 4 );
+  sts = xdr_encode_uint32( &argbufs[0], eventid );
+  if( args ) {
+    xdr_init( &argbufs[1], args->buf, args->offset );
+    argbufs[1].offset = args->offset;
+  } else xdr_init( &argbufs[1], NULL, 0 );
+  
+  d = fvm_event_descs;
+  while( d ) {
+    if( d->eventid == 0 || d->eventid == eventid ) {
+      sts = fvm_state_init( &state, d->progid, d->procid );
       if( !sts ) {
+	fvm_set_args2( &state, argbufs, 2 );	
 	fvm_run( &state, -1 );
       }
     }
-    c = c->next;
+    d = d->next;
   }
   
 }
-
-
-static struct rpcd_subscriber fvm_event_sb = {
-  NULL,
-  NULL,
-  fvm_event_cb,
-  NULL
-};
 
 
 void fvm_rpc_register( void ) {
@@ -904,21 +906,21 @@ void fvm_rpc_register( void ) {
     sts = freg_next( NULL, key, 0, &entry );
     while( !sts ) {
       if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
-	uint32_t cat, progid, procid;
-	struct fvm_event_cat *ct;
-	
-	cat = 0;
+	uint32_t eventid, progid, procid;
+	struct fvm_event_desc *d;
+
+	eventid = 0;
 	procid = 0;
 	progid = fvm_progid_by_name( entry.name );
-	sts = freg_get_by_name( NULL, entry.id, "category", FREG_TYPE_UINT32, (char *)&cat, sizeof(cat), NULL );
+	sts = freg_get_by_name( NULL, entry.id, "eventid", FREG_TYPE_UINT32, (char *)&eventid, sizeof(eventid), NULL );
 	sts = freg_get_by_name( NULL, entry.id, "procid", FREG_TYPE_UINT32, (char *)&procid, sizeof(procid), NULL );	
 
-	ct = malloc( sizeof(*ct) );
-	ct->cat = cat;
-	ct->progid = progid;
-	ct->procid = procid;
-	ct->next = fvm_event_cats;	
-	fvm_event_cats = ct;
+	d = malloc( sizeof(*d) );
+	d->eventid = eventid;
+	d->progid = progid;
+	d->procid = procid;
+	d->next = fvm_event_descs;	
+	fvm_event_descs = d;
 	
       }
       
@@ -966,7 +968,7 @@ void fvm_rpc_register( void ) {
 
   raft_notify_register( &fvm_notify_cxt );
 
-  rpcd_event_subscribe( &fvm_event_sb );
+  rpcd_event_subscribe( 0, fvm_event_cb, NULL );
 }
 
 

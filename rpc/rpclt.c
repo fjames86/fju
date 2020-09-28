@@ -125,7 +125,7 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS [u32=*] [u64=*] [str=*] [opaque-file=*]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
-    { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
+    { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "eventid=* parm=*" },
     { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* register=true|false run=true|false" },
     { FVM_RPC_PROG, 1, 3, fvm_register_args, fvm_register_results, "fvm.unload", "name=*" },
@@ -1095,20 +1095,16 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 
 static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
-  uint32_t category, eventid;
+  uint32_t eventid;
   uint8_t parm[1024];
   int parmlen, j;
   char tmp[4];
   
-  category = 0;
   eventid = 0;
   parmlen = 0;
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "category" ) == 0 ) {
-      if( !argval ) usage( "Need category" );
-      category = strtoul( argval, NULL, 10 );
-    } else if( strcmp( argname, "eventid" ) == 0 ) {
+    if( strcmp( argname, "eventid" ) == 0 ) {
       if( !argval ) usage( "Need eventid" );
       eventid = strtoul( argval, NULL, 10 );
     } else if( strcmp( argname, "parm" ) == 0 ) {
@@ -1123,7 +1119,6 @@ static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr 
     i++;
   }
 
-  xdr_encode_uint32( xdr, category );
   xdr_encode_uint32( xdr, eventid );
   xdr_encode_opaque( xdr, parm, parmlen );
 }

@@ -221,23 +221,18 @@ static struct rpc_program cht_rsync_prog = {
   NULL, CHT_RSYNC_RPC_PROG, &cht_rsync_vers
 };
 
-static struct rpcd_subscriber cht_rsync_nlsevent;
-static uint32_t cht_rsync_nlsevents[] = { NLS_RPC_PROG, 0 };
-
-static void cht_rsync_nlsevent_cb( struct rpcd_subscriber *sc, uint32_t cat, uint32_t evt, void *parm, int parmsize ) {
+static void cht_rsync_nlsevent_cb( uint32_t eventid, struct xdr_s *args, void *cxt ) {
+  uint64_t hshare;
+  int sts;
   
-  if( cat != NLS_RPC_PROG ) return;
-  switch( evt ) {
-  case NLS_EVENT_REMOTEAPPEND:
-    {
-      struct nls_remote *remote = (struct nls_remote *)parm;
-
-      /* find the cht this remote is associated with */
-      cht_rsync_update( remote->hshare );
-      
-    }
-    break;
-  }
+  if( eventid != NLS_EVENT_REMOTEAPPEND ) return;
+  if( !args ) return;
+  
+  sts = xdr_decode_uint64( args, &hshare );
+  if( !sts ) sts = xdr_decode_uint64( args, &hshare );  
+  if( sts ) return;
+  
+  cht_rsync_update( hshare );
 }
 
 static void cht_rsync_iter_cb( struct rpc_iterator *iter ) {
@@ -357,10 +352,8 @@ void cht_rsync_initialize( void ) {
   rpc_program_register( &cht_rsync_prog );
 
   /* register to receive nls events */
-  cht_rsync_nlsevent.category = cht_rsync_nlsevents;
-  cht_rsync_nlsevent.cb = cht_rsync_nlsevent_cb;
-  rpcd_event_subscribe( &cht_rsync_nlsevent );
-
+  rpcd_event_subscribe( NLS_EVENT_REMOTEAPPEND, cht_rsync_nlsevent_cb, NULL );
+  
   /* register iterator */
   rpc_iterator_register( &cht_rsync_iter );
 }

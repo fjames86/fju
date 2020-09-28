@@ -3,6 +3,7 @@
 #define FVM_H
 
 #include <stdint.h>
+#include <fju/rpc.h>
 
 #define FVM_MAX_NAME 64
 
@@ -75,6 +76,7 @@ int fvm_module_set_flags( uint32_t progid, uint32_t flags, uint32_t mask );
 /* initialize runtime state */
 int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid );
 int fvm_set_args( struct fvm_s *state, char *buf, int len );
+int fvm_set_args2( struct fvm_s *state, struct xdr_s *bufs, int nbuf );
 int fvm_get_res( struct fvm_s *state, char **buf );
 
 /* exeucute a single step */

@@ -27,6 +27,7 @@
 #endif
 
 #include <fju/rpc.h>
+#include <fju/events.h>
 
 #define RPC_MAX_BUF (1024*1024)
 #define RPC_MAX_CONN 32 
@@ -138,29 +139,11 @@ void rpcd_stop( void );
 int rpcdp( void );
 int rpcd_get_default_port( void );
 
-struct rpcd_subscriber;
-struct rpcd_subscriber {
-    struct rpcd_subscriber *next;
 
-    uint32_t *category;     /* 0-terminated list of event categories. NULL implies all categories */
-
-    /* callback and private data */
-    void (*cb)( struct rpcd_subscriber *sc, uint32_t category, uint32_t eventid, void *parm, int parmsize );
-    void *prv;
-};
-
-/*
- * Publish an event to all subscribers. 
- * parm must be a single contiguous buffer of parsize length. 
- * If pointers are required, they must be encoded as offsets within this buffer.
- * Actual layout of this structure is left unspecified. 
- */
-void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int parmsize );
-void rpcd_event_subscribe( struct rpcd_subscriber *sc );
-int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc );
-
-#define RPCD_EVENT_CATEGORY 0x00001000  /* event category for rpcd itself */
-#define RPCD_EVENT_RPCCALL  0           /* received an rpc call */
+typedef void (*rpcd_event_cb_t)( uint32_t eventid, struct xdr_s *args, void *cxt );
+void rpcd_event_publish( uint32_t eventid, struct xdr_s *args );
+void rpcd_event_subscribe( uint32_t eventid, rpcd_event_cb_t cb, void *cxt );
+int rpcd_event_unsubscribe( rpcd_event_cb_t cb );
 
 struct rpcd_active_conn {
     struct rpc_listen *listen;

@@ -170,7 +170,11 @@ int main( int argc, char **argv ) {
 		if( strcmp( argname, "clid" ) == 0 ) {
 		    if( argval ) clid = strtoull( argval, NULL, 16 );
 		} else if( strcmp( argname, "hostid" ) == 0 ) {
-		    if( argval ) hostid = hostreg_hostid_by_name( argval );
+		  if( argval ) {
+		    char *term;
+		    hostid = strtoull( argval, &term, 16 );
+		    if( *term ) hostid = hostreg_hostid_by_name( argval );
+		  }
 		} else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
 		i++;
 	    }

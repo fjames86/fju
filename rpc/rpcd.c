@@ -45,6 +45,13 @@
 #include <dlfcn.h>
 #endif
 
+struct rpcd_event_subscriber {
+  uint32_t eventid;
+  rpcd_event_cb_t cb;
+  void *cxt;
+};
+#define RPCD_MAX_SUBSCRIBER 32  
+
 static struct {
 	int foreground;
 	int no_rpcregister;
@@ -74,8 +81,10 @@ static struct {
 	uint8_t buftab[RPC_MAX_CONN][RPC_MAX_BUF];
 
 	uint64_t connid;
-        struct rpcd_subscriber *rpcd_subcs;
-
+  
+        struct rpcd_event_subscriber subc[RPCD_MAX_SUBSCRIBER];
+	int nsubc;
+  
         struct rpcd_active_conn aconn;
 } rpc;
 
@@ -711,7 +720,7 @@ static void rpc_poll( int timeout ) {
 					memset( &rpc.aconn, 0, sizeof(rpc.aconn) );
 					
 					if( sts == 0 ) {
-					        rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
+					        rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
 
 					        c->cdata.count = c->inc.xdr.offset;
 						c->cdata.offset = 0;
@@ -932,7 +941,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       
       rpc.flist = c;
       if( sts == 0 ) {
-	rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
+	rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       } else if( sts > 0 ) {
@@ -1324,54 +1333,37 @@ void rpcd_stop( void ) {
 }
 
 
-void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int parmsize ) {
-    struct rpcd_subscriber *sc, *next;
-    int i, found;
-    sc = rpc.rpcd_subcs;
-    while( sc ) {
-	found = 0;
-	if( sc->category == NULL ) found = 1;
-	else {
-	    i = 0;
-	    while( sc->category[i] ) {
-		if( sc->category[i] == category ) {
-		    found = 1;
-		    break;
-		}
-		i++;
-	    }
-	}
-	
-	if( found && sc->cb ) {
-	    next = sc->next;
-	    sc->cb( sc, category, eventid, parm, parmsize );
-	    sc = next;
-	} else {
-	    sc = sc->next;
-	}
-	
+void rpcd_event_publish( uint32_t eventid, struct xdr_s *args ) {
+  int i;
+
+  for( i = 0; i < rpc.nsubc; i++ ) {
+    if( rpc.subc[i].eventid == 0 || rpc.subc[i].eventid == eventid ) {
+      rpc.subc[i].cb( eventid, args, rpc.subc[i].cxt );
     }
+  }
 }
 
-void rpcd_event_subscribe( struct rpcd_subscriber *sc ) {
-    sc->next = rpc.rpcd_subcs;
-    rpc.rpcd_subcs = sc;
+void rpcd_event_subscribe( uint32_t eventid, rpcd_event_cb_t cb, void *cxt ) {
+  if( rpc.nsubc >= RPCD_MAX_SUBSCRIBER ) {
+    rpc_log( RPC_LOG_ERROR, "Out of event subscriber descriptors" );
+  } else {
+    rpc.subc[rpc.nsubc].eventid = eventid;
+    rpc.subc[rpc.nsubc].cb = cb;
+    rpc.subc[rpc.nsubc].cxt = cxt;
+    rpc.nsubc++;
+  }
 }
 
-int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc ) {
-    struct rpcd_subscriber *sc, *prev;
-    sc = rpc.rpcd_subcs;
-    prev = NULL;
-    while( sc ) {
-	if( sc == subsc ) {
-	    if( prev ) prev->next = sc->next;
-	    else rpc.rpcd_subcs = sc->next;
-	    return 0;
-	}
-	prev = sc;
-	sc = sc->next;
+int rpcd_event_unsubscribe( rpcd_event_cb_t cb ) {
+  int i;
+  for( i = 0; i < rpc.nsubc; i++ ) {
+    if( rpc.subc[i].cb == cb ) {
+      if( i != rpc.nsubc ) rpc.subc[i] = rpc.subc[rpc.nsubc - 1];
+      rpc.nsubc--;
+      return 0;
     }
-    return -1;
+  }
+  return -1;
 }
 
 int rpcd_active_conn( struct rpcd_active_conn *aconn ) {

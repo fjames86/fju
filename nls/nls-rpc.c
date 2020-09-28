@@ -453,7 +453,17 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   /* Did we read all available messages? If not then continue */
   if( eof || nmsgs == 0 || seq == nlscxtp->seq ) {
     /* publish completion event */
-    rpcd_event_publish( NLS_RPC_PROG, NLS_EVENT_REMOTEAPPEND, &remote, sizeof(remote) );
+    struct xdr_s args;
+    char xdrbuf[64];    
+    xdr_init( &args, (uint8_t *)xdrbuf, sizeof(xdrbuf) );
+    xdr_encode_uint64( &args, remote.hostid );
+    xdr_encode_uint64( &args, remote.hshare );
+    xdr_encode_uint64( &args, remote.seq );
+    xdr_encode_uint64( &args, remote.lastid );
+    xdr_encode_uint64( &args, remote.timestamp );
+    xdr_encode_uint64( &args, remote.last_contact );
+    xdr_encode_uint32( &args, remote.notify_period );
+    rpcd_event_publish( NLS_EVENT_REMOTEAPPEND, &args );
     goto done;
   }
 

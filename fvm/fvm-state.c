@@ -44,12 +44,29 @@ int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid ) {
 }
 
 int fvm_set_args( struct fvm_s *state, char *buf, int len ) {
+  struct xdr_s xdr;
+  xdr_init( &xdr, (uint8_t *)buf, len );
+  xdr.offset = len;
+  return fvm_set_args2( state, &xdr, 1 );
+}
+
+int fvm_set_args2( struct fvm_s *state, struct xdr_s *bufs, int nbuf ) {
   uint32_t rescountp, resbufp;
+  int i, len, off;
+
+  len = 0;
+  for( i = 0; i < nbuf; i++ ) {
+    len += bufs[i].offset;
+  }
   
   if( len > FVM_MAX_STACK ) return -1;
 
   /* signature: procedure( int argcount, void *argbuf, int *rescount, void **resbuf ); */
-  memcpy( state->stack, buf, len );
+  off = 0;
+  for( i = 0; i < nbuf; i++ ) {
+    memcpy( state->stack + off, bufs[i].buf, bufs[i].offset );
+    off += bufs[i].offset;
+  }
   state->reg[FVM_REG_SP] = FVM_ADDR_STACK + len;
 
   /* allocate space for result buf pointer and result count */

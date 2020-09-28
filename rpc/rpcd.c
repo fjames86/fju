@@ -713,15 +713,15 @@ static void rpc_poll( int timeout ) {
 					/* msg complete - process */
 					xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
 					c->inc.xdr.count = c->cdata.count;
-					
+
+					//rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
+						
 					rpc.aconn.listen = NULL;
 					rpc.aconn.conn = c;
 					sts = rpc_process_incoming( &c->inc );
 					memset( &rpc.aconn, 0, sizeof(rpc.aconn) );
 					
 					if( sts == 0 ) {
-					        rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
-
 					        c->cdata.count = c->inc.xdr.offset;
 						c->cdata.offset = 0;
 						c->cstate = RPC_CSTATE_SENDLEN;
@@ -934,6 +934,8 @@ static void rpc_accept( struct rpc_listen *lis ) {
       rpc_log( RPC_LOG_DEBUG, "UDP Incoming %s count=%d", ipstr, c->cdata.count );
       rpc.flist = rpc.flist->next;
 
+      //rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
+	
       rpc.aconn.listen = lis;
       rpc.aconn.conn = NULL;
       sts = rpc_process_incoming( &c->inc );
@@ -941,7 +943,6 @@ static void rpc_accept( struct rpc_listen *lis ) {
       
       rpc.flist = c;
       if( sts == 0 ) {
-	rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       } else if( sts > 0 ) {

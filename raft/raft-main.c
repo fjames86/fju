@@ -265,14 +265,14 @@ static void print_cluster( struct raft_cluster *cluster, struct raft_member *mem
   int j;
   
       printf( "cluster id=%"PRIx64" state=%s termseq=%"PRIu64" leader=%"PRIx64" (%s)\n"
-	      "        typeid=%x flags=0x%x commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
+	      "        typeid=%x flags=%s (0x%x) commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
 	      cluster->id,
 	      cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
 	      cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
 	      cluster->state == RAFT_STATE_LEADER ? "Leader" :
 	      "Unknown",
 	      cluster->termseq, cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
-	      cluster->typeid, cluster->flags, cluster->commitseq, cluster->stateseq );
+	      cluster->typeid, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", cluster->flags, cluster->commitseq, cluster->stateseq );
 	          
       for( j = 0; j < nmember; j++ ) {
 	  if( member[j].lastseen ) {
@@ -281,8 +281,13 @@ static void print_cluster( struct raft_cluster *cluster, struct raft_member *mem
 	      strcpy( timestr, "Never" );
 	  }
 
-	  printf( "    member hostid=%"PRIx64" (%s) flags=%x lastseen=%s ", 
-		  member[j].hostid, hostreg_name_by_hostid( member[j].hostid, namestr ), member[j].flags, timestr );
+	  printf( "    member hostid=%"PRIx64" (%s) flags=%s%s (0x%x) lastseen=%s ", 
+		  member[j].hostid,
+		  hostreg_name_by_hostid( member[j].hostid, namestr ),
+		  member[j].flags & RAFT_MEMBER_VOTED ? "Voted," : "",
+		  member[j].flags & RAFT_MEMBER_OFFLINE ? "Offline," : "",
+		  member[j].flags,
+		  timestr );
 	  if( cluster->state == RAFT_STATE_LEADER ) {
 	    printf( "nextseq=%"PRIu64" stateseq=%"PRIu64"", member[j].nextseq, member[j].stateseq );
 	  }

@@ -4,6 +4,7 @@
 
 #include <fju/mmf.h>
 #include <fju/log.h>
+#include <fju/sec.h>
 
 #define CHT_KEY_SIZE 16 /* key into database i.e. content hash */
 #define CHT_BLOCK_SIZE (16*1024)
@@ -66,6 +67,7 @@ int cht_prop( struct cht_s *cht, struct cht_prop *prop );
  * buf : optional, receives block data
  */
 int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entry *entry );
+int cht_read2( struct cht_s *cht, char *key, struct sec_buf *iov, int niov, struct cht_entry *entry );
 
 /* 
  * write a block. 
@@ -74,6 +76,7 @@ int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entr
  * entry : key and flags must be set, seq receives entry seqno
  */
 int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size );
+int cht_write2( struct cht_s *cht, struct cht_entry *entry, struct sec_buf *iov, int niov );
 
 /* 
  * Delete an entry 

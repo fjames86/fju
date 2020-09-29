@@ -139,20 +139,24 @@ int cht_set_alog( struct cht_s *cht, uint64_t alog_hshare ) {
   return 0;
 }
 
-static int cht_read_block( struct cht_s *cht, int idx, char *buf, int size ) {
-  int sts;
-
-  if( size > CHT_BLOCK_SIZE ) size = CHT_BLOCK_SIZE;
-  if( idx >= cht->count ) return -1;
+static int cht_read_block( struct cht_s *cht, int idx, struct sec_buf *iov, int niov ) {
+  int sts, i, size, toread;
+  uint64_t offset;
   
-  sts = mmf_read( &cht->mmf, buf, size,
-		  sizeof(struct cht_prop) +
-		  (sizeof(struct cht_entry) * cht->count) +
-		  (CHT_BLOCK_SIZE * idx) );
-  if( sts < 0 ) return -1;
-    
+  offset = sizeof(struct cht_prop) + (sizeof(struct cht_entry) * cht->count) + (CHT_BLOCK_SIZE * idx);
+  size = 0;
+  for( i = 0; i < niov; i++ ) {
+    toread = iov[i].len;
+    if( (size + toread) > CHT_BLOCK_SIZE ) toread = CHT_BLOCK_SIZE - size;
+    sts = mmf_read( &cht->mmf, iov[i].buf, toread, offset );
+    if( sts < 0 ) break;
+    size += toread;
+    if( size >= CHT_BLOCK_SIZE ) break;
+  }
+
   return 0;
 }
+
 
 static int zerokey( char *key ) {
   int i;
@@ -165,6 +169,13 @@ static int zerokey( char *key ) {
 }
 
 int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entry *entry ) {
+  struct sec_buf iov[1];
+  iov[0].buf = buf;
+  iov[0].len = size;
+  return cht_read2( cht, key, iov, 1, entry );
+}
+
+int cht_read2( struct cht_s *cht, char *key, struct sec_buf *iov, int niov, struct cht_entry *entry ) {
   int sts, i;
   uint32_t idx;
   
@@ -177,12 +188,8 @@ int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entr
       sts = 0;
       if( entry ) *entry = cht->file->entry[idx];
 
-      if( buf && size > 0 ) {
-	if( size > (cht->file->entry[idx].flags & CHT_SIZE_MASK) ) {
-	  size = (cht->file->entry[idx].flags & CHT_SIZE_MASK);
-	}
-	
-	sts = cht_read_block( cht, idx, buf, size );
+      if( iov && niov > 0 ) {
+	sts = cht_read_block( cht, idx, iov, niov );
       }
       break;
     }
@@ -193,21 +200,26 @@ int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entr
   return sts;
 }
 
+static int cht_write_block( struct cht_s *cht, int idx, struct sec_buf *iov, int niov ) {
+  int sts, i, towrite, size;
+  uint64_t offset;
 
-static int cht_write_block( struct cht_s *cht, int idx, char *buf, int size ) {
-  int sts;
+  offset = sizeof(struct cht_prop) + (sizeof(struct cht_entry) * cht->count) + (CHT_BLOCK_SIZE * idx);
+  size = 0;
+  for( i = 0; i < niov; i++ ) {
+    towrite = iov[i].len;
+    if( (size + towrite) > CHT_BLOCK_SIZE ) towrite = CHT_BLOCK_SIZE - size;
+    
+    sts = mmf_write( &cht->mmf, iov[i].buf, towrite, offset );
+    if( sts < 0 ) break;
+    offset += towrite;
+    size += towrite;
+    if( size >= CHT_BLOCK_SIZE ) break;
+  }
 
-  if( size > CHT_BLOCK_SIZE ) size = CHT_BLOCK_SIZE;
-  if( idx >= cht->count ) return -1;
-
-  sts = mmf_write( &cht->mmf, buf, size,
-		   sizeof(struct cht_prop) +
-		   (sizeof(struct cht_entry) * cht->count) +
-		   (CHT_BLOCK_SIZE * idx) );
-  if( sts < 0 ) return -1;
-  
   return 0;
 }
+
 
 static int cht_evict( struct cht_s *cht, int idx, int rdepth ) {
   char *key;
@@ -290,17 +302,25 @@ static void cht_alog_write( struct cht_s *cht, uint32_t op, struct cht_entry *en
 }
 
 int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size ) {
-  int sts, i;
+  struct sec_buf iov[1];
+  iov[0].buf = buf;
+  iov[0].len = size;
+  return cht_write2( cht, entry, iov, 1 );
+}
+
+int cht_write2( struct cht_s *cht, struct cht_entry *entry, struct sec_buf *iov, int niov ) {
+  int sts, i, size;
   uint32_t idx;
 
+  size = 0;
+  for( i = 0; i < niov; i++ ) {
+    size += iov[i].len;
+  }
   if( size > CHT_BLOCK_SIZE ) return -1;
-
+  
   if( zerokey( (char *)entry->key ) ) {
     uint8_t hash[SEC_SHA1_MAX_HASH];
-    struct sec_buf iov[1];
-    iov[0].buf = buf;
-    iov[0].len = size;
-    sha1( hash, iov, 1 );
+    sha1( hash, iov, niov );
     memcpy( entry->key, hash, CHT_KEY_SIZE );
   }
   
@@ -327,7 +347,7 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
       cht->file->entry[idx].flags = size | (entry->flags & ~CHT_SIZE_MASK);
       entry->flags = cht->file->entry[idx].flags;
       memcpy( cht->file->entry[idx].cookie, entry->cookie, CHT_MAX_COOKIE );      
-      cht_write_block( cht, idx, buf, size );
+      cht_write_block( cht, idx, iov, niov );
       
       sts = 0;
       cht->file->header.seq++;
@@ -353,7 +373,7 @@ int cht_write( struct cht_s *cht, struct cht_entry *entry, char *buf, int size )
   cht->file->entry[idx].flags = (size & CHT_SIZE_MASK) | (entry->flags & ~CHT_SIZE_MASK);
   entry->flags = cht->file->entry[idx].flags;
   memcpy( cht->file->entry[idx].cookie, entry->cookie, CHT_MAX_COOKIE );  
-  cht_write_block( cht, idx, buf, size );
+  cht_write_block( cht, idx, iov, niov );
   
   cht->file->header.seq++;
   cht->file->header.fill++;

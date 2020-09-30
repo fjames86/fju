@@ -27,25 +27,25 @@ int fvm_module_load_file( char *filename, uint32_t *progid ) {
   
   sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
   if( sts ) {
-    fvm_log( LOG_LVL_ERROR, "Failed to open file %s", rpc_strerror( rpc_errno() ) );    
+    fvm_log( LOG_LVL_ERROR, "fvm failed to open module file %s", rpc_strerror( rpc_errno() ) );    
     return sts;
   }
 
   memset( &header, 0, sizeof(header) );
   sts = mmf_read( &mmf, (char *)&header, sizeof(header), 0 );
   if( sts != sizeof(header) ) {
-    fvm_log( LOG_LVL_ERROR, "Bad file size %d != %d", sts, sizeof(header) );
+    fvm_log( LOG_LVL_ERROR, "fvm bad module file size %d != %d", sts, sizeof(header) );
     sts = -1;
     goto done;
   }
 
   if( header.magic != FVM_MAGIC ) {
-    fvm_log( LOG_LVL_ERROR, "Bad header magic" );
+    fvm_log( LOG_LVL_ERROR, "fvm bad module header magic" );
     sts = -1;
     goto done;
   }
   if( header.version != FVM_VERSION ) {
-    fvm_log( LOG_LVL_ERROR, "Bad header version" );    
+    fvm_log( LOG_LVL_ERROR, "fvm bad module header version" );    
     sts = -1;
     goto done;
   }      
@@ -178,6 +178,7 @@ int fvm_module_list( struct fvm_module_info *minfo, int n ) {
       minfo[i].progid = m->header.progid;
       minfo[i].versid = m->header.versid;
       minfo[i].clusterid = m->clusterid;
+      minfo[i].utime = m->utime;
     }
     i++;
     m = m->next;

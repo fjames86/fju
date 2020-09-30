@@ -39,6 +39,7 @@ struct fvm_module_info {
   uint32_t flags;
 #define FVM_MODULE_AUDIT        0x0001  /* save to audit log */
 #define FVM_MODULE_PERSISTENT   0x0002 /* save data segment after each run */
+  uint64_t utime;
 };
   
 struct fvm_module;

@@ -35,14 +35,15 @@ struct fvm_header {
 struct fvm_module {
   struct fvm_module *next;
   
-  struct fvm_header header;
-  struct fvm_symbol *symbols;
-  uint8_t *data;
-  uint8_t *text;
+  struct fvm_header header; /* module header */
+  struct fvm_symbol *symbols; /* list of module symbols */
+  uint8_t *data; /* module data segment */
+  uint8_t *text; /* module text segment */
   
-  uint64_t clusterid;
+  uint64_t clusterid; /* non-zero if clustered */
   uint32_t flags; /* module flags */
-  char path[256];
+  char path[256]; /* path to module file, if any */
+  uint64_t utime; /* total user runtime in ms */
 };
 
 typedef enum {

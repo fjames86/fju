@@ -1128,7 +1128,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
   char name[64];
   uint32_t progid, versid, datasize, textsize;
   int c;
-  uint64_t clid;
+  uint64_t clid, utime;
   uint32_t flags;
   
   sts = xdr_decode_boolean( xdr, &b );
@@ -1141,8 +1141,9 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     sts = xdr_decode_uint32( xdr, &textsize );
     sts = xdr_decode_uint64( xdr, &clid );
     sts = xdr_decode_uint32( xdr, &flags );
-    printf( "%s Program %u:%u Data %u Text %u Flags 0x%08x CLID %"PRIx64"\n",
-	    name, progid, versid, datasize, textsize, flags, clid );
+    sts = xdr_decode_uint64( xdr, &utime );
+    printf( "%s Program %u:%u Data %u Text %u Flags 0x%08x CLID %"PRIx64" UTime %"PRIu64"\n",
+	    name, progid, versid, datasize, textsize, flags, clid, utime );
     
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "xdr error" );

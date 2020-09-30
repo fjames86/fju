@@ -242,6 +242,7 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     xdr_encode_uint32( &inc->xdr, minfo[i].textsize );
     xdr_encode_uint64( &inc->xdr, minfo[i].clusterid );
     xdr_encode_uint32( &inc->xdr, minfo[i].flags );
+    xdr_encode_uint64( &inc->xdr, minfo[i].utime );
     m = fvm_module_symbols( minfo[i].progid, sym, nsym );
     if( m > nsym ) {
       nsym = m;

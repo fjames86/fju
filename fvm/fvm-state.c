@@ -163,6 +163,9 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
     }
   }
   state->flags &= ~FVM_STATE_DIRTY;
+
+  /* increment runtime counter */
+  state->module->utime += end - start;
   
   return 0;
 }

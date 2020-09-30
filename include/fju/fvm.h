@@ -55,6 +55,7 @@ struct fvm_s {
   uint32_t reg[FVM_MAX_REG];
   int32_t frame;
   uint32_t nsteps;
+  uint32_t timeout;
   uint8_t stack[FVM_MAX_STACK];
 };
 

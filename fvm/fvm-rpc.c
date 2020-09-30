@@ -936,6 +936,11 @@ void fvm_rpc_register( void ) {
     fvm_log( LOG_LVL_INFO, "Setting max steps to %u", nsteps );
     fvm_max_steps( nsteps );
   }
+  sts = freg_get_by_name( NULL, 0, "/fju/fvm/timeout", FREG_TYPE_UINT32, (char *)&nsteps, sizeof(nsteps), NULL );
+  if( !sts ) {
+    fvm_log( LOG_LVL_INFO, "Setting timeout to %u", nsteps );
+    fvm_default_timeout( nsteps );
+  }
 
 
   /* run init functions on startup */

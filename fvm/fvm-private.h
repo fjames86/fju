@@ -75,6 +75,7 @@ void fvm_write( struct fvm_s *state, uint32_t addr, uint32_t val );
 void fvm_debug( int enable );
 void fvm_printf( char *fmt, ... );
 uint32_t fvm_max_steps( uint32_t n );
+uint32_t fvm_default_timeout( uint32_t timeout );
 
 int fvm_cluster_update( struct fvm_module *module );
 struct fvm_module *fvm_get_modules( void );

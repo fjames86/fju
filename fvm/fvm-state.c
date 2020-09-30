@@ -127,7 +127,8 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
   sts = 0;
   
   if( nsteps == 0 ) nsteps = fvm_max_steps( 0 );
-
+  if( state->timeout == 0 ) state->timeout = fvm_default_timeout( 0 );
+  
   start = rpc_now();
   while( !(state->flags & FVM_STATE_YIELD) &&
 	 (nsteps == -1 || state->nsteps < nsteps) &&
@@ -136,6 +137,13 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
     ns++;
     if( sts ) {
       fvm_printf( "fvm_step returned error status\n" );
+      break;
+    }
+
+    /* forbid running longer than a specified timeout */
+    if( state->timeout && (state->nsteps % 1000 == 0) && ((rpc_now() - start) > state->timeout) ) {
+      fvm_printf( "fvm_step exiting due to max timeout\n" );
+      sts = -1;
       break;
     }
   }
@@ -320,3 +328,12 @@ int fvm_write_string( struct fvm_module *m, uint32_t procid, char *str ) {
   
   return -1;
 }
+
+uint32_t fvm_default_timeout( uint32_t timeout ) {
+  static uint32_t default_timeout = 1000;
+  uint32_t t = default_timeout;
+  if( timeout ) default_timeout = timeout;
+  return t;
+}
+
+    

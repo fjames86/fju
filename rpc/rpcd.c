@@ -762,8 +762,12 @@ static void rpc_poll( int timeout ) {
 						}
 					} else if( sts > 0 ) {
 					  rpc_log( RPC_LOG_TRACE, "rpc_process_incoming noresponse" );
+					  c->cstate = RPC_CSTATE_RECVLEN;
+					  c->nstate = RPC_NSTATE_RECV;
 					} else {
 					  rpc_log( RPC_LOG_ERROR, "rpc_process_incoming failed" );
+					  c->cstate = RPC_CSTATE_RECVLEN;
+					  c->nstate = RPC_NSTATE_RECV; 
 					}
 
 				}

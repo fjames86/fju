@@ -40,5 +40,7 @@ Begin
 
    Declare Syscall ReadCht(key : opaque, buf : opaque, var size : integer) : 16;
    Declare Syscall WriteCht(key : opaque, buf : opaque, size : integer) : 17;
+
+   Declare Syscall NextLogEntry(logname : string, var idhigh : integer, var idlow : integer, var result : integer) : 18;
    
 End.

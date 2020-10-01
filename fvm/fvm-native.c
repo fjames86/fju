@@ -236,6 +236,48 @@ static int native_readlog( struct fvm_s *state ) {
   return 0;
 }
 
+/* procedure nextlogentry(logname : string, var idhigh : integer, var idlow : integer, result : integer) */
+static int native_nextlogentry( struct fvm_s *state ) {
+  uint32_t resultaddr, idlowaddr, idhighaddr, idlow, idhigh;
+  uint64_t id;
+  int sts, ne;
+  char str[256];
+  struct log_entry entry;
+  
+  native_readstr( state, ntohl( fvm_stack_read( state, 16 ) ), str, sizeof(str) );
+  resultaddr = ntohl( fvm_stack_read( state, 4 ) );
+  idlowaddr = ntohl( fvm_stack_read( state, 8 ) );
+  idhighaddr = ntohl( fvm_stack_read( state, 12 ) );
+  idhigh = ntohl( fvm_read( state, idhighaddr ) );
+  idlow = ntohl( fvm_read( state, idlowaddr ) );
+  
+  if( strcmp( prevlogname, str ) != 0 ) {
+    if( prevlog.pid ) log_close( &prevlog );
+    memset( &prevlog, 0, sizeof(prevlog) );
+    strcpy( prevlogname, str );  
+    strcat( str, ".log" );
+
+    fvm_printf( "native_nextlogentry opening file \"%s\"\n", str );
+    sts = log_open( mmf_default_path( str, NULL ), NULL, &prevlog );
+    if( sts ) {
+      strcpy( prevlogname, "" );
+      return -1;
+    }
+  }
+
+  id = (((uint64_t)idhigh) << 32) | (uint64_t)idlow;
+  sts = log_read( &prevlog, id, &entry, 1, &ne );
+  if( sts || !ne ) {
+    fvm_write( state, resultaddr, htonl( 0 ) );
+  } else {
+    fvm_write( state, idlowaddr, htonl( entry.id & 0xffffffff ) );
+    fvm_write( state, idhighaddr, htonl( entry.id >> 32 ) );
+    fvm_write( state, resultaddr, htonl( 1 ) );
+  }
+  
+  return 0;
+}
+
 /* declare procdure(dest :string, destsize : integer, fmt : string, args : opaque) */
 static int native_sprintf( struct fvm_s *state ) {
   uint32_t bufaddr, fmtaddr, bufsize, argsaddr;
@@ -585,6 +627,7 @@ static struct fvm_native_proc native_procs[] =
    { 15, native_writeregstring },   
    { 16, native_readcht },
    { 17, native_writecht },
+   { 18, native_nextlogentry },
    
    { 0, NULL }
   };

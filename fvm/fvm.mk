@@ -4,6 +4,7 @@ fvm_programs+=fvm/programs/test-rpc.fvm
 fvm_programs+=fvm/programs/test-service.fvm
 fvm_programs+=fvm/programs/watchdog.fvm
 fvm_programs+=fvm/programs/eventlog.fvm
+fvm_programs+=fvm/programs/msgq.fvm
 
 fvm_stdlib+=fvm/stdlib/native.asm
 fvm_stdlib+=fvm/stdlib/xdr.asm
@@ -54,6 +55,10 @@ fvm/programs/watchdog.fvm: ${BINDIR}/fvmc fvm/programs/watchdog.pas
 fvm/programs/eventlog.fvm: ${BINDIR}/fvmc fvm/programs/eventlog.pas
 	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/programs/eventlog.pas
 	rm fvm/programs/eventlog.asm
+
+fvm/programs/msgq.fvm: ${BINDIR}/fvmc fvm/programs/msgq.pas
+	${BINDIR}/fvmc -o $@ fvm/stdlib/native.pas fvm/programs/msgq.pas
+	rm fvm/programs/msgq.asm
 
 fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test1.asm fvm/stdlib/native.asm
 	${BINDIR}/fvmc -o $@ -I fvm/stdlib/ fvm/test/test1.asm

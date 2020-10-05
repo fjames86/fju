@@ -1043,6 +1043,8 @@ static struct {
 	{ "STSP", 0x4a, 0x00020002 }, /* STSP RX const. store into stack pointer offset by const into rx */
 	{ "INC", 0x4b, 0x00020000 }, /* INC RX RY. increment at memory address RX by RY */	
 	{ "INC", 0x4c, 0x00020002 }, /* INC RX const. increment at memory address RX by const */
+	{ "STSPINC", 0x4d, 0x00020001 }, /* STSPINC RX const: increment value at stack offset const by rx */
+	{ "STSPDEC", 0x4e, 0x00020001 }, /* STSPDEC RX const: decrement value at stack offset const by rx */
 	
 	{ NULL, 0, 0 }
 	  

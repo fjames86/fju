@@ -655,6 +655,18 @@ static int opcode_incconst( struct fvm_s *state, uint32_t flags, uint32_t reg, u
   return 0;
 }
 
+static int opcode_stspincconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* STSP RX const */
+  uint32_t val = mem_read( state, state->reg[FVM_REG_SP] + sign_extend( data ) );
+  mem_write( state, state->reg[FVM_REG_SP] + sign_extend( data ), val + state->reg[reg] );
+  return 0;
+}
+static int opcode_stspdecconst( struct fvm_s *state, uint32_t flags, uint32_t reg, uint32_t data ) {
+  /* STSP RX const */
+  uint32_t val = mem_read( state, state->reg[FVM_REG_SP] + sign_extend( data ) );
+  mem_write( state, state->reg[FVM_REG_SP] + sign_extend( data ), val - state->reg[reg] );
+  return 0;
+}
 
 
 
@@ -742,6 +754,8 @@ static struct opcode_def opcodes[FVM_MAX_OPCODE] =
    { opcode_stspconst, "STSP" },
    { opcode_increg, "INC" },
    { opcode_incconst, "INC" },
+   { opcode_stspincconst, "STSPINC" },
+   { opcode_stspdecconst, "STSPDEC" },
    
   };
 

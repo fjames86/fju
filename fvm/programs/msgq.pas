@@ -7,6 +7,10 @@
  * This program runs a service routine periodically to poll for new log entries.
  * These are interpreted as being messages to be distributed to clients.
  *
+ * This program must be run clustered, so that registrations are shared across all nodes.
+ * The message log should be shared with nls so that when new messages are written all nodes
+ * publish them.
+ * 
  * TODO: does any of this work and is it even useful? 
 }
 
@@ -80,7 +84,7 @@ Begin
 
 End;
 
-{ write message into queue }
+{ write message into queue. note that the arg buffer must contain the msgid followed by variable length data  }
 Procedure Publish(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
 Begin
 	If argcount < 4 Then

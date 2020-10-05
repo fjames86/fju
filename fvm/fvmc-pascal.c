@@ -727,28 +727,35 @@ static void parseexpr( int reg ) {
     parseexpr( reg );
     fvmc_emit( "\tNOT\tR%u\n", reg );
   } else if( accepttok( TOK_CARET ) ) {
-    /* ^var */
+    /* ^expr | ^var */
     tok = glob.tok;
-    expecttok( TOK_NAME );
-    v = getvar( tok.token );
-    if( v ) {
-      if( v->type != VAR_OPAQUE ) usage( "deference must be a variable of pointer type" );
-
-      fvmc_emit( "\tLDSP\tR%u\t-%u\n", reg, v->offset + glob.stackoffset );
-      fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
-      
-      if( v->flags & VAR_ISVAR ) {
+    if( accepttok( TOK_NAME ) ) {
+      v = getvar( tok.token );
+      if( v ) {
+	if( v->type != VAR_OPAQUE ) usage( "deference must be a variable of pointer type" );
+	
+	fvmc_emit( "\tLDSP\tR%u\t-%u\n", reg, v->offset + glob.stackoffset );
+	fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
+	
+	if( v->flags & VAR_ISVAR ) {
+	  fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
+	}
+	
+      } else {
+	/* assume global */
+	v = getglobal( tok.token );
+	if( !v ) usage( "Unknown global %s", tok.token );
+	
+	fvmc_emit( "\tLD\tR%u\t%s\n", reg, tok.token );
 	fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
       }
-      
     } else {
-      /* assume global */
-      v = getglobal( tok.token );
-      if( !v ) usage( "Unknown global %s", tok.token );
-      
-      fvmc_emit( "\tLD\tR%u\t%s\n", reg, tok.token );
+      /* ^expr */
+      parseexpr( reg );
+      /* reg now contains an address, dereference it */
       fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );
     }
+      
   } else if( accepttok( TOK_ADDRESS ) ) {
     /* address var */
     tok = glob.tok;
@@ -1253,34 +1260,41 @@ static void parsestatement( void ) {
     assignreg( v, reg );
     assignreg( NULL, 1 );
   } else if( accepttok( TOK_CARET ) ) {
-    /* ^var := expr */
+    /* ^var := expr | ^expr := expr */
     struct var *v;
     struct token nametok = glob.tok;
-    expectok( TOK_NAME );
-    expectok( TOK_ASSIGN );
-    parseexpr( 0 );
-    v = getvar( nametok.token );
-    if( v ) {
-      /* var must be a pointer type */
-      if( (v->type != VAR_OPAQUE) ) usage( "Var type not a pointer" );
-      
-      if( v->flags & VAR_ISVAR ) {
-	/* var already a pointer */
-	fvmc_emit( "\tLDSP\tR1\t-%u\n", v->offset + glob.stackoffset );
-	fvmc_emit( "\tLD\tR1\tR1\n" );
-	fvmc_emit( "\tST\tR1\tR0 ; store into %s\n", v->name );	
+    if( accepttok( TOK_NAME ) ) {
+      expectok( TOK_ASSIGN );
+      parseexpr( 0 );
+      v = getvar( nametok.token );
+      if( v ) {
+	/* var must be a pointer type */
+	if( (v->type != VAR_OPAQUE) ) usage( "Var type not a pointer" );
+	
+	if( v->flags & VAR_ISVAR ) {
+	  /* var already a pointer */
+	  fvmc_emit( "\tLDSP\tR1\t-%u\n", v->offset + glob.stackoffset );
+	  fvmc_emit( "\tLD\tR1\tR1\n" );
+	  fvmc_emit( "\tST\tR1\tR0 ; store into %s\n", v->name );	
+	} else {
+	  fvmc_emit( "\tLDSP\tR1\t-%u ; load %s\n", v->offset + glob.stackoffset, v->name );
+	  fvmc_emit( "\tST\tR1\tR0 ; store into %s\n", v->name );
+	}
+	
       } else {
-	fvmc_emit( "\tLDSP\tR1\t-%u ; load %s\n", v->offset + glob.stackoffset, v->name );
-	fvmc_emit( "\tST\tR1\tR0 ; store into %s\n", v->name );
+	v = getglobal( nametok.token );
+	if( !v ) usage( "Unknown variable %s", nametok.token );
+	
+	/* assume global */
+	fvmc_emit( "\tLD\tR1\t%s\n", nametok.token );
+	fvmc_emit( "\tST\tR1\tR0\n" );
       }
-      
     } else {
-      v = getglobal( nametok.token );
-      if( !v ) usage( "Unknown variable %s", nametok.token );
-      
-      /* assume global */
-      fvmc_emit( "\tLD\tR1\t%s\n", nametok.token );
-      fvmc_emit( "\tST\tR1\tR0\n" );
+      /* ^expr := expr */
+      parseexpr( 0 );
+      expectok( TOK_ASSIGN );
+      parseexpr( 1 );
+      fvmc_emit( "\tST\tR0\tR1\n" );
     }
     
   } else if( accepttok( TOK_CALL ) || accepttok( TOK_SYSCALL ) ) {

@@ -18,7 +18,7 @@ Procedure PublishMsg(msgid : integer, buf : opaque, count : integer)
 Begin
 	var i, progid, procid, c : integer;
 	var q : opaque;
-	
+
 	i := 0;
 	While i < nSubs Do
 	Begin

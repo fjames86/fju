@@ -1,6 +1,15 @@
 
 { -*- text -*- }
 
+{
+ * This allows clients to register interest in receiving messages of a given msgid.
+ * They specify a progid/procid that should be called.
+ * This program runs a service routine periodically to poll for new log entries.
+ * These are interpreted as being messages to be distributed to clients.
+ *
+ * TODO: does any of this work and is it even useful? 
+}
+
 Program MsgQ(23102222, 1, Service,Publish,Subscribe);
 Begin
 

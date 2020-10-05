@@ -99,8 +99,7 @@ static int native_now( struct fvm_s *state ) {
   return 0;
 }
 
-/* procedure logstr(str : string) */
-static int native_logstr( struct fvm_s *state ) {  
+static int native_logstrlvl( struct fvm_s *state, int lvl ) {  
   char *str;
   uint32_t addr;
 
@@ -114,10 +113,28 @@ static int native_logstr( struct fvm_s *state ) {
     
     xdr_init( &xdr, (uint8_t *)str, 4 );
     sts = xdr_decode_uint32( &xdr, &len );
-    if( !sts ) log_writef( NULL, LOG_LVL_INFO, "%.*s", len, str + 4 );
+    if( !sts ) log_writef( NULL, lvl, "%.*s", len, str + 4 );
   }
   
   return 0;
+}
+
+
+/* procedure logstr(str : string) */
+static int native_logstr( struct fvm_s *state ) {
+  return native_logstrlvl( state, LOG_LVL_INFO );
+}
+/* procedure logdebug(str : string) */
+static int native_logdebug( struct fvm_s *state ) {
+  return native_logstrlvl( state, LOG_LVL_DEBUG );
+}
+/* procedure logwarn(str : string) */
+static int native_logwarn( struct fvm_s *state ) {
+  return native_logstrlvl( state, LOG_LVL_WARN );
+}
+/* procedure logerror(str : string) */
+static int native_logerror( struct fvm_s *state ) {
+  return native_logstrlvl( state, LOG_LVL_ERROR );
 }
 
 /* procedure ProgidByName( str : string, var progid : integer ) */
@@ -628,6 +645,9 @@ static struct fvm_native_proc native_procs[] =
    { 16, native_readcht },
    { 17, native_writecht },
    { 18, native_nextlogentry },
+   { 19, native_logdebug },
+   { 20, native_logwarn },   
+   { 21, native_logerror },
    
    { 0, NULL }
   };

@@ -31,16 +31,16 @@ Begin
    Declare Syscall ReadLog(logname : string, idhigh : integer, idlow : integer, buf : opaque, var count	: integer) : 8;
    Declare Syscall Sprintf(dest : string, destsize : integer, fmt : string, args : opaque) : 9;
    Declare Syscall Yield(timeout : integer, flags : integer, var result : integer) : 10;
-   Declare Syscall Invoke(progid : integer, procid : integer, args : opaque, argcount : integer, res : opaque, var rescount : integer) : 11;
-   
+   Declare Syscall Invoke(progid : integer, procid : integer, args : opaque, argcount : integer, res : opaque, var rescount : integer) : 11;   
    Declare Syscall ReadRegInt(path : string, var int : integer) : 12;
    Declare Syscall ReadRegString(path : string, str : string, size : integer ) : 13;
    Declare Syscall WriteRegInt(path : string, int : integer ) : 14;
    Declare Syscall WriteRegString(path : string, str : string) : 15;
-
    Declare Syscall ReadCht(key : opaque, buf : opaque, var size : integer) : 16;
    Declare Syscall WriteCht(key : opaque, buf : opaque, size : integer) : 17;
-
    Declare Syscall NextLogEntry(logname : string, var idhigh : integer, var idlow : integer, var result : integer) : 18;
+   Declare Syscall LogDebug(str : string) : 19;
+   Declare Syscall LogWarn(str : string) : 20;
+   Declare Syscall LogError(str : string) : 21;   
    
 End.

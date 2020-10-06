@@ -65,3 +65,56 @@ program state to be maintained across different machines. Note that it will be l
 If the execution of a procedure would result in some side effect e.g. writing to a log file, these side effects are
 not clustered, and will happen only on the machine where the procedure was run.
 
+## ------------------------------
+
+fvmc Assembler/Compiler
+
+Programs for fvm may be written either in fvm assembler or a variant of pascal defined below.
+
+fvmc pascal file format:
+
+------------
+Program Name(progid,versid,exports...);
+Begin
+
+Procedure procname(argname : argtype, var argname : argtype, ...)
+Begin
+End;
+
+var globalname : type;
+
+End.
+------------
+
+Valid Type identifiers: integer, string, opaque, string[len], opaque[len]
+
+Exported procedures MUST always have the following signature:
+Procedure exportedproc(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque);
+
+The difference between parameters declared with var is those with var are passed by reference, those without
+are passed by value. So in the above signature, rescount is initally 0 and must be set by the procedure
+to the length of the resbuf that must also be set.
+
+There should only be a single Program defined in a compiled module. However, other files may be included
+in the compiled module by using a Declare body:
+
+----------
+
+a declare file:
+
+Declare
+
+{ define a procedure to be included }
+Procedure Procname(arg : type, ....)
+Begin
+body....
+End;
+
+{ declare a forward reference to a procedure, but don't define its body }
+Declare Procedure procname(Arg : type);
+
+End;
+
+
+
+---------

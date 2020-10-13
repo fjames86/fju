@@ -29,7 +29,8 @@ static void usage( char *fmt, ... ) {
 	    "   -n      max steps\n"
 	    "   -v      Verbose\n"
 	    "   -r      Replay audit log\n"
-	    "   -R      Save to audit log\n" 
+	    "   -R      Save to audit log\n"
+	    "   --u32 u32 | --u64 u64 | --str str  Set arg values\n" 
 	    "\n" );
   }
   
@@ -55,6 +56,7 @@ int main( int argc, char **argv ) {
   uint32_t progid = 0, procid = 0;
   struct xdr_s argxdr;
   int replay = 0, saveaudit = 0;
+  char *resbuf;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
@@ -174,6 +176,17 @@ int main( int argc, char **argv ) {
   if( saveaudit ) fvm_audit_write( progid, procid, (char *)argbuf, argxdr.offset );
   sts = fvm_run( &state, nsteps );
   if( sts ) usage( "Failed to run" );
+
+  resbuf = NULL;
+  sts = fvm_get_res( &state, &resbuf );
+  if( resbuf && sts > 0 ) {
+    for( i = 0; i < sts; i++ ) {
+      if( i && (i % 16) == 0 ) {
+	printf( "\n" );
+      }
+      printf( "%02x ", (uint32_t)resbuf[i] );
+    }
+  }
   
   return 0;
 }

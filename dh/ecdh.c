@@ -51,7 +51,14 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
   }
 
-  printf( "ecdh [-p public -s secret]\n" );
+  printf( "ecdh [-p public -s secret] [-S signdata] [-V verifysig]\n"
+	  "\n"
+	  "     -p public       Public key\n"
+	  "     -s secret       Secret key\n"
+	  "     -S signdata     Generate signature from this string, requires secret key\n"
+	  "     -V verifysig    Verify signature, requires public key and signdata\n"
+	  );
+  
   exit( 0 );
 }
 
@@ -103,7 +110,8 @@ int main( int argc, char **argv ) {
   struct sec_buf secret, public, common;
   int sp, pp;
   char hex[256];
-
+  char *signstr = NULL, *verstr = NULL;
+  
   memset( secret_buf, 0, sizeof(secret_buf) );
   memset( common_buf, 0, sizeof(common_buf) );
   memset( pub_buf, 0, sizeof(pub_buf) );
@@ -126,6 +134,14 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       hex2bn( argv[i], &public );
       pp = 1;
+    } else if( strcmp( argv[i], "-S" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      signstr = argv[i];
+    } else if( strcmp( argv[i], "-V" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      verstr = argv[i];	      
     } else usage( NULL );
     i++;
   }
@@ -133,13 +149,45 @@ int main( int argc, char **argv ) {
   if( pp && sp ) {
     ecdh_common( &secret, &public, &common );
     bn2hex( common.buf, hex, common.len );
-    printf( "COMMON %s\n", hex );
-  } else {
+    printf( "COMMON %s\n", hex );    
+  } else if( signstr == NULL && verstr == NULL ) {
     ecdh_generate( &secret, &public );
     bn2hex( secret.buf, hex, secret.len );
     printf( "SECRET %s\n", hex );
     bn2hex( public.buf, hex, public.len );
     printf( "PUBLIC %s\n", hex );
+  }
+
+  if( signstr ) {
+    struct sec_buf dataiov[1], sig;
+    char sigbuf[SEC_MAX_SIG];
+    int sts;
+
+    dataiov[0].buf = signstr;
+    dataiov[0].len = strlen( signstr );
+    
+    if( sp ) {      
+      sig.buf = sigbuf;
+      sig.len = SEC_MAX_SIG;
+      do {
+	sts = sec_sign( &secret, dataiov, 1, &sig );
+	if( sts ) usage( "Sign failed" );
+      } while( sig.len != 70 );
+      
+      memset( hex, 0, sizeof(hex) );
+      base32_encode( sig.buf, sig.len, hex );
+      //bn2hex( sig.buf, hex, sig.len );
+      printf( "SIG %s\n", hex );
+    }
+    
+    if( pp && verstr ) {
+      sts = base32_decode( verstr, sigbuf );
+      sig.len = sts;
+      sig.buf = sigbuf;
+      
+      sts = sec_verify( &public, dataiov, 1, &sig );
+      printf( "Verify %s\n", sts ? "failed" : "success" );
+    }
   }
 
   return 0;

@@ -70,4 +70,11 @@ uint32_t sec_crc32( uint32_t crc, char *buf, int len );
 int fju_readstdin( char *buf, int size );
 int fju_writestdout( char *buf, int size );
 
+void base32_encode( char *plain, int len, char *coded );
+int base32_decode( char *coded, char *plain );
+
+#define SEC_MAX_SIG 72 
+int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig );
+int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig );
+
 #endif

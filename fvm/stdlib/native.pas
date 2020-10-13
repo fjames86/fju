@@ -42,5 +42,6 @@ Begin
    Declare Syscall LogDebug(str : string) : 19;
    Declare Syscall LogWarn(str : string) : 20;
    Declare Syscall LogError(str : string) : 21;   
+   Declare Syscall NextRegEntry(path : string, name : string, var type : integer) : 22;
    
 End.

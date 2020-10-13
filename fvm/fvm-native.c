@@ -482,6 +482,48 @@ static int native_invoke( struct fvm_s *state ) {
   return 0;
 }
 
+/* Procedure NextRegEntry(path : str, name : string, var type : integer); */
+static int native_nextregentry( struct fvm_s *state ) {
+  uint32_t pathaddr, nameaddr, typeaddr;
+  char path[256], name[64];
+  int sts;
+  struct freg_entry entry;
+  uint64_t id;
+  char *nstr;
+  
+  pathaddr = ntohl( fvm_stack_read( state, 12 ) );
+  nameaddr = ntohl( fvm_stack_read( state, 8 ) );
+  typeaddr = ntohl( fvm_stack_read( state, 4 ) );
+  native_readstr( state, pathaddr, path, sizeof(path) );
+  native_readstr( state, nameaddr, name, sizeof(name) );
+  
+  sts = freg_subkey( NULL, 0, path, 0, &id );
+  if( sts ) goto done;
+  if( strcmp( name, "" ) == 0 ) {
+    sts = freg_next( NULL, id, 0, &entry );
+    if( sts ) goto done;    
+  } else {
+    sts = freg_entry_by_name( NULL, id, name, &entry, NULL );
+    if( !sts ) sts = freg_next( NULL, id, entry.id, &entry );
+    if( sts ) goto done;    
+  }
+
+ done:
+  if( sts ) {
+    fvm_write( state, nameaddr, 0 );
+    fvm_write( state, typeaddr, 0 );
+  } else {
+    fvm_write( state, nameaddr, htonl( strlen( entry.name ) ) );
+    if( !sts ) {
+      nstr = fvm_getaddr_writable( state, nameaddr + 4 );
+      if( nstr ) memcpy( nstr, entry.name, strlen( entry.name ) );
+    }
+    fvm_write( state, typeaddr, htonl( entry.flags & FREG_TYPE_MASK ) );
+  }
+  
+  return 0;
+}
+
 static int native_readregint( struct fvm_s *state ) {
   uint32_t pathaddr, intaddr, u;
   char path[256];
@@ -624,6 +666,7 @@ static int native_writecht( struct fvm_s *state ) {
   return 0;
 }
 
+
 static struct fvm_native_proc native_procs[] =
   {
    { 0, native_nop },
@@ -648,6 +691,7 @@ static struct fvm_native_proc native_procs[] =
    { 19, native_logdebug },
    { 20, native_logwarn },   
    { 21, native_logerror },
+   { 22, native_nextregentry },
    
    { 0, NULL }
   };

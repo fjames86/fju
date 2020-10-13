@@ -81,14 +81,12 @@ static int get_offset( int block ) {
 }
 
 static unsigned char shift_right( unsigned char byte, char offset ) {
-  if (offset > 0)
-    return byte >>  offset;
-  else
-    return byte << -offset;
+  if( offset > 0 ) return byte >> offset;
+  else return byte << -offset;
 }
 
 static unsigned char shift_left( unsigned char byte, char offset ) {
-  return shift_right(byte, - offset);
+  return shift_right( byte, -offset );
 }
 
 static void encode_sequence( const unsigned char *plain, int len, unsigned char *coded ) {
@@ -96,8 +94,8 @@ static void encode_sequence( const unsigned char *plain, int len, unsigned char 
   unsigned char c;
   
   for( block = 0; block < 8; block++ ) {
-    octet = get_octet(block); 
-    junk = get_offset(block); 
+    octet = get_octet( block ); 
+    junk = get_offset( block ); 
     
     if( octet >= len ) { 
       pad( &coded[block], 8 - block );
@@ -109,7 +107,7 @@ static void encode_sequence( const unsigned char *plain, int len, unsigned char 
     if (junk < 0 && octet < len - 1 ) {
       c |= shift_right( plain[octet+1], 8 + junk );
     }
-    coded[block] = encode_char(c);
+    coded[block] = encode_char( c );
   }
 }
 
@@ -151,9 +149,8 @@ int base32_decode( char *coded, char *plain ) {
   for( i = 0, j = 0; ; i += 8, j += 5 ) {
     n = decode_sequence( (uint8_t *)&coded[i], (uint8_t *)&plain[j] );
     written += n;
-    if (n < 5)
-      return written;
-    
+    if( n < 5 )
+      return written;    
   }
 
   return -1;

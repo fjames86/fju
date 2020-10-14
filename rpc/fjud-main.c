@@ -39,6 +39,9 @@
 #include <fju/freg.h>
 #include <fju/fvm.h>
 #include <fju/cht-rsync.h>
+#include <fju/sec.h>
+#include <fju/lic.h>
+#include <fju/hostreg.h>
 
 #include "rpc-private.h"
 
@@ -112,6 +115,57 @@ static void main_cb( rpcd_evt_t evt, void *arg, void *cxt ) {
   }
 }
 
+static void check_license( struct rpc_iterator *iter ) {
+  static uint8_t pubkeybuf[] =
+    {
+     0xd6, 0xfd, 0x57, 0xa7, 0xbd, 0xff, 0xca, 0xc2, 0xe1, 0xc0, 0x63, 0xcb, 0xfb,
+     0x72, 0x3f, 0x21, 0x02, 0x7e, 0x1f, 0x93, 0xf3, 0xb3, 0x65, 0xc2, 0x23, 0x69,
+     0x50, 0x60, 0x5f, 0x6a, 0x52, 0xc7, 0x75, 0x7e, 0xe4, 0xb2, 0xdc, 0xfe, 0x9e,
+     0x77, 0xbe, 0x19, 0x87, 0xbc, 0x4f, 0x22, 0x75, 0xeb, 0x7c, 0x6e, 0x63, 0xa3,
+     0x19, 0x74, 0xe8, 0xb6, 0xa0, 0x28, 0xff, 0x54, 0x2a, 0xff, 0xa2, 0x51
+    };
+  
+  struct lic_s lic;
+  int len, sts;
+  struct sec_buf pubkey, iov[1], sig;
+  
+  sts = freg_get_by_name( NULL, 0, "/fju/lic", FREG_TYPE_OPAQUE, (char *)&lic, sizeof(lic), &len );
+  if( !sts ) {
+    if( len != sizeof(lic) ) sts = -1;
+    else if( lic.hostid != hostreg_localid() ) {
+      rpc_log( RPC_LOG_ERROR, "lic bad hostid" );
+      sts = -1;
+    } else if( time( NULL ) > lic.expire ) {
+      rpc_log( RPC_LOG_ERROR, "lic expired" );
+      sts = -1;
+    } else {
+      pubkey.buf = (char *)pubkeybuf;
+      pubkey.len = sizeof(pubkeybuf);
+      iov[0].buf = (char *)&lic;
+      iov[0].len = 32;
+      sig.buf = lic.verf;
+      sig.len = lic.nverf;
+      sts = sec_verify( &pubkey, iov, 1, &sig );
+      if( sts ) {
+	rpc_log( RPC_LOG_ERROR, "lic verify failed" );
+      }
+    }
+  }
+  if( sts ) {
+    rpc_log( RPC_LOG_ERROR, "Licensing failed, exiting." );
+    exit( 1 );
+  }  
+}
+
+static struct rpc_iterator liciter =
+  {
+   NULL,
+   0,
+   1000*60*60*24,
+   check_license,
+   NULL
+  };
+
 int main( int argc, char **argv ) {
   int sts;
 
@@ -124,6 +178,9 @@ int main( int argc, char **argv ) {
     rpcd_loggers[0].cb = rpcd_logger_cb;
     rpc_add_logger( &rpcd_loggers[0] );
   }
+
+  /* check license */
+  rpc_iterator_register( &liciter );
   
   /* run daemon. */
   rpcd_main( argc, argv, main_cb, NULL );

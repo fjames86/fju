@@ -41,18 +41,12 @@ int fju_writestdout( char *buf, int size ) {
   return 0;
 }
 
-
-
-static size_t min(size_t x, size_t y) {
-  return x < y ? x : y;
-}
-
-#define PADDING_CHAR '='
+/* ------------------------ base32 encoding ---------------------- */
 
 static void pad( unsigned char *buf, int len ) {
   int i;
   for( i = 0; i < len; i++ ) {
-    buf[i] = PADDING_CHAR;
+    buf[i] = '=';
   }
 }
 
@@ -116,10 +110,11 @@ void base32_encode( char *plain, int len, char *coded ) {
   int i, j;
   
   for( i = 0, j = 0; i < len; i += 5, j += 8 ) {
-    encode_sequence( (uint8_t *)&plain[i], min(len - i, 5), (uint8_t *)&coded[j] );
+    encode_sequence( (uint8_t *)&plain[i], (len - i) < 5 ? len - i : 5, (uint8_t *)&coded[j] );
   }
-  //coded[j] = '\0';
+
 }
+
 
 static int decode_sequence( unsigned char *coded, unsigned char *plain ) {
   int block, offset, octet, c;
@@ -155,4 +150,70 @@ int base32_decode( char *coded, char *plain ) {
 
   return -1;
 }
+
+#if 0
+
+/* ----------------- franks base32 encoding ------------ */
+
+static char b32_char( uint8_t c ) {
+  static char base32[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  return base32[c & 0x1F];
+}
+
+	     
+/* take up to 5 input bytes and produce 8 output chars plus terminating null char for 9 chars total */
+static int b32_encode_block( uint8_t *buf, int buflen, char *str ) {
+  static int nchars[] = { 0, 2, 4, 5, 7, 8 };
+  int i;
+  uint8_t c;
+
+  if( buflen > 5 ) return -1;
+  
+  u64 = 0;
+  for( i = 0; i < 5; i++ ) {
+    u64 |= (u64 << 8) | (i < buflen ? buf[i] : 0);
+  }
+
+  n = nchars[buflen];
+  for( i = 0; i < 8; i++ ) {
+    if( i < n ) {
+      c = (u64 >> (35 - (5*i))) & 0x1f;
+    } else {
+      c = '=';
+    }
+    
+    *str = b32_char( c );
+    str++;
+  }
+
+  *str = '\0';
+  return 0;
+}
+
+int base32_encode( char *buf, int len, char *str, int strlen ) {
+  char tmpstr[9];
+  int i, n, count;
+
+  count = 0;
+  for( i = 0; i < len; i += 5 ) {
+    n = 5;
+    if( (i + 5) > len ) n = len - i;
+    b32_encode_block( buf, n, tmpstr );
+    if( strlen > 8 ) {
+      memcpy( str, tmpstr, 8 );
+      str += 8;
+      strlen -= 8;
+    }
+    count += 8;
+  }
+
+  return count;
+}
+
+/* take blocks of 8 chars and produce up to 5 bytes */
+static int b32_decode_block( char *str, int strlen, char *buf, int buflen ) {
+  
+}
+
+#endif
 

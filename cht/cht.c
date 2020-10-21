@@ -209,9 +209,13 @@ static int cht_write_block( struct cht_s *cht, int idx, struct sec_buf *iov, int
   for( i = 0; i < niov; i++ ) {
     towrite = iov[i].len;
     if( (size + towrite) > CHT_BLOCK_SIZE ) towrite = CHT_BLOCK_SIZE - size;
+
+    /* allow passing buf=NULL to skip regions */
+    if( iov[i].buf ) {
+      sts = mmf_write( &cht->mmf, iov[i].buf, towrite, offset );
+      if( sts < 0 ) break;
+    }
     
-    sts = mmf_write( &cht->mmf, iov[i].buf, towrite, offset );
-    if( sts < 0 ) break;
     offset += towrite;
     size += towrite;
     if( size >= CHT_BLOCK_SIZE ) break;

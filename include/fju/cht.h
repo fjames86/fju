@@ -21,7 +21,6 @@ struct cht_entry {
   char cookie[CHT_MAX_COOKIE]; /* private data */
 };
 
-
 struct cht_file;
 
 struct cht_s {

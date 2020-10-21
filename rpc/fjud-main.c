@@ -153,7 +153,7 @@ static void check_license( struct rpc_iterator *iter ) {
   }
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "Licensing failed, exiting." );
-    exit( 1 );
+    rpcd_stop();
   }  
 }
 

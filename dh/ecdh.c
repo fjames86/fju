@@ -57,6 +57,8 @@ static void usage( char *fmt, ... ) {
 	  "     -s secret       Secret key\n"
 	  "     -S signdata     Generate signature from this string, requires secret key\n"
 	  "     -V verifysig    Verify signature, requires public key and signdata\n"
+	  "     -e              Encrypt from stdin\n"
+	  "     -d              Decrypt from stdin\n" 
 	  );
   
   exit( 0 );
@@ -111,6 +113,7 @@ int main( int argc, char **argv ) {
   int sp, pp;
   char hex[256];
   char *signstr = NULL, *verstr = NULL;
+  int encflag = 0; // 0=don't 1=encrypt 2=decrypt 
   
   memset( secret_buf, 0, sizeof(secret_buf) );
   memset( common_buf, 0, sizeof(common_buf) );
@@ -141,7 +144,11 @@ int main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-V" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      verstr = argv[i];	      
+      verstr = argv[i];
+    } else if( strcmp( argv[i], "-e" ) == 0 ) {
+      encflag = 1;
+    } else if( strcmp( argv[i], "-d" ) == 0 ) {
+      encflag = 2;
     } else usage( NULL );
     i++;
   }
@@ -149,13 +156,14 @@ int main( int argc, char **argv ) {
   if( pp && sp ) {
     ecdh_common( &secret, &public, &common );
     bn2hex( common.buf, hex, common.len );
-    printf( "COMMON %s\n", hex );    
+    if( !encflag ) printf( "COMMON %s\n", hex );    
   } else if( signstr == NULL && verstr == NULL ) {
     ecdh_generate( &secret, &public );
     bn2hex( secret.buf, hex, secret.len );
     printf( "SECRET %s\n", hex );
     bn2hex( public.buf, hex, public.len );
     printf( "PUBLIC %s\n", hex );
+    ecdh_common( &secret, &public, &common );
   }
 
   if( signstr ) {
@@ -188,6 +196,24 @@ int main( int argc, char **argv ) {
       sts = sec_verify( &public, dataiov, 1, &sig );
       printf( "Verify %s\n", sts ? "failed" : "success" );
     }
+  }
+
+  if( encflag ) {
+    char *encbuf = malloc( 32*1024 );
+    int n;
+    
+    memset( encbuf, 0, 32*1024 );
+    
+    n = fju_readstdin( encbuf, 32*1024 );
+    if( n % 16 ) n += 16 - (n % 16);
+
+    if( encflag == 1 ) {
+      aes_encrypt( (uint8_t *)common.buf, (uint8_t *)encbuf, n );
+    } else {
+      aes_decrypt( (uint8_t *)common.buf, (uint8_t *)encbuf, n );
+    }
+    
+    fju_writestdout( encbuf, n );
   }
 
   return 0;

@@ -127,10 +127,22 @@ static void check_license( struct rpc_iterator *iter ) {
   
   struct lic_s lic;
   int len, sts;
-  struct sec_buf pubkey, iov[1], sig;
+  struct sec_buf secret, pubkey, common, iov[1], sig;
+  char commonbuf[SEC_ECDH_MAX_COMMON];
+  struct hostreg_prop prop;
   
   sts = freg_get_by_name( NULL, 0, "/fju/lic", FREG_TYPE_OPAQUE, (char *)&lic, sizeof(lic), &len );
   if( !sts ) {
+    hostreg_prop( &prop );
+    secret.buf = (char *)prop.privkey;
+    secret.len = sizeof(prop.privkey);
+    pubkey.buf = (char *)pubkeybuf;
+    pubkey.len = sizeof(pubkeybuf);    
+    common.buf = commonbuf;
+    common.len = sizeof(commonbuf);
+    ecdh_common( &secret, &pubkey, &common );
+    aes_decrypt( (uint8_t *)common.buf, (uint8_t *)&lic, sizeof(lic) );
+          
     if( len != sizeof(lic) ) sts = -1;
     else if( lic.hostid != hostreg_localid() ) {
       rpc_log( RPC_LOG_ERROR, "lic bad hostid" );
@@ -139,8 +151,6 @@ static void check_license( struct rpc_iterator *iter ) {
       rpc_log( RPC_LOG_ERROR, "lic expired" );
       sts = -1;
     } else {
-      pubkey.buf = (char *)pubkeybuf;
-      pubkey.len = sizeof(pubkeybuf);
       iov[0].buf = (char *)&lic;
       iov[0].len = 32;
       sig.buf = lic.verf;

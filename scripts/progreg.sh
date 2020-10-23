@@ -35,6 +35,7 @@ else
     fi
     
     if [ $PROGID ]; then
+	freg put /fju/rpc/progreg/$PROGNAME u32 $PROGID
     else
 	PROGID=$(dd if=/dev/urandom bs=4 count=1 2> /dev/null | hd -v -e '"%d" "\n"' | head -n 2 | tail -n 1 )
 	PROGID=$((20000000 + $PROGID % 20000000))
@@ -46,7 +47,6 @@ else
     fi
     
     echo "$PROGNAME $PROGID" 
-    freg put /fju/rpc/progreg/$PROGNAME u32 $PROGID
 fi
 
 	

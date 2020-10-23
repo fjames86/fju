@@ -477,31 +477,30 @@ static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i )
   free( tmpbuf );
 }
 
-static struct {
-  uint32_t prog;
-  char *name;
-} rpcbind_name_list[] = {
-  { HRAUTH_RPC_PROG, "hrauth" },
-  { RAFT_RPC_PROG, "raft" },
-  { REX_RPC_PROG, "rex" },
-  { NLS_RPC_PROG, "nls" },
-  { FREG_RPC_PROG, "freg" },
-  { FVM_RPC_PROG, "fvm" },
-  { RPCBIND_RPC_PROG, "rpcbind" },
-  { FJUD_RPC_PROG, "fjud" },
-  { SVCTEST_RPC_PROG, "svctest" },
-  { CHT_RSYNC_RPC_PROG, "cht-rsync" },
-  { 0, NULL }
-};
-
 static char *rpcbind_name_by_prog( uint32_t prog ) {
-  int i;
-  i = 0;
-  while( 1 ) {
-    if( !rpcbind_name_list[i].name ) break;
-    if( rpcbind_name_list[i].prog == prog ) return rpcbind_name_list[i].name;
-    i++;
+  static struct freg_entry entry;
+  
+  int sts;
+  uint32_t progid;
+  uint64_t id, hkey;
+
+  sts = freg_subkey( NULL, 0, "/fju/rpc/progreg", FREG_CREATE, &hkey );
+  if( !sts ) {
+    id = 0;
+    sts = freg_next( NULL, hkey, id, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ) {
+	sts = freg_get( NULL, entry.id, NULL, (char *)&progid, sizeof(progid), NULL );
+	if( !sts && progid == prog ) {
+	  return entry.name;
+	}
+      }
+      
+      id = entry.id;
+      sts = freg_next( NULL, hkey, id, &entry );
+    }
   }
+  
   return "";
 }
 

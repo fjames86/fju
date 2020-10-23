@@ -202,6 +202,7 @@ struct rpc_program {
   struct rpc_program *next;
   uint32_t prog;
   struct rpc_version *vers;
+  uint32_t *auth; /* mandatory authentication flavours: must be called with one of these */
 };
 void rpc_program_register( struct rpc_program *p );
 void rpc_program_unregister( struct rpc_program *p );

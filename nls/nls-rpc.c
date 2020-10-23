@@ -646,8 +646,9 @@ static struct rpc_version nls_vers = {
   NULL, NLS_RPC_VERS, nls_procs
 };
 
+static uint32_t nls_prog_auths[] = { RPC_AUTH_HRAUTH, 0 };
 static struct rpc_program nls_prog = {
-  NULL, NLS_RPC_PROG, &nls_vers
+    NULL, NLS_RPC_PROG, &nls_vers, nls_prog_auths
 };
 
 

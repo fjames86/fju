@@ -632,6 +632,25 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
       }
     }
 
+    /* check mandatory authentication */
+    if( p->auth && pc->proc ) {
+      int ii = 0;
+      uint32_t aid = inc->pvr ? inc->pvr->flavour : 0;
+      int found = 0;
+      
+      for( ii = 0; p->auth[ii]; ii++ ) {
+	if( p->auth[ii] == aid ) {
+	  found = 1;
+	  break;
+	}
+      }
+      if( !found ) {
+	rpc_log( RPC_LOG_INFO, "Mandatory authentication failure" );
+	rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+	return 0;
+      }
+    }
+    
     /* invoke handler function */
     sts = pc->fn( inc );
     if( sts < 0 ) {

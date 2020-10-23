@@ -814,6 +814,28 @@ static int bind_list( struct rpc_inc *inc ) {
   if( inc->laddr_len == sizeof(laddr) ) memcpy( &laddr, &inc->laddr, sizeof(laddr) );
 
   i = 0;
+#if 0
+  /* list ordered by listening address */
+  for( j = 0; j < 16; j++ ) {
+    if( bind_laddrs[j].port == 0 ) break;
+    p = rpc_program_list();
+    while( p ) {
+      v = p->vers;
+      while( v ) {
+	if( i < 64 ) {
+	  mlist[i].prog = p->prog;
+	  mlist[i].vers = v->vers;
+	  mlist[i].prot = bind_laddrs[j].prot;
+	  mlist[i].port = bind_laddrs[j].port;
+	  i++;
+	}
+	v = v->next;
+      }
+      p = p->next;
+    }
+  }
+#else
+  /* list ordered by program */
   p = rpc_program_list();
   while( p ) {
     v = p->vers;
@@ -835,7 +857,8 @@ static int bind_list( struct rpc_inc *inc ) {
     }
     p = p->next;
   }
-
+#endif
+  
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   rpcbind_encode_mapping_list( &inc->xdr, mlist, i > 64 ? 64 : i );
   rpc_complete_accept_reply( inc, handle );

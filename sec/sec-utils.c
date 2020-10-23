@@ -9,6 +9,11 @@
 
 
 #include <fju/sec.h>
+#include <fju/hostreg.h>
+#include <fju/lic.h>
+
+#include <time.h>
+#include <string.h>
 
 int fju_readstdin( char *buf, int size ) {
   int offset = 0;
@@ -39,6 +44,51 @@ int fju_writestdout( char *buf, int size ) {
   write( STDOUT_FILENO, buf, size );
 #endif
   return 0;
+}
+
+int fju_check_license( char *licbuf, int size ) {
+  static uint8_t pubkeybuf[] =
+    {
+     0xd6, 0xfd, 0x57, 0xa7, 0xbd, 0xff, 0xca, 0xc2, 0xe1, 0xc0, 0x63, 0xcb, 0xfb,
+     0x72, 0x3f, 0x21, 0x02, 0x7e, 0x1f, 0x93, 0xf3, 0xb3, 0x65, 0xc2, 0x23, 0x69,
+     0x50, 0x60, 0x5f, 0x6a, 0x52, 0xc7, 0x75, 0x7e, 0xe4, 0xb2, 0xdc, 0xfe, 0x9e,
+     0x77, 0xbe, 0x19, 0x87, 0xbc, 0x4f, 0x22, 0x75, 0xeb, 0x7c, 0x6e, 0x63, 0xa3,
+     0x19, 0x74, 0xe8, 0xb6, 0xa0, 0x28, 0xff, 0x54, 0x2a, 0xff, 0xa2, 0x51
+    };
+  
+  struct lic_s lic;
+  int sts;
+  struct sec_buf secret, pubkey, common, iov[1], sig;
+  char commonbuf[SEC_ECDH_MAX_COMMON];
+  struct hostreg_prop prop;
+
+  if( size != sizeof(lic) ) return -1;
+  memcpy( &lic, licbuf, sizeof(lic) );
+
+  hostreg_prop( &prop );
+  secret.buf = (char *)prop.privkey;
+  secret.len = sizeof(prop.privkey);
+  pubkey.buf = (char *)pubkeybuf;
+  pubkey.len = sizeof(pubkeybuf);    
+  common.buf = commonbuf;
+  common.len = sizeof(commonbuf);
+  ecdh_common( &secret, &pubkey, &common );
+  aes_decrypt( (uint8_t *)common.buf, (uint8_t *)&lic, sizeof(lic) );
+
+  sts = -1;
+  if( lic.hostid != hostreg_localid() ) {
+    sts = -1;
+  } else if( time( NULL ) > lic.expire ) {
+    sts = -1;
+  } else {
+    iov[0].buf = (char *)&lic;
+    iov[0].len = 32;
+    sig.buf = lic.verf;
+    sig.len = lic.nverf;
+    sts = sec_verify( &pubkey, iov, 1, &sig );
+  }
+  
+  return sts;
 }
 
 /* ------------------------ base32 encoding ---------------------- */

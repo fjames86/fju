@@ -11,6 +11,7 @@
 #include <fju/sec.h>
 #include <fju/hostreg.h>
 #include <fju/lic.h>
+#include <fju/freg.h>
 
 #include <time.h>
 #include <string.h>
@@ -46,7 +47,7 @@ int fju_writestdout( char *buf, int size ) {
   return 0;
 }
 
-int fju_check_license( char *licbuf, int size ) {
+int fju_check_license( char *licbuf, int size, struct lic_s *licp ) {
   static uint8_t pubkeybuf[] =
     {
      0xd6, 0xfd, 0x57, 0xa7, 0xbd, 0xff, 0xca, 0xc2, 0xe1, 0xc0, 0x63, 0xcb, 0xfb,
@@ -62,9 +63,14 @@ int fju_check_license( char *licbuf, int size ) {
   char commonbuf[SEC_ECDH_MAX_COMMON];
   struct hostreg_prop prop;
 
-  if( size != sizeof(lic) ) return -1;
-  memcpy( &lic, licbuf, sizeof(lic) );
-
+  if( licbuf == NULL && size == 0 ) {
+    sts = freg_get_by_name( NULL, 0, "/fju/lic", FREG_TYPE_OPAQUE, (char *)&lic, sizeof(lic), &size );
+    if( sts ) return -1;
+  } else {
+    if( size != sizeof(lic) ) return -1;
+    memcpy( &lic, licbuf, sizeof(lic) );
+  }
+  
   hostreg_prop( &prop );
   secret.buf = (char *)prop.privkey;
   secret.len = sizeof(prop.privkey);
@@ -87,6 +93,8 @@ int fju_check_license( char *licbuf, int size ) {
     sig.len = lic.nverf;
     sts = sec_verify( &pubkey, iov, 1, &sig );
   }
+
+  if( !sts && licp ) *licp = lic;
   
   return sts;
 }

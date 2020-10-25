@@ -42,9 +42,11 @@
 #include <fju/sec.h>
 #include <fju/lic.h>
 #include <fju/hostreg.h>
+#include <fju/lic.h>
 
 #include "rpc-private.h"
 
+#include <time.h>
 
 static void init_cb( void ) {
   /* 
@@ -115,18 +117,20 @@ static void main_cb( rpcd_evt_t evt, void *arg, void *cxt ) {
   }
 }
 
+#define FJUD_LICEXPIRE_WARN 30
+
 static void check_license( struct rpc_iterator *iter ) {
   struct lic_s lic;
-  int len, sts;
-  
-  sts = freg_get_by_name( NULL, 0, "/fju/lic", FREG_TYPE_OPAQUE, (char *)&lic, sizeof(lic), &len );
-  if( !sts && (len == sizeof(lic)) ) {
-    sts = fju_check_license( (char *)&lic, sizeof(lic) );
-  }
+  int sts;
+
+  sts = fju_check_license( NULL, 0, &lic );
   if( sts ) {
     rpc_log( RPC_LOG_ERROR, "License check failed, exiting." );
     rpcd_stop();
+  } else if( (lic.expire - time( NULL )) < FJUD_LICEXPIRE_WARN ) {
+    rpc_log( RPC_LOG_WARN, "License will expire in %d days", (lic.expire - time( NULL )) / (60*60*24) );
   }
+  
 }
 
 static struct rpc_iterator liciter =

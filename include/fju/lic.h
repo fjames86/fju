@@ -2,6 +2,8 @@
 #ifndef LIC_H
 #define LIC_H
 
+#include <fju/sec.h>
+
 struct lic_s {
   uint64_t hostid; /* hostid */
   uint64_t expire; /* expiry date */
@@ -12,6 +14,7 @@ struct lic_s {
   char verf[SEC_MAX_SIG];
 };
 
-
+int fju_check_license( char *licbuf, int size, struct lic_s *licp );
+		       
 #endif
 

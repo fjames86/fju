@@ -77,6 +77,4 @@ int base32_decode( char *coded, char *plain );
 int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig );
 int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig );
 
-int fju_check_license( char *licbuf, int size );
-
 #endif

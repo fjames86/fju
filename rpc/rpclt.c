@@ -89,6 +89,7 @@ static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void freg_rem_results( struct xdr_s *xdr );
 static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void cmdprog_licinfo_results( struct xdr_s *xdr );
 static void fvm_list_results( struct xdr_s *xdr );
 static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_load_results( struct xdr_s *xdr );
@@ -126,6 +127,7 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "eventid=* parm=*" },
+    { FJUD_RPC_PROG, 1, 3, NULL, cmdprog_licinfo_results, "fjud.licinfo", "" },    
     { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* register=true|false run=true|false" },
     { FVM_RPC_PROG, 1, 3, fvm_register_args, fvm_register_results, "fvm.unload", "name=*" },
@@ -1475,4 +1477,35 @@ static void fvm_writevar_results( struct xdr_s *xdr ) {
   if( sts ) usage( "xdr error" );
   if( !b ) usage( "Failed" );
 
+}
+
+static void cmdprog_licinfo_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t u64;
+  uint32_t u32;
+  char str[256];
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  if( b ) {
+    sts = xdr_decode_uint64( xdr, &u64 );
+    if( sts ) usage( "xdr error" );
+    printf( "Hostid     %" PRIx64 "\n", u64 );
+    sts = xdr_decode_uint64( xdr, &u64 );
+    if( sts ) usage( "xdr error" );
+    sec_timestr( u64, str );
+    printf( "Expiry     %s\n", str );
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );
+    printf( "Version    %u\n", u32 );
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );
+    printf( "Flags      %u\n", u32 );    
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );    
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );    
+  } else {
+    printf( "License check failed" );
+  }
 }

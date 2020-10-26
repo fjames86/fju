@@ -421,7 +421,7 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
     sts = rpc_call_udp( &pars, &args, &res );
   }
   tend = rpc_now();
-  if( sts ) usage( "RPC call failed" );
+  if( sts ) usage( "RPC call failed: %s", rpc_errmsg( NULL ) );
   if( glob.reporttime ) printf( ";; Time: %dms\n", (int)(tend - tstart) );
   if( info->results ) info->results( &res );
   free( argbuf );

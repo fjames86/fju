@@ -327,6 +327,8 @@ struct rpc_reply_data {
   uint32_t raddr_len;
 };
 void rpc_get_reply_data( struct rpc_inc *inc, struct rpc_reply_data *rdata );
-				   
+
+char *rpc_errmsg( char *msg );
+
 #endif
 

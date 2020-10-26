@@ -48,6 +48,8 @@
 
 #include <time.h>
 
+int cmdprog_register( void );
+
 static void init_cb( void ) {
   /* 
    * Register programs, auth providers and other initialization. 
@@ -65,6 +67,7 @@ static void init_cb( void ) {
   freg_register();
   fvm_rpc_register();
   cht_rsync_initialize();
+  cmdprog_register();
 }
 
 /* -------- Setup logging ---------------- */

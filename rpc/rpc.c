@@ -690,20 +690,51 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 }
 
 
+static char *rpc_getreplystr( struct rpc_inc *inc, char *msgstr ) {
+  sprintf( msgstr, "%s %s",
+	   inc->msg.u.reply.tag == RPC_MSG_ACCEPT ? "Accept" : "Reject",
+	   inc->msg.u.reply.tag == RPC_MSG_ACCEPT ?
+	   (inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_SUCCESS ? "Success" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROG_UNAVAIL ? "ProgUnavail" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROG_MISMATCH ? "ProgMismatch" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROC_UNAVAIL ? "ProcUnavail" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_GARBAGE_ARGS ? "GarbageArgs" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_SYSTEM_ERROR ? "SystemError" :
+	    "Other") :
+	   (inc->msg.u.reply.u.reject.tag == RPC_REJECT_RPCMISMATCH ? "RPCMismatch" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_BADCRED ? "AuthError BadCred" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_REJECTED ? "AuthError Rejected" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_BADVERF ? "AuthError BadVerf" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_REJECTEDVERF ? "AuthError RejectedVerf" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_TOOWEAK ? "AuthError TooWeak" :
+	    "Other") );
+  return msgstr;
+}
+
 int rpc_process_reply( struct rpc_inc *inc ) {
   int sts;
+  char msgstr[256];
 
+  rpc_getreplystr( inc, msgstr );
+  rpc_errmsg( msgstr );
+  
   if( inc->msg.tag != RPC_REPLY ) return -1;
   if( inc->msg.u.reply.tag != RPC_MSG_ACCEPT ) return -1;
   if( inc->msg.u.reply.u.accept.tag != RPC_ACCEPT_SUCCESS ) return -1;
   
   if( inc->pvr ) {
     sts = inc->pvr->cverf( inc->pvr, &inc->msg, inc->pcxt );
-    if( sts ) return sts;
+    if( sts ) {
+      rpc_errmsg( "Auth verf failure" );
+      return sts;
+    }
 
     if( inc->pvr->cmres ) {
       sts = inc->pvr->cmres( inc->pvr, &inc->xdr, inc->xdr.offset, inc->xdr.count, inc->pcxt );
-      if( sts ) return sts;
+      if( sts ) {
+	rpc_errmsg( "Auth cmres failure" );
+	return sts;
+      }
     }
   }
   
@@ -1535,4 +1566,10 @@ void rpc_get_reply_data( struct rpc_inc *inc, struct rpc_reply_data *rdata ) {
 
 
 
+
+char *rpc_errmsg( char *msg ) {
+  static char msgbuf[256];
+  if( msg ) strncpy( msgbuf, msg, sizeof(msgbuf) - 1 );
+  return msgbuf;
+}
 

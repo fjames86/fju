@@ -299,10 +299,11 @@ int main( int argc, char **argv ) {
 
     if( i >= argc ) glob.addr = htonl( INADDR_LOOPBACK );
     else {
-      glob.hostid = strtoull( argv[i], &term, 16 );
+      uint64_t hid = strtoull( argv[i], &term, 16 );
+      if( !*term ) glob.hostid = hid;
+      
       if( *term ) {
 	struct hostreg_host host;
-	glob.hostid = 0;
 	if( strcmp( argv[i], "local" ) == 0 ) {
 	  glob.hostid = 0;
 	  glob.addr = htonl( INADDR_LOOPBACK );
@@ -325,9 +326,10 @@ int main( int argc, char **argv ) {
 	    sts = inet_pton( AF_INET, argv[i], &glob.addr );
 	    //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
 	    if( sts == 1 ) {
+	      glob.hostid = 0;	      
 	      i++;
 	    } else {
-	      glob.addr = htonl( INADDR_LOOPBACK );	    
+	      //glob.addr = htonl( INADDR_LOOPBACK );	    
 	    }
 	  }
 	}

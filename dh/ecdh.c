@@ -51,7 +51,7 @@ static void usage( char *fmt, ... ) {
     exit( 1 );
   }
 
-  printf( "ecdh [-p public -s secret] [-S signdata] [-V verifysig]\n"
+  printf( "ecdh [-p public -s secret] [-S signdata] [-V verifysig] [-d | -e]\n"
 	  "\n"
 	  "     -p public       Public key\n"
 	  "     -s secret       Secret key\n"

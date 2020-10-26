@@ -62,5 +62,5 @@ FJU_DEPS+=${LIBDIR}/lib${lib}.a
 FJU_LIBS+=-l${lib}
 .endfor
 ${LIBFJU}: ${FJU_DEPS}
-	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive 
+	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive
 

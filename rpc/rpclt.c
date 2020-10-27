@@ -108,7 +108,7 @@ static void fvm_writevar_results( struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
-    { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*]" },
+    { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
@@ -236,6 +236,7 @@ static struct {
     uint32_t addr;
     int tcp;
     int reporttime;
+    int rawmodeb64;
 } glob;
 
 int main( int argc, char **argv ) {
@@ -1256,6 +1257,12 @@ static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
       xdr_encode_string( xdr, argval );
     } else if( strcmp( argname, "bool" ) == 0 ) {
       xdr_encode_boolean( xdr, strcmp( argval, "true" ) == 0 );
+    } else if( strcmp( argname, "fixed" ) == 0 ) {
+      int sts = base64_decode( (char *)(xdr->buf + xdr->offset), xdr->count - xdr->offset, argval );
+      if( sts < 0 ) usage( "Failed to decode fixed base64" );
+      xdr->offset += sts;
+    } else if( strcmp( argname, "resb64" ) == 0 ) {
+      glob.rawmodeb64 = 1;
     } else usage( NULL );
     i++;
   }
@@ -1264,24 +1271,36 @@ static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 
 static void rawmode_results( struct xdr_s *xdr ) {
   int i, count, j, c;
-  count = xdr->count - xdr->offset;
-  
-  for( i = 0; i < count; i += 16 ) {
-    for( j = 0; j < 16; j++ ) {
-      if( (i + j) < count ) {
-	printf( "%02x ", (uint32_t)xdr->buf[xdr->offset + i + j] );
-      }
-    }
-    for( j = 0; j < 16; j++ ) {
-      if( (i + j) < count ) {
-	c = xdr->buf[xdr->offset + i + j];
-	if( !isalnum( c ) ) c = '.';
-	printf( "%c", c );
-      }
-    }
+
+  if( glob.rawmodeb64 ) {
+    char *str;
+    int sts;
+    c = xdr->count - xdr->offset;
+    str = malloc( 4*((c / 3) + (c % 3 ? 1 : 0)) + 1 );
+    sts = base64_encode( (char *)(xdr->buf + xdr->offset), xdr->count - xdr->offset, str );
+    printf( "%s\n", str );
+    free( str );
+  } else {    
+    count = xdr->count - xdr->offset;
     
-    printf( "\n" );
+    for( i = 0; i < count; i += 16 ) {
+      for( j = 0; j < 16; j++ ) {
+	if( (i + j) < count ) {
+	  printf( "%02x ", (uint32_t)xdr->buf[xdr->offset + i + j] );
+	}
+      }
+      for( j = 0; j < 16; j++ ) {
+	if( (i + j) < count ) {
+	  c = xdr->buf[xdr->offset + i + j];
+	  if( !isalnum( c ) ) c = '.';
+	  printf( "%c", c );
+	}
+      }
+      
+      printf( "\n" );
+    }
   }
+  
 }
 
 static void fvm_cluster_args( int argc, char **argv, int i, struct xdr_s *xdr ) {

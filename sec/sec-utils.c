@@ -57,6 +57,7 @@ int fju_check_license( char *licbuf, int size, struct lic_s *licp ) {
      0x77, 0xbe, 0x19, 0x87, 0xbc, 0x4f, 0x22, 0x75, 0xeb, 0x7c, 0x6e, 0x63, 0xa3,
      0x19, 0x74, 0xe8, 0xb6, 0xa0, 0x28, 0xff, 0x54, 0x2a, 0xff, 0xa2, 0x51
     };
+  static int initialized = 0;
   
   struct lic_s lic;
   int sts;
@@ -64,6 +65,15 @@ int fju_check_license( char *licbuf, int size, struct lic_s *licp ) {
   char commonbuf[SEC_ECDH_MAX_COMMON];
   struct hostreg_prop prop;
 
+  if( !initialized ) {
+    char licpubbuf[sizeof(pubkeybuf)];
+    /* this provides a way of changing the license public key at runtime */
+    sts = freg_get_by_name( NULL, 0, "/fju/licpubkey", FREG_TYPE_OPAQUE, licpubbuf, sizeof(licpubbuf), &size );
+    if( !sts && size == sizeof(pubkeybuf) ) {
+      memcpy( pubkeybuf, licpubbuf, sizeof(pubkeybuf) );
+    }
+  }
+  
   if( licbuf == NULL && size == 0 ) {
     sts = freg_get_by_name( NULL, 0, "/fju/lic", FREG_TYPE_OPAQUE, (char *)&lic, sizeof(lic), &size );
     if( sts ) return -1;

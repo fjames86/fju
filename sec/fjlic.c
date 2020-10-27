@@ -9,7 +9,7 @@
 #include <fju/lic.h>
 
 static void usage( char *fmt, ... ) {
-  printf( "Usage: fjlic hostid pubkey [-v version] [-D days]\n" 
+  printf( "Usage: fjlic hostid pubkey [-v version] [-D days] [-k privkey]\n" 
 	  );
   if( fmt ) {
     va_list args;
@@ -95,6 +95,13 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       days = strtoul( argv[i], NULL, 0 );
+    } else if( strcmp( argv[i], "-k" ) == 0 ) {
+      struct sec_buf xx;
+      i++;
+      if( i >= argc ) usage( NULL );
+      xx.buf = (char *)privkeybuf;
+      xx.len = sizeof(privkeybuf);
+      hex2bn( argv[i], &xx );
     } else usage( NULL );
     i++;
   }

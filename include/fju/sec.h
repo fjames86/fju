@@ -70,8 +70,14 @@ uint32_t sec_crc32( uint32_t crc, char *buf, int len );
 int fju_readstdin( char *buf, int size );
 int fju_writestdout( char *buf, int size );
 
+#if 0
 void base32_encode( char *plain, int len, char *coded );
 int base32_decode( char *coded, char *plain );
+#endif
+
+/* str must be a least 4*((buflen / 3) + (buflen % 3 ? 1 : 0)) + 1 bytes long */
+int base64_encode( char *buf, int buflen, char *str );
+int base64_decode( char *buf, int buflen, char *str );
 
 #define SEC_MAX_SIG 72 
 int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig );

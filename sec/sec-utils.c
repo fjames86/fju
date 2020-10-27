@@ -15,6 +15,7 @@
 
 #include <time.h>
 #include <string.h>
+#include <stdio.h>
 
 int fju_readstdin( char *buf, int size ) {
   int offset = 0;
@@ -100,6 +101,8 @@ int fju_check_license( char *licbuf, int size, struct lic_s *licp ) {
 }
 
 /* ------------------------ base32 encoding ---------------------- */
+
+#if 0
 
 static void pad( unsigned char *buf, int len ) {
   int i;
@@ -209,69 +212,109 @@ int base32_decode( char *coded, char *plain ) {
   return -1;
 }
 
-#if 0
+#endif
 
-/* ----------------- franks base32 encoding ------------ */
+/* --------------- base64 ------------------ */
 
-static char b32_char( uint8_t c ) {
-  static char base32[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  return base32[c & 0x1F];
+
+static char b64chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static char *base64_encode_block( uint8_t *buf, int len, char *str ) {
+  str[0] = b64chars[buf[0] >> 2];
+  str[1] = b64chars[((buf[0] & 0x3) << 4) | ((buf[1] & 0xf0) >> 4)];
+  str[2] = len > 1 ? b64chars[((buf[1] & 0x0f) << 2) | ((buf[2] & 0xc0) >> 6)] : '=';
+  str[3] = len > 2 ? b64chars[buf[2] & 0x3f] : '=';
+  return str + 4;
 }
 
-	     
-/* take up to 5 input bytes and produce 8 output chars plus terminating null char for 9 chars total */
-static int b32_encode_block( uint8_t *buf, int buflen, char *str ) {
-  static int nchars[] = { 0, 2, 4, 5, 7, 8 };
+/* 
+ * str must be a least 4*((blen / 3) + (blen % 3 ? 1 : 0)) + 1 bytes long
+ */
+int base64_encode( char *buf, int buflen, char *str ) {
   int i;
-  uint8_t c;
-
-  if( buflen > 5 ) return -1;
   
-  u64 = 0;
-  for( i = 0; i < 5; i++ ) {
-    u64 |= (u64 << 8) | (i < buflen ? buf[i] : 0);
+  for( i = 0; i < buflen / 3; i++ ) {
+    str = base64_encode_block( (uint8_t *)&buf[3*i], 3, str );
   }
-
-  n = nchars[buflen];
-  for( i = 0; i < 8; i++ ) {
-    if( i < n ) {
-      c = (u64 >> (35 - (5*i))) & 0x1f;
-    } else {
-      c = '=';
-    }
-    
-    *str = b32_char( c );
-    str++;
+  if( buflen % 3 ) {
+    str = base64_encode_block( (uint8_t *)&buf[3*(buflen / 3)], buflen % 3, str );
   }
-
   *str = '\0';
+  
   return 0;
 }
 
-int base32_encode( char *buf, int len, char *str, int strlen ) {
-  char tmpstr[9];
-  int i, n, count;
 
-  count = 0;
-  for( i = 0; i < len; i += 5 ) {
-    n = 5;
-    if( (i + 5) > len ) n = len - i;
-    b32_encode_block( buf, n, tmpstr );
-    if( strlen > 8 ) {
-      memcpy( str, tmpstr, 8 );
-      str += 8;
-      strlen -= 8;
+static void base64_decode_block( uint8_t *str, uint8_t *buf ) {
+  /* assume the chars of str have been checked already that the high 2 bits are clear? */
+  buf[0] = str[0] << 2 | str[1] >> 4;
+  buf[1] = str[1] << 4 | str[2] >> 2;
+  buf[2] = str[2] << 6 | str[3] >> 0;
+}
+
+static int base64_valid_char( char c ) {
+  if( c >= 'A' && c <= 'Z' ) return c - 'A';
+  if( c >= 'a' && c <= 'z' ) return 26 + (c - 'a');
+  if( c >= '0' && c <= '9' ) return 52 + (c - '0');
+  if( c == '+' ) return 62;
+  if( c == '/' ) return 63;
+  return -1;
+}
+    
+/*
+ * Return number of bytes decoded 
+ */
+int base64_decode( char *buf, int buflen, char *str ) {
+  uint8_t tmp[4];
+  int i, j, c, bidx, endp;
+
+  bidx = 0;
+  while( 1 ) {
+    endp = -1;
+    for( i = 0; i < 4; i++ ) {
+      if( *str == '=' ) {
+	if( i == 0 ) return -1; /* = not allowed in this position */
+	
+	endp = i;
+	/* check the rest are also '=' chars */
+	for( j = i; j < 4; j++ ) {
+	  if( *str != '=' ) return -1; /* bad b64 string */
+	  tmp[j] = 0;
+	  str++;
+	}
+	break;
+      } else {
+	c = base64_valid_char( *str );
+	if( c < 0 ) goto done;
+	
+	tmp[i] = c;
+      }
+      str++;
     }
-    count += 8;
+
+    if( endp == -1 ) {
+      base64_decode_block( tmp, (uint8_t *)buf );
+      buf += 3;
+      buflen -= 3;
+      bidx += 3;
+    } else {
+      uint8_t tbuf[3];
+      base64_decode_block( tmp, tbuf );
+      
+      c = endp == 1 ? 1 : endp == 2 ? 1 : endp == 3 ? 2 : 3;
+      if( buflen >= c ) {
+	memcpy( buf, tbuf, c );
+	buf += c;
+	buflen -= c;
+      }
+      bidx += c;
+    }
+    
+    if( endp != -1 ) break;
   }
-
-  return count;
-}
-
-/* take blocks of 8 chars and produce up to 5 bytes */
-static int b32_decode_block( char *str, int strlen, char *buf, int buflen ) {
+ done:
   
+  return bidx;
 }
 
-#endif
 

@@ -183,13 +183,14 @@ int main( int argc, char **argv ) {
       } while( sig.len != 70 );
       
       memset( hex, 0, sizeof(hex) );
-      base32_encode( sig.buf, sig.len, hex );
+      base64_encode( sig.buf, sig.len, hex );
       //bn2hex( sig.buf, hex, sig.len );
       printf( "SIG %s\n", hex );
     }
     
     if( pp && verstr ) {
-      sts = base32_decode( verstr, sigbuf );
+      sts = base64_decode( sigbuf, sizeof(sigbuf), verstr );
+      if( sts < 0 ) usage( "Bad verf string" );
       sig.len = sts;
       sig.buf = sigbuf;
       

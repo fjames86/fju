@@ -34,4 +34,6 @@ ssh root@${remoteip} sh ~/fjud.sh start
 # run the fvm test script
 #sh scripts/test-fvm.sh
 
+#tar czf fjud.tar.gz bin/fjud bin/rpclt bin/freg bin/fjlog
+#cat scripts/install.sh fjud.tar.gz > bin/install.sh
 

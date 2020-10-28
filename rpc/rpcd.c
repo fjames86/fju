@@ -365,18 +365,7 @@ int rpcd_get_default_port( void ) {
 
 static void rpc_init_listen( void ) {
 	int i, sts, j;
-	struct rpc_conn *c;
 	int prot_ports[16];
-
-	/* setup connection table */
-	for( i = 0; i < RPC_MAX_CONN; i++ ) {
-		c = &rpc.conntab[i];
-		memset( c, 0, sizeof(*c) );
-		c->next = rpc.flist;
-		c->buf = rpc.buftab[i];
-		c->count = sizeof(rpc.buftab[i]);
-		rpc.flist = c;
-	}
 
 	if( !rpc.nlisten ) {
 	    uint32_t port = rpcd_get_default_port();
@@ -653,8 +642,12 @@ static void rpc_poll( int timeout ) {
 	c = rpc.clist;
 	while( c ) {
 		if( (revents[i] & RPC_POLLERR) || (revents[i] & RPC_POLLHUP) ) {
-			c->cstate = RPC_CSTATE_CLOSE;
+		  rpc_log( RPC_LOG_DEBUG, "Connection %"PRIx64" %s", c->connid,
+			   (revents[i] & RPC_POLLERR) ? "POLLERR" : "POLLHUP" );
+		  
+		  c->cstate = RPC_CSTATE_CLOSE;
 		}
+		
 		else if( revents[i] & RPC_POLLIN ) {
 			c->timestamp = rpc_now();
 
@@ -667,10 +660,12 @@ static void rpc_poll( int timeout ) {
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
+					rpc_log( RPC_LOG_DEBUG, "recv: %s", rpc_strerror( rpc_errno() ) );
 					c->cstate = RPC_CSTATE_CLOSE;
 					break;
 				}
 				else if( sts == 0 ) {
+				  rpc_log( RPC_LOG_DEBUG, "Connection graceful close" );
 					c->cstate = RPC_CSTATE_CLOSE;
 				}
 				else {
@@ -1015,6 +1010,16 @@ static void rpcd_run( void ) {
 	}
 #endif
 
+	/* setup connection table */
+	for( i = 0; i < RPC_MAX_CONN; i++ ) {
+		c = &rpc.conntab[i];
+		memset( c, 0, sizeof(*c) );
+		c->next = rpc.flist;
+		c->buf = rpc.buftab[i];
+		c->count = sizeof(rpc.buftab[i]);
+		rpc.flist = c;
+	}
+	
 	/* register programs and initialize */
 	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_INIT, NULL, rpc.main_cxt );
 
@@ -1127,11 +1132,14 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 	/* start by allocating a connection descriptor */
 	c = rpc.flist;
 	if( !c ) return -1;
+
 	rpc.flist = c->next;
 
-
 	c->fd = socket( addr->sa_family, SOCK_STREAM, 0 );
-	if( c->fd < 0 ) goto failure;
+	if( c->fd < 0 ) {
+	  rpc_log( RPC_LOG_ERROR, "socket: %s", rpc_strerror( rpc_errno() ) );
+	  goto failure;
+	}
 
 	/* set non-blocking */
 #ifdef WIN32
@@ -1154,9 +1162,11 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 			goto failure;
 		}
 #else
-		if( errno != EWOULDBLOCK ) {
-			close( c->fd );
-			goto failure;
+		/* tcp returns EINPROGRESS, unix domain sockets return EAGAIN */
+		if( errno != EINPROGRESS && errno != EAGAIN ) {
+		  rpc_log( RPC_LOG_ERROR, "connect: %s", rpc_strerror( errno ) );
+		  close( c->fd );
+		  goto failure;
 		}
 #endif
 		c->cstate = RPC_CSTATE_CONNECT;
@@ -1172,7 +1182,8 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 	}
 
 	if( connid ) *connid = c->connid;
-	
+
+	c->timestamp = rpc_now();
 	c->next = rpc.clist;
 	rpc.clist = c;
 	

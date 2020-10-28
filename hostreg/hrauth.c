@@ -683,10 +683,19 @@ static int hrauth_proc_invoke( struct rpc_inc *inc ) {
 }
 #endif
 
+static int hrauth_proc_nullping( struct rpc_inc *inc ) {
+  /* 
+   * this proc does nothing and does not reply. it is used by the tcp 
+   * connection framework to keep connections alive 
+   */
+  return 1;
+}
+
 static struct rpc_proc hrauth_procs[] = {
   { 0, hrauth_proc_null },
   { 1, hrauth_proc_local },
   { 2, hrauth_proc_list },
+  { 3, hrauth_proc_nullping },  
   { 0, NULL }
 };
 
@@ -926,7 +935,8 @@ struct hrauth_conn {
   uint32_t state;   /* state */
 #define HRAUTH_CONN_DISCONNECTED 0
 #define HRAUTH_CONN_CONNECTED    1
-#define HRAUTH_CONN_CONNECTING   2 
+#define HRAUTH_CONN_CONNECTING   2
+  int waiting;
   struct hrauth_context hcxt;  /* authentication context */
   struct sockaddr_storage addr; /* connection address */
   int addrlen;
@@ -1024,7 +1034,8 @@ int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts ) {
   }
   if( conndata.nconn >= RPC_MAX_CONN ) return -1;
 
-  hc = (struct hrauth_conn *)&conndata.conn[conndata.nconn];  
+  hc = (struct hrauth_conn *)&conndata.conn[conndata.nconn];
+  memset( hc, 0, sizeof(*hc) );
   hc->hostid = hostid;
   hc->state = HRAUTH_CONN_DISCONNECTED;
 
@@ -1095,8 +1106,21 @@ int hrauth_conn_unregister( uint64_t hostid ) {
   return -1;
 }
 
+static void hrauth_conn_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
+  struct hrauth_call_cxt *cxt;
+  struct hrauth_conn *hc;
+
+  /* clear the waiting flag so the connection can be reused */
+  cxt = (struct hrauth_call_cxt *)w->cxt;
+  hc = hrauth_conn_by_connid( cxt->hcall.hostid );
+  if( !hc ) return;
+  hc->waiting = 0;
+
+  hrauth_call_cb( w, inc );
+}
+
 /* send an rpc to this host and possibly await a reply */
-int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args ) {
   int handle;
   struct hrauth_conn *hc;
   struct rpc_conn *conn;
@@ -1109,6 +1133,9 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
   hc = hrauth_conn_by_hostid( hcall->hostid );
   if( !hc ) return -1;
 
+  /* can't send if currently waiting for a reply */
+  if( hc->waiting ) return -1;
+  
   /* check connected */
   if( !hc->connid ) return -1;
   if( hc->state != HRAUTH_CONN_CONNECTED ) return -1;
@@ -1144,6 +1171,9 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
 
   rpc_send( conn, inc.xdr.offset );
 
+  /* if no completion set then return immediately */
+  if( !hcall->donecb ) return 0;
+  
   /* await reply */
   w = (struct rpc_waiter *)malloc( sizeof(*w) + sizeof(*hcallp) );
   hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w));
@@ -1153,12 +1183,15 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
   memset( w, 0, sizeof(*w) );  
   w->xid = inc.msg.xid;
   w->timeout = rpc_now() + hcall->timeout;
-  w->cb = hrauth_call_cb;
+  w->cb = hrauth_conn_call_cb;
   w->cxt = hcallp;
   w->pvr = hrauth_provider();
   w->cxt = hcxt;
   rpc_await_reply( w );
-    
+
+  /* set waiting flag */
+  hc->waiting = 1;
+  
   return 0;
 }
 
@@ -1171,13 +1204,13 @@ static void hrauth_send_ping( struct hrauth_conn *hc ) {
   
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hc->hostid;
-  hcall.prog = 100000;
-  hcall.vers = 2;
-  hcall.proc = 0;
+  hcall.prog = HRAUTH_RPC_PROG;
+  hcall.vers = HRAUTH_RPC_VERS;
+  hcall.proc = 3; /* nullping proc */
   hcall.donecb = hrauth_ping_cb;
   hcall.cxt = NULL;
   
-  sts = hrauth_call_tcp_async( &hcall, NULL, NULL );
+  sts = hrauth_call_tcp_async( &hcall, NULL );
   if( sts ) {
     hrauth_log( LOG_LVL_ERROR, "hrauth ping failed hostid=%"PRIx64"", hc->hostid );
   }

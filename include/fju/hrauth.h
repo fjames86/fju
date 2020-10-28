@@ -123,6 +123,24 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 
+
+
+/* 
+ * TCP connection handling. This allows connecting to remote servers and sending RPC calls to them.
+ * Hosts are registered to have connections established. Connections are reestablished if dropped.
+ * Only a single RPC can be sent at a time, no queuing is implemented. This means if an RPC is 
+ * currently being sent then a new RPC cannot be sent until the previous send has completed. 
+ * Furthermore, if a reply is expected no futher calls can be sent until that reply is received. 
+ * This is because receive and transmit share the same buffer (!). Maybe that should be fixed...
+ * 
+ * Because of these limitations the following is best practice: 
+ * - Both services should establish connections to each other.
+ * - These connections are outgoing only i.e. only RPC calls can be made, there are never any 
+ * replies sent back. 
+ * - A message oriented architecture needs to be used where RPCs procs are always silent and may 
+ * reply only be sending back a new call on the outgoing connection.
+ * 
+ */
 #define HRAUTH_CONN_PINGTIMEOUT (30000)
 
 struct hrauth_conn_opts {
@@ -135,7 +153,7 @@ struct hrauth_conn_opts {
 };
 int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts );
 int hrauth_conn_unregister( uint64_t hostid );
-int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args );
 
 #endif
 

@@ -642,7 +642,7 @@ static void rpc_poll( int timeout ) {
 	c = rpc.clist;
 	while( c ) {
 		if( (revents[i] & RPC_POLLERR) || (revents[i] & RPC_POLLHUP) ) {
-		  rpc_log( RPC_LOG_DEBUG, "Connection %"PRIx64" %s", c->connid,
+		  rpc_log( RPC_LOG_DEBUG, "Connection connid=%"PRIx64" %s", c->connid,
 			   (revents[i] & RPC_POLLERR) ? "POLLERR" : "POLLHUP" );
 		  
 		  c->cstate = RPC_CSTATE_CLOSE;
@@ -660,12 +660,12 @@ static void rpc_poll( int timeout ) {
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-					rpc_log( RPC_LOG_DEBUG, "recv: %s", rpc_strerror( rpc_errno() ) );
+					rpc_log( RPC_LOG_DEBUG, "connid=%"PRIx64" recv: %s", c->connid, rpc_strerror( rpc_errno() ) );
 					c->cstate = RPC_CSTATE_CLOSE;
 					break;
 				}
 				else if( sts == 0 ) {
-				  rpc_log( RPC_LOG_DEBUG, "Connection graceful close" );
+				  rpc_log( RPC_LOG_DEBUG, "Connection graceful close connid=%"PRIx64"", c->connid );
 					c->cstate = RPC_CSTATE_CLOSE;
 				}
 				else {
@@ -1196,6 +1196,9 @@ failure:
 }
 
 int rpc_send( struct rpc_conn *c, int count ) {
+  /* unless the connection is idle we can't start sending */
+  if( c->cstate != RPC_CSTATE_RECVLEN ) return -1;
+  
   c->cstate = RPC_CSTATE_SENDLEN;
   c->nstate = RPC_NSTATE_SEND;
   c->cdata.count = count;

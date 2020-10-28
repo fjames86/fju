@@ -123,5 +123,19 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 
+#define HRAUTH_CONN_PINGTIMEOUT (30000)
+
+struct hrauth_conn_opts {
+  uint32_t mask;
+#define HRAUTH_CONN_OPT_ADDR 0x0001
+#define HRAUTH_CONN_OPT_PINGTIMEOUT 0x0002 
+  struct sockaddr_storage addr;
+  int addrlen;
+  uint32_t pingtimeout;
+};
+int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts );
+int hrauth_conn_unregister( uint64_t hostid );
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
+
 #endif
 

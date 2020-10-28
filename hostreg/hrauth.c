@@ -49,9 +49,12 @@
 #include <fju/hrauth.h>
 #include <fju/mmf.h>
 #include <fju/sec.h>
+#include <fju/rpc.h>
 #include <fju/rpcd.h>
 #include <fju/log.h>
 #include <fju/freg.h>
+
+static void hrauth_conn_init( void );
 
 static void hrauth_log( int lvl, char *fmt, ... ) {
   static struct log_s log;
@@ -703,6 +706,7 @@ void hrauth_register( void ) {
   hostreg_open();
   rpc_provider_register( hrauth_provider() );
   rpc_program_register( &hrauth_prog );
+  hrauth_conn_init();
 }
 
 /* ---------- simple hrauth client ---------------- */
@@ -741,8 +745,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   hcallp->donecb( &inc->xdr, hcallp->cxt );
   
  done:
-  free( w->pcxt );   /* free auth context */
-  free( w );         /* free waiter */
+  free( w );         /* free waiter plus other state */
 }
 
 int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
@@ -802,7 +805,8 @@ int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
   inc.pvr = hrauth_provider();
 
   /* prepare auth context */
-  hcxt = malloc( sizeof(*hcxt) );
+  w = malloc( sizeof(*w) + sizeof(*hcxt) + sizeof(*hcallp) + args->offset );  
+  hcxt = (struct hrauth_context *)((char *)w + sizeof(*w)); 
   sts = hrauth_init( hcxt, hcall->hostid );
   hcxt->service = hcall->service;
   inc.pcxt = hcxt;
@@ -830,8 +834,7 @@ int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
   
   /* await reply - copy args so we can resend on failure */
   /* XXX: we don't do auto resends so we don't need to copy args */
-  w = malloc( sizeof(*w) + sizeof(*hcallp) + args->offset );
-  hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w));
+  hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w) + sizeof(*hcxt));
   hcallp->hcall = *hcall;
   xdr_init( &hcallp->args, (uint8_t *)(((char *)hcallp) + sizeof(*hcallp)), args->offset );
   memcpy( hcallp->args.buf, args->buf, args->offset );
@@ -916,6 +919,341 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
 }
 
 /* ------ an equivalent for TCP is MUCH harder. ------ */
+
+struct hrauth_conn {
+  uint64_t hostid;
+  int port;
+  uint64_t connid;
+  uint32_t state;
+#define HRAUTH_CONN_DISCONNECTED 0
+#define HRAUTH_CONN_CONNECTED    1
+#define HRAUTH_CONN_CONNECTING   2 
+  struct hrauth_context hcxt;
+  struct sockaddr_storage addr;
+  int addrlen;
+  uint32_t pingtimeout;
+};
+static struct {
+  struct hrauth_conn conn[RPC_MAX_CONN];
+  int nconn;
+} conndata;
+
+/* lookup the connection for this host */
+static struct hrauth_conn *hrauth_conn_by_hostid( uint64_t hostid ) {
+  int i;
+  for( i = 0; i < conndata.nconn; i++ ) {
+    if( conndata.conn[i].hostid == hostid ) return &conndata.conn[i];
+  }
+  return NULL;
+}
+
+static struct hrauth_conn *hrauth_conn_by_connid( uint64_t connid ) {
+  int i;
+  for( i = 0; i < conndata.nconn; i++ ) {
+    if( conndata.conn[i].connid == connid ) return &conndata.conn[i];
+  }
+  return NULL;
+}
+
+static int hrauth_connect( struct hrauth_conn *hc );
+
+
+static void hrauth_conncb( rpc_conn_event_t evt, struct rpc_conn *conn ) {
+  struct hrauth_conn *hc;
+  int sts;
+  
+  hc = hrauth_conn_by_connid( conn->connid );
+  if( !hc ) return;
+  
+  switch( evt ) {
+  case RPC_CONN_CLOSE:
+    /* clear connid from structure */
+    if( hc->state == HRAUTH_CONN_CONNECTING ) {
+      /* connect operation failed */
+      hrauth_log( LOG_LVL_ERROR, "Connection failed hostid=%"PRIx64"", hc->hostid );
+    } else {
+      /* connection dropped */
+      hrauth_log( LOG_LVL_ERROR, "Connection dropped hostid=%"PRIx64"", hc->hostid );      
+    }
+    
+    hc->connid = 0;
+    hc->state = HRAUTH_CONN_DISCONNECTED;
+
+    /* attempt reconnect immediately */
+    sts = hrauth_connect( hc );
+    if( sts ) {
+      hrauth_log( LOG_LVL_ERROR, "Failed to connect hostid=%"PRIx64"", hc->hostid );
+    }
+    
+    break;
+  case RPC_CONN_CONNECT:
+    /* set connected state */
+    hc->state = HRAUTH_CONN_CONNECTED;
+    break;
+  }
+  
+}
+
+static int hrauth_connect( struct hrauth_conn *hc ) {
+  /* initiate connection */
+  int sts;
+
+  if( hc->state != HRAUTH_CONN_DISCONNECTED ) return -1;
+
+  sts = hrauth_init( &hc->hcxt, hc->hostid );
+  if( sts ) return sts;
+  
+  sts = rpc_connect( (struct sockaddr *)&hc->addr, hc->addrlen, hrauth_conncb, NULL, &hc->connid );
+  if( sts ) return sts;
+
+  hc->state = HRAUTH_CONN_CONNECTING;
+  return 0;
+}
+
+
+/* register to maintain a connection to this host */
+int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts ) {
+  int i, sts;
+  struct hrauth_conn *hc;
+  
+  for( i = 0; i < conndata.nconn; i++ ) {
+    if( conndata.conn[i].hostid == hostid ) return 0;
+  }
+  if( conndata.nconn >= RPC_MAX_CONN ) return -1;
+
+  hc = (struct hrauth_conn *)&conndata.conn[conndata.nconn];  
+  hc->hostid = hostid;
+  hc->state = HRAUTH_CONN_DISCONNECTED;
+
+  if( opts && opts->mask & HRAUTH_CONN_OPT_ADDR ) {
+    memcpy( &hc->addr, &opts->addr, opts->addrlen );
+    hc->addrlen = opts->addrlen;
+  } else {
+    struct sockaddr_in *sinp = (struct sockaddr_in *)&hc->addr;
+    struct rpc_listen *listen;
+    int port;
+    struct hostreg_host host;
+    
+    sts = hostreg_host_by_id( hostid, &host );
+    if( sts ) return -1;
+
+    listen = rpcd_listen_by_type( RPC_LISTEN_TCP );
+    if( listen ) port = ntohs( listen->addr.sin.sin_port );
+    else port = 8000; // XXX get default port from somewhere? 
+    
+    memset( sinp, 0, sizeof(*sinp) );
+    sinp->sin_family = AF_INET;
+    sinp->sin_port = htons( port );
+    sinp->sin_addr.s_addr = host.addr[0]; // XXX What if there are no address? 
+    hc->addrlen = sizeof(*sinp);
+  }
+
+  if( opts && opts->mask & HRAUTH_CONN_OPT_PINGTIMEOUT ) {
+    hc->pingtimeout = opts->pingtimeout;
+  } else {
+    hc->pingtimeout = HRAUTH_CONN_PINGTIMEOUT;
+  }
+  
+  /* initiate connection */
+  sts = hrauth_connect( &conndata.conn[conndata.nconn] );
+  if( sts ) return sts;
+  
+  conndata.nconn++;  
+
+  return 0;  
+}
+
+/* unregister this host */
+int hrauth_conn_unregister( uint64_t hostid ) {
+  int i;
+			  
+  for( i = 0; i < conndata.nconn; i++ ) {
+    if( conndata.conn[i].hostid == hostid ) {
+      /* close connection */
+      if( conndata.conn[i].connid ) {
+	struct rpc_conn *conn;	
+	conn = rpc_conn_by_connid( conndata.conn[i].connid );
+	if( conn ) rpc_conn_close( conn );
+      }
+      
+      /* delete from list */
+      if( i != conndata.nconn - 1 ) conndata.conn[i] = conndata.conn[conndata.nconn - 1];
+      conndata.nconn--;
+      return 0;	
+    }
+  }
+  
+  return -1;
+}
+
+/* send an rpc to this host and possibly await a reply */
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
+  int handle;
+  struct hrauth_conn *hc;
+  struct rpc_conn *conn;
+  struct rpc_inc inc;
+  struct hrauth_context *hcxt;
+  struct rpc_waiter *w;
+  struct hrauth_call_cxt *hcallp;
+  
+  /* start by getting connection for this host */
+  hc = hrauth_conn_by_hostid( hcall->hostid );
+  if( !hc ) return -1;
+
+  /* check connected */
+  if( !hc->connid ) return -1;
+  if( hc->state != HRAUTH_CONN_CONNECTED ) return -1;
+  
+  /* get rpc connection */
+  conn = rpc_conn_by_connid( hc->connid );
+  if( !conn ) {
+    hc->connid = 0;
+    hc->state = HRAUTH_CONN_DISCONNECTED;
+    return -1;
+  }
+
+  /* if connection is not sitting idle then can't do anything */
+  /* TODO: queue this operation and do it later once the current operation has completed */
+  if( conn->cstate != RPC_CSTATE_RECVLEN ) return -1;
+  
+  /* encode call into connection buffer */
+  memset( &inc, 0, sizeof(inc) );
+  xdr_init( &inc.xdr, conn->buf, conn->count );
+  
+  hcxt = &hc->hcxt;
+  if( hcall->service != hcxt->service ) {
+    /* can't change service level once context established */
+    hrauth_init( hcxt, hcall->hostid );
+    hcxt->service = hcall->service;
+  }
+  inc.pvr = hrauth_provider();
+  inc.pcxt = hcxt;
+  
+  rpc_init_call( &inc, hcall->prog, hcall->vers, hcall->proc, &handle );
+  if( args ) xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+  rpc_complete_call( &inc, handle );
+
+  rpc_send( conn, inc.xdr.offset );
+
+  /* await reply */
+  w = (struct rpc_waiter *)malloc( sizeof(*w) + sizeof(*hcallp) );
+  hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w));
+  hcallp->hcall = *hcall;
+  xdr_init( &hcallp->args, NULL, 0 );
+  
+  memset( w, 0, sizeof(*w) );  
+  w->xid = inc.msg.xid;
+  w->timeout = rpc_now() + hcall->timeout;
+  w->cb = hrauth_call_cb;
+  w->cxt = hcallp;
+  w->pvr = hrauth_provider();
+  w->cxt = hcxt;
+  rpc_await_reply( w );
+    
+  return 0;
+}
+
+static void hrauth_ping_cb( struct xdr_s *xdr, void *cxt ) {  
+}
+
+static void hrauth_send_ping( struct hrauth_conn *hc ) {
+  struct hrauth_call hcall;
+  int sts;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hc->hostid;
+  hcall.prog = 100000;
+  hcall.vers = 2;
+  hcall.proc = 0;
+  hcall.donecb = hrauth_ping_cb;
+  hcall.cxt = NULL;
+  
+  sts = hrauth_call_tcp_async( &hcall, NULL, NULL );
+  if( sts ) {
+    hrauth_log( LOG_LVL_ERROR, "hrauth ping failed hostid=%"PRIx64"", hc->hostid );
+  }
+}
+
+static void hrauth_conn_iter_cb( struct rpc_iterator *it ) {
+  /* check all connections are alive, attempt reconnect if any are disconnected */
+  int sts, i;
+  struct hrauth_conn *hc;
+  struct rpc_conn *conn;
+  uint64_t now;
+  
+  for( i = 0; i < conndata.nconn; i++ ) {
+    hc = &conndata.conn[i];
+    if( hc->state == HRAUTH_CONN_DISCONNECTED ) {
+      sts = hrauth_connect( hc );
+      if( sts ) {
+	hrauth_log( LOG_LVL_ERROR, "Reconnect attempt failed hostid=%"PRIx64"", hc->hostid );
+      }
+    }
+    
+    /* check rpc connection's timestamp. if it is getting close to the connection timeout do something */
+    if( hc->state == HRAUTH_CONN_CONNECTED ) {      
+      conn = rpc_conn_by_connid( hc->connid );
+      now = rpc_now();
+      if( conn && ((now - conn->timestamp) >= hc->pingtimeout) ) {
+	hrauth_log( LOG_LVL_INFO, "Connection getting stale, sending ping hostid=%"PRIx64"", hc->hostid );
+
+	hrauth_send_ping( hc );	
+      }
+    }
+  }
+}
+
+static struct rpc_iterator hrauth_conn_iter =
+{
+ NULL,
+ 0,
+ 5000,
+ hrauth_conn_iter_cb,
+ NULL
+};
+
+static void hrauth_conn_init( void ) {
+  int sts;
+  struct freg_entry entry;
+  uint64_t hkey, hostid, id;
+  
+  /* register the connection iterator */
+  rpc_iterator_register( &hrauth_conn_iter );
+
+  /* register configured connections */
+  sts = freg_subkey( NULL, 0, "/fju/hrauth/connect", FREG_CREATE, &hkey );
+  if( !sts ) {
+    id = 0;
+    sts = freg_next( NULL, hkey, id, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+	sts = freg_get_by_name( NULL, entry.id, "hostid", FREG_TYPE_UINT64, (char *)&hostid, sizeof(hostid), NULL );
+	if( !sts ) {
+	  sts = hrauth_conn_register( hostid, NULL );
+	  if( sts ) hrauth_log( LOG_LVL_ERROR, "Failed to register host %s (%"PRIx64")", entry.name, hostid );
+	}
+      }
+      id = entry.id;
+      sts = freg_next( NULL, hkey, id, &entry );
+    }
+    
+  }
+
+    
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #if 0
 

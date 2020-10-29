@@ -53,6 +53,7 @@
 #include <fju/rpcd.h>
 #include <fju/log.h>
 #include <fju/freg.h>
+#include <fju/events.h>
 
 static void hrauth_conn_init( void );
 
@@ -979,7 +980,6 @@ static int hrauth_connect( struct hrauth_conn *hc );
 
 static void hrauth_conncb( rpc_conn_event_t evt, struct rpc_conn *conn ) {
   struct hrauth_conn *hc;
-  int sts;
   
   hc = hrauth_conn_by_connid( conn->connid );
   if( !hc ) return;
@@ -998,13 +998,27 @@ static void hrauth_conncb( rpc_conn_event_t evt, struct rpc_conn *conn ) {
     hc->connid = 0;
     hc->state = HRAUTH_CONN_DISCONNECTED;
 
-    /* attempt reconnect immediately */
-    hrauth_log( LOG_LVL_INFO, "Attempting reconnect" );
-    sts = hrauth_connect( hc );
-    if( sts ) {
-      hrauth_log( LOG_LVL_ERROR, "Failed to connect hostid=%"PRIx64"", hc->hostid );
-      hc->state = HRAUTH_CONN_DISCONNECTED;      
+    /* publish disconnect event */
+    {
+      struct xdr_s evtxdr;
+      uint8_t evtxdrbuf[32];
+      xdr_init( &evtxdr, evtxdrbuf, sizeof(evtxdrbuf) );
+      xdr_encode_uint64( &evtxdr, hc->hostid );
+      rpcd_event_publish( HRAUTH_EVENT_DISCONNECT, &evtxdr );
     }
+    
+#if 0
+    {
+      int sts;
+      /* attempt reconnect immediately */    
+      hrauth_log( LOG_LVL_INFO, "Attempting reconnect" );
+      sts = hrauth_connect( hc );
+      if( sts ) {
+	hrauth_log( LOG_LVL_ERROR, "Failed to connect hostid=%"PRIx64"", hc->hostid );
+	hc->state = HRAUTH_CONN_DISCONNECTED;      
+      }
+    }
+#endif
     
     break;
   case RPC_CONN_CONNECT:

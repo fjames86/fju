@@ -6,5 +6,8 @@
 
 #define NLS_EVENT_REMOTEAPPEND 2        /* remote log had some messages appened parm=&remote */
 
+/* host disconnected, arg=hostid*/
+#define HRAUTH_EVENT_DISCONNECT 3 
+
 #endif
 

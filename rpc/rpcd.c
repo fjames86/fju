@@ -644,8 +644,8 @@ static void rpc_poll( int timeout ) {
 		if( (revents[i] & RPC_POLLERR) || (revents[i] & RPC_POLLHUP) ) {
 		  rpc_log( RPC_LOG_DEBUG, "Connection connid=%"PRIx64" %s", c->connid,
 			   (revents[i] & RPC_POLLERR) ? "POLLERR" : "POLLHUP" );
-		  
-		  c->cstate = RPC_CSTATE_CLOSE;
+
+		  rpc_conn_close( c );
 		}
 		
 		else if( revents[i] & RPC_POLLIN ) {
@@ -661,24 +661,24 @@ static void rpc_poll( int timeout ) {
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
 					rpc_log( RPC_LOG_DEBUG, "connid=%"PRIx64" recv: %s", c->connid, rpc_strerror( rpc_errno() ) );
-					c->cstate = RPC_CSTATE_CLOSE;
+					rpc_conn_close( c );
 					break;
 				}
 				else if( sts == 0 ) {
 				  rpc_log( RPC_LOG_DEBUG, "Connection graceful close connid=%"PRIx64"", c->connid );
-					c->cstate = RPC_CSTATE_CLOSE;
+				  rpc_conn_close( c );
 				}
 				else {
 					xdr_init( &tmpx, c->buf, 4 );
 					xdr_decode_uint32( &tmpx, &c->cdata.count );
 					if( !(c->cdata.count & 0x80000000) ) {
-						c->cstate = RPC_CSTATE_CLOSE;
+					  rpc_conn_close( c );
 						break;
 					}
 
 					c->cdata.count &= ~0x80000000;
 					if( c->cdata.count > RPC_MAX_BUF ) {
-						c->cstate = RPC_CSTATE_CLOSE;
+					  rpc_conn_close( c );
 						break;
 					}
 
@@ -694,11 +694,11 @@ static void rpc_poll( int timeout ) {
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-					c->cstate = RPC_CSTATE_CLOSE;
+					rpc_conn_close( c );
 					break;
 				}
 				else if( sts == 0 ) {
-					c->cstate = RPC_CSTATE_CLOSE;
+				  rpc_conn_close( c );
 					break;
 				}
 				c->timestamp = rpc_now();
@@ -736,7 +736,7 @@ static void rpc_poll( int timeout ) {
 #else
 							if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-							c->cstate = RPC_CSTATE_CLOSE;
+							rpc_conn_close( c );
 							break;
 						}
 
@@ -748,7 +748,7 @@ static void rpc_poll( int timeout ) {
 #else
 							if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-							c->cstate = RPC_CSTATE_CLOSE;
+							rpc_conn_close( c );
 							break;
 						}
 
@@ -789,7 +789,7 @@ static void rpc_poll( int timeout ) {
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-					c->cstate = RPC_CSTATE_CLOSE;
+					rpc_conn_close( c );
 					break;
 				}
 				c->cstate = RPC_CSTATE_SEND;
@@ -803,7 +803,7 @@ static void rpc_poll( int timeout ) {
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-					c->cstate = RPC_CSTATE_CLOSE;
+					rpc_conn_close( c );
 					break;
 				}
 
@@ -822,13 +822,14 @@ static void rpc_poll( int timeout ) {
 									   getsockopt( c->fd, SOL_SOCKET, SO_ERROR, (char *)&sts, &slen );
 									   if( sts ) {
 										   rpc_log( RPC_LOG_ERROR, "Connect failed: %s", rpc_strerror( rpc_errno() ) );
-										   c->cstate = RPC_CSTATE_CLOSE;
+										   rpc_conn_close( c );
 									   }
 									   else {
 										   c->nstate = RPC_NSTATE_RECV;
 										   c->cstate = RPC_CSTATE_RECVLEN;
 									   }
 
+									   rpc_log( RPC_LOG_INFO, "Nonblocking connect completed" );
 									   if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CONNECT, c );
 			}
 				break;
@@ -857,6 +858,12 @@ static void rpc_poll( int timeout ) {
 static void rpc_close_connections( void ) {
 	struct rpc_conn *c, *prev, *next;
 
+	c = rpc.clist;
+	while( c ) {
+	  if( c->cstate == RPC_CSTATE_CLOSE && c->cdata.cb ) c->cdata.cb( RPC_CONN_CLOSE, c );
+	  c = c->next;
+	}
+	
 	/* Close pending connections */
 	c = rpc.clist;
 	prev = NULL;
@@ -870,7 +877,7 @@ static void rpc_close_connections( void ) {
 			close( c->fd );
 #endif
 			/* invoke callback if required */
-			if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CLOSE, c );
+			rpc_log( RPC_LOG_INFO, "Closing connection %"PRIu64"", c->connid );
 
 			if( prev ) prev->next = c->next;
 			else rpc.clist = c->next;
@@ -977,6 +984,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->connid = ++rpc.connid;
       c->timestamp = rpc_now();
       c->listen = lis;
+      c->dirtype = RPC_CONN_DIR_INCOMING;
       
 #ifdef WIN32
 	  {
@@ -1082,7 +1090,7 @@ static void rpcd_run( void ) {
 		while( c ) {
 			if( now > (c->timestamp + RPC_CONNECTION_TIMEOUT) ) {
 			        rpc_log( RPC_LOG_INFO, "closing stale connection fd=%d", (int)c->connid );
-				c->cstate = RPC_CSTATE_CLOSE;
+				rpc_conn_close( c );
 			}
 
 			c = c->next;
@@ -1175,6 +1183,7 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 		  goto failure;
 		}
 #endif
+		rpc_log( RPC_LOG_INFO, "connect nonblocking in progress" );
 		c->cstate = RPC_CSTATE_CONNECT;
 		c->nstate = RPC_NSTATE_CONNECT;
 		c->connid = ++rpc.connid;
@@ -1183,19 +1192,23 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 		c->cstate = RPC_CSTATE_RECVLEN;
 		c->nstate = RPC_NSTATE_RECV;
 		c->connid = ++rpc.connid;
-		
+
+		rpc_log( RPC_LOG_INFO, "connect completed immediately" );
 		if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CONNECT, c );
 	}
 
 	if( connid ) *connid = c->connid;
 
 	c->timestamp = rpc_now();
+	c->dirtype = RPC_CONN_DIR_OUTGOING;
 	c->next = rpc.clist;
 	rpc.clist = c;
-	
+
+	rpc_log( RPC_LOG_INFO, "rpc_connect success" );
 	return 0;
 
 failure:
+	rpc_log( RPC_LOG_INFO, "rpc_connect failure" );
 	c->next = rpc.flist;
 	rpc.flist = c;
 	return -1;
@@ -1234,7 +1247,7 @@ struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen ) 
   struct rpc_conn *c;
   c = rpc.clist;
   while( c ) {
-    if( c->listen->type == type ) {
+    if( c->dirtype == RPC_CONN_DIR_INCOMING && c->listen->type == type ) {
       switch( type ) {
       case RPC_LISTEN_TCP:
 	{
@@ -1269,6 +1282,7 @@ struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen ) 
 
 
 void rpc_conn_close( struct rpc_conn *c ) {
+  rpc_log( RPC_LOG_INFO, "Closing connection %"PRIu64"", c->connid );
     c->cstate = RPC_CSTATE_CLOSE;
 }
 

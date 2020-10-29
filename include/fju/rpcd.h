@@ -81,6 +81,11 @@ typedef enum {
 } rpc_conn_event_t;
 typedef void (*rpc_conn_cb_t)( rpc_conn_event_t event, struct rpc_conn *conn );
 
+typedef enum {
+    RPC_CONN_DIR_INCOMING = 0,
+    RPC_CONN_DIR_OUTGOING = 1,
+} rpc_conn_dir_t;
+
 struct rpc_conn {
 	struct rpc_conn *next;
 
@@ -114,6 +119,8 @@ struct rpc_conn {
   struct rpc_listen *listen;
   struct sockaddr_storage addr;
   int addrlen;
+
+  rpc_conn_dir_t dirtype;
 };
 
 typedef enum {
@@ -131,6 +138,8 @@ int rpc_send( struct rpc_conn *c, int count );
 struct rpc_conn *rpc_conn_acquire( void );
 void rpc_conn_release( struct rpc_conn *c );
 struct rpc_conn *rpc_conn_by_connid( uint64_t connid );
+
+/* find incoming connection by address */
 struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen );
 void rpc_conn_close( struct rpc_conn *c );
 

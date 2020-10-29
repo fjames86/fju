@@ -417,7 +417,11 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
 
   tstart = rpc_now();
   if( glob.hostid ) {
-    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+    if( glob.tcp ) {
+      sts = hrauth_call_tcp( &hcall, &args, &res, &opts );
+    } else {
+      sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+    }
   } else if( glob.tcp ) {
     sts = rpc_call_tcp( &pars, &args, &res );
   } else {

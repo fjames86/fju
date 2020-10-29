@@ -141,7 +141,7 @@ int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s
  * reply only be sending back a new call on the outgoing connection.
  * 
  */
-#define HRAUTH_CONN_PINGTIMEOUT (30000)
+#define HRAUTH_CONN_PINGTIMEOUT (10000)
 
 struct hrauth_conn_opts {
   uint32_t mask;
@@ -154,6 +154,7 @@ struct hrauth_conn_opts {
 int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts );
 int hrauth_conn_unregister( uint64_t hostid );
 int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args );
+int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat, struct xdr_s *res );
 
 #endif
 

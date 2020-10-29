@@ -110,6 +110,10 @@ struct rpc_conn {
 	uint8_t *buf;
 
 	uint64_t timestamp;
+
+  struct rpc_listen *listen;
+  struct sockaddr_storage addr;
+  int addrlen;
 };
 
 typedef enum {
@@ -127,6 +131,7 @@ int rpc_send( struct rpc_conn *c, int count );
 struct rpc_conn *rpc_conn_acquire( void );
 void rpc_conn_release( struct rpc_conn *c );
 struct rpc_conn *rpc_conn_by_connid( uint64_t connid );
+struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen );
 void rpc_conn_close( struct rpc_conn *c );
 
 /* dynamically loaded service entry point */

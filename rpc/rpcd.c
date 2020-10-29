@@ -710,7 +710,9 @@ static void rpc_poll( int timeout ) {
 					c->inc.xdr.count = c->cdata.count;
 
 					//rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
-						
+
+					memcpy( &c->inc.raddr, &c->addr, c->addrlen );
+					c->inc.raddr_len = c->addrlen;
 					rpc.aconn.listen = NULL;
 					rpc.aconn.conn = c;
 					sts = rpc_process_incoming( &c->inc );
@@ -967,10 +969,14 @@ static void rpc_accept( struct rpc_listen *lis ) {
 
       c->inc.raddr_len = sizeof(c->inc.raddr);
       c->fd = accept( lis->fd, (struct sockaddr *)&c->inc.raddr, &c->inc.raddr_len );
+      memcpy( &c->addr, &c->inc.raddr, c->inc.raddr_len );
+      c->addrlen = c->inc.raddr_len;
+      
       c->cstate = RPC_CSTATE_RECVLEN;
       c->nstate = RPC_NSTATE_RECV;
       c->connid = ++rpc.connid;
       c->timestamp = rpc_now();
+      c->listen = lis;
       
 #ifdef WIN32
 	  {
@@ -1223,6 +1229,44 @@ struct rpc_conn *rpc_conn_by_connid( uint64_t connid ) {
 	}
 	return NULL;
 }
+
+struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen ) {
+  struct rpc_conn *c;
+  c = rpc.clist;
+  while( c ) {
+    if( c->listen->type == type ) {
+      switch( type ) {
+      case RPC_LISTEN_TCP:
+	{
+	  struct sockaddr_in *sinp = (struct sockaddr_in *)&c->addr;
+	  if( addrlen == sizeof(sinp->sin_addr) &&
+	      (memcmp( &sinp->sin_addr, addr, addrlen ) == 0) ) {
+	    return c;
+	  }
+	}
+	break;
+      case RPC_LISTEN_TCP6:
+	{
+	  struct sockaddr_in6 *sin6p = (struct sockaddr_in6 *)&c->addr;
+	  if( addrlen == sizeof(sin6p->sin6_addr) &&
+	      (memcmp( &sin6p->sin6_addr, addr, addrlen ) == 0) ) {
+	    return c;
+	  }
+	}
+	break;
+#ifndef WIN32
+      case RPC_LISTEN_UNIX:
+	break;
+#endif
+      default:
+	break;
+      }
+    }
+    c = c->next;
+  }
+  return NULL;
+}
+
 
 void rpc_conn_close( struct rpc_conn *c ) {
     c->cstate = RPC_CSTATE_CLOSE;

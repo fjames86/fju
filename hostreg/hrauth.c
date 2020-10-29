@@ -1285,9 +1285,6 @@ static void hrauth_conn_iter_cb( struct rpc_iterator *it ) {
 
   for( i = 0; i < conndata.nconn; i++ ) {
     hc = &conndata.conn[i];
-    conn = rpc_conn_by_connid( hc->connid );
-    
-    hrauth_log( LOG_LVL_INFO, "hrauth conn hostid=%"PRIx64" state=%u connid=%"PRIu64" conn=%p", hc->hostid, hc->state, hc->connid, conn );
     
     if( hc->state == HRAUTH_CONN_DISCONNECTED ) {
       hrauth_log( LOG_LVL_INFO, "Reconnecting to hostid=%"PRIx64"", hc->hostid );
@@ -1298,8 +1295,8 @@ static void hrauth_conn_iter_cb( struct rpc_iterator *it ) {
     }
     
     /* check rpc connection's timestamp. if it is getting close to the connection timeout do something */
-    if( hc->state == HRAUTH_CONN_CONNECTED ) {      
-      conn = rpc_conn_by_connid( hc->connid );
+    if( hc->state == HRAUTH_CONN_CONNECTED ) {
+      conn = rpc_conn_by_connid( hc->connid );      
       now = rpc_now();
       if( conn && ((now - conn->timestamp) >= hc->pingtimeout) ) {
 	hrauth_log( LOG_LVL_INFO, "Connection getting stale, sending ping hostid=%"PRIx64"", hc->hostid );

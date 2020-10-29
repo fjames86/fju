@@ -741,10 +741,16 @@ void raft_register( void ) {
   int i, n, m, j;
   struct raft_cluster cl[32];
   struct raft_member member[32];
+  struct hrauth_conn_opts opts;
   
   raft_open();
 
   raft_prop( &glob.prop );
+
+  /* ensure communication every so often*/
+  memset( &opts, 0, sizeof(opts) );
+  opts.mask |= HRAUTH_CONN_OPT_PINGTIMEOUT;
+  opts.pingtimeout = glob.prop.term_high;
   
   /* set all clusters to follower state */
   n = raft_cluster_list( cl, 32 );
@@ -759,7 +765,7 @@ void raft_register( void ) {
     /* ensure all members are registered as hrauth connections, so we cna talk to them using TCP */
     m = raft_member_list( cl[i].id, member, 32 );
     for( j = 0; j < m; j++ ) {
-      hrauth_conn_register( member[j].hostid, NULL );
+      hrauth_conn_register( member[j].hostid, &opts );
     }
   }
 

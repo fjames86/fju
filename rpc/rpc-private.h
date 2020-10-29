@@ -18,5 +18,7 @@ void rpc_add_logger( struct rpc_logger *logger );
 
 #define RPC_LOG_LTAG 0x1000
 
+struct rpc_conn *rpc_conn_list( void );
+
 #endif
 

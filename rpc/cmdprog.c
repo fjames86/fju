@@ -11,6 +11,8 @@
 #include <fju/lic.h>
 #include <fju/hrauth.h>
 
+#include "rpc-private.h"
+
 static int cmdprog_proc_null( struct rpc_inc *inc ) {
   int handle;
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -70,11 +72,31 @@ static int cmdprog_proc_licinfo( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int cmdprog_proc_connlist( struct rpc_inc *inc ) {
+  int handle;
+  struct rpc_conn *c;
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  c = rpc_conn_list();
+  while( c ) {
+    xdr_encode_boolean( &inc->xdr, 1 );
+    xdr_encode_uint64( &inc->xdr, c->connid );
+    xdr_encode_uint32( &inc->xdr, c->dirtype );
+    /* TODO encode other info e.g. host */
+    
+    c = c->next;
+  }
+  xdr_encode_boolean( &inc->xdr, 0 );
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+  
 static struct rpc_proc cmdprog_procs[] = {
   { 0, cmdprog_proc_null },
   { 1, cmdprog_proc_stop },
   { 2, cmdprog_proc_event },
-  { 3, cmdprog_proc_licinfo },  
+  { 3, cmdprog_proc_licinfo },
+  { 4, cmdprog_proc_connlist },
   { 0, NULL }
 };
 

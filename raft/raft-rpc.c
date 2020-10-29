@@ -738,8 +738,9 @@ static struct rpc_program raft_prog = {
 };
 
 void raft_register( void ) {
-  int i, n;
+  int i, n, m, j;
   struct raft_cluster cl[32];
+  struct raft_member member[32];
   
   raft_open();
 
@@ -754,10 +755,18 @@ void raft_register( void ) {
     cl[i].leaderid = 0;
     cl[i].timeout = rpc_now() + glob.prop.term_high;
     raft_cluster_set( &cl[i] );
+
+    /* ensure all members are registered as hrauth connections, so we cna talk to them using TCP */
+    m = raft_member_list( cl[i].id, member, 32 );
+    for( j = 0; j < m; j++ ) {
+      hrauth_conn_register( member[j].hostid, NULL );
+    }
   }
-  
+
   rpc_program_register( &raft_prog );
   rpc_iterator_register( &raft_iter );
+
+  
 }
 
 void raft_notify_register( struct raft_notify_context *cxt ) {

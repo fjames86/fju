@@ -1204,7 +1204,6 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 	c->next = rpc.clist;
 	rpc.clist = c;
 
-	rpc_log( RPC_LOG_INFO, "rpc_connect success" );
 	return 0;
 
 failure:
@@ -1269,6 +1268,9 @@ struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen ) 
 	break;
 #ifndef WIN32
       case RPC_LISTEN_UNIX:
+	{
+	  /* TODO */
+	}
 	break;
 #endif
       default:
@@ -1282,8 +1284,12 @@ struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen ) 
 
 
 void rpc_conn_close( struct rpc_conn *c ) {
-  rpc_log( RPC_LOG_INFO, "Closing connection %"PRIu64"", c->connid );
-    c->cstate = RPC_CSTATE_CLOSE;
+  rpc_log( RPC_LOG_DEBUG, "Close connection %"PRIu64"", c->connid );
+  c->cstate = RPC_CSTATE_CLOSE;
+}
+
+struct rpc_conn *rpc_conn_list( void ) {
+  return rpc.clist;
 }
 
     

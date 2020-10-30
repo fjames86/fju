@@ -90,6 +90,7 @@ static void freg_rem_results( struct xdr_s *xdr );
 static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_licinfo_results( struct xdr_s *xdr );
+static void cmdprog_connlist_results( struct xdr_s *xdr );
 static void fvm_list_results( struct xdr_s *xdr );
 static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_load_results( struct xdr_s *xdr );
@@ -127,7 +128,8 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "eventid=* parm=*" },
-    { FJUD_RPC_PROG, 1, 3, NULL, cmdprog_licinfo_results, "fjud.licinfo", "" },    
+    { FJUD_RPC_PROG, 1, 3, NULL, cmdprog_licinfo_results, "fjud.licinfo", "" },
+    { FJUD_RPC_PROG, 1, 4, NULL, cmdprog_connlist_results, "fjud.connlist", "" },        
     { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* register=true|false run=true|false" },
     { FVM_RPC_PROG, 1, 3, fvm_register_args, fvm_register_results, "fvm.unload", "name=*" },
@@ -1533,4 +1535,55 @@ static void cmdprog_licinfo_results( struct xdr_s *xdr ) {
   } else {
     printf( "License check failed" );
   }
+}
+
+static void cmdprog_connlist_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t connid, rx, tx;
+  uint32_t dirtype, type, addr, port, cstate;
+  char ip[256];
+
+  printf( "%-8s %-4s %-8s %-8s %-8s %-4s\n", "ConnID", "Dir", "State", "RX", "TX", "Type" );
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  while( b ) {
+    sts = xdr_decode_uint64( xdr, &connid );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &dirtype );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &cstate );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &rx );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &tx );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &type );
+    if( sts ) usage( "xdr error" );
+    if( type == RPC_LISTEN_TCP ) {
+      sts = xdr_decode_uint32( xdr, &addr );
+      if( !sts ) sts = xdr_decode_uint32( xdr, &port );
+    }
+    if( sts ) usage( "xdr error" );
+    printf( "%-8"PRIx64" %-4s %-8s %-8"PRIu64" %-8"PRIu64" %-4s",
+	    connid,
+	    dirtype == RPC_CONN_DIR_INCOMING ? "IN" : "OUT",
+	    cstate == RPC_CSTATE_RECVLEN ? "RecvLen" :
+	    cstate == RPC_CSTATE_RECV ? "Recv" :
+	    cstate == RPC_CSTATE_SENDLEN ? "SendLen" :
+	    cstate == RPC_CSTATE_SEND ? "Send" :
+	    cstate == RPC_CSTATE_CONNECT ? "Connect" :
+	    cstate == RPC_CSTATE_CLOSE ? "Close" :
+	    "Other",
+	    rx, tx,
+	    type == RPC_LISTEN_TCP ? "TCP" : "Other" );
+    if( type == RPC_LISTEN_TCP ) {
+      strcpy( ip, "" );
+      mynet_ntop( addr, ip );
+      sprintf( ip + strlen( ip ), ":%u", port );
+      printf( "%s", ip );
+    }
+    printf( "\n" );
+	    
+
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );    
+  }
+
 }

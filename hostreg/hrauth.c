@@ -1026,6 +1026,10 @@ static void hrauth_conncb( rpc_conn_event_t evt, struct rpc_conn *conn ) {
     hrauth_log( LOG_LVL_INFO, "Connect succeeded hostid=%"PRIx64"", hc->hostid );
     hc->state = HRAUTH_CONN_CONNECTED;
     break;
+  case RPC_CONN_DONE_SEND:
+    /* connection send operation completed. */
+    /* XXX when queuing implemented, initate next send operation */
+    break;
   }
   
 }

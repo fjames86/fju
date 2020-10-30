@@ -76,8 +76,9 @@ typedef enum {
 
 struct rpc_conn;
 typedef enum {
-    RPC_CONN_CLOSE = 0,
-    RPC_CONN_CONNECT = 1,
+    RPC_CONN_CLOSE = 0,  /* connection is closing */
+    RPC_CONN_CONNECT = 1, /* connect completed successfully */
+    RPC_CONN_DONE_SEND = 2, /* send operation completed, connetion reverted to recvlen (idle) */
 } rpc_conn_event_t;
 typedef void (*rpc_conn_cb_t)( rpc_conn_event_t event, struct rpc_conn *conn );
 
@@ -107,6 +108,9 @@ struct rpc_conn {
 		/* callback on completion */
 	        rpc_conn_cb_t cb;
 		void *cxt;
+
+	  uint64_t rx;
+	  uint64_t tx;
 	} cdata;
 
 	struct rpc_inc inc;
@@ -116,6 +120,7 @@ struct rpc_conn {
 
 	uint64_t timestamp;
 
+  rpc_listen_t listype;
   struct rpc_listen *listen;
   struct sockaddr_storage addr;
   int addrlen;

@@ -82,7 +82,20 @@ static int cmdprog_proc_connlist( struct rpc_inc *inc ) {
     xdr_encode_boolean( &inc->xdr, 1 );
     xdr_encode_uint64( &inc->xdr, c->connid );
     xdr_encode_uint32( &inc->xdr, c->dirtype );
-    /* TODO encode other info e.g. host */
+    xdr_encode_uint32( &inc->xdr, c->cstate );
+    xdr_encode_uint64( &inc->xdr, c->cdata.rx );
+    xdr_encode_uint64( &inc->xdr, c->cdata.tx );
+    xdr_encode_uint32( &inc->xdr, c->listype );
+    switch( c->listype ) {
+    case RPC_LISTEN_TCP:
+      xdr_encode_uint32( &inc->xdr, ((struct sockaddr_in *)&c->addr)->sin_addr.s_addr );
+      xdr_encode_uint32( &inc->xdr, ntohs( ((struct sockaddr_in *)&c->addr)->sin_port ) );
+      break;
+    default:
+      break;
+    }
+    
+    /* TODO encode other info */
     
     c = c->next;
   }

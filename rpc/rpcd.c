@@ -669,6 +669,7 @@ static void rpc_poll( int timeout ) {
 				  rpc_conn_close( c );
 				}
 				else {
+				  c->cdata.rx += sts;
 					xdr_init( &tmpx, c->buf, 4 );
 					xdr_decode_uint32( &tmpx, &c->cdata.count );
 					if( !(c->cdata.count & 0x80000000) ) {
@@ -701,6 +702,7 @@ static void rpc_poll( int timeout ) {
 				  rpc_conn_close( c );
 					break;
 				}
+				c->cdata.rx += sts;
 				c->timestamp = rpc_now();
 				
 				c->cdata.offset += sts;
@@ -739,6 +741,7 @@ static void rpc_poll( int timeout ) {
 							rpc_conn_close( c );
 							break;
 						}
+						c->cdata.tx += sts;
 
 						c->cstate = RPC_CSTATE_SEND;
 						sts = send( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
@@ -751,20 +754,24 @@ static void rpc_poll( int timeout ) {
 							rpc_conn_close( c );
 							break;
 						}
-
+						c->cdata.tx += sts;
+						
 						c->cdata.offset += sts;
 						if( c->cdata.offset == c->cdata.count ) {
 							c->nstate = RPC_NSTATE_RECV;
 							c->cstate = RPC_CSTATE_RECVLEN;
+							if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
 						}
 					} else if( sts > 0 ) {
 					  rpc_log( RPC_LOG_TRACE, "rpc_process_incoming noresponse" );
 					  c->cstate = RPC_CSTATE_RECVLEN;
 					  c->nstate = RPC_NSTATE_RECV;
+					  if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
 					} else {
 					  rpc_log( RPC_LOG_ERROR, "rpc_process_incoming failed" );
 					  c->cstate = RPC_CSTATE_RECVLEN;
-					  c->nstate = RPC_NSTATE_RECV; 
+					  c->nstate = RPC_NSTATE_RECV;
+					  if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
 					}
 
 				}
@@ -792,6 +799,7 @@ static void rpc_poll( int timeout ) {
 					rpc_conn_close( c );
 					break;
 				}
+				c->cdata.tx += sts;
 				c->cstate = RPC_CSTATE_SEND;
 
 				/* fall through */
@@ -806,11 +814,13 @@ static void rpc_poll( int timeout ) {
 					rpc_conn_close( c );
 					break;
 				}
-
+				c->cdata.tx += sts;
+				
 				c->cdata.offset += sts;
 				if( c->cdata.offset == c->cdata.count ) {
 					c->nstate = RPC_NSTATE_RECV;
 					c->cstate = RPC_CSTATE_RECVLEN;
+					if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
 				}
 				break;
 			case RPC_CSTATE_CONNECT:
@@ -984,6 +994,7 @@ static void rpc_accept( struct rpc_listen *lis ) {
       c->connid = ++rpc.connid;
       c->timestamp = rpc_now();
       c->listen = lis;
+      c->listype = lis->type;
       c->dirtype = RPC_CONN_DIR_INCOMING;
       
 #ifdef WIN32
@@ -1167,7 +1178,22 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 #endif
 	c->cdata.cb = cb;
 	c->cdata.cxt = cxt;
-
+	switch( addr->sa_family ) {
+	case AF_INET:
+	  c->listype = RPC_LISTEN_TCP;
+	  break;
+#ifndef WIN32
+	case AF_UNIX:
+	  c->listype = RPC_LISTEN_UNIX;
+	  break;
+#endif
+	default:
+	  c->listype = 0;
+	  break;
+	}
+	memcpy( &c->addr, addr, alen );
+	c->addrlen = alen;
+	       
 	sts = connect( c->fd, addr, alen );
 	if( sts < 0 ) {
 #ifdef WIN32

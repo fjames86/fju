@@ -1560,7 +1560,7 @@ static void cmdprog_connlist_results( struct xdr_s *xdr ) {
       if( !sts ) sts = xdr_decode_uint32( xdr, &port );
     }
     if( sts ) usage( "xdr error" );
-    printf( "%-8"PRIx64" %-4s %-8s %-8"PRIu64" %-8"PRIu64" %-4s",
+    printf( "%-8"PRIu64" %-4s %-8s %-8"PRIu64" %-8"PRIu64" %-4s",
 	    connid,
 	    dirtype == RPC_CONN_DIR_INCOMING ? "IN" : "OUT",
 	    cstate == RPC_CSTATE_RECVLEN ? "RecvLen" :
@@ -1571,7 +1571,9 @@ static void cmdprog_connlist_results( struct xdr_s *xdr ) {
 	    cstate == RPC_CSTATE_CLOSE ? "Close" :
 	    "Other",
 	    rx, tx,
-	    type == RPC_LISTEN_TCP ? "TCP" : "Other" );
+	    type == RPC_LISTEN_TCP ? "TCP" :
+	    type == RPC_LISTEN_UNIX ? "UNIX" : 
+	    "Other" );
     if( type == RPC_LISTEN_TCP ) {
       strcpy( ip, "" );
       mynet_ntop( addr, ip );

@@ -31,11 +31,22 @@
 #include <fju/raft.h>
 #include <fju/log.h>
 
+#define RAFT_MAX_PINGCXT 32
+struct raft_ping_cxt {
+  struct raft_ping_cxt *next;
+  
+  uint64_t clid;
+  uint64_t hostid;
+  uint64_t termseq;
+};
+
 static struct {  
   struct raft_prop prop;
   uint64_t nextprop;
   struct raft_notify_context *notlist;
   struct log_s log;
+  struct raft_ping_cxt pingcxt[RAFT_MAX_PINGCXT];
+  struct raft_ping_cxt *pingcxt_flist;
 } glob;
 
 static void raft_log( int lvl, char *fmt, ... ) {
@@ -98,12 +109,6 @@ static void raft_transition_follower( struct raft_cluster *cl ) {
 }
 
 
-struct raft_ping_cxt {
-  uint64_t clid;
-  uint64_t hostid;
-  uint64_t termseq;
-};
-
 static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   int sts, b;
   struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)cxt;
@@ -161,7 +166,8 @@ static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
   }
   
  done:
-  free( pcxt );
+  pcxt->next = glob.pingcxt_flist;
+  glob.pingcxt_flist = pcxt;
   
   return;
 }
@@ -176,7 +182,14 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   raft_log( LOG_LVL_TRACE, "raft_call_ping clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
   	   cl->id, hostid, cl->termseq );
 
-  pcxt = malloc( sizeof(*pcxt) );
+  pcxt = glob.pingcxt_flist;
+  if( !pcxt ) {
+    raft_log( LOG_LVL_WARN, "raft_call_ping out of ping descriptors" );
+    return;
+  }
+  glob.pingcxt_flist = pcxt->next;
+  pcxt->next = NULL;
+  
   pcxt->clid = cl->id;
   pcxt->hostid = hostid;
   pcxt->termseq = cl->termseq;
@@ -197,7 +210,9 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint64( &xdr, cl->commitseq );
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
-    free( pcxt );
+    pcxt->next = glob.pingcxt_flist;
+    glob.pingcxt_flist = pcxt;
+
     raft_log( LOG_LVL_ERROR, "raft_call_ping: hrauth_call failed" );
   }
 
@@ -263,7 +278,8 @@ static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
   }
 
  done:
-  free( pcxt );
+  pcxt->next = glob.pingcxt_flist;
+  glob.pingcxt_flist = pcxt;
   
   return;
 }
@@ -278,7 +294,14 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   raft_log( LOG_LVL_TRACE, "raft_call_vote clid=%"PRIx64" hostid=%"PRIx64" termseq=%"PRIu64"",
   	   cl->id, hostid, cl->termseq );
 
-  pcxt = malloc( sizeof(*pcxt) );
+  pcxt = glob.pingcxt_flist;
+  if( !pcxt ) {
+    raft_log( LOG_LVL_WARN, "raft_call_vote out of ping descriptors" );
+    return;
+  }
+  glob.pingcxt_flist = pcxt->next;
+  pcxt->next = NULL;
+
   pcxt->clid = cl->id;
   pcxt->hostid = hostid;
   pcxt->termseq = cl->termseq;
@@ -300,7 +323,9 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint64( &xdr, cl->stateterm );  
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
-    free( pcxt );
+    pcxt->next = glob.pingcxt_flist;
+    glob.pingcxt_flist = pcxt;
+
     raft_log( LOG_LVL_ERROR, "raft_call_vote: hrauth_call failed" );
   }
 
@@ -575,11 +600,13 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
   /* check term seqno */
   if( termseq < cl.termseq ) {
+    raft_log( LOG_LVL_TRACE, "raft_proc_vote decline %"PRIu64" < %"PRIu64"", termseq, cl.termseq );
     xdr_encode_boolean( &inc->xdr, 0 );
     goto done;
   }
 
   if( termseq > cl.termseq ) {
+    raft_log( LOG_LVL_TRACE, "raft_proc_vote immediate follow termseq=%"PRIu64"", termseq );    
     cl.termseq = termseq;
     cl.leaderid = 0;
     raft_transition_follower( &cl );
@@ -589,19 +616,27 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   case RAFT_STATE_FOLLOWER:
     if( (cl.voteid == 0 || cl.voteid == candid) &&
 	(stateseq >= cl.stateseq) ) {
+      // XXX: there is a bug here.stateseq is not being properly incremented? */
+      
+      raft_log( LOG_LVL_TRACE, "raft_proc_vote vote success" );
+      
       xdr_encode_boolean( &inc->xdr, 1 );
       cl.voteid = candid;
       cl.timeout = rpc_now() + term_timeout();
       raft_cluster_set( &cl );
       raft_iter_set_timeout( cl.timeout );
     } else {
+      raft_log( LOG_LVL_TRACE, "raft_proc_vote vote fail voteid=%"PRIx64" stateseq=%"PRIu64" cl.stateseq=%"PRIu64"",
+		cl.voteid, stateseq, cl.stateseq );
       xdr_encode_boolean( &inc->xdr, 0 );
     }
     break;
   case RAFT_STATE_CANDIDATE:
+    raft_log( LOG_LVL_TRACE, "raft_proc_vote declined candidate" );
     xdr_encode_boolean( &inc->xdr, 0 );
     break;
   case RAFT_STATE_LEADER:
+    raft_log( LOG_LVL_TRACE, "raft_proc_vote declined leader" );    
     xdr_encode_boolean( &inc->xdr, 0 );
     break;
   }
@@ -742,6 +777,11 @@ void raft_register( void ) {
   struct raft_cluster cl[32];
   struct raft_member member[32];
   struct hrauth_conn_opts opts;
+
+  for( i = 0; i < RAFT_MAX_PINGCXT; i++ ) {
+    glob.pingcxt[i].next = glob.pingcxt_flist;
+    glob.pingcxt_flist = &glob.pingcxt[i];
+  }
   
   raft_open();
 

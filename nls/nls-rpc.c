@@ -48,9 +48,22 @@
 
 #define NLS_MAX_XDRCOUNT (8*1024)
 
+#define NLS_MAX_READCXT 32
+struct nls_read_cxt {
+  struct nls_read_cxt *next;
+  
+  uint64_t hostid;
+  uint64_t hshare;
+  uint64_t seq;
+  uint64_t lastid;
+  uint64_t tag;
+};
+
 static struct {
   struct nls_prop prop;
   struct log_s log;
+  struct nls_read_cxt ncxt[NLS_MAX_READCXT];
+  struct nls_read_cxt *ncxt_flist;
 } glob;
 
 static uint64_t nls_share_seqno( uint64_t hshare, uint64_t *lastid );
@@ -354,12 +367,6 @@ static int nls_proc_notreg( struct rpc_inc *inc ) {
 
 
 static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint64_t lastid, int xdrcount );
-struct nls_read_cxt {
-  uint64_t hostid;
-  uint64_t hshare;
-  uint64_t seq;
-  uint64_t lastid;
-};
 
 static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   int sts, b;
@@ -472,7 +479,9 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   
  done:
   if( logopen ) log_close( &log );
-  free( cxt );
+
+  nlscxtp->next = glob.ncxt_flist;
+  glob.ncxt_flist = nlscxtp;
 }
 
 /* send a read command to server */
@@ -486,7 +495,14 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   nls_log( LOG_LVL_DEBUG, "nls_call_read hostid=%"PRIx64" hshare=%"PRIx64" seq=%"PRIu64" lastid=%"PRIx64" xdrcount=%u",
 	   hostid, hshare, seq, lastid, xdrcount );
 
-  nlscxtp = malloc( sizeof(*nlscxtp) );
+  nlscxtp = glob.ncxt_flist;
+  if( !nlscxtp ) {
+    nls_log( LOG_LVL_DEBUG, "nls_call_read ouf context descriptors" );
+    return;
+  }
+  glob.ncxt_flist = nlscxtp->next;
+  nlscxtp->next = NULL;
+  
   nlscxtp->hostid = hostid;
   nlscxtp->hshare = hshare;
   nlscxtp->lastid = lastid;
@@ -507,22 +523,18 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   xdr_encode_uint32( &xdr, xdrcount );  
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
-    free( nlscxtp );
+    nlscxtp->next = glob.ncxt_flist;
+    glob.ncxt_flist = nlscxtp;
     nls_log( LOG_LVL_ERROR, "nls_call_read: hrauth_call failed" );
   }
 
 }
 
-struct nls_notreg_cxt {
-  uint64_t hostid;
-  uint64_t hshare;
-};
-
 static void nls_call_notreg_cb( struct xdr_s *xdr, void *cxt ) {
   int sts;
   uint64_t seq;
   struct nls_remote remote;
-  struct nls_notreg_cxt *ncxt = (struct nls_notreg_cxt *)cxt;
+  struct nls_read_cxt *ncxt = (struct nls_read_cxt *)cxt;
   
   if( !xdr ) {
     nls_log( LOG_LVL_ERROR, "nls_call_notreg_cb: timeout" );
@@ -544,7 +556,8 @@ static void nls_call_notreg_cb( struct xdr_s *xdr, void *cxt ) {
   }
   
  done:
-  free( ncxt );
+  ncxt->next = glob.ncxt_flist;
+  glob.ncxt_flist = ncxt;
   return;
 }
 
@@ -556,7 +569,7 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   uint8_t cookie[NLS_MAX_COOKIE];
   uint8_t xdr_buf[64];
   struct hostreg_prop prop;
-  struct nls_notreg_cxt *ncxt;
+  struct nls_read_cxt *ncxt;
   struct nls_remote remote;
   
   nls_log( LOG_LVL_DEBUG, "nls_call_notreg hostid=%"PRIx64" hshare=%"PRIx64"", hostid, hshare );
@@ -569,7 +582,13 @@ static void nls_call_notreg( uint64_t hostid, uint64_t hshare, uint8_t *cookiep 
   
   memset( cookie, 0, sizeof(cookie) );
 
-  ncxt = malloc( sizeof(*ncxt) );
+  ncxt = glob.ncxt_flist;
+  if( !ncxt ) {
+    nls_log( LOG_LVL_DEBUG, "nls_call_notreg ouf context descriptors" );
+    return;
+  }
+  glob.ncxt_flist = ncxt->next;
+  ncxt->next = NULL;
   ncxt->hostid = hostid;
   ncxt->hshare = hshare;
   
@@ -743,16 +762,14 @@ static uint64_t nls_remote_seqno( uint64_t hshare, uint64_t *lastid ) {
   return seq;  
 }
 
-struct nls_notify_cxt {
-    uint64_t hostid;
-    uint64_t hshare;
-    uint64_t tag;
-};
-
 static void nls_notify_cb( struct xdr_s *xdr, void *cxt ) {
     int sts, b;
-    struct nls_notify_cxt *ncxt = (struct nls_notify_cxt *)cxt;
-    
+    struct nls_read_cxt *ncxt = (struct nls_read_cxt *)cxt;
+
+    nls_log( LOG_LVL_DEBUG, "nls_notify_cb %s hostid=%"PRIx64" hshare=%"PRIx64"",
+	     xdr ? "Timeout" : "Success",
+	     ncxt->hostid, ncxt->hshare );
+
     if( !xdr ) goto done;
 
     sts = xdr_decode_boolean( xdr, &b );
@@ -765,7 +782,8 @@ static void nls_notify_cb( struct xdr_s *xdr, void *cxt ) {
     }
     
 done:
-    free( ncxt );
+    ncxt->next = glob.ncxt_flist;
+    glob.ncxt_flist = ncxt;
     return;
 }
 
@@ -776,14 +794,21 @@ static void nls_call_notify( struct nls_notify *notify ) {
   struct xdr_s xdr;
   uint8_t xdr_buf[64];
   struct hostreg_prop prop;
-  struct nls_notify_cxt *ncxt;
+  struct nls_read_cxt *ncxt;
   
   nls_log( LOG_LVL_DEBUG, "nls_call_notify hostid=%"PRIx64" hshare=%"PRIx64"", notify->hostid, notify->hshare );
 
   sts = hostreg_prop( &prop );
   if( sts ) return;
 
-  ncxt = malloc( sizeof(*ncxt) );
+  ncxt = glob.ncxt_flist;
+  if( !ncxt ) {
+    nls_log( LOG_LVL_WARN, "nls_call_notify out of context descriptors" );
+    return;
+  }
+  glob.ncxt_flist = ncxt->next;
+  ncxt->next = NULL;
+  
   ncxt->hostid = notify->hostid;
   ncxt->hshare = notify->hshare;
   ncxt->tag = notify->tag;
@@ -806,7 +831,8 @@ static void nls_call_notify( struct nls_notify *notify ) {
   sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
   if( sts ) {
     nls_log( LOG_LVL_ERROR, "nls_call_notify: hrauth_call failed" );
-    free( ncxt );
+    ncxt->next = glob.ncxt_flist;
+    glob.ncxt_flist = ncxt;
   }
     
 }
@@ -855,6 +881,11 @@ static struct rpc_iterator nls_svr_iter = {
 void nls_register( void ) {
   int i, n;
   struct nls_remote remote[NLS_MAX_REMOTE];
+
+  for( i = 0; i < NLS_MAX_READCXT; i++ ) {
+    glob.ncxt[i].next = glob.ncxt_flist;
+    glob.ncxt_flist = &glob.ncxt[i];
+  }
   
   nls_open();
   hostreg_open();

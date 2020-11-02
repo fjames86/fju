@@ -50,6 +50,24 @@
 
 int cmdprog_register( void );
 
+#if 0
+
+#include <sys/resource.h>
+static void fjud_rusage_iter( struct rpc_iterator *iter ) {
+  struct rusage ru;
+  getrusage( RUSAGE_SELF, &ru );
+  rpc_log( RPC_LOG_INFO, "data rss %"PRIu64"", ru.ru_idrss );
+}
+static struct rpc_iterator rusage_iter =
+  {
+   NULL,
+   0,
+   1000,
+   fjud_rusage_iter,
+   NULL
+  };
+#endif  
+
 static void init_cb( void ) {
   /* 
    * Register programs, auth providers and other initialization. 
@@ -68,6 +86,8 @@ static void init_cb( void ) {
   fvm_rpc_register();
   cht_rsync_initialize();
   cmdprog_register();
+
+  //rpc_iterator_register( &rusage_iter );
 }
 
 /* -------- Setup logging ---------------- */

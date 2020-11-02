@@ -887,7 +887,7 @@ static void rpc_close_connections( void ) {
 			close( c->fd );
 #endif
 			/* invoke callback if required */
-			rpc_log( RPC_LOG_INFO, "Closing connection %"PRIu64"", c->connid );
+			rpc_log( RPC_LOG_DEBUG, "Closing connection %"PRIu64"", c->connid );
 
 			if( prev ) prev->next = c->next;
 			else rpc.clist = c->next;
@@ -1100,7 +1100,7 @@ static void rpcd_run( void ) {
 		now = rpc_now();
 		while( c ) {
 			if( now > (c->timestamp + RPC_CONNECTION_TIMEOUT) ) {
-			        rpc_log( RPC_LOG_INFO, "closing stale connection fd=%d", (int)c->connid );
+			        rpc_log( RPC_LOG_DEBUG, "Closing stale connection fd=%d", (int)c->connid );
 				rpc_conn_close( c );
 			}
 
@@ -1209,7 +1209,7 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 		  goto failure;
 		}
 #endif
-		rpc_log( RPC_LOG_INFO, "connect nonblocking in progress" );
+		rpc_log( RPC_LOG_DEBUG, "connect nonblocking in progress" );
 		c->cstate = RPC_CSTATE_CONNECT;
 		c->nstate = RPC_NSTATE_CONNECT;
 		c->connid = ++rpc.connid;
@@ -1219,7 +1219,7 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 		c->nstate = RPC_NSTATE_RECV;
 		c->connid = ++rpc.connid;
 
-		rpc_log( RPC_LOG_INFO, "connect completed immediately" );
+		rpc_log( RPC_LOG_DEBUG, "connect completed immediately" );
 		if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CONNECT, c );
 	}
 

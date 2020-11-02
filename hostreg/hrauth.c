@@ -686,20 +686,11 @@ static int hrauth_proc_invoke( struct rpc_inc *inc ) {
 
 static int hrauth_proc_nullping( struct rpc_inc *inc ) {
   /* 
-   * this proc does nothing and does not reply. it is used by the tcp 
-   * connection framework to keep connections alive 
+   * this proc does nothing, it is used to keep connections alive 
    */
-
-  struct hrauth_context *hcxt;
-
-  if( inc->pvr && inc->pvr->flavour == RPC_AUTH_HRAUTH ) {
-    hcxt = (struct hrauth_context *)inc->pcxt;
-
-    hrauth_log( LOG_LVL_DEBUG, "Nullping received from %"PRIx64"", hcxt->remoteid );
-    hrauth_reply_tcp( hcxt, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL );
-  }
   
-  return 1;
+  hrauth_log( LOG_LVL_DEBUG, "hrauth_proc_nullping" );
+  return hrauth_reply( inc, NULL );
 }
 
 static struct rpc_proc hrauth_procs[] = {
@@ -1149,7 +1140,6 @@ static void hrauth_conn_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   hc = hrauth_conn_by_hostid( cxt->hcall.hostid );
   if( !hc ) {
     hrauth_log( LOG_LVL_WARN, "hrauth_conn_call_cb unknown connection hostid=%"PRIx64"", cxt->hcall.hostid );
-    return;
   }
 
   /* do anything required with the connection context */
@@ -1282,6 +1272,8 @@ static void hrauth_ping_cb( struct xdr_s *xdr, void *cxt ) {
 static void hrauth_send_ping( struct hrauth_conn *hc ) {
   struct hrauth_call hcall;
   int sts;
+
+  hrauth_log( LOG_LVL_TRACE, "hrauth_send_ping %"PRIx64"", hc->hostid );
   
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hc->hostid;
@@ -1308,7 +1300,7 @@ static void hrauth_conn_iter_cb( struct rpc_iterator *it ) {
     hc = &conndata.conn[i];
     
     if( hc->state == HRAUTH_CONN_DISCONNECTED ) {
-      hrauth_log( LOG_LVL_INFO, "Reconnecting to hostid=%"PRIx64"", hc->hostid );
+      hrauth_log( LOG_LVL_DEBUG, "Reconnecting to hostid=%"PRIx64"", hc->hostid );
       sts = hrauth_connect( hc );
       if( sts ) {
 	hrauth_log( LOG_LVL_ERROR, "Reconnect attempt failed hostid=%"PRIx64"", hc->hostid );
@@ -1320,7 +1312,7 @@ static void hrauth_conn_iter_cb( struct rpc_iterator *it ) {
       conn = rpc_conn_by_connid( hc->connid );      
       now = rpc_now();
       if( conn && ((now - conn->timestamp) >= hc->pingtimeout) ) {
-	hrauth_log( LOG_LVL_INFO, "Connection getting stale, sending ping hostid=%"PRIx64"", hc->hostid );
+	hrauth_log( LOG_LVL_DEBUG, "Connection getting stale, sending ping hostid=%"PRIx64"", hc->hostid );
 
 	hrauth_send_ping( hc );	
       }
@@ -1366,6 +1358,40 @@ static void hrauth_conn_init( void ) {
 
     
 }
+
+
+int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args ) {
+  int sts;
+
+  sts = hrauth_call_tcp_async( hcall, args );
+  if( sts ) sts = hrauth_call_udp_async( hcall, args, NULL );
+  
+  return sts;
+}
+
+int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res ) {
+  struct hrauth_context *hcxt;
+  struct rpcd_active_conn aconn;
+  int sts, handle;
+
+  /* 
+   * if the call was received from a tcp conncection then reply 
+   * back on the corresponding outgoing connection, if any. 
+   * otherwise reply as normal 
+   */
+  rpcd_active_conn( &aconn );
+  if( aconn.conn && inc->pvr && inc->pvr->flavour == RPC_AUTH_HRAUTH ) {
+    hcxt = (struct hrauth_context *)inc->pcxt;
+    sts = hrauth_reply_tcp( hcxt, inc->msg.xid, RPC_ACCEPT_SUCCESS, res );
+    if( !sts ) return 1;
+  }
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  if( res) xdr_encode_fixed( &inc->xdr, res->buf, res->offset );
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
 
 /* ---------------------- synchronous calls ------------------ */
 

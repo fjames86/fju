@@ -22,7 +22,18 @@
  * SOFTWARE.
  * 
 */
- 
+
+
+
+/* 
+ * XXX needs rewriting. need to associate a log with each cluster
+ * 
+ */
+
+
+
+
+
 #ifndef RAFT_H
 #define RAFT_H
 

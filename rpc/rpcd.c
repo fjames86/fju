@@ -1240,6 +1240,10 @@ failure:
 }
 
 int rpc_send( struct rpc_conn *c, int count ) {
+  int sts;
+  char tmpbuf[4];
+  struct xdr_s tmpx;
+  
   /* unless the connection is idle we can't start sending */
   if( c->cstate != RPC_CSTATE_RECVLEN ) return -1;
   
@@ -1247,6 +1251,44 @@ int rpc_send( struct rpc_conn *c, int count ) {
   c->nstate = RPC_NSTATE_SEND;
   c->cdata.count = count;
   c->cdata.offset = 0;
+
+  /* optimistically send count */
+  xdr_init( &tmpx, (uint8_t *)tmpbuf, 4 );
+  xdr_encode_uint32( &tmpx, c->cdata.count | 0x80000000 );
+  c->timestamp = rpc_now();
+  
+  sts = send( c->fd, tmpbuf, 4, 0 );
+  if( sts < 0 ) {
+#ifdef WIN32
+    if( WSAGetLastError() == WSAEWOULDBLOCK ) return 0;
+#else
+    if( (errno == EAGAIN) || (errno == EINTR) ) return 0;
+#endif
+    rpc_conn_close( c );
+    return 0;
+  }
+  c->cdata.tx += sts;
+  
+  c->cstate = RPC_CSTATE_SEND;
+  sts = send( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
+  if( sts < 0 ) {
+#ifdef WIN32
+    if( WSAGetLastError() == WSAEWOULDBLOCK ) return 0;
+#else
+    if( (errno == EAGAIN) || (errno == EINTR) ) return 0;
+#endif
+    rpc_conn_close( c );
+    return 0;
+  }
+  c->cdata.tx += sts;
+  
+  c->cdata.offset += sts;
+  if( c->cdata.offset == c->cdata.count ) {
+    c->nstate = RPC_NSTATE_RECV;
+    c->cstate = RPC_CSTATE_RECVLEN;
+    if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
+  }
+  
   return 0;
 }
 

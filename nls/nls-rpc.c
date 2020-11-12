@@ -368,7 +368,7 @@ static int nls_proc_notreg( struct rpc_inc *inc ) {
 
 static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint64_t lastid, int xdrcount );
 
-static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
+static void nls_read_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   int sts, b;
   struct log_s log;
   uint64_t id, lastid, previd, seq;
@@ -377,7 +377,7 @@ static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
   int lenp;
   struct log_entry e;
   struct log_iov iov[1];
-  struct nls_read_cxt *nlscxtp = (struct nls_read_cxt *)cxt;
+  struct nls_read_cxt *nlscxtp = (struct nls_read_cxt *)hcallp->cxt;
   int logopen = 0;
   struct nls_remote remote;
   struct nls_share rshare;
@@ -530,11 +530,11 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
 
 }
 
-static void nls_call_notreg_cb( struct xdr_s *xdr, void *cxt ) {
+static void nls_call_notreg_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   int sts;
   uint64_t seq;
   struct nls_remote remote;
-  struct nls_read_cxt *ncxt = (struct nls_read_cxt *)cxt;
+  struct nls_read_cxt *ncxt = (struct nls_read_cxt *)hcallp->cxt;
   
   if( !xdr ) {
     nls_log( LOG_LVL_ERROR, "nls_call_notreg_cb: timeout" );
@@ -762,9 +762,9 @@ static uint64_t nls_remote_seqno( uint64_t hshare, uint64_t *lastid ) {
   return seq;  
 }
 
-static void nls_notify_cb( struct xdr_s *xdr, void *cxt ) {
+static void nls_notify_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
     int sts, b;
-    struct nls_read_cxt *ncxt = (struct nls_read_cxt *)cxt;
+    struct nls_read_cxt *ncxt = (struct nls_read_cxt *)hcallp->cxt;
 
     nls_log( LOG_LVL_DEBUG, "nls_notify_cb %s hostid=%"PRIx64" hshare=%"PRIx64"",
 	     xdr ? "Timeout" : "Success",

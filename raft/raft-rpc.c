@@ -109,9 +109,9 @@ static void raft_transition_follower( struct raft_cluster *cl ) {
 }
 
 
-static void raft_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
+static void raft_call_ping_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   int sts, b;
-  struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)cxt;
+  struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)hcallp->cxt;
   struct raft_member member;
   uint64_t termseq, commitseq;
   struct raft_cluster cl;
@@ -226,9 +226,9 @@ struct raft_vote_cxt {
   uint64_t termseq;
 };
 
-static void raft_call_vote_cb( struct xdr_s *xdr, void *cxt ) {
+static void raft_call_vote_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   int sts, b;
-  struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)cxt;
+  struct raft_ping_cxt *pcxt = (struct raft_ping_cxt *)hcallp->cxt;
   struct raft_member member;
   struct raft_cluster cl;
   uint64_t termseq;

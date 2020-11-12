@@ -64,5 +64,8 @@
 #define CHT_RSYNC_RPC_PROG (FJU_BASE_PROG + 8)
 #define CHT_RSYNC_RPC_VERS 1
 
+#define RAFT2_RPC_PROG (FJU_BASE_PROG + 9)
+#define RAFT2_RPC_VERS 1
+
 #endif
 

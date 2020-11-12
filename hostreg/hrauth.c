@@ -740,7 +740,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   /* check for timeout */
   if( !inc ) {
     hrauth_log( LOG_LVL_TRACE, "hrauth_call_cb: XID=%u timeout", w->xid );
-    hcallp->donecb( NULL, hcallp->cxt );
+    hcallp->donecb( NULL, hcallp );
     goto done;
   }
 
@@ -748,12 +748,12 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   sts = rpc_process_reply( inc );
   if( sts ) {
     hrauth_log( LOG_LVL_TRACE, "hrauth_call_cb: failed processing reply reply.tag=%d reply.accept.tag=%d", inc->msg.u.reply.tag, inc->msg.u.reply.u.accept.tag );
-    hcallp->donecb( NULL, hcallp->cxt );
+    hcallp->donecb( NULL, hcallp );
     goto done;
   }
 
   /* invoke callback */
-  hcallp->donecb( &inc->xdr, hcallp->cxt );
+  hcallp->donecb( &inc->xdr, hcallp );
   
  done:
   free( w );         /* free waiter plus other state */
@@ -871,8 +871,8 @@ struct hrauth_proxy_cxt {
   struct rpc_reply_data rdata;
 };
 
-static void hrauth_proxy_udp_cb( struct xdr_s *xdr, void *cxt ) {
-  struct hrauth_proxy_cxt *pcxt = (struct hrauth_proxy_cxt *)cxt;
+static void hrauth_proxy_udp_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+  struct hrauth_proxy_cxt *pcxt = (struct hrauth_proxy_cxt *)hcallp->cxt;
   struct rpc_listen *listen;
   int handle;
   struct rpc_inc inc;
@@ -1265,7 +1265,7 @@ int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat,
 
 
 
-static void hrauth_ping_cb( struct xdr_s *xdr, void *cxt ) {
+static void hrauth_ping_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   hrauth_log( LOG_LVL_TRACE, "hrauth ping %s", xdr ? "timeout" : "success" );
 }
 
@@ -1387,7 +1387,7 @@ int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res ) {
   }
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  if( res) xdr_encode_fixed( &inc->xdr, res->buf, res->offset );
+  if( res ) xdr_encode_fixed( &inc->xdr, res->buf, res->offset );
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }

@@ -984,8 +984,8 @@ struct ping_cxt {
   uint64_t stateseq;
 };
 
-static void fvm_call_ping_donecb( struct xdr_s *xdr, void *cxt ) {
-  struct ping_cxt *p = (struct ping_cxt *)cxt;
+static void fvm_call_ping_donecb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+  struct ping_cxt *p = (struct ping_cxt *)hcallp->cxt;
   int sts, b;
   struct raft_cluster cl;
   struct raft_member member;
@@ -1066,8 +1066,8 @@ struct write_cxt {
   uint32_t timeout;
 };
 
-static void fvm_call_write_donecb( struct xdr_s *xdr, void *cxt ) {
-  struct write_cxt *w = (struct write_cxt *)cxt;
+static void fvm_call_write_donecb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+  struct write_cxt *w = (struct write_cxt *)hcallp->cxt;
   struct raft_cluster cl;
   struct fvm_module *m;
   int sts;

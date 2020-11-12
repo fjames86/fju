@@ -149,8 +149,8 @@ struct rex_ping_cxt {
   uint64_t stateseq;
 };
 
-static void rex_call_ping_cb( struct xdr_s *xdr, void *cxt ) {
-  struct rex_ping_cxt *pcxt = (struct rex_ping_cxt *)cxt;
+static void rex_call_ping_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+  struct rex_ping_cxt *pcxt = (struct rex_ping_cxt *)hcallp->cxt;
   int sts;
   struct raft_member member;
   struct raft_cluster cl;

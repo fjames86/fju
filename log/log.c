@@ -540,7 +540,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   e->msglen = msglen;
   e->prev_id = hdr->last_id;
   e->seq = hdr->seq;
-  e->ltag = log->ltag;
+  e->ltag = log->ltag ? log->ltag : entry->ltag;
   hdr->last_id = e->id;
 
   entry->id = e->id;

@@ -91,8 +91,9 @@ struct hrauth_call {
   uint32_t prog;
   uint32_t vers;
   uint32_t proc;
-  void (*donecb)( struct xdr_s *res, void *cxt );
-  void *cxt;
+  void (*donecb)( struct xdr_s *res, struct hrauth_call *hcallp );
+  void *cxt;  /* private data */
+  uint64_t cxt2; /* more private data */
   int timeout;
   int service;
 };
@@ -154,6 +155,7 @@ struct hrauth_conn_opts {
 int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts );
 int hrauth_conn_unregister( uint64_t hostid );
 int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args );
+int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args );
 int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat, struct xdr_s *res );
 int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res );
 

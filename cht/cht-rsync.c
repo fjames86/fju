@@ -47,9 +47,9 @@ static struct cht_rsync_context *cht_rsync_by_hshare( uint64_t hshare, int type 
   return NULL;
 }
 
-static void call_read_donecb( struct xdr_s *xdr, void *pcxt ) {
+static void call_read_donecb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   /* write result back into local table */
-  struct cht_rsync_context *cxt = (struct cht_rsync_context *)pcxt;
+  struct cht_rsync_context *cxt = (struct cht_rsync_context *)hcallp->cxt;
   struct cht_entry entry;
   char *bufp;
   int lenp, sts, b;

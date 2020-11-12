@@ -151,5 +151,26 @@ int log_set_lvl( struct log_s *log, int lvl );
 /* set log cookie */
 int log_set_cookie( struct log_s *log, char *cookie, int size );
 
+#define log_deflogger(_name,_tag) \
+int _name( int lvl, char *fmt, ... ) {\
+  va_list args;\
+  struct log_entry entry;\
+  struct log_iov iov[1];\
+  char buf[1024];\
+\
+  va_start(args,fmt);\
+  vsnprintf( buf, sizeof(buf) - 1, fmt, args );  \
+  va_end(args);\
+  memset( &entry, 0, sizeof(entry) );\
+  iov[0].buf = buf;\
+  iov[0].len = (int)strlen( buf );\
+  entry.iov = iov;\
+  entry.niov = 1;\
+  entry.flags = lvl & (~LOG_BINARY);\
+  entry.ltag = _tag;\
+  return log_write( NULL, &entry );  \
+}
+ 
+
 #endif
 

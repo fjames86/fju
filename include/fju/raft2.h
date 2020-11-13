@@ -88,7 +88,7 @@ struct raft2_app {
   /* apply command to state machine */
   void (*command)( struct raft2_cluster *cl, char *buf, int len );
 };
-void raft2_app_register( struct raft2_app *app );
+int raft2_app_register( struct raft2_app *app );
 
 /* 
  * Start process of initiating command:

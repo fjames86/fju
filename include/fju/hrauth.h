@@ -142,7 +142,7 @@ int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s
  * reply only be sending back a new call on the outgoing connection.
  * 
  */
-#define HRAUTH_CONN_PINGTIMEOUT (10000)
+#define HRAUTH_CONN_PINGTIMEOUT (30000)
 
 struct hrauth_conn_opts {
   uint32_t mask;

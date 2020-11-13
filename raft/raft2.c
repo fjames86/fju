@@ -24,6 +24,7 @@ static struct {
   struct raft2_prop prop;
   struct raft2_cluster cl[RAFT2_MAX_CLUSTER];
   uint32_t ncl;
+  struct raft2_app *app;
 } glob;
 
 static uint64_t raft2_term_timeout( void ) {
@@ -218,6 +219,7 @@ static void raft2_convert_follower( struct raft2_cluster *cl, uint64_t term, uin
 static void raft2_convert_candidate( struct raft2_cluster *cl );
 static void raft2_convert_leader( struct raft2_cluster *cl );
 static void raft2_set_iter_timeout( void );
+static struct raft2_app *raft2_app_by_appid( uint32_t appid );
 
 static struct raft2_cluster *cl_by_id( uint64_t clid ) {
   int i;
@@ -233,12 +235,15 @@ static void raft2_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   struct raft2_member *mp;
   int i, success, sts;
   
-  raft2_log( LOG_LVL_TRACE, "Ping %s", res ? "Timeout" : "Success" );
+  raft2_log( LOG_LVL_TRACE, "raft2_ping_cb %s", res ? "Success" : "Timeout" );
   if( !res ) return;
   
   clid = hcallp->cxt2;
   cl = cl_by_id( clid );
-  if( !cl ) return;
+  if( !cl ) {
+    raft2_log( LOG_LVL_TRACE, "Unknown cluster" );
+    return;
+  }
   hostid = hcallp->hostid;
 
   mp = NULL;
@@ -259,11 +264,15 @@ static void raft2_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
     raft2_log( LOG_LVL_ERROR, "Xdr decode error" );
     return;
   }
-  
+
+  raft2_log( LOG_LVL_TRACE, "raft2_vote_cb success=%s term=%"PRIu64"", success ? "true" : "false", term );
   if( term > cl->term ) {
+    raft2_log( LOG_LVL_TRACE, "Remote term higher - convert to follower" );
+    raft2_convert_follower( cl, term, hcallp->hostid );
   }
   
   if( !success ) {
+    raft2_log( LOG_LVL_TRACE, "ping rejected" );
   }
   
   mp->lastseen = time( NULL );
@@ -271,7 +280,7 @@ static void raft2_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   return;  
 }
 
-static void raft2_call_ping( struct raft2_cluster *cl, uint64_t hostid ) {
+static void raft2_call_ping( struct raft2_cluster *cl, uint64_t hostid, uint64_t nextseq ) {
   struct hrauth_call hcall;
   struct xdr_s args;
   char argbuf[256];
@@ -284,7 +293,7 @@ static void raft2_call_ping( struct raft2_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint64( &args, cl->term ); /* current term */
   xdr_encode_uint64( &args, cl->seq ); /* current seq */
   xdr_encode_uint64( &args, cl->commitseq ); /* leaders commit seq */
-  xdr_encode_uint64( &args, 0 ); /* next command seq */
+  xdr_encode_uint64( &args, nextseq ); /* next command seq */
 
 
   memset( &hcall, 0, sizeof(hcall) );
@@ -308,7 +317,7 @@ static void raft2_call_ping( struct raft2_cluster *cl, uint64_t hostid ) {
 static void raft2_send_pings( struct raft2_cluster *cl ) {
   int i;
   for( i = 0; i < cl->nmember; i++ ) {
-    raft2_call_ping( cl, cl->member[i].hostid );
+    raft2_call_ping( cl, cl->member[i].hostid, 0 );
   }
 }
 
@@ -318,7 +327,7 @@ static void raft2_vote_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   struct raft2_member *mp;
   int i, success, sts, count;
   
-  raft2_log( LOG_LVL_DEBUG, "raft2_vote_cb %s", res ? "timeout" : "success" );
+  raft2_log( LOG_LVL_DEBUG, "raft2_vote_cb %s", res ? "Success" : "timeout" );
   if( !res ) return;
   
   clid = hcallp->cxt2;
@@ -402,11 +411,16 @@ static void raft2_call_vote( struct raft2_cluster *cl, uint64_t hostid ) {
 }
 
 static void raft2_convert_follower( struct raft2_cluster *cl, uint64_t term, uint64_t leaderid ) {
+  int i;
+  
   raft2_log( LOG_LVL_INFO, "Convert to follower term=%"PRIu64" leader=%"PRIx64"", term, leaderid );  
   cl->state = RAFT2_STATE_FOLLOWER;
   cl->term = term;
   cl->timeout = raft2_term_timeout();
   cl->leaderid = leaderid;
+  for( i = 0; i < cl->nmember; i++ ) {
+    cl->member[i].flags &= ~RAFT2_MEMBER_VOTED;
+  }
   raft2_cluster_set( cl );
   raft2_set_iter_timeout();
 }
@@ -427,11 +441,17 @@ static void raft2_convert_candidate( struct raft2_cluster *cl ) {
 }
 
 static void raft2_convert_leader( struct raft2_cluster *cl ) {
+  int i;
+  
   raft2_log( LOG_LVL_INFO, "Convert to leader" );
 
   cl->state = RAFT2_STATE_LEADER;
   cl->timeout = rpc_now() + glob.prop.term_low;
   cl->leaderid = hostreg_localid();
+  for( i = 0; i < cl->nmember; i++ ) {
+    cl->member[i].flags &= ~RAFT2_MEMBER_VOTED;
+  }
+  
   raft2_send_pings( cl );
   raft2_cluster_set( cl );
   raft2_set_iter_timeout();  
@@ -459,6 +479,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   struct hrauth_context *hc;
   struct xdr_s res;
   char resbuf[16];
+  struct raft2_app *app;
   
   /* we can guarantee this because we set a mandatory authenticator */
   hc = (struct hrauth_context *)inc->pcxt;
@@ -520,6 +541,10 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
       /* Lookup command buffer, break if not found */
 
       /* Apply command buffer */
+      app = raft2_app_by_appid( clp->appid );
+      if( app ) {
+	app->command( clp, NULL, 0 );
+      }
       
       clp->seq = s;
       raft2_cluster_set( clp );
@@ -528,6 +553,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
 
   clp->leaderid = hostid;
   clp->timeout = raft2_term_timeout();
+  clp->state = RAFT2_STATE_FOLLOWER;
   raft2_cluster_set( clp );
   success = 1;
 
@@ -723,4 +749,63 @@ void raft2_register( void ) {
 
   rpc_program_register( &raft_prog );
   rpc_iterator_register( &raft2_iter );
+}
+
+int raft2_app_register( struct raft2_app *app ) {
+  struct raft2_app *ap;
+  ap = glob.app;
+  while( ap ) {
+    if( ap == app ) return -1;
+    ap = ap->next;
+  }
+  app->next = glob.app;
+  glob.app = app;
+  return 0;    
+}
+
+static struct raft2_app *raft2_app_by_appid( uint32_t appid ) {
+  struct raft2_app *app;
+  app = glob.app;
+  while( app ) {
+    if( app->appid == appid ) return app;
+    app = app->next;
+  }
+  return NULL;
+}
+    
+  
+
+int raft2_cluster_command( uint64_t clid, char *buf, int len ) {
+  struct raft2_cluster *cl;
+  int i;
+  struct raft2_app *app;
+  
+  /* lookup cluster */
+  cl = cl_by_id( clid );
+  if( !cl ) return -1;
+
+  /* reject if not leader */
+  if( cl->state != RAFT2_STATE_LEADER ) return -1;
+
+  /* distribute buffer */
+  /* TODO */
+
+  /* note: the following needs to be in the distribute completion routine */
+  
+  /* distribute seq increase */
+  for( i = 0; i < cl->nmember; i++ ) {
+    raft2_call_ping( cl, cl->member[i].hostid, cl->seq + 1 );
+  }
+
+  /* save increase */
+  cl->seq++;
+  raft2_cluster_set( cl );
+
+  /* apply command */
+  app = raft2_app_by_appid( cl->appid );
+  if( app ) {
+    app->command( cl, buf, len );
+  }
+
+  return 0;
 }

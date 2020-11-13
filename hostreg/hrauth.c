@@ -1364,7 +1364,11 @@ int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args ) {
   int sts;
 
   sts = hrauth_call_tcp_async( hcall, args );
-  if( sts ) sts = hrauth_call_udp_async( hcall, args, NULL );
+  if( sts ) {
+    hrauth_log( LOG_LVL_ERROR, "hrauth_call_tcp_async failed" );
+    sts = hrauth_call_udp_async( hcall, args, NULL );
+    if( sts ) hrauth_log( LOG_LVL_ERROR, "hrauth_call_udp_async failed" );
+  }
   
   return sts;
 }
@@ -1381,9 +1385,11 @@ int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res ) {
    */
   rpcd_active_conn( &aconn );
   if( aconn.conn && inc->pvr && inc->pvr->flavour == RPC_AUTH_HRAUTH ) {
+    hrauth_log( LOG_LVL_TRACE, "hrauth_reply sending reply on outgoing conn" );
     hcxt = (struct hrauth_context *)inc->pcxt;
     sts = hrauth_reply_tcp( hcxt, inc->msg.xid, RPC_ACCEPT_SUCCESS, res );
     if( !sts ) return 1;
+    hrauth_log( LOG_LVL_TRACE, "hrauth_reply_tcp failed" );
   }
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );

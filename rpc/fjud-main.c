@@ -43,6 +43,7 @@
 #include <fju/lic.h>
 #include <fju/hostreg.h>
 #include <fju/lic.h>
+#include <fju/raft2.h>
 
 #include "rpc-private.h"
 
@@ -80,13 +81,15 @@ static void init_cb( void ) {
    * These could be moved out to separate modules and dynamically loaded but for now 
    * they are included in libfju so can be called directly from here.
    */     
-  raft_register();
+  //raft_register();
   nls_register();
   freg_register();
   fvm_rpc_register();
   cht_rsync_initialize();
   cmdprog_register();
 
+  raft2_register();
+  
   //rpc_iterator_register( &rusage_iter );
 }
 

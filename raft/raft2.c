@@ -214,9 +214,10 @@ int raft2_cluster_rem( uint64_t clid ) {
 
 /* ------------ rpc -------------------- */
 
-static void raft2_convert_follower( struct raft2_cluster *cl, uint64_t term );
+static void raft2_convert_follower( struct raft2_cluster *cl, uint64_t term, uint64_t leaderid );
 static void raft2_convert_candidate( struct raft2_cluster *cl );
 static void raft2_convert_leader( struct raft2_cluster *cl );
+static void raft2_set_iter_timeout( void );
 
 static struct raft2_cluster *cl_by_id( uint64_t clid ) {
   int i;
@@ -233,7 +234,8 @@ static void raft2_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   int i, success, sts;
   
   raft2_log( LOG_LVL_TRACE, "Ping %s", res ? "Timeout" : "Success" );
-
+  if( !res ) return;
+  
   clid = hcallp->cxt2;
   cl = cl_by_id( clid );
   if( !cl ) return;
@@ -257,14 +259,14 @@ static void raft2_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
     raft2_log( LOG_LVL_ERROR, "Xdr decode error" );
     return;
   }
-
+  
   if( term > cl->term ) {
   }
-
+  
   if( !success ) {
   }
   
-  mp->lastseen = rpc_now();
+  mp->lastseen = time( NULL );
   raft2_cluster_set( cl );
   return;  
 }
@@ -277,6 +279,12 @@ static void raft2_call_ping( struct raft2_cluster *cl, uint64_t hostid ) {
   
   xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
   /* encode args */
+  xdr_encode_uint64( &args, cl->clid );
+  xdr_encode_uint64( &args, cl->leaderid ); /* leaderid (must match sender id!) */
+  xdr_encode_uint64( &args, cl->term ); /* current term */
+  xdr_encode_uint64( &args, cl->seq ); /* current seq */
+  xdr_encode_uint64( &args, cl->commitseq ); /* leaders commit seq */
+  xdr_encode_uint64( &args, 0 ); /* next command seq */
 
 
   memset( &hcall, 0, sizeof(hcall) );
@@ -290,7 +298,7 @@ static void raft2_call_ping( struct raft2_cluster *cl, uint64_t hostid ) {
   hcall.service = HRAUTH_SERVICE_PRIV;
   sts = hrauth_call_async( &hcall, &args );
   if( sts ) {
-    raft2_log( LOG_LVL_ERROR, "hrauth_call failed" );
+    raft2_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
     return;
   }
 
@@ -310,11 +318,15 @@ static void raft2_vote_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   struct raft2_member *mp;
   int i, success, sts, count;
   
-  raft2_log( LOG_LVL_DEBUG, "vote %s", res ? "timeout" : "success" );
-
+  raft2_log( LOG_LVL_DEBUG, "raft2_vote_cb %s", res ? "timeout" : "success" );
+  if( !res ) return;
+  
   clid = hcallp->cxt2;
   cl = cl_by_id( clid );
-  if( !cl ) return;
+  if( !cl ) {
+    raft2_log( LOG_LVL_TRACE, "Unknown cluster %"PRIx64"", clid );
+    return;
+  }
   hostid = hcallp->hostid;
 
   mp = NULL;
@@ -337,19 +349,23 @@ static void raft2_vote_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   }
 
   if( term > cl->term ) {
-    raft2_convert_follower( cl, term );
+    raft2_log( LOG_LVL_TRACE, "Vote returned newer term - convert to follower" );
+    raft2_convert_follower( cl, term, hostid );
   } else if( success ) {
     mp->flags |= RAFT2_MEMBER_VOTED;
     count = 1;
     for( i = 0; i < cl->nmember; i++ ) {
       if( cl->member[i].flags & RAFT2_MEMBER_VOTED ) count++;
     }
-    if( count >= (cl->nmember + 1) / 2 ) {
+
+    raft2_log( LOG_LVL_TRACE, "Vote success count=%u", count );
+    if( count >= (((cl->nmember + 1) / 2) + 1) ) {
+      raft2_log( LOG_LVL_TRACE, "Sufficient votes received - convert to leader" );
       raft2_convert_leader( cl );
     }
   }
   
-  mp->lastseen = rpc_now();
+  mp->lastseen = time( NULL );
   raft2_cluster_set( cl );
   return;  
 }
@@ -362,7 +378,10 @@ static void raft2_call_vote( struct raft2_cluster *cl, uint64_t hostid ) {
   
   xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
   /* encode args */
-
+  xdr_encode_uint64( &args, cl->clid );
+  xdr_encode_uint64( &args, hostreg_localid() ); /* leaderid (must match sender id!) */
+  xdr_encode_uint64( &args, cl->term ); /* current term */
+  xdr_encode_uint64( &args, cl->seq ); /* current seq */
 
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
@@ -375,19 +394,21 @@ static void raft2_call_vote( struct raft2_cluster *cl, uint64_t hostid ) {
   hcall.service = HRAUTH_SERVICE_PRIV;
   sts = hrauth_call_async( &hcall, &args );
   if( sts ) {
-    raft2_log( LOG_LVL_ERROR, "hrauth_call failed" );
+    raft2_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
     return;
   }
 
   
 }
 
-static void raft2_convert_follower( struct raft2_cluster *cl, uint64_t term ) {
-  raft2_log( LOG_LVL_INFO, "Convert to follower" );  
+static void raft2_convert_follower( struct raft2_cluster *cl, uint64_t term, uint64_t leaderid ) {
+  raft2_log( LOG_LVL_INFO, "Convert to follower term=%"PRIu64" leader=%"PRIx64"", term, leaderid );  
   cl->state = RAFT2_STATE_FOLLOWER;
   cl->term = term;
   cl->timeout = raft2_term_timeout();
+  cl->leaderid = leaderid;
   raft2_cluster_set( cl );
+  raft2_set_iter_timeout();
 }
 
 static void raft2_convert_candidate( struct raft2_cluster *cl ) {
@@ -396,20 +417,24 @@ static void raft2_convert_candidate( struct raft2_cluster *cl ) {
   cl->state = RAFT2_STATE_CANDIDATE;
   cl->term++;
   cl->timeout = raft2_elec_timeout();
+  cl->leaderid = 0;
   for( i = 0; i < cl->nmember; i++ ) {
     cl->member[i].flags &= ~RAFT2_MEMBER_VOTED;
     raft2_call_vote( cl, cl->member[i].hostid );
   }
   raft2_cluster_set( cl );
+  raft2_set_iter_timeout();  
 }
 
 static void raft2_convert_leader( struct raft2_cluster *cl ) {
   raft2_log( LOG_LVL_INFO, "Convert to leader" );
 
   cl->state = RAFT2_STATE_LEADER;
-  cl->timeout = glob.prop.term_low;
+  cl->timeout = rpc_now() + glob.prop.term_low;
+  cl->leaderid = hostreg_localid();
   raft2_send_pings( cl );
   raft2_cluster_set( cl );
+  raft2_set_iter_timeout();  
 }
 
 
@@ -447,6 +472,9 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &nextseq ); /* next command seq */
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
+  raft2_log( LOG_LVL_TRACE, "raft2_proc_ping clid=%"PRIx64" leaderid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64" commitseq=%"PRIu64" nextseq=%"PRIu64"",
+	     clid, hostid, term, seq, commitseq, nextseq );
+  
   if( hc->remoteid != hostid ) {
     /* sender is different to claimed leader */
     raft2_log( LOG_LVL_WARN, "Remoteid mismatch" );
@@ -464,8 +492,8 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
 
   if( term > clp->term ) {
     /* term increased, convert to follower */
-    raft2_log( LOG_LVL_INFO, "Term incresed - Convert to follower" );
-    raft2_convert_follower( clp, term );
+    raft2_log( LOG_LVL_INFO, "Term incresed - Convert to follower %"PRIx64"", hostid );
+    raft2_convert_follower( clp, term, hostid );
   }
 
   if( seq > clp->seq ) {
@@ -498,6 +526,9 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
     }
   }
 
+  clp->leaderid = hostid;
+  clp->timeout = raft2_term_timeout();
+  raft2_cluster_set( clp );
   success = 1;
 
  done:
@@ -528,6 +559,9 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq ); /* current seq */
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
+  raft2_log( LOG_LVL_TRACE, "raft2_proc_vote clid=%"PRIx64" leaderid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64"",
+	     clid, hostid, term, seq );
+  
   if( hc->remoteid != hostid ) {
     /* sender is different to claimed leader */
     raft2_log( LOG_LVL_WARN, "Remoteid mismatch" );
@@ -607,10 +641,10 @@ static struct rpc_program raft_prog = {
 
 
 static void raft2_iter_cb( struct rpc_iterator *iter ) {
-  uint64_t now, to;
+  uint64_t now;
   int i, j;
   
-  raft2_log( LOG_LVL_TRACE, "raft2 iterator" );
+  //raft2_log( LOG_LVL_TRACE, "raft2 iterator" );
   raft2_prop( &glob.prop );
   glob.ncl = raft2_cluster_list( glob.cl, RAFT2_MAX_CLUSTER );
 
@@ -628,14 +662,17 @@ static void raft2_iter_cb( struct rpc_iterator *iter ) {
       switch( glob.cl[i].state ) {
       case RAFT2_STATE_FOLLOWER:
 	/* term timeout - convert to candidate */
+	raft2_log( LOG_LVL_TRACE, "Term timeout - convert to candidate" );
 	raft2_convert_candidate( &glob.cl[i] );
 	break;
       case RAFT2_STATE_CANDIDATE:
 	/* election timeout - start new election */
+	raft2_log( LOG_LVL_TRACE, "Election timeout - new election" );
 	raft2_convert_candidate( &glob.cl[i] );
 	break;
       case RAFT2_STATE_LEADER:
 	/* send pings to keep term alive */
+	raft2_log( LOG_LVL_TRACE, "Send pings to keep term alive" );
 	raft2_send_pings( &glob.cl[i] );
 	glob.cl[i].timeout = rpc_now() + glob.prop.term_low;
 	raft2_cluster_set( &glob.cl[i] );
@@ -645,11 +682,7 @@ static void raft2_iter_cb( struct rpc_iterator *iter ) {
   }
 
   /* set timeout to min cluster timeout */
-  to = iter->timeout;
-  for( i = 0; i < glob.ncl; i++ ) {
-    if( glob.cl[i].timeout < to ) to = glob.cl[i].timeout;
-  }
-  iter->timeout = to;
+  raft2_set_iter_timeout();
 }
 
 
@@ -662,10 +695,32 @@ static struct rpc_iterator raft2_iter =
    NULL
   };
 
+static void raft2_set_iter_timeout( void ) {
+  int i;
+  uint64_t to;
+  
+  /* set timeout to min cluster timeout */
+  to = raft2_iter.timeout;
+  for( i = 0; i < glob.ncl; i++ ) {
+    if( glob.cl[i].timeout < to ) to = glob.cl[i].timeout;
+  }
+  raft2_iter.timeout = to;  
+}
+
+
 void raft2_register( void ) {
+  int i;
+  
   raft2_open();
   glob.ncl = raft2_cluster_list( glob.cl, RAFT2_MAX_CLUSTER );
-  
+
+  /* initiaze by immediately going into follower state */
+  for( i = 0; i < glob.ncl; i++ ) {
+    glob.cl[i].state = RAFT2_STATE_FOLLOWER;
+    glob.cl[i].timeout = 0;
+    raft2_cluster_set( &glob.cl[i] );
+  }
+
   rpc_program_register( &raft_prog );
   rpc_iterator_register( &raft2_iter );
 }

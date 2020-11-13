@@ -46,7 +46,7 @@
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
             "          add cluster [clid=ID] [typeid=TYPEID] [witness=true|false]\n"
-            "          set cluster ID [typeid=TYPEID] [witness=true|false]\n"
+            "          set cluster ID [appid=TYPEID] [witness=true|false]\n"
             "          rem cluster ID\n"
             "          add member [clid=CLID] [hostid=HOSTID]\n"
             "          set member\n"

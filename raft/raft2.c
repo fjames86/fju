@@ -94,6 +94,28 @@ int raft2_prop( struct raft2_prop *prop ) {
   return 0;
 }
 
+int raft2_prop_set( uint32_t mask, struct raft2_prop *prop ) {
+  if( !glob.ocount ) return -1;
+  raft2_lock();
+  if( mask & RAFT2_PROP_ELEC_LOW ) {
+    glob.file->prop.elec_low = prop->elec_low;
+  }
+  if( mask & RAFT2_PROP_ELEC_HIGH ) {
+    glob.file->prop.elec_high = prop->elec_high;
+  }
+  if( mask & RAFT2_PROP_TERM_LOW ) {
+    glob.file->prop.term_low = prop->term_low;
+  }
+  if( mask & RAFT2_PROP_TERM_HIGH ) {
+    glob.file->prop.term_high = prop->term_high;
+  }
+  if( mask & RAFT2_PROP_RPC_TIMEOUT ) {
+    glob.file->prop.rpc_timeout = prop->rpc_timeout;
+  }
+  raft2_unlock();
+  return 0;
+}  
+
 
 /* database functions */
 int raft2_cluster_list( struct raft2_cluster *cl, int ncl ) {
@@ -140,9 +162,12 @@ int raft2_cluster_by_clid( uint64_t clid, struct raft2_cluster *cl ) {
 int raft2_cluster_set( struct raft2_cluster *cl ) {
   int i, sts;
 
+  if( !cl->clid ) sec_rand( &cl->clid, sizeof(cl->clid) );
+  
   sts = -1;
   if( !glob.ocount ) return -1;
   raft2_lock();
+  
   for( i = 0; i < glob.file->prop.count; i++ ) {
     if( glob.file->cluster[i].clid == cl->clid ) {
       if( cl ) {
@@ -157,6 +182,8 @@ int raft2_cluster_set( struct raft2_cluster *cl ) {
   if( glob.file->prop.count >= RAFT2_MAX_CLUSTER ) goto done;
 
   i = glob.file->prop.count;
+  cl->term = 1;
+  cl->seq = 1;
   glob.file->cluster[i] = *cl;
   glob.file->prop.count++;
   glob.file->prop.seq++;

@@ -35,8 +35,10 @@ struct raft2_cluster {
   struct raft2_member member[RAFT2_MAX_MEMBER];
 
   uint32_t appid;
+  uint32_t flags;
+#define RAFT2_CLUSTER_WITNESS 0x0001
   
-  uint32_t spare[3];
+  uint32_t spare[2];
 };
 
 struct raft2_prop {
@@ -59,6 +61,14 @@ struct raft2_prop {
 int raft2_open( void );
 int raft2_close( void );
 int raft2_prop( struct raft2_prop *prop );
+
+#define RAFT2_PROP_ELEC_LOW 0x0001
+#define RAFT2_PROP_ELEC_HIGH 0x0002
+#define RAFT2_PROP_TERM_LOW 0x0004
+#define RAFT2_PROP_TERM_HIGH 0x0008
+#define RAFT2_PROP_RPC_TIMEOUT 0x0010
+#define RAFT2_PROP_FLAGS 0x0020
+int raft2_prop_set( uint32_t mask, struct raft2_prop *prop );
 
 /* database functions */
 int raft2_cluster_list( struct raft2_cluster *cl, int ncl );

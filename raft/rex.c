@@ -213,7 +213,7 @@ static void rex_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint32( &xdr, nbytes );
   if( nbytes % 4 ) nbytes += 4 - (nbytes % 4);
   xdr.offset += nbytes;
-  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
+  sts = hrauth_call_udp_async( &hcall, &xdr, 1, NULL );
   if( sts ) {
     rex_log( LOG_LVL_ERROR, "raft_call_ping: hrauth_call failed" );
     free( pcxt );
@@ -280,7 +280,7 @@ static int rex_proc_write( struct rpc_inc *inc ) {
     xdr_encode_uint64( &args, clid );
     xdr_encode_opaque( &args, (uint8_t *)buf, len );
     inc->msg = msg;
-    sts = hrauth_call_udp_proxy( inc, cl.leaderid, &args );
+    sts = hrauth_call_udp_proxy( inc, cl.leaderid, &args, 1 );
     if( sts ) rex_log( LOG_LVL_DEBUG, "proxy call failed!\n" );
     rpc_conn_release( tmpconn );
     return 1;

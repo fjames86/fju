@@ -113,12 +113,12 @@ struct hrauth_call_opts {
   int port;
   uint32_t addrmask;
 };
-int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
+int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs, struct hrauth_call_opts *opts );
 
 //int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args );
 
 /* forward this call to the specified host */
-int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args );
+int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args, int nargs );
 
 /* synchronous rpc call - don't use these in service routines */
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
@@ -154,8 +154,8 @@ struct hrauth_conn_opts {
 };
 int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts );
 int hrauth_conn_unregister( uint64_t hostid );
-int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args );
-int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args );
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs );
+int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs );
 int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat, struct xdr_s *res );
 int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res );
 

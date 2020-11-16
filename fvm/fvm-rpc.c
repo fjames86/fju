@@ -1053,7 +1053,7 @@ static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t pro
   xdr_encode_uint32( &xdr, progid );
   xdr_encode_opaque( &xdr, (uint8_t *)data, datasize );
   
-  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
+  sts = hrauth_call_udp_async( &hcall, &xdr, 1, NULL );
   rpc_conn_release( tmpconn );
   
   return sts;
@@ -1124,7 +1124,7 @@ static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_
   xdr_encode_uint32( &xdr, module->header.progid );
   xdr_encode_opaque( &xdr, (uint8_t *)module->data, module->header.datasize );
   
-  sts = hrauth_call_udp_async( &hcall, &xdr, NULL );
+  sts = hrauth_call_udp_async( &hcall, &xdr, 1, NULL );
   rpc_conn_release( tmpconn );
   
   return sts;

@@ -724,7 +724,6 @@ void hrauth_register( void ) {
 
 struct hrauth_call_cxt {
   struct hrauth_call hcall;
-  struct xdr_s args;
 };
 
 static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
@@ -759,7 +758,7 @@ static void hrauth_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   free( w );         /* free waiter plus other state */
 }
 
-int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts ) {
+int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs, struct hrauth_call_opts *opts ) {
   int sts, handle;
   struct rpc_waiter *w;
   struct hostreg_host host;
@@ -816,14 +815,18 @@ int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
   inc.pvr = hrauth_provider();
 
   /* prepare auth context */
-  w = malloc( sizeof(*w) + sizeof(*hcxt) + sizeof(*hcallp) + args->offset );  
+  w = malloc( sizeof(*w) + sizeof(*hcxt) + sizeof(*hcallp) );  
   hcxt = (struct hrauth_context *)((char *)w + sizeof(*w)); 
   sts = hrauth_init( hcxt, hcall->hostid );
   hcxt->service = hcall->service;
   inc.pcxt = hcxt;
   
   rpc_init_call( &inc, hcall->prog, hcall->vers, hcall->proc, &handle );
-  xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+  while( nargs ) {
+    xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+    args++;
+    nargs--;
+  }
   rpc_complete_call( &inc, handle );
 
   /* send */
@@ -844,12 +847,8 @@ int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct
   }
   
   /* await reply - copy args so we can resend on failure */
-  /* XXX: we don't do auto resends so we don't need to copy args */
   hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w) + sizeof(*hcxt));
   hcallp->hcall = *hcall;
-  xdr_init( &hcallp->args, (uint8_t *)(((char *)hcallp) + sizeof(*hcallp)), args->offset );
-  memcpy( hcallp->args.buf, args->buf, args->offset );
-  hcallp->args.offset = args->offset;
   
   memset( w, 0, sizeof(*w) );
   w->xid = inc.msg.xid;
@@ -903,7 +902,7 @@ static void hrauth_proxy_udp_cb( struct xdr_s *xdr, struct hrauth_call *hcallp )
   return;
 }
 
-int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args ) {
+int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args, int nargs ) {
   int sts;
   struct hrauth_call hcall;
   struct hrauth_proxy_cxt *pcxt;
@@ -920,7 +919,7 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
   hcall.cxt = pcxt;
   hcall.timeout = 500;
   hcall.service = HRAUTH_SERVICE_PRIV;
-  sts = hrauth_call_udp_async( &hcall, args, NULL );
+  sts = hrauth_call_udp_async( &hcall, args, nargs, NULL );
   if( sts ) {
     hrauth_log( LOG_LVL_DEBUG, "hrauth_call_udp_async failed" );
     free( pcxt );
@@ -1148,7 +1147,7 @@ static void hrauth_conn_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
 }
 
 /* send an rpc to this host and possibly await a reply */
-int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args ) {
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs ) {
   int handle;
   struct hrauth_conn *hc;
   struct rpc_conn *conn;
@@ -1191,7 +1190,11 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args ) {
   inc.pcxt = hcxt;
   
   rpc_init_call( &inc, hcall->prog, hcall->vers, hcall->proc, &handle );
-  if( args ) xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+  while( nargs ) {
+    xdr_encode_fixed( &inc.xdr, args->buf, args->offset );
+    args++;
+    nargs--;
+  }      
   rpc_complete_call( &inc, handle );
 
   rpc_send( conn, inc.xdr.offset );
@@ -1203,7 +1206,6 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args ) {
   w = (struct rpc_waiter *)malloc( sizeof(*w) + sizeof(*hcallp) );
   hcallp = (struct hrauth_call_cxt *)(((char *)w) + sizeof(*w));
   hcallp->hcall = *hcall;
-  xdr_init( &hcallp->args, NULL, 0 );
   
   memset( w, 0, sizeof(*w) );  
   w->xid = inc.msg.xid;
@@ -1283,7 +1285,7 @@ static void hrauth_send_ping( struct hrauth_conn *hc ) {
   hcall.donecb = hrauth_ping_cb;
   hcall.cxt = NULL;
   
-  sts = hrauth_call_tcp_async( &hcall, NULL );
+  sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
   if( sts ) {
     hrauth_log( LOG_LVL_ERROR, "hrauth ping failed hostid=%"PRIx64"", hc->hostid );
   }
@@ -1360,13 +1362,13 @@ static void hrauth_conn_init( void ) {
 }
 
 
-int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args ) {
+int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs ) {
   int sts;
 
-  sts = hrauth_call_tcp_async( hcall, args );
+  sts = hrauth_call_tcp_async( hcall, args, nargs );
   if( sts ) {
     hrauth_log( LOG_LVL_ERROR, "hrauth_call_tcp_async failed" );
-    sts = hrauth_call_udp_async( hcall, args, NULL );
+    sts = hrauth_call_udp_async( hcall, args, nargs, NULL );
     if( sts ) hrauth_log( LOG_LVL_ERROR, "hrauth_call_udp_async failed" );
   }
   

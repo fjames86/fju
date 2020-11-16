@@ -448,7 +448,7 @@ static void raft2_call_ping( struct raft2_cluster *cl, uint64_t hostid, uint64_t
   hcall.cxt2 = cl->clid;
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
-  sts = hrauth_call_async( &hcall, &args );
+  sts = hrauth_call_async( &hcall, &args, 1 );
   if( sts ) {
     raft2_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
     return;
@@ -544,7 +544,7 @@ static void raft2_call_vote( struct raft2_cluster *cl, uint64_t hostid ) {
   hcall.cxt2 = cl->clid;
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
-  sts = hrauth_call_async( &hcall, &args );
+  sts = hrauth_call_async( &hcall, &args, 1 );
   if( sts ) {
     raft2_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
     return;
@@ -552,6 +552,93 @@ static void raft2_call_vote( struct raft2_cluster *cl, uint64_t hostid ) {
 
   
 }
+
+
+static void raft2_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
+  uint64_t clid, hostid, term;
+  struct raft2_cluster *cl;
+  struct raft2_member *mp;
+  int i, success, sts;
+  
+  raft2_log( LOG_LVL_TRACE, "raft2_putcmd_cb %s", res ? "Success" : "Timeout" );
+  if( !res ) return;
+  
+  clid = hcallp->cxt2;
+  cl = cl_by_id( clid );
+  if( !cl ) {
+    raft2_log( LOG_LVL_TRACE, "Unknown cluster" );
+    return;
+  }
+  hostid = hcallp->hostid;
+
+  mp = NULL;
+  for( i = 0; i < cl->nmember; i++ ) {
+    if( cl->member[i].hostid == hostid ) {
+      mp = &cl->member[i];
+      break;
+    }
+  }
+  if( !mp ) {
+    raft2_log( LOG_LVL_ERROR, "Unknown member" );
+    return;
+  }
+
+  sts = xdr_decode_boolean( res, &success );
+  if( !sts ) sts = xdr_decode_uint64( res, &term );
+  if( sts ) {
+    raft2_log( LOG_LVL_ERROR, "Xdr decode error" );
+    return;
+  }
+
+  /* TODO */
+  
+  mp->lastseen = time( NULL );
+  raft2_cluster_set( cl );
+  return;  
+}
+
+static void raft2_call_putcmd( struct raft2_cluster *cl, uint64_t hostid, char *buf, int len ) {
+  struct hrauth_call hcall;
+  struct xdr_s args[2];
+  char argbuf[256];
+  int sts;
+  
+  xdr_init( &args[0], (uint8_t *)argbuf, sizeof(argbuf) );
+  /* encode args */
+  xdr_encode_uint64( &args[0], cl->clid );
+  xdr_encode_uint64( &args[0], cl->term ); /* current term */
+  xdr_encode_uint64( &args[0], cl->seq ); /* current seq */
+  xdr_encode_uint32( &args[0], len );
+  xdr_init( &args[1], (uint8_t *)buf, len );
+  args[1].offset = len;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = RAFT2_RPC_PROG;
+  hcall.vers = RAFT2_RPC_VERS;
+  hcall.proc = 3; /* putcmd */
+  hcall.donecb = raft2_putcmd_cb;
+  hcall.cxt2 = cl->clid;
+  hcall.timeout = glob.prop.rpc_timeout;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  sts = hrauth_call_async( &hcall, args, 2 );
+  if( sts ) {
+    raft2_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
+    return;
+  }
+
+  
+}
+
+
+
+
+
+
+
+
+
+
 
 static void raft2_convert_follower( struct raft2_cluster *cl, uint64_t term, uint64_t leaderid ) {
   int i;
@@ -981,7 +1068,6 @@ static struct raft2_app *raft2_app_by_appid( uint32_t appid ) {
 int raft2_cluster_command( uint64_t clid, char *buf, int len ) {
   struct raft2_cluster *cl;
   int i;
-  struct raft2_app *app;
   
   /* lookup cluster */
   cl = cl_by_id( clid );
@@ -991,24 +1077,10 @@ int raft2_cluster_command( uint64_t clid, char *buf, int len ) {
   if( cl->state != RAFT2_STATE_LEADER ) return -1;
 
   /* distribute buffer */
-  /* TODO */
-
-  /* note: the following needs to be in the distribute completion routine */
-  
-  /* distribute seq increase */
   for( i = 0; i < cl->nmember; i++ ) {
-    raft2_call_ping( cl, cl->member[i].hostid, cl->seq + 1 );
-  }
-
-  /* save increase */
-  cl->seq++;
-  raft2_cluster_set( cl );
-
-  /* apply command */
-  app = raft2_app_by_appid( cl->appid );
-  if( app ) {
-    app->command( cl, buf, len );
+    raft2_call_putcmd( cl, cl->member[i].hostid, buf, len );
   }
 
   return 0;
 }
+

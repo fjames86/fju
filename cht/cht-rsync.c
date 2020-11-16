@@ -97,7 +97,7 @@ static void cht_rsync_call_read( struct cht_rsync_context *cxt, struct cht_entry
   xdr_init( &xdr, (uint8_t *)xdrbuf, sizeof(xdrbuf) );
   xdr_encode_uint64( &xdr, cxt->hshare );
   xdr_encode_fixed( &xdr, entry->key, CHT_KEY_SIZE );
-  hrauth_call_udp_async( &hcall, &xdr, NULL );
+  hrauth_call_udp_async( &hcall, &xdr, 1, NULL );
 }
 
 static int cht_alog_read( struct cht_rsync_context *cxt, uint64_t log_id, uint32_t *op, struct cht_entry *entry, uint64_t *next_id ) {

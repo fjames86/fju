@@ -170,7 +170,10 @@ int _name( int lvl, char *fmt, ... ) {\
   entry.ltag = _tag;\
   return log_write( NULL, &entry );  \
 }
- 
+
+int log_truncate( struct log_s *log, uint64_t id );
+
+
 
 #endif
 

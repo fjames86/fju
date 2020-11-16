@@ -194,6 +194,11 @@ int mmf_truncate( struct mmf_s *mmf, int size ) {
   return 0;
 }
 
+int mmf_delete_file( char *path ) {
+  DeleteFileA( path );
+  return 0;
+}
+
 #else
 int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 	memset( mmf, 0, sizeof(*mmf) );
@@ -299,4 +304,10 @@ int mmf_truncate( struct mmf_s *mmf, int size ) {
   ftruncate( mmf->fd, size );
   return 0;
 }
+
+int mmf_delete_file( char *path ) {
+  unlink( path );
+  return 0;
+}
+
 #endif

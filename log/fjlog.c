@@ -57,7 +57,8 @@ static struct {
 #define CMD_TAIL      3 
 #define CMD_RESET     4
 #define CMD_PROP      5
-#define CMD_TEST      6 
+#define CMD_TEST      6
+#define CMD_TRUNCATE  7
   struct log_s log;
   int flags;
   uint64_t start_id;  
@@ -86,6 +87,7 @@ static void usage( char *fmt, ... ) {
           "              -f                           Follow log.\n"
 	  "              -r                           Reset log, clearing all messages.\n"
 	  "              -u                           Show log properties.\n"
+	  "              -X                           Truncate to log entry set by -i option\n"
 	  "\n" 
 	  "  OPTIONS\n"
 	  "     -p path                               Use log file by path name.\n"
@@ -138,6 +140,8 @@ int main( int argc, char **argv ) {
       fju.cmd = CMD_RESET;
     } else if( strcmp( argv[i], "-u" ) == 0 ) {
       fju.cmd = CMD_PROP;
+    } else if( strcmp( argv[i], "-X" ) == 0 ) {
+      fju.cmd = CMD_TRUNCATE;
     } else if( strcmp( argv[i], "-i" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -255,6 +259,11 @@ int main( int argc, char **argv ) {
     break;
   case CMD_TEST:
     cmd_test();
+    break;
+  case CMD_TRUNCATE:
+    if( !fju.start_id ) usage( "Need entry ID" );
+    sts = log_truncate( &fju.log, fju.start_id );
+    if( sts ) usage( "Failed to truncate" );
     break;
   }
 

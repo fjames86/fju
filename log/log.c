@@ -680,3 +680,56 @@ int log_set_cookie( struct log_s *log, char *cookie, int size ) {
   
   return 0;
 }
+
+
+int log_truncate( struct log_s *log, uint64_t id ) {
+  struct _header *hdr;
+  int sts;
+  uint32_t idx, ecount;
+  struct _entry *e;
+  char *p;
+
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+
+  hdr = (struct _header *)log->mmf.file;
+
+  sts = -1;
+  log_lock( log );
+
+  /*
+   * check if this is a valid id.
+   * if it is then reduce the hdr->count to point to this index
+   */
+
+  idx = (uint32_t)(id & LOG_INDEX_MASK);
+  if( idx >= hdr->lbacount ) goto done;
+
+  /* lookup item at index */
+  p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
+  e = (struct _entry *)p;
+  if( e->magic != LOG_MAGIC ) goto done;
+  if( e->id != id ) goto done;
+
+  /* get previous id */
+  id = e->prev_id;
+  if( id ) {
+    p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
+    e = (struct _entry *)p;
+    if( e->magic != LOG_MAGIC ) goto done;
+    if( e->id != id ) goto done;
+  }
+
+  ecount = 1 + (e->msglen / LOG_LBASIZE) + (e->msglen % LOG_LBASIZE ? 1 : 0);
+  idx = (idx + ecount) % hdr->lbacount;
+
+  /* id is correct, truncate to here */
+  hdr->count = (idx - hdr->start + hdr->lbacount) % hdr->lbacount;
+  //hdr->seq++;
+  hdr->last_id = id;
+
+ done:
+  log_unlock( log );
+
+  return sts;
+}

@@ -3,6 +3,7 @@
 #define RAFT2_H
 
 #include <stdint.h>
+#include <fju/log.h>
 
 #define RAFT2_MAX_MEMBER  8
 #define RAFT2_MAX_CLUSTER 32
@@ -10,7 +11,7 @@
 struct raft2_member {
   uint64_t hostid;      /* host identifier */
   uint64_t lastseen;    /* when last received a message from this host */
-  uint64_t seq;         /* (leader only) last seq acked by member */
+  uint64_t seq;         /* (leader only) highest command seq acked by member */
   uint32_t flags;       /* member flags */
 #define RAFT2_MEMBER_VOTED  0x0001    /* (leader only) received vote this election */
   
@@ -22,8 +23,8 @@ struct raft2_cluster {
   uint64_t leaderid;     /* current leader. 0 indicates no leader */
   uint64_t voteid;       /* who we voted for this election */
   uint64_t term;         /* current term seqno */
-  uint64_t seq;          /* state seqno */
-  uint64_t commitseq;    /* highest seq command saved locally */
+  uint64_t seq;          /* highest state seqno applied to state machine */
+  uint64_t commitseq;    /* highest seq command saved by quorum of cluster */
   uint64_t timeout;      /* when current term/election ends */
   uint32_t state;        /* current state */
 #define RAFT2_STATE_FOLLOWER     0
@@ -76,6 +77,9 @@ int raft2_clid_list( uint64_t *clid, int n );
 int raft2_cluster_by_clid( uint64_t clid, struct raft2_cluster *cl );
 int raft2_cluster_set( struct raft2_cluster *cl );
 int raft2_cluster_rem( uint64_t clid );
+
+/* open command log */
+int raft2_log_open( uint64_t clid, struct log_s *log );
 
 /* register rpc service */
 void raft2_register( void );

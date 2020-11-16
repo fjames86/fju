@@ -16,6 +16,11 @@ struct raft2_file {
   struct raft2_cluster cluster[RAFT2_MAX_CLUSTER];
 };
 
+struct raft2_log {
+  uint64_t clid;
+  struct log_s log;
+};
+
 static struct {
   uint32_t ocount;
   struct mmf_s mmf;
@@ -23,6 +28,7 @@ static struct {
 
   struct raft2_prop prop;
   struct raft2_cluster cl[RAFT2_MAX_CLUSTER];
+  struct raft2_log clog[RAFT2_MAX_CLUSTER];
   uint32_t ncl;
   struct raft2_app *app;
 } glob;
@@ -204,6 +210,14 @@ int raft2_cluster_rem( uint64_t clid ) {
   for( i = 0; i < glob.file->prop.count; i++ ) {
     if( glob.file->cluster[i].clid == clid ) {
       if( i != (glob.file->prop.count - 1) ) glob.file->cluster[i] = glob.file->cluster[glob.file->prop.count - 1];
+
+      /* delete the command log */
+      {
+	char clstr[64];
+	sprintf( clstr, "%"PRIx64".log", clid );
+	mmf_delete_file( mmf_default_path( "raft", clstr, NULL ) );
+      }
+      
       glob.file->prop.count--;
       sts = 0;
       break;
@@ -211,6 +225,18 @@ int raft2_cluster_rem( uint64_t clid ) {
   }
   raft2_unlock();
   return sts;    
+}
+
+int raft2_log_open( uint64_t clid, struct log_s *log ) {
+  char clstr[64];
+  struct log_opts opts;
+  
+  sprintf( clstr, "%"PRIx64".log", clid );
+  memset( &opts, 0, sizeof(opts) );
+  opts.mask = LOG_OPT_COOKIE|LOG_OPT_FLAGS;
+  strcpy( opts.cookie, "raft" );
+  opts.flags = LOG_FLAG_FIXED|LOG_FLAG_GROW;
+  return log_open( mmf_default_path( "raft", clstr, NULL ), &opts, log );
 }
 
 /* ------------ rpc -------------------- */
@@ -228,6 +254,107 @@ static struct raft2_cluster *cl_by_id( uint64_t clid ) {
   }
   return NULL;
 }
+static struct log_s *clog_by_id( uint64_t clid ) {
+  int i;
+  /* return already open log */
+  for( i = 0; RAFT2_MAX_CLUSTER; i++ ) {
+    if( glob.clog[i].clid == clid ) return &glob.clog[i].log;
+  }
+
+  /* open a new log descriptor */
+  for( i = 0; i < RAFT2_MAX_CLUSTER; i++ ) {
+    if( glob.clog[i].clid == 0 ) {
+      glob.clog[i].clid = clid;
+      raft2_log_open( clid, &glob.clog[i].log );
+      return &glob.clog[i].log;
+    }
+  }
+
+  /* all a log we don't need anymore */
+  for( i = 0; i < RAFT2_MAX_CLUSTER; i++ ) {
+    if( !cl_by_id( glob.clog[i].clid ) ) {
+      log_close( &glob.clog[i].log );
+      glob.clog[i].clid = clid;
+      raft2_log_open( clid, &glob.clog[i].log );
+      return &glob.clog[i].log;
+    }
+  }
+
+  /* failed? "this should never happen" */
+  raft2_log( LOG_LVL_ERROR, "Failed to open command log clid=%"PRIx64"", clid ); 
+  return NULL;    
+}
+
+struct raft2_cmd_header {
+  uint64_t term;
+  uint64_t seq;
+};
+
+static int raft2_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, char *buf, int len ) {
+  int sts, ne;
+  struct log_s *log;
+  struct log_entry entry;
+  struct log_iov iov[1];
+  struct raft2_cmd_header hdr;
+  uint64_t id;
+  
+  log = clog_by_id( clid );
+  if( !log ) return -1;
+
+  memset( &entry, 0, sizeof(entry) );
+  entry.iov = iov;
+  iov[0].buf = (char *)&hdr;
+  iov[0].len = sizeof(hdr);
+  entry.niov = 1;
+  id = 0;
+  while( 1 ) {
+    sts = log_read_end( log, id, &entry, 1, &ne );
+    if( sts || !ne ) break;
+
+    if( hdr.seq == seq ) {
+      if( term ) *term = hdr.term;
+      log_read_buf( log, entry.id, buf, len, NULL );
+      return entry.msglen;
+    }
+
+    id = entry.id;
+  }
+
+  return -1;  
+}
+
+static int raft2_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *buf, int len ) {
+  struct log_s *log;
+  struct log_entry entry;
+  struct log_iov iov[2];
+  struct raft2_cmd_header hdr;
+
+  log = clog_by_id( clid );
+  if( !log ) return -1;
+
+  hdr.term = term;
+  hdr.seq = seq;
+  
+  memset( &entry, 0, sizeof(entry) );
+  entry.iov = iov;
+  entry.niov = 2;
+  iov[0].buf = (char *)&hdr;
+  iov[0].len = sizeof(hdr);
+  iov[1].buf = buf;
+  iov[1].len = len;
+  entry.flags = LOG_BINARY;
+  log_write( log, &entry );
+  return 0;
+}
+
+
+
+
+
+
+
+
+
 
 static void raft2_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   uint64_t clid, hostid, term;
@@ -674,6 +801,11 @@ static void raft2_iter_cb( struct rpc_iterator *iter ) {
   raft2_prop( &glob.prop );
   glob.ncl = raft2_cluster_list( glob.cl, RAFT2_MAX_CLUSTER );
 
+  /* open all logs */
+  for( i = 0; i < glob.ncl; i++ ) {
+    clog_by_id( glob.cl[i].clid );
+  }
+  
   /* ensure connections registered */
   for( i = 0; i < glob.ncl; i++ ) {
     for( j = 0; j < glob.cl[i].nmember; j++ ) {

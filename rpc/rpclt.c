@@ -1540,10 +1540,10 @@ static void cmdprog_licinfo_results( struct xdr_s *xdr ) {
 static void cmdprog_connlist_results( struct xdr_s *xdr ) {
   int sts, b;
   uint64_t connid, rx, tx;
-  uint32_t dirtype, type, addr, port, cstate;
+  uint32_t dirtype, type, addr, port, cstate, coffset, ccount;
   char ip[256];
 
-  printf( "%-8s %-4s %-8s %-8s %-8s %-4s\n", "ConnID", "Dir", "State", "RX", "TX", "Type" );
+  printf( "%-8s %-4s %-8s %-8s %-8s %-12s %-4s\n", "ConnID", "Dir", "State", "RX", "TX", "Offset/Count", "Type" );
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "xdr error" );
@@ -1553,6 +1553,8 @@ static void cmdprog_connlist_results( struct xdr_s *xdr ) {
     if( !sts ) sts = xdr_decode_uint32( xdr, &cstate );
     if( !sts ) sts = xdr_decode_uint64( xdr, &rx );
     if( !sts ) sts = xdr_decode_uint64( xdr, &tx );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &coffset );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &ccount );    
     if( !sts ) sts = xdr_decode_uint32( xdr, &type );
     if( sts ) usage( "xdr error" );
     if( type == RPC_LISTEN_TCP ) {
@@ -1560,7 +1562,7 @@ static void cmdprog_connlist_results( struct xdr_s *xdr ) {
       if( !sts ) sts = xdr_decode_uint32( xdr, &port );
     }
     if( sts ) usage( "xdr error" );
-    printf( "%-8"PRIu64" %-4s %-8s %-8"PRIu64" %-8"PRIu64" %-4s",
+    printf( "%-8"PRIu64" %-4s %-8s %-8"PRIu64" %-8"PRIu64" %4u/%4u %-4s",
 	    connid,
 	    dirtype == RPC_CONN_DIR_INCOMING ? "IN" : "OUT",
 	    cstate == RPC_CSTATE_RECVLEN ? "RecvLen" :
@@ -1570,7 +1572,7 @@ static void cmdprog_connlist_results( struct xdr_s *xdr ) {
 	    cstate == RPC_CSTATE_CONNECT ? "Connect" :
 	    cstate == RPC_CSTATE_CLOSE ? "Close" :
 	    "Other",
-	    rx, tx,
+	    rx, tx, coffset, ccount,
 	    type == RPC_LISTEN_TCP ? "TCP" :
 	    type == RPC_LISTEN_UNIX ? "UNIX" : 
 	    "Other" );

@@ -85,6 +85,8 @@ static int cmdprog_proc_connlist( struct rpc_inc *inc ) {
     xdr_encode_uint32( &inc->xdr, c->cstate );
     xdr_encode_uint64( &inc->xdr, c->cdata.rx );
     xdr_encode_uint64( &inc->xdr, c->cdata.tx );
+    xdr_encode_uint32( &inc->xdr, c->cdata.offset );
+    xdr_encode_uint32( &inc->xdr, c->cdata.count );
     xdr_encode_uint32( &inc->xdr, c->listype );
     switch( c->listype ) {
     case RPC_LISTEN_TCP:

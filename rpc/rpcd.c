@@ -667,8 +667,10 @@ static void rpc_poll( int timeout ) {
 				else if( sts == 0 ) {
 				  rpc_log( RPC_LOG_DEBUG, "Connection graceful close connid=%"PRIx64"", c->connid );
 				  rpc_conn_close( c );
-				}
+				} 
 				else {
+				  if( sts != 4 ) rpc_log( RPC_LOG_ERROR, "recvlen %d != 4", sts );
+				  
 				  c->cdata.rx += sts;
 					xdr_init( &tmpx, c->buf, 4 );
 					xdr_decode_uint32( &tmpx, &c->cdata.count );
@@ -688,7 +690,7 @@ static void rpc_poll( int timeout ) {
 				}
 				break;
 			case RPC_CSTATE_RECV:
-				sts = recv( c->fd, c->buf + c->cdata.offset, RPC_MAX_BUF - c->cdata.offset, 0 );
+				sts = recv( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
 				if( sts < 0 ) {
 #ifdef WIN32
 					if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
@@ -734,12 +736,14 @@ static void rpc_poll( int timeout ) {
 						sts = send( c->fd, tmpbuf, 4, 0 );
 						if( sts < 0 ) {
 #ifdef WIN32
-							if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
+						  if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
 #else
-							if( (errno == EAGAIN) || (errno == EINTR) ) break;
+						  if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-							rpc_conn_close( c );
-							break;
+						  rpc_conn_close( c );
+						  break;
+						} else if( sts != 4 ) {
+						  rpc_log( RPC_LOG_ERROR, "Failed to send count %d != 4", sts );
 						}
 						c->cdata.tx += sts;
 
@@ -798,7 +802,10 @@ static void rpc_poll( int timeout ) {
 #endif
 					rpc_conn_close( c );
 					break;
+				} else if( sts != 4 ) {
+				  rpc_log( RPC_LOG_ERROR, "Failed to send count %d != 4", sts );
 				}
+				
 				c->cdata.tx += sts;
 				c->cstate = RPC_CSTATE_SEND;
 
@@ -1266,6 +1273,8 @@ int rpc_send( struct rpc_conn *c, int count ) {
 #endif
     rpc_conn_close( c );
     return 0;
+  } else if( sts != 4 ) {
+    rpc_log( RPC_LOG_ERROR, "Failed to send count %d != 4", sts );
   }
   c->cdata.tx += sts;
   

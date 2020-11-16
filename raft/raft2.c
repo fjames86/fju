@@ -555,7 +555,7 @@ static void raft2_call_vote( struct raft2_cluster *cl, uint64_t hostid ) {
 
 
 static void raft2_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
-  uint64_t clid, hostid, term;
+  uint64_t clid, hostid, term, seq;
   struct raft2_cluster *cl;
   struct raft2_member *mp;
   int i, success, sts;
@@ -585,32 +585,40 @@ static void raft2_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
 
   sts = xdr_decode_boolean( res, &success );
   if( !sts ) sts = xdr_decode_uint64( res, &term );
+  if( !sts ) sts = xdr_decode_uint64( res, &seq );
   if( sts ) {
     raft2_log( LOG_LVL_ERROR, "Xdr decode error" );
     return;
   }
 
-  /* TODO */
+  if( success ) {
+    if( mp->seq == seq - 1 ) {
+      mp->seq = seq;
+    }
+  }
   
   mp->lastseen = time( NULL );
   raft2_cluster_set( cl );
   return;  
 }
 
-static void raft2_call_putcmd( struct raft2_cluster *cl, uint64_t hostid, char *buf, int len ) {
+static void raft2_call_putcmd( struct raft2_cluster *cl, uint64_t hostid, uint64_t term, uint64_t seq, char *buf, int len ) {
   struct hrauth_call hcall;
-  struct xdr_s args[2];
+  struct xdr_s args[3];
   char argbuf[256];
   int sts;
   
   xdr_init( &args[0], (uint8_t *)argbuf, sizeof(argbuf) );
   /* encode args */
   xdr_encode_uint64( &args[0], cl->clid );
-  xdr_encode_uint64( &args[0], cl->term ); /* current term */
-  xdr_encode_uint64( &args[0], cl->seq ); /* current seq */
+  xdr_encode_uint64( &args[0], term ); /* command term */
+  xdr_encode_uint64( &args[0], seq ); /* command seq */
   xdr_encode_uint32( &args[0], len );
   xdr_init( &args[1], (uint8_t *)buf, len );
-  args[1].offset = len;
+  if( len % 4 ) {
+    raft2_log( LOG_LVL_ERROR, "Command not a multiple of 4" );
+    return;
+  }
   
   memset( &hcall, 0, sizeof(hcall) );
   hcall.hostid = hostid;
@@ -627,7 +635,6 @@ static void raft2_call_putcmd( struct raft2_cluster *cl, uint64_t hostid, char *
     return;
   }
 
-  
 }
 
 
@@ -897,6 +904,8 @@ static int raft_proc_putcommand( struct rpc_inc *inc ) {
  done:
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_uint64( &inc->xdr, sts ? 1 : 0 );
+  xdr_encode_uint64( &inc->xdr, term );
+  xdr_encode_uint64( &inc->xdr, seq );
   rpc_complete_accept_reply( inc, handle );
   
   return 0;
@@ -1076,9 +1085,14 @@ int raft2_cluster_command( uint64_t clid, char *buf, int len ) {
   /* reject if not leader */
   if( cl->state != RAFT2_STATE_LEADER ) return -1;
 
+  /* save buffer locally */
+  raft2_command_put( clid, cl->term, cl->xxx, buf, len );
+  cl->xxx++;
+  raft2_cluster_set( cl );
+  
   /* distribute buffer */
   for( i = 0; i < cl->nmember; i++ ) {
-    raft2_call_putcmd( cl, cl->member[i].hostid, buf, len );
+    raft2_call_putcmd( cl, cl->member[i].hostid, cl->term, cl->seq, buf, len );
   }
 
   return 0;

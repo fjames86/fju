@@ -25,6 +25,7 @@ struct raft2_cluster {
   uint64_t term;         /* current term seqno */
   uint64_t seq;          /* highest state seqno applied to state machine */
   uint64_t commitseq;    /* highest seq command saved by quorum of cluster */
+  uint64_t xxx;          /* FIXME: highest seq command saved locally (equivalent to member.seq) */
   uint64_t timeout;      /* when current term/election ends */
   uint32_t state;        /* current state */
 #define RAFT2_STATE_FOLLOWER     0

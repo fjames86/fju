@@ -94,6 +94,7 @@ struct raft2_app {
 };
 int raft2_app_register( struct raft2_app *app );
 
+#define RAFT2_MAX_COMMAND (32*1024)
 /* 
  * Start process of initiating command:
  * - save command buffer locally 

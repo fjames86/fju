@@ -31,6 +31,8 @@ static struct {
   struct raft2_log clog[RAFT2_MAX_CLUSTER];
   uint32_t ncl;
   struct raft2_app *app;
+
+  char buf[RAFT2_MAX_COMMAND];
 } glob;
 
 static uint64_t raft2_term_timeout( void ) {
@@ -290,7 +292,8 @@ struct raft2_cmd_header {
   uint64_t seq;
 };
 
-static int raft2_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, char *buf, int len ) {
+/* read command buffer. returns -1 on error or command buffer length on success */
+static int raft2_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, char *buf, int len, uint64_t *entryid ) {
   int sts, ne;
   struct log_s *log;
   struct log_entry entry;
@@ -301,6 +304,14 @@ static int raft2_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, ch
   log = clog_by_id( clid );
   if( !log ) return -1;
 
+  /* 
+   * Read from most recently written entry until we find a matching entry
+   * Note that this is somewhat inefficient but hopefully we won't be looking too far 
+   * back in time very often so it should be acceptable. 
+   * It would be better to have a constant time lookup mapping seq => entry.id but this 
+   * is not easy to do using fjlogs (we'd need a custom logger)
+   */
+  
   memset( &entry, 0, sizeof(entry) );
   entry.iov = iov;
   iov[0].buf = (char *)&hdr;
@@ -314,6 +325,7 @@ static int raft2_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, ch
     if( hdr.seq == seq ) {
       if( term ) *term = hdr.term;
       log_read_buf( log, entry.id, buf, len, NULL );
+      if( entryid ) *entryid = entry.id;
       return entry.msglen;
     }
 
@@ -323,6 +335,7 @@ static int raft2_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, ch
   return -1;  
 }
 
+/* store a command buffer */
 static int raft2_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *buf, int len ) {
   struct log_s *log;
   struct log_entry entry;
@@ -344,6 +357,9 @@ static int raft2_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *
   iov[1].len = len;
   entry.flags = LOG_BINARY;
   log_write( log, &entry );
+
+  /* wait for command to be written to stable storage */
+  log_sync( log, MMF_SYNC_NOW );
   return 0;
 }
 
@@ -601,7 +617,7 @@ static int raft_proc_null( struct rpc_inc *inc ) {
  */
 static int raft_proc_ping( struct rpc_inc *inc ) {
   int handle, sts, success;
-  uint64_t clid, hostid, term, seq, commitseq, nextseq, s;
+  uint64_t clid, hostid, term, seq, commitseq, nextseq, s, bterm, entryid;
   struct raft2_cluster *clp;
   struct hrauth_context *hc;
   struct xdr_s res;
@@ -644,44 +660,40 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
     raft2_convert_follower( clp, term, hostid );
   }
 
-  if( seq > clp->seq ) {
-    /* we have missed some updates?  */
-    raft2_log( LOG_LVL_WARN, "Seq jump - missed updates?" );
-  }
-    
-  
   /* lookup command buffer for (term,seq), reply false if not found */
-  /* TODO */
+  sts = raft2_command_by_seq( clid, seq, &bterm, NULL, 0, &entryid );
+  if( sts ) goto done;
 
-  /* if a command buffer is found for (seq) but a different term then delete that entry and all others after it */
-  /* TODO */
-
-  if( nextseq > seq ) {
-    raft2_log( LOG_LVL_DEBUG, "Seq bump" );
-    /* 
-     * Apply new command:
-     * - Lookup command buffer for seq+1, apply. set clp->commitseq to seq+1 
-     * - continue for seq+2, ... upto nextseq 
-     * - Stop if command buffer not found. Request the buffer from leader.
-     */
-    for( s = clp->seq; s <= nextseq; s++ ) {
-      /* Lookup command buffer, break if not found */
-
-      /* Apply command buffer */
-      app = raft2_app_by_appid( clp->appid );
-      if( app ) {
-	app->command( clp, NULL, 0 );
-      }
-      
-      clp->seq = s;
-      raft2_cluster_set( clp );
-    }
-  }
-
+  /* checks successful, we now accept the update and apply any changes required */
   clp->leaderid = hostid;
   clp->timeout = raft2_term_timeout();
   clp->state = RAFT2_STATE_FOLLOWER;
   raft2_cluster_set( clp );
+  
+  /* if a command buffer is found for (seq) but a different term then delete that entry and all others after it */
+  if( bterm != term ) {
+    log_truncate( clog_by_id( clid ), entryid );
+  }
+
+  /* leader has incremented commitseq indicating quorum have received this entry */
+  if( commitseq > clp->commitseq ) {
+    clp->commitseq = commitseq;
+    raft2_cluster_set( clp );
+  }
+
+  /* apply any commands commited but not yet applied */
+  app = raft2_app_by_appid( clp->appid );
+  if( app && clp->seq < clp->commitseq ) {
+    for( s = clp->seq + 1; s <= clp->commitseq; s++ ) {    
+      sts = raft2_command_by_seq( clid, s, NULL, glob.buf, sizeof(glob.buf), NULL );
+      if( sts ) break; /* command buffer not found */
+
+      app->command( clp, glob.buf, sts );
+      clp->seq = s;
+      raft2_cluster_set( clp );
+    }      
+  }
+
   success = 1;
 
  done:
@@ -757,9 +769,49 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
  * sent from leaders to distribute command buffers. 
  */
 static int raft_proc_putcommand( struct rpc_inc *inc ) {
-  int handle;
+  int handle, sts, len;
+  char *bufp;
+  uint64_t term, seq, entryid, clid, bterm;
+  struct hrauth_context *hc;
+  struct raft2_cluster *cl;
+  
+  hc = (struct hrauth_context *)inc->pcxt;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );
+  
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  raft2_log( LOG_LVL_TRACE, "raft_proc_putcommand clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64" len=%u",
+	     clid, term, seq, len );
+  
+  /* lookup cluster */
+  sts = -1;
+  cl = cl_by_id( clid );
+  if( !sts ) goto done;
+
+  /* check sender is leader */
+  if( cl->leaderid != hc->remoteid ) goto done;
+
+  sts = raft2_command_by_seq( clid, seq, &bterm, NULL, 0, &entryid );
+  if( !sts && bterm != term ) {
+    /* found this entry already */
+    raft2_log( LOG_LVL_WARN, "Found conflicting existing command - deleting entries after %"PRIu64"", seq );
+    log_truncate( clog_by_id( clid ), entryid );
+  }
+  
+  sts = raft2_command_put( clid, term, seq, bufp, len );
+  if( sts ) {
+    raft2_log( LOG_LVL_ERROR, "Failed to write command buffer" );
+  }
+ 
+ done:
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_uint64( &inc->xdr, sts ? 1 : 0 );
   rpc_complete_accept_reply( inc, handle );
+  
   return 0;
 }
 
@@ -767,9 +819,28 @@ static int raft_proc_putcommand( struct rpc_inc *inc ) {
  * Sent from nodes that come online to update their state 
  */
 static int raft_proc_getcommand( struct rpc_inc *inc ) {
-  int handle;
+  int handle, sts;
+  uint64_t term, seq, clid;
+  struct hrauth_context *hc;
+  
+  hc = (struct hrauth_context *)inc->pcxt;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  raft2_log( LOG_LVL_TRACE, "raft_proc_gettcommand clid=%"PRIx64" seq=%"PRIu64"",
+	     clid, seq );
+
+  sts = raft2_command_by_seq( clid, seq, &term, glob.buf, sizeof(glob.buf), NULL );
+  
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  rpc_complete_accept_reply( inc, handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  if( !sts ) {
+    xdr_encode_uint64( &inc->xdr, term );
+    xdr_encode_opaque( &inc->xdr, (uint8_t *)glob.buf, sts );
+  }
+  rpc_complete_accept_reply( inc, handle );  
   return 0;
 }
 

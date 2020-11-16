@@ -58,7 +58,12 @@ int mmf_close( struct mmf_s *mmf );
 int mmf_lock( struct mmf_s *mmf );
 int mmf_unlock( struct mmf_s *mmf );
 int mmf_remap( struct mmf_s *mmf, int size );
+
+/* flush changes to disk. if sync=1 do it synchronously, otherwise initiate async flushing */
+#define MMF_SYNC_NOW   1
+#define MMF_SYNC_LATER 0
 int mmf_sync( struct mmf_s *mmf, int sync );
+
 char *mmf_default_path( char *filename, ... );
 int mmf_ensure_dir( char *path );
 int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset );

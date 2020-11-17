@@ -293,14 +293,14 @@ static void print_cluster( struct raft2_cluster *cluster ) {
   int j;
   
       printf( "cluster id=%"PRIx64" state=%s leader=%"PRIx64" (%s)\n"
-	      "        term=%"PRIu64" seq=%"PRIu64" appid=%u flags=%s (0x%x)\n",
+	      "        term=%"PRIu64" appliedseq=%"PRIu64" appid=%u flags=%s (0x%x)\n",
 	      cluster->clid,
 	      cluster->state == RAFT2_STATE_FOLLOWER ? "Follower" :
 	      cluster->state == RAFT2_STATE_CANDIDATE ? "Candidate" :
 	      cluster->state == RAFT2_STATE_LEADER ? "Leader" :
 	      "Unknown",
 	      cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
-	      cluster->term, cluster->seq,	      
+	      cluster->term, cluster->appliedseq,	      
 	      cluster->appid, cluster->flags & RAFT2_CLUSTER_WITNESS ? "Witness" : "", cluster->flags );
 	          
       for( j = 0; j < cluster->nmember; j++ ) {
@@ -317,7 +317,7 @@ static void print_cluster( struct raft2_cluster *cluster ) {
 		  cluster->member[j].flags,
 		  timestr );
 	  if( cluster->state == RAFT2_STATE_LEADER ) {
-	    printf( "seq=%"PRIu64"", cluster->member[j].seq );
+	    printf( "seq=%"PRIu64"", cluster->member[j].storedseq );
 	  }
 	  printf( "\n" );
     }

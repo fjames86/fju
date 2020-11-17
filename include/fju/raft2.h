@@ -11,7 +11,7 @@
 struct raft2_member {
   uint64_t hostid;      /* host identifier */
   uint64_t lastseen;    /* when last received a message from this host */
-  uint64_t seq;         /* (leader only) highest command seq acked by member */
+  uint64_t storedseq;   /* (leader only) highest command seq acked by member */
   uint32_t flags;       /* member flags */
 #define RAFT2_MEMBER_VOTED  0x0001    /* (leader only) received vote this election */
   
@@ -23,9 +23,8 @@ struct raft2_cluster {
   uint64_t leaderid;     /* current leader. 0 indicates no leader */
   uint64_t voteid;       /* who we voted for this election */
   uint64_t term;         /* current term seqno */
-  uint64_t seq;          /* highest state seqno applied to state machine */
+  uint64_t appliedseq;   /* highest state seqno applied to state machine */
   uint64_t commitseq;    /* highest seq command saved by quorum of cluster */
-  uint64_t xxx;          /* FIXME: highest seq command saved locally (equivalent to member.seq) */
   uint64_t timeout;      /* when current term/election ends */
   uint32_t state;        /* current state */
 #define RAFT2_STATE_FOLLOWER     0

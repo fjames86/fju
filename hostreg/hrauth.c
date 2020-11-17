@@ -690,7 +690,7 @@ static int hrauth_proc_nullping( struct rpc_inc *inc ) {
    */
   
   hrauth_log( LOG_LVL_DEBUG, "hrauth_proc_nullping" );
-  return hrauth_reply( inc, NULL );
+  return hrauth_reply( inc, NULL, 0 );
 }
 
 static struct rpc_proc hrauth_procs[] = {
@@ -1221,7 +1221,7 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, int na
 
 
 /* send a reply message back to this host on that host's connection */
-int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat, struct xdr_s *res ) {
+int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat, struct xdr_s *res, int nres ) {
   int handle;
   struct hrauth_conn *hc;
   struct rpc_conn *conn;
@@ -1255,7 +1255,11 @@ int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat,
   inc.pcxt = hcxt;
   
   rpc_init_accept_reply( &inc, xid, acceptstat, NULL, &handle );
-  if( res ) xdr_encode_fixed( &inc.xdr, res->buf, res->offset );
+  while( nres > 0 ) {
+    xdr_encode_fixed( &inc.xdr, res->buf, res->offset );
+    res++;
+    nres--;
+  }
   rpc_complete_accept_reply( &inc, handle );
 
   rpc_send( conn, inc.xdr.offset );
@@ -1375,7 +1379,7 @@ int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs 
   return sts;
 }
 
-int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res ) {
+int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res, int nres ) {
   struct hrauth_context *hcxt;
   struct rpcd_active_conn aconn;
   int sts, handle;
@@ -1389,13 +1393,17 @@ int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res ) {
   if( aconn.conn && inc->pvr && inc->pvr->flavour == RPC_AUTH_HRAUTH ) {
     hrauth_log( LOG_LVL_TRACE, "hrauth_reply sending reply on outgoing conn" );
     hcxt = (struct hrauth_context *)inc->pcxt;
-    sts = hrauth_reply_tcp( hcxt, inc->msg.xid, RPC_ACCEPT_SUCCESS, res );
+    sts = hrauth_reply_tcp( hcxt, inc->msg.xid, RPC_ACCEPT_SUCCESS, res, nres );
     if( !sts ) return 1;
     hrauth_log( LOG_LVL_TRACE, "hrauth_reply_tcp failed" );
   }
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  if( res ) xdr_encode_fixed( &inc->xdr, res->buf, res->offset );
+  while( nres > 0 ) {
+    xdr_encode_fixed( &inc->xdr, res->buf, res->offset );
+    res++;
+    nres--;
+  }
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }

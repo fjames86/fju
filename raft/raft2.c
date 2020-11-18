@@ -983,9 +983,11 @@ static int raft_proc_getcommand( struct rpc_inc *inc ) {
     xdr_encode_uint64( &res[0], term );
     xdr_encode_uint32( &res[0], sts );
     xdr_init( &res[1], (uint8_t *)glob.buf, sts );
+    res[1].offset = sts;
   } else {
     xdr_init( &res[1], NULL, 0 );
   }
+  
   return hrauth_reply( inc, res, 2 );
 }
 

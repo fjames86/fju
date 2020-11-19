@@ -248,6 +248,7 @@ static void raft2_convert_candidate( struct raft2_cluster *cl );
 static void raft2_convert_leader( struct raft2_cluster *cl );
 static void raft2_set_iter_timeout( void );
 static struct raft2_app *raft2_app_by_appid( uint32_t appid );
+static void raft2_call_putcmd( struct raft2_cluster *cl, uint64_t hostid, uint64_t cseq );
 
 static struct raft2_cluster *cl_by_id( uint64_t clid ) {
   int i;
@@ -697,26 +698,39 @@ static void raft2_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
 
   /* apply any commands now acked by quorum */
   raft2_apply_commands( cl );
+
+  /* send next command if any */
+  raft2_call_putcmd( cl, hostid, 0 );
   
   return;  
 }
 
-static void raft2_call_putcmd( struct raft2_cluster *cl, uint64_t hostid, uint64_t term, uint64_t seq ) {
+static void raft2_call_putcmd( struct raft2_cluster *cl, uint64_t hostid, uint64_t cseq ) {
   struct hrauth_call hcall;
   struct xdr_s args[3];
   char argbuf[256];
-  int sts, len;
-  uint64_t eterm;
+  int sts, len, i;
+  uint64_t cterm;
+
+  if( cseq == 0 ) {
+    for( i = 0; i < cl->nmember; i++ ) {
+      if( cl->member[i].hostid == hostid ) {
+	cseq = cl->member[i].storedseq + 1;
+	break;
+      }
+    }
+    if( cseq == 0 ) return;
+  }
   
-  len = raft2_command_by_seq( cl->clid, seq, &eterm, glob.buf, sizeof(glob.buf), NULL );
+  len = raft2_command_by_seq( cl->clid, cseq, &cterm, glob.buf, sizeof(glob.buf), NULL );
   if( len < 0 ) return;
   
   xdr_init( &args[0], (uint8_t *)argbuf, sizeof(argbuf) );
   /* encode args */
   xdr_encode_uint64( &args[0], cl->clid );
-  xdr_encode_uint64( &args[0], term ); /* current term */
-  xdr_encode_uint64( &args[0], eterm ); /* command term */
-  xdr_encode_uint64( &args[0], seq ); /* command seq */
+  xdr_encode_uint64( &args[0], cl->term ); /* current term */
+  xdr_encode_uint64( &args[0], cterm ); /* command term */
+  xdr_encode_uint64( &args[0], cseq ); /* command seq */
   xdr_encode_uint32( &args[0], len );
   xdr_init( &args[1], (uint8_t *)glob.buf, len );
   if( len % 4 ) len += 4 - (len % 4);
@@ -1050,13 +1064,35 @@ static int raft_proc_getcmd( struct rpc_inc *inc ) {
   return hrauth_reply( inc, res, 2 );
 }
 
+/* rpc interface to command api */
+static int raft_proc_command( struct rpc_inc *inc ) {
+  int handle, sts;
+  char *bufp;
+  int len;
+  uint64_t clid;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  raft2_log( LOG_LVL_TRACE, "raft_proc_command clid=%"PRIx64" len=%u", clid, len );
+
+  sts = raft2_cluster_command( clid, bufp, len );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
 
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_ping },
   { 2, raft_proc_vote },  
   { 3, raft_proc_putcmd },
-  { 4, raft_proc_getcmd },  
+  { 4, raft_proc_getcmd },
+  { 5, raft_proc_command },
   { 0, NULL }
 };
 
@@ -1208,7 +1244,7 @@ int raft2_cluster_command( uint64_t clid, char *buf, int len ) {
   
   /* distribute buffer */
   for( i = 0; i < cl->nmember; i++ ) {
-    raft2_call_putcmd( cl, cl->member[i].hostid, cl->term, cl->member[i].storedseq + 1 );
+    raft2_call_putcmd( cl, cl->member[i].hostid, 0 );
   }
 
   return 0;

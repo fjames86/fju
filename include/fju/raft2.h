@@ -21,10 +21,10 @@ struct raft2_member {
 struct raft2_cluster {
   uint64_t clid;         /* cluster identifier */
   uint64_t leaderid;     /* current leader. 0 indicates no leader */
-  uint64_t voteid;       /* who we voted for this election */
+  uint64_t voteid;       /* who we voted for this term */
   uint64_t term;         /* current term seqno */
-  uint64_t appliedseq;   /* highest state seqno applied to state machine */
-  uint64_t commitseq;    /* highest seq command saved by quorum of cluster */
+  uint64_t appliedseq;   /* highest state seqno applied to local state machine */
+  uint64_t commitseq;    /* (leader only) highest seq command saved by quorum of cluster */
   uint64_t timeout;      /* when current term/election ends */
   uint32_t state;        /* current state */
 #define RAFT2_STATE_FOLLOWER     0

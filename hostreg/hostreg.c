@@ -148,10 +148,12 @@ int hostreg_prop( struct hostreg_prop *prop ) {
 }
 
 uint64_t hostreg_localid( void ) {
-  int sts;
-  uint64_t localid;
-  sts = freg_get_by_name( NULL, 0, HOSTREG_ROOTPATH "/local/id", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
-  if( sts ) return sts;
+  static uint64_t localid;
+  if( !localid ) {
+    int sts;
+    sts = freg_get_by_name( NULL, 0, HOSTREG_ROOTPATH "/local/id", FREG_TYPE_UINT64, (char *)&localid, sizeof(localid), NULL );
+    if( sts ) return 0;
+  }
   return localid;
 }
 

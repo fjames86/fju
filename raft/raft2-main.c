@@ -291,16 +291,17 @@ int main( int argc, char **argv ) {
 static void print_cluster( struct raft2_cluster *cluster ) {
   char timestr[128], namestr[HOSTREG_MAX_NAME];
   int j;
-  
-      printf( "cluster id=%"PRIx64" state=%s leader=%"PRIx64" (%s)\n"
-	      "        term=%"PRIu64" appliedseq=%"PRIu64" appid=%u flags=%s (0x%x)\n",
+
+      printf( "cluster id=%"PRIx64" state=%s term=%"PRIu64" leader=%"PRIx64" (%s)\n"
+	      "        appliedseq=%"PRIu64" commitseq=%"PRIu64" appid=%u flags=%s (0x%x)\n",
 	      cluster->clid,
 	      cluster->state == RAFT2_STATE_FOLLOWER ? "Follower" :
 	      cluster->state == RAFT2_STATE_CANDIDATE ? "Candidate" :
 	      cluster->state == RAFT2_STATE_LEADER ? "Leader" :
 	      "Unknown",
+	      cluster->term,
 	      cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
-	      cluster->term, cluster->appliedseq,	      
+	      cluster->appliedseq, cluster->commitseq,
 	      cluster->appid, cluster->flags & RAFT2_CLUSTER_WITNESS ? "Witness" : "", cluster->flags );
 	          
       for( j = 0; j < cluster->nmember; j++ ) {

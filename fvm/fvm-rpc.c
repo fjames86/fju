@@ -12,7 +12,6 @@
 #include "fvm-private.h"
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
-#include <fju/raft.h>
 #include <fju/hrauth.h>
 #include <fju/hostreg.h>
 
@@ -29,11 +28,6 @@
  * List modules 
  * 
  */
-
-/* want to be able to register an rpc program which is dynamically generated (normally it is always a static sturct) */
-static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t progid, char *data, int datasize );
-static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module );
-static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_module *module, uint32_t retry, int timeout );
 
 static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int nprocs, rpc_proc_t proccb ) {
   struct rpc_program *pg;
@@ -349,140 +343,6 @@ static int fvm_proc_unregister( struct rpc_inc *inc ) {
   return 0;
 }
 
-static int fvm_proc_ping( struct rpc_inc *inc ) {
-  /* follower receives updated data from leader */
-  int handle, sts, len;
-  uint64_t clid, termseq, leaderid, stateseq, stateterm;
-  struct raft_cluster cl;
-  uint8_t *datap;
-  struct fvm_module *m;
-  uint32_t progid;
-  
-  sts = xdr_decode_uint64( &inc->xdr, &clid );
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &leaderid );
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &termseq );
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateseq );
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &stateterm );
-  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &progid );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-
-  sts = raft_cluster_by_id( clid, &cl );
-  if( cl.state == RAFT_STATE_LEADER ) {
-    /* we are leader, do not accept */
-    sts = -1;
-    goto done;
-  }
-  if( cl.leaderid != leaderid ) {
-    /* bad leader */
-    sts = -1;
-    goto done;
-  }  
-  if( termseq != cl.termseq ) {
-    /* bad term seq */
-    sts = -1;
-    goto done;
-  }
-  if( stateseq < cl.stateseq ) {
-    /* old state, ignore */
-    sts = -1;
-    goto done;
-  }
-
-  /* all good, accept */
-  
-  m = fvm_module_by_progid( progid );
-  if( !m ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-
-  len = m->header.datasize;  
-  sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&datap, &len );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-  
-  if( len == m->header.datasize ) {
-    memcpy( m->data, datap, len );
-    sts = 0;
-  } else {
-    sts = -1;
-  }
-
-  
- done:
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
-  rpc_complete_accept_reply( inc, handle );
-  
-  return 0;
-}
-
-static int fvm_proc_write( struct rpc_inc *inc ) {
-  /* leader receives upated data from follower */
-  int handle, sts, len;
-  uint64_t clid;
-  struct raft_cluster cl;
-  char *datap = NULL;  
-  uint32_t progid;
-  struct fvm_module *m;
-  int i, n;
-  struct raft_member member[32];
-    
-  sts = xdr_decode_uint64( &inc->xdr, &clid );
-  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &progid );
-  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&datap, &len );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-
-  m = fvm_module_by_progid( progid );
-  if( !m ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-  
-  sts = raft_cluster_by_id( clid, &cl );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-  
-  if( cl.state != RAFT_STATE_LEADER ) {
-    // not leader, don't care 
-    return 1;
-  }
-
-  // update cluster 
-  cl.stateterm = cl.termseq;
-  cl.stateseq++;
-  cl.commitseq = cl.stateseq;
-  fvm_log( LOG_LVL_TRACE, "setting cluster stateseq=%"PRIu64"", cl.stateseq );
-  raft_cluster_set( &cl );
-
-  if( len == m->header.datasize ) {
-    memcpy( m->data, datap, len );
-  }
-  
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  rpc_complete_accept_reply( inc, handle );
-
-  // send pings to all followers
-  n = raft_member_list( cl.id, member, 32 );
-  for( i = 0; i < n; i++ ) {
-    fvm_call_ping( &cl, member[i].hostid, progid, (char *)m->data, (int)m->header.datasize );
-  }
-  
-  return 0;
-}
-
-static int fvm_proc_cluster( struct rpc_inc *inc ) {
-  int handle, sts;
-  char name[FVM_MAX_NAME];
-  struct fvm_module *m;
-  uint64_t clid;
-  
-  sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &clid );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-
-  m = fvm_module_by_name( name );
-  if( m ) m->clusterid = clid;
-  
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  xdr_encode_boolean( &inc->xdr, m ? 1 : 0 );  
-  rpc_complete_accept_reply( inc, handle );
-  
-  return 0;
-}
-
 static int fvm_proc_run( struct rpc_inc *inc ) {
   int handle, sts;
   uint32_t progid, procid;
@@ -663,9 +523,9 @@ static struct rpc_proc fvm_procs[] = {
   { 3, fvm_proc_unload },
   { 4, fvm_proc_register },
   { 5, fvm_proc_unregister },
-  { 6, fvm_proc_ping },
-  { 7, fvm_proc_write },
-  { 8, fvm_proc_cluster },
+  //  { 6, fvm_proc_ping },
+  //{ 7, fvm_proc_write },
+  //{ 8, fvm_proc_cluster },
   { 9, fvm_proc_run },
   { 10, fvm_proc_readvar },
   { 11, fvm_proc_writevar },
@@ -728,33 +588,6 @@ static void fvm_iter_cb( struct rpc_iterator *it ) {
   
 }
 
-
-static void fvm_cluster_notify( raft_notify_t evt, struct raft_cluster *cl, void *cxt, void *reserved ) {
-  struct fvm_module *m;
-		  
-  switch( evt ) {
-  case RAFT_NOTIFY_LEADER:
-  case RAFT_NOTIFY_SEND_PING:
-    /* resend data whenever we become leader or are sending raft ping messages */
-    m = fvm_get_modules();
-    while( m ) {
-      if( m->clusterid == cl->id ) {
-	fvm_send_pings( cl, m );
-      }
-      m = m->next;
-    }
-    break;
-  default:
-    break;
-  }
-  
-}
-
-static struct raft_notify_context fvm_notify_cxt = {
-  NULL,
-  fvm_cluster_notify,
-  NULL
-};
 
 struct fvm_event_desc {
   struct fvm_event_desc *next;
@@ -972,216 +805,7 @@ void fvm_rpc_register( void ) {
 
   rpc_program_register( &fvm_prog );
 
-  raft_notify_register( &fvm_notify_cxt );
-
   rpcd_event_subscribe( 0, fvm_event_cb, NULL );
 }
 
-
-struct ping_cxt {
-  uint64_t clid;
-  uint64_t hostid;
-  uint64_t stateseq;
-};
-
-static void fvm_call_ping_donecb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
-  struct ping_cxt *p = (struct ping_cxt *)hcallp->cxt;
-  int sts, b;
-  struct raft_cluster cl;
-  struct raft_member member;
-  
-  if( !xdr ) {
-    fvm_log( LOG_LVL_TRACE, "fvm ping timeout" );
-    goto done;
-  }
-
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) {
-    goto done;
-  }
-
-  if( b ) {
-    /* ping accepted by follower */
-    sts = raft_cluster_by_id( p->clid, &cl );
-    if( sts ) goto done;
-    if( cl.state != RAFT_STATE_LEADER ) goto done;
-    sts = raft_member_by_hostid( p->clid, p->hostid, &member );
-    if( sts ) goto done;
-    member.nextseq = cl.stateseq;
-    member.stateseq = p->stateseq;
-    fvm_log( LOG_LVL_TRACE, "Setting member stateseq %"PRIu64"", p->stateseq );
-    raft_member_set( &member );
-  }
-
- done:
-  free( p );
-}
-
-static int fvm_call_ping( struct raft_cluster *cl, uint64_t hostid, uint32_t progid, char *data, int datasize ) {
-  /* send data to followers */
-  int sts;
-  struct hrauth_call hcall;
-  struct xdr_s xdr;
-  struct rpc_conn *tmpconn;
-  struct ping_cxt *p;
-
-  fvm_log( LOG_LVL_DEBUG, "fvm_call_ping clid=%"PRIx64" Progid=%u Hostid=%"PRIx64" datasize=%u", cl->id, progid, hostid, datasize );
-  
-  tmpconn = rpc_conn_acquire();
-  if( !tmpconn ) return -1;
-  
-  memset( &hcall, 0, sizeof(hcall) );
-  hcall.hostid = hostid;
-  hcall.prog = FVM_RPC_PROG;
-  hcall.vers = FVM_RPC_VERS;
-  hcall.proc = 6;
-  hcall.timeout = 500;
-  hcall.service = HRAUTH_SERVICE_PRIV;
-  hcall.donecb = fvm_call_ping_donecb;
-  p = malloc( sizeof(*p) );
-  p->clid = cl->id;
-  p->hostid = hostid;
-  p->stateseq = cl->stateseq;
-  hcall.cxt = p;
-  
-  xdr_init( &xdr, tmpconn->buf, tmpconn->count );
-  xdr_encode_uint64( &xdr, cl->id );
-  xdr_encode_uint64( &xdr, hostreg_localid() );
-  xdr_encode_uint64( &xdr, cl->termseq );
-  xdr_encode_uint64( &xdr, cl->stateseq );
-  xdr_encode_uint64( &xdr, cl->stateterm );
-  xdr_encode_uint32( &xdr, progid );
-  xdr_encode_opaque( &xdr, (uint8_t *)data, datasize );
-  
-  sts = hrauth_call_udp_async( &hcall, &xdr, 1, NULL );
-  rpc_conn_release( tmpconn );
-  
-  return sts;
-}
-
-struct write_cxt {
-  uint64_t clid;
-  uint32_t progid;
-  uint32_t retry;
-  uint32_t timeout;
-};
-
-static void fvm_call_write_donecb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
-  struct write_cxt *w = (struct write_cxt *)hcallp->cxt;
-  struct raft_cluster cl;
-  struct fvm_module *m;
-  int sts;
-  int retry;
-  
-  if( !xdr ) {    
-    fvm_log( LOG_LVL_ERROR, "write timeout, retrying" );
-    sts = raft_cluster_by_id( w->clid, &cl );
-    m = fvm_module_by_progid( w->progid );
-    retry = (int)w->retry;
-    retry--;
-    if( m && sts == 0 && retry > 0 ) {
-      fvm_call_write( &cl, cl.leaderid, m, retry, (w->timeout * 3) / 2 );
-    }
-  } else {
-    fvm_log( LOG_LVL_DEBUG, "fvm_call_write success" );
-  }
-
-  free( w );
-  
-  return;
-}
-
-static int fvm_call_write( struct raft_cluster *cl, uint64_t hostid, struct fvm_module *module, uint32_t retry, int timeout ) {
-  /* send data segment to leader */
-  /* send data to followers */
-  int sts;
-  struct xdr_s xdr;
-  struct rpc_conn *tmpconn;
-  struct hrauth_call hcall;
-  struct write_cxt *w;
-
-  fvm_log( LOG_LVL_DEBUG, "fvm_call_write clid=%"PRIx64" hostid=%"PRIx64" datasize=%u", cl->id, hostid, module->header.datasize );
-  
-  tmpconn = rpc_conn_acquire();
-  if( !tmpconn ) return -1;
-  
-  memset( &hcall, 0, sizeof(hcall) );
-  hcall.hostid = hostid;
-  hcall.prog = FVM_RPC_PROG;
-  hcall.vers = FVM_RPC_VERS;
-  hcall.proc = 7;
-  hcall.timeout = timeout;
-  hcall.service = HRAUTH_SERVICE_PRIV;
-  hcall.donecb = fvm_call_write_donecb;
-  w = malloc( sizeof(*w) );
-  w->clid = cl->id;
-  w->progid = module->header.progid;
-  w->retry = retry;
-  hcall.cxt = w;
-  
-  xdr_init( &xdr, tmpconn->buf, tmpconn->count );
-  xdr_encode_uint64( &xdr, cl->id );
-  xdr_encode_uint32( &xdr, module->header.progid );
-  xdr_encode_opaque( &xdr, (uint8_t *)module->data, module->header.datasize );
-  
-  sts = hrauth_call_udp_async( &hcall, &xdr, 1, NULL );
-  rpc_conn_release( tmpconn );
-  
-  return sts;
-}
-
-static void fvm_send_pings( struct raft_cluster *cl, struct fvm_module *module ) {
-  /* send ping rpcs to all other members */
-  int i, n;
-  struct raft_member member[32];
-  
-  n = raft_member_list( cl->id, member, 32 );
-  for( i = 0; i < n; i++ ) {
-    fvm_log( LOG_LVL_TRACE, "Comparing cluster stateseq %"PRIu64" to member stateseq %"PRIu64"", cl->stateseq, member[i].stateseq );
-    
-    if( member[i].stateseq < cl->stateseq ) {
-      fvm_log( LOG_LVL_DEBUG, "Sending updated state module=%s clid=%"PRIx64" member=%"PRIx64" cl.stateseq=%"PRIu64" member.stateseq="PRIu64"",
-	       module->header.name, cl->id, member[i].hostid, cl->stateseq, member[i].stateseq );
-
-      fvm_call_ping( cl, member[i].hostid, module->header.progid, (char *)module->data, (int)module->header.datasize );
-    } 
-  }
-}
-
-int fvm_cluster_update( struct fvm_module *module ) {
-  int sts;
-  struct raft_cluster cl;
-
-  if( !module->clusterid ) return -1;
-  
-  fvm_log( LOG_LVL_INFO, "Updating cluster for program %s %u:%u cluster %"PRIx64"",
-	   module->header.name,
-	   module->header.progid,
-	   module->header.versid,
-	   module->clusterid );
-  
-  sts = raft_cluster_by_id( module->clusterid, &cl );
-  if( sts ) return sts;
-
-  if( cl.state == RAFT_STATE_LEADER ) {
-    /* send ping rpcs to all other members */
-    cl.stateterm = cl.termseq;
-    cl.stateseq++;
-    cl.commitseq = cl.stateseq;
-    raft_cluster_set( &cl );
-    
-    fvm_send_pings( &cl, module );
-  } else {
-    /* send write to leader */
-    if( !cl.leaderid ) {
-      fvm_log( LOG_LVL_WARN, "fvm_cluster_update cluster %"PRIx64" missing leader", cl.id );
-      return -1;
-    }
-    
-    sts = fvm_call_write( &cl, cl.leaderid, module, 3, 500 );
-    if( sts ) return sts;
-  }
-  
-  return 0;
-}
 

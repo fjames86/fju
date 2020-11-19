@@ -44,8 +44,6 @@
 #include <fju/rpc.h>
 #include <fju/hrauth.h>
 #include <fju/hostreg.h>
-#include <fju/raft.h>
-#include <fju/rex.h>
 #include <fju/nls.h>
 #include <fju/freg.h>
 #include <fju/sec.h>
@@ -63,18 +61,10 @@ struct clt_info {
 };
 
 static void rpcbind_results( struct xdr_s *xdr );
-static void raft_list_results( struct xdr_s *xdr );
-static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void rex_read_results( struct xdr_s *xdr );
-static void rex_write_results( struct xdr_s *xdr );
-static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void hrauth_local_results( struct xdr_s *xdr );
 static void hrauth_list_results( struct xdr_s *xdr );
 static void clt_call( struct clt_info *info, int argc, char **argv, int i );
 static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i );
-static void raft_add_results( struct xdr_s *xdr );
 static void nls_list_results( struct xdr_s *xdr );
 static void nls_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void nls_read_results( struct xdr_s *xdr );
@@ -114,11 +104,6 @@ static struct clt_info clt_procs[] = {
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 2, NULL, hrauth_list_results, "hrauth.list", NULL },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_list_results, "raft.list", NULL },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, raft_add_args, raft_add_results, "raft.add", "clid=CLID" },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, raft_rem_args, NULL, "raft.rem", "clid=CLID" },
-    { REX_RPC_PROG, REX_RPC_VERS, 1, rex_read_args, rex_read_results, "rex.read", "clid=CLID" },
-    { REX_RPC_PROG, REX_RPC_VERS, 2, rex_write_args, rex_write_results, "rex.write", "clid=CLID data=DATA" },
     { NLS_RPC_PROG, NLS_RPC_VERS, 1, NULL, nls_list_results, "nls.list", NULL },
     { NLS_RPC_PROG, NLS_RPC_VERS, 3, nls_read_args, nls_read_results, "nls.read", "hshare=HSHARE [id=ID]" },
     { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
@@ -255,7 +240,6 @@ int main( int argc, char **argv ) {
 #endif
 
     hostreg_open();
-    raft_open();
     freg_open( NULL, NULL );
 
     glob.hostid = hostreg_localid();
@@ -542,163 +526,6 @@ static void rpcbind_results( struct xdr_s *xdr ) {
   usage( "XDR error" );
 }
 
-static void raft_list_results( struct xdr_s *xdr ) {
-    int i, n, j, m;
-    struct raft_cluster cl;
-    struct raft_member member;
-    char timestr[64];
-    
-    xdr_decode_uint32( xdr, (uint32_t *)&n );
-    for( i = 0; i < n; i++ ) {
-	xdr_decode_uint64( xdr, &cl.id );
-	xdr_decode_uint64( xdr, &cl.leaderid );
-	xdr_decode_uint64( xdr, &cl.termseq );
-	xdr_decode_uint64( xdr, &cl.voteid );
-	xdr_decode_uint32( xdr, &cl.state );
-	xdr_decode_uint32( xdr, &cl.typeid );
-	xdr_decode_uint64( xdr, &cl.commitseq );
-	xdr_decode_uint64( xdr, &cl.stateseq );
-	xdr_decode_uint64( xdr, &cl.stateterm );
-	// TODO: print
-	printf( "Cluster ID=%"PRIx64" leader=%"PRIx64" termseq=%"PRIu64"\n"
-		"        state=%s typeid=%u commitseq=%"PRIu64" stateseq=%"PRIu64" stateterm=%"PRIu64"\n",
-		cl.id, cl.leaderid, cl.termseq,
-		cl.state == RAFT_STATE_FOLLOWER ? "FOLLOWER" :
-		cl.state == RAFT_STATE_CANDIDATE ? "CANDIDATE" :
-		cl.state == RAFT_STATE_LEADER ? "LEADER" :
-		"Unknown",
-		cl.typeid, cl.commitseq, cl.stateseq, cl.stateterm );
-	
-	xdr_decode_uint32( xdr, (uint32_t *)&m );
-	for( j = 0; j < m; j++ ) {
-	    xdr_decode_uint64( xdr, &member.hostid );
-	    xdr_decode_uint64( xdr, &member.lastseen );
-	    xdr_decode_uint32( xdr, &member.flags );
-	    xdr_decode_uint64( xdr, &member.nextseq );	    
-	    xdr_decode_uint64( xdr, &member.stateseq );
-
-	    if( member.lastseen ) {
-	      sec_timestr( member.lastseen, timestr );
-	    } else {
-	      strcpy( timestr, "Never" );
-	    }
-	  	    
-	    printf( "    Member ID=%"PRIx64" lastseen=%s flags=%x nextseq=%"PRIu64" stateseq=%"PRIu64"\n",
-		    member.hostid, timestr, member.flags, member.nextseq, member.stateseq );
-	}
-    }
-    
-}
-
-static void rex_read_results( struct xdr_s *xdr ) {
-  int sts, len;
-  uint8_t *buf;
-
-  sts = xdr_decode_opaque_ref( xdr, &buf, &len );
-  if( sts ) usage( "XDR error" );
-  if( len > 0 ) {
-    if( buf[len - 1] && len < xdr->count ) buf[len] = '\0';
-    printf( "%s\n", buf );
-  }
-  
-}
-
-static void rex_write_results( struct xdr_s *xdr ) {
-  int sts, b;
-  uint64_t leaderid;
-
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  sts = xdr_decode_uint64( xdr, &leaderid );
-  if( sts ) usage( "xdr error" );
-  
-  printf( "Success=%s Leader=%"PRIx64"\n", b ? "True" : "False", leaderid );
-}
-
-static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  uint64_t clid = 0;
-  char argname[64], *argval;
-  
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "clid" ) == 0 ) {
-      clid = strtoull( argval, NULL, 16 );
-    } else usage( "Unknown arg \"%s\"", argname );
-    i++;
-  }
-  if( !clid ) usage( "Need CLID" );
-  
-  xdr_encode_uint64( xdr, clid );
-}
-
-static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  uint64_t clid = 0;
-  char argname[64], *argval;
-  char data[REX_MAX_BUF];
-  int len;
-  
-  memset( data, 0, sizeof(data) );
-  
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "clid" ) == 0 ) {
-      clid = strtoull( argval, NULL, 16 );
-    } else if( strcmp( argname, "data" ) == 0 ) {
-      len = strlen( argval );
-      memcpy( data, argval, len );
-    } else usage( "Unknown arg \"%s\"", argname );
-    i++;
-  }
-  if( !clid ) usage( "Need CLID" );
-  
-  xdr_encode_uint64( xdr, clid );
-  xdr_encode_opaque( xdr, (uint8_t *)data, len );
-}
-
-static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  int sts;
-  struct raft_cluster cl;
-  struct raft_member member[32];
-  int nmember, j;
-  uint64_t clid = 0;
-  char argname[64], *argval;
-  
-  while( i < argc ) {
-      argval_split( argv[i], argname, &argval );
-      if( strcmp( argname, "clid" ) == 0 ) {
-	  clid = strtoull( argval, NULL, 16 );
-      } else usage( "Unknown arg \"%s\"", argname );
-      i++;
-  }
-  if( !clid ) usage( "Need CLID" );
-  
-  sts = raft_cluster_by_id( clid, &cl );
-  if( sts ) usage( "Unknown cluster %"PRIx64"", clid );
-  nmember = raft_member_list( clid, member, 32 );
-  
-  xdr_encode_uint64( xdr, clid );
-  xdr_encode_uint32( xdr, cl.typeid ); 
-  xdr_encode_uint32( xdr, 0 ); // flags 
-  
-  xdr_encode_uint32( xdr, nmember );
-  for( j = 0; j < nmember; j++ ) {
-    xdr_encode_uint64( xdr, member[j].hostid == glob.hostid ? hostreg_localid() : member[j].hostid );
-  }
-    
-}
-static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    uint64_t clid = 0;
-    char argname[64], *argval;
-    while( i < argc ) {
-	argval_split( argv[i], argname, &argval );
-	if( strcmp( argname, "clid" ) == 0 ) {
-	    clid = strtoull( argval, NULL, 16 );
-	} else usage( "Unknown arg \"%s\"", argname );
-	i++;
-    }
-    if( !clid ) usage( "Need CLID" );
-    xdr_encode_uint64( xdr, clid );
-}
 
 static void bn2hex( char *bn, char *hex, int len ) {
   int i;
@@ -788,17 +615,6 @@ bad:
     usage( "XDR error" );
 }
 
-static void raft_add_results( struct xdr_s *xdr ) {
-  int sts, b;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) goto bad;
-  printf( "Success=%s\n", b ? "True" : "False" );
-  return;
-  
- bad:
-  usage( "XDR error" );
-}
 
 static int nls_decode_prop( struct xdr_s *xdr, uint64_t *hshare, struct log_prop *prop ) {
   int sts;

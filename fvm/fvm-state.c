@@ -17,7 +17,6 @@
 #include <fju/log.h>
 #include <fju/programs.h>
 #include <fju/rpc.h>
-#include <fju/raft.h>
 
 int fvm_state_init( struct fvm_s *state, uint32_t progid, uint32_t procid ) {
   struct fvm_module *m;
@@ -117,13 +116,6 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
   int sts = 0, ns = 0;
   uint64_t start, end;
 
-  if( state->module->clusterid ) {
-    struct raft_cluster cl;
-    sts = raft_cluster_by_id( state->module->clusterid, &cl );
-    if( sts ) return sts;
-    if( !cl.leaderid ) return -1;
-  }
-  
   sts = 0;
   
   if( nsteps == 0 ) nsteps = fvm_max_steps( 0 );

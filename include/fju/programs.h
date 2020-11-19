@@ -46,9 +46,6 @@
 #define HRAUTH_RPC_PROG (FJU_BASE_PROG + 2)
 #define HRAUTH_RPC_VERS 1
 
-#define REX_RPC_PROG (FJU_BASE_PROG + 3)
-#define REX_RPC_VERS 1
-
 #define FREG_RPC_PROG (FJU_BASE_PROG + 4)
 #define FREG_RPC_VERS 1
 

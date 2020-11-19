@@ -1,474 +1,1252 @@
-/*
- * MIT License
- * 
- * Copyright (c) 2019 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
- 
-#ifdef WIN32
-#define _CRT_SECURE_NO_WARNINGS
-#endif
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <inttypes.h>
-
+#include <fju/raft.h>
 #include <fju/mmf.h>
 #include <fju/rpc.h>
+#include <fju/rpcd.h>
 #include <fju/hostreg.h>
+#include <fju/hrauth.h>
+#include <fju/programs.h>
 #include <fju/log.h>
 #include <fju/sec.h>
 
-#include <fju/raft.h>
-
-#define RAFT_ELEC_LOW 200      /* minimum election timeout */
-#define RAFT_ELEC_HIGH 1000    /* maximum eleection timeout */
-#define RAFT_TERM_LOW 3000     /* minimum term timeout */
-#define RAFT_TERM_HIGH 10000    /* maxmimum term timeout */
-
-#define RAFT_MAX_CLUSTER 32
-#define RAFT_MAX_MEMBER 256
-
-struct raft_header {
-    uint32_t magic;
-#define RAFT_MAGIC 0x22AE9EF7
-    uint32_t version;
-    uint64_t seq;
-
-    /* entry counts */
-    uint32_t cluster_max;
-    uint32_t cluster_count;
-    uint32_t member_max;
-    uint32_t member_count;
-
-    /* header fields */
-    uint32_t elec_low;
-    uint32_t elec_high;
-    uint32_t term_low;
-    uint32_t term_high;
-    uint32_t rpc_timeout;
-    uint32_t rpc_retry;
+static log_deflogger(raft_log, RAFT_RPC_PROG)
   
-    uint32_t spare[30];
+struct raft_file {
+  struct raft_prop prop;
+  struct raft_cluster cluster[RAFT_MAX_CLUSTER];
 };
 
-
-struct raft_file {
-    struct raft_header header;
-    struct raft_cluster cluster[RAFT_MAX_CLUSTER];
-    struct raft_member member[RAFT_MAX_MEMBER];
+struct raft_log {
+  uint64_t clid;
+  struct log_s log;
 };
 
 static struct {
-    struct mmf_s mmf;
-    int ocount;
-    struct raft_file *file;
+  uint32_t ocount;
+  struct mmf_s mmf;
+  struct raft_file *file;
+
+  struct raft_prop prop;
+  struct raft_cluster cl[RAFT_MAX_CLUSTER];
+  struct raft_log clog[RAFT_MAX_CLUSTER];
+  uint32_t ncl;
+  struct raft_app *app;
+
+  char buf[RAFT_MAX_COMMAND];
 } glob;
 
+static uint64_t raft_term_timeout( void ) {
+  return rpc_now() + glob.prop.term_low +
+    (sec_rand_uint32() % (glob.prop.term_high - glob.prop.term_low));
+}
+
+static uint64_t raft_elec_timeout( void ) {
+  return rpc_now() + glob.prop.elec_low +
+    (sec_rand_uint32() % (glob.prop.elec_high - glob.prop.elec_low));
+}
+
 static void raft_lock( void ) {
-    mmf_lock( &glob.mmf );
+  mmf_lock( &glob.mmf );
 }
 static void raft_unlock( void ) {
-    mmf_unlock( &glob.mmf );
+  mmf_unlock( &glob.mmf );
 }
 
 int raft_open( void ) {
-    int sts;
-    
-    if( glob.ocount < 0 ) return -1;
-    if( glob.ocount > 0 ) {
-        glob.ocount++;
-        return 0;
-    }
+  int sts;
 
-    mmf_ensure_dir( mmf_default_path( "raft", NULL ) );
-    sts = mmf_open( mmf_default_path( "raft", "raft.dat", NULL ), &glob.mmf );
-    if( sts ) return sts;
-    
-    sts = mmf_remap( &glob.mmf, sizeof(*glob.file) );
-    if( sts ) goto bad;
-    glob.file = (struct raft_file *)glob.mmf.file;
-    
-    raft_lock();
-    if( glob.file->header.magic != RAFT_MAGIC ) {
-        glob.file->header.magic = RAFT_MAGIC;
-        glob.file->header.version = RAFT_VERSION;
-        glob.file->header.seq = 1;
-        glob.file->header.cluster_max = RAFT_MAX_CLUSTER;
-        glob.file->header.cluster_count = 0;
-        glob.file->header.member_max = RAFT_MAX_MEMBER;
-        glob.file->header.member_count = 0;	
-	glob.file->header.elec_low = RAFT_ELEC_LOW;
-	glob.file->header.elec_high = RAFT_ELEC_HIGH;
-	glob.file->header.term_low = RAFT_TERM_LOW;
-	glob.file->header.term_high = RAFT_TERM_HIGH;
-	glob.file->header.rpc_timeout = 500;
-	glob.file->header.rpc_retry = 3;
-    } else if( glob.file->header.version != RAFT_VERSION ) {
-        raft_unlock();
-        goto bad;
-    }
-    raft_unlock();
-
-    hostreg_open();
-    
-    glob.ocount = 1;
+  if( glob.ocount > 0 ) {
+    glob.ocount++;
     return 0;
- bad:
-    mmf_close( &glob.mmf );
-    return -1;
+  }
+
+  sts = mmf_open( mmf_default_path( "raft", "raft.dat", NULL ), &glob.mmf );
+  if( sts ) return sts;
+
+  sts = mmf_remap( &glob.mmf, sizeof(*glob.file) );
+
+  glob.file = (struct raft_file *)glob.mmf.file;
+
+  if( glob.file->prop.magic != RAFT_MAGIC ) {
+    glob.file->prop.magic = RAFT_MAGIC;
+    glob.file->prop.version = RAFT_VERSION;
+    glob.file->prop.seq = 1;
+    glob.file->prop.count = 0;
+    glob.file->prop.flags = 0;
+    glob.file->prop.elec_low = 1000;
+    glob.file->prop.elec_high = 3000;
+    glob.file->prop.term_low = 3000;
+    glob.file->prop.term_high = 8000;
+    glob.file->prop.rpc_timeout = 200;
+  }
+  
+  glob.ocount = 1;
+  return 0;
 }
 
 int raft_close( void ) {
-    if( glob.ocount <= 0 ) return -1;
+  if( glob.ocount == 0 ) return -1;
+  if( glob.ocount > 1 ) {
     glob.ocount--;
-    if( glob.ocount > 0 ) return 0;
-    mmf_close( &glob.mmf );
-    hostreg_close();
     return 0;
-}
-
-int raft_reset( void ) {
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    glob.file->header.magic = RAFT_MAGIC;
-    glob.file->header.version = RAFT_VERSION;
-    glob.file->header.seq = 1;
-    glob.file->header.cluster_max = RAFT_MAX_CLUSTER;
-    glob.file->header.cluster_count = 0;
-    glob.file->header.member_max = RAFT_MAX_MEMBER;
-    glob.file->header.member_count = 0;    
-    raft_unlock();
-    return 0;
+  }
+  mmf_close( &glob.mmf );
+  glob.ocount = 0;
+  return 0;
 }
 
 int raft_prop( struct raft_prop *prop ) {
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    prop->version = glob.file->header.version;
-    prop->seq = glob.file->header.seq;
-    prop->cluster_max = glob.file->header.cluster_max;
-    prop->cluster_count = glob.file->header.cluster_count;
-    prop->member_max = glob.file->header.member_max;
-    prop->member_count = glob.file->header.member_count;    
-    prop->elec_low = glob.file->header.elec_low;
-    prop->elec_high = glob.file->header.elec_high;
-    prop->term_low = glob.file->header.term_low;
-    prop->term_high = glob.file->header.term_high;
-    prop->rpc_timeout = glob.file->header.rpc_timeout;
-    prop->rpc_retry = glob.file->header.rpc_retry;
-    raft_unlock();
-    return 0;
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  *prop = glob.file->prop;
+  raft_unlock();
+  return 0;
 }
 
-int raft_set_timeouts( uint32_t *elec_low, uint32_t *elec_high, uint32_t *term_low, uint32_t *term_high ) {
-    uint32_t to;
-    
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    
-    if( elec_low ) {
-      to = glob.file->header.elec_low;
-      glob.file->header.elec_low = *elec_low;
-      *elec_low = to;
-    }
-    if( elec_high ) {
-      to = glob.file->header.elec_high;
-      glob.file->header.elec_high = *elec_high;
-      *elec_high = to;
-    }
-    if( term_low ) {
-      to = glob.file->header.term_low;
-      glob.file->header.term_low = *term_low;
-      *term_low = to;
-    }
-    if( term_high ) {
-      to = glob.file->header.term_high;
-      glob.file->header.term_high = *term_high;
-      *term_high = to;
-    }
-    
-    raft_unlock();
-    return 0;
+int raft_prop_set( uint32_t mask, struct raft_prop *prop ) {
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  if( mask & RAFT_PROP_ELEC_LOW ) {
+    glob.file->prop.elec_low = prop->elec_low;
+  }
+  if( mask & RAFT_PROP_ELEC_HIGH ) {
+    glob.file->prop.elec_high = prop->elec_high;
+  }
+  if( mask & RAFT_PROP_TERM_LOW ) {
+    glob.file->prop.term_low = prop->term_low;
+  }
+  if( mask & RAFT_PROP_TERM_HIGH ) {
+    glob.file->prop.term_high = prop->term_high;
+  }
+  if( mask & RAFT_PROP_RPC_TIMEOUT ) {
+    glob.file->prop.rpc_timeout = prop->rpc_timeout;
+  }
+  raft_unlock();
+  return 0;
+}  
+
+
+/* database functions */
+int raft_cluster_list( struct raft_cluster *cl, int ncl ) {
+  int i;
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  for( i = 0; i < glob.file->prop.count; i++ ) {
+    if( i < ncl ) cl[i] = glob.file->cluster[i];
+  }
+  i = glob.file->prop.count;
+  raft_unlock();
+  return i;
 }
 
-int raft_set_rpc_timeout( uint32_t rpc_timeout ) {
-
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    
-    glob.file->header.rpc_timeout = rpc_timeout;
-    
-    raft_unlock();
-    return 0;
+int raft_clid_list( uint64_t *clid, int ncl ) {
+  int i;
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  for( i = 0; i < glob.file->prop.count; i++ ) {
+    if( i < ncl ) clid[i] = glob.file->cluster[i].clid;
+  }
+  i = glob.file->prop.count;
+  raft_unlock();
+  return i;  
 }
 
-int raft_set_rpc_retry( uint32_t rpc_retry) {
+int raft_cluster_by_clid( uint64_t clid, struct raft_cluster *cl ) {
+  int i, sts;
 
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    
-    glob.file->header.rpc_retry = rpc_retry;
-    
-    raft_unlock();
-    return 0;
-}
-
-
-int raft_cluster_list( struct raft_cluster *cluster, int n ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    for( i = 0; i < glob.file->header.cluster_count; i++ ) {
-         if( i < n ) {
-             cluster[i] = glob.file->cluster[i];
-         }
+  sts = -1;
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  for( i = 0; i < glob.file->prop.count; i++ ) {
+    if( glob.file->cluster[i].clid == clid ) {
+      if( cl ) *cl = glob.file->cluster[i];
+      sts = 0;
+      break;
     }
-    sts = glob.file->header.cluster_count;
-    raft_unlock();
-    return sts;
+  }
+  raft_unlock();
+  return sts;
 }
 
-int raft_cluster_by_id( uint64_t clid, struct raft_cluster *cluster ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    sts = -1;
-    for( i = 0; i < glob.file->header.cluster_count; i++ ) {
-        if( glob.file->cluster[i].id == clid ) {
-            if( cluster ) *cluster = glob.file->cluster[i];
-            sts = 0;
-            break;
-        }
-    }
-    raft_unlock();
-    return sts;
-}
+int raft_cluster_set( struct raft_cluster *cl ) {
+  int i, sts;
 
-int raft_cluster_set( struct raft_cluster *cluster ) {
-    int sts, i;
-
-    if( !cluster->id ) {
-      sec_rand( &cluster->id, sizeof(cluster->id) );
-      cluster->termseq = 0;
-      cluster->voteid = 0;
-      cluster->flags = 0;
-      cluster->state = RAFT_STATE_FOLLOWER;
-      cluster->timeout = 0;
-    }
-    
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-
-    /* update existing */
-    sts = -1;
-    for( i = 0; i < glob.file->header.cluster_count; i++ ) {
-      if( glob.file->cluster[i].id == cluster->id ) {
-	glob.file->cluster[i] = *cluster;
-	glob.file->header.seq++;
-	sts = 0;
-	goto done;
+  if( !cl->clid ) sec_rand( &cl->clid, sizeof(cl->clid) );
+  
+  sts = -1;
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  
+  for( i = 0; i < glob.file->prop.count; i++ ) {
+    if( glob.file->cluster[i].clid == cl->clid ) {
+      if( cl ) {
+	glob.file->cluster[i] = *cl;
+	glob.file->prop.seq++;
       }
+      sts = 0;
+      goto done;
     }
+  }
 
-    /* add new */
-    sts = -1;
-    if( (glob.file->header.cluster_count >= glob.file->header.cluster_max) ) {
-	sts = -1;
-	goto done;
-    }
-    
-    i = glob.file->header.cluster_count;
-    cluster->leaderid = hostreg_localid();
-    glob.file->cluster[i] = *cluster;
-    glob.file->header.cluster_count++;
+  if( glob.file->prop.count >= RAFT_MAX_CLUSTER ) goto done;
 
-    glob.file->header.seq++;
-    sts = 0;
-
-done:
-    raft_unlock();
-    return sts;
+  i = glob.file->prop.count;
+  cl->term = 1;
+  cl->appliedseq = 0;
+  glob.file->cluster[i] = *cl;
+  glob.file->prop.count++;
+  glob.file->prop.seq++;
+  sts = 0;
+  
+ done:
+  raft_unlock();
+  return sts;  
 }
 
 int raft_cluster_rem( uint64_t clid ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    
-    raft_lock();
+  int i, sts;
 
-    /* delete all members */
-    i = 0;
-    while( i < glob.file->header.member_count ) {
-	if( glob.file->member[i].clid == clid ) {
-	    if( i != (glob.file->header.member_count - 1) ) glob.file->member[i] = glob.file->member[glob.file->header.member_count - 1];
-	    glob.file->header.member_count--;
-	    glob.file->header.seq++;
-	} else {
-	    i++;
-	}
-    }
+  sts = -1;
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  for( i = 0; i < glob.file->prop.count; i++ ) {
+    if( glob.file->cluster[i].clid == clid ) {
+      if( i != (glob.file->prop.count - 1) ) glob.file->cluster[i] = glob.file->cluster[glob.file->prop.count - 1];
 
-    /* delete cluster */
-    sts = -1;
-    for( i = 0; i < glob.file->header.cluster_count; i++ ) {
-        if( glob.file->cluster[i].id == clid ) {
-            if( i != (glob.file->header.cluster_count - 1) ) glob.file->cluster[i] = glob.file->cluster[glob.file->header.cluster_count - 1];
-            glob.file->header.cluster_count--;
-            glob.file->header.seq++;
-            sts = 0;
-            break;
-        }
+      /* delete the command log */
+      {
+	char clstr[64];
+	sprintf( clstr, "%"PRIx64".log", clid );
+	mmf_delete_file( mmf_default_path( "raft", clstr, NULL ) );
+      }
+      
+      glob.file->prop.count--;
+      sts = 0;
+      break;
     }
-    
-    raft_unlock();
-    return sts;
+  }
+  raft_unlock();
+  return sts;    
 }
 
-int raft_cluster_quorum( uint64_t clid ) {
-    int i, count;
-    
-    if( glob.ocount <= 0 ) return -1;    
-    raft_lock();
+int raft_log_open( uint64_t clid, struct log_s *log ) {
+  char clstr[64];
+  struct log_opts opts;
+  
+  sprintf( clstr, "%"PRIx64".log", clid );
+  memset( &opts, 0, sizeof(opts) );
+  opts.mask = LOG_OPT_COOKIE|LOG_OPT_FLAGS;
+  strcpy( opts.cookie, "raft" );
+  opts.flags = LOG_FLAG_FIXED|LOG_FLAG_GROW;
+  return log_open( mmf_default_path( "raft", clstr, NULL ), &opts, log );
+}
 
+/* ------------ rpc -------------------- */
+
+static void raft_convert_follower( struct raft_cluster *cl, uint64_t term, uint64_t leaderid );
+static void raft_convert_candidate( struct raft_cluster *cl );
+static void raft_convert_leader( struct raft_cluster *cl );
+static void raft_set_iter_timeout( void );
+static struct raft_app *raft_app_by_appid( uint32_t appid );
+static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t cseq );
+
+static struct raft_cluster *cl_by_id( uint64_t clid ) {
+  int i;
+  for( i = 0; i < glob.ncl; i++ ) {
+    if( glob.cl[i].clid == clid ) return &glob.cl[i];
+  }
+  return NULL;
+}
+static struct log_s *clog_by_id( uint64_t clid ) {
+  int i;
+  /* return already open log */
+  for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
+    if( glob.clog[i].clid == clid ) return &glob.clog[i].log;
+  }
+
+  /* open a new log descriptor */
+  for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
+    if( glob.clog[i].clid == 0 ) {
+      glob.clog[i].clid = clid;
+      raft_log_open( clid, &glob.clog[i].log );
+      return &glob.clog[i].log;
+    }
+  }
+
+  /* all a log we don't need anymore */
+  for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
+    if( !cl_by_id( glob.clog[i].clid ) ) {
+      log_close( &glob.clog[i].log );
+      glob.clog[i].clid = clid;
+      raft_log_open( clid, &glob.clog[i].log );
+      return &glob.clog[i].log;
+    }
+  }
+
+  /* failed? "this should never happen" */
+  raft_log( LOG_LVL_ERROR, "Failed to open command log clid=%"PRIx64"", clid ); 
+  return NULL;    
+}
+
+struct raft_cmd_header {
+  uint64_t term;
+  uint64_t seq;
+};
+
+/* read command buffer. returns -1 on error or command buffer length on success */
+static int raft_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, char *buf, int len, uint64_t *entryid ) {
+  int sts, ne;
+  struct log_s *log;
+  struct log_entry entry;
+  struct log_iov iov[1];
+  struct raft_cmd_header hdr;
+  uint64_t id;
+  
+  log = clog_by_id( clid );
+  if( !log ) return -1;
+
+  /* 
+   * Read from most recently written entry until we find a matching entry
+   * Note that this is somewhat inefficient but hopefully we won't be looking too far 
+   * back in time very often so it should be acceptable. 
+   * It would be better to have a constant time lookup mapping seq => entry.id but this 
+   * is not easy to do using fjlogs (we'd need a custom logger)
+   */
+  
+  memset( &entry, 0, sizeof(entry) );
+  entry.iov = iov;
+  iov[0].buf = (char *)&hdr;
+  iov[0].len = sizeof(hdr);
+  entry.niov = 1;
+  id = 0;
+  while( 1 ) {
+    sts = log_read_end( log, id, &entry, 1, &ne );
+    if( sts || !ne ) break;
+
+    if( hdr.seq == seq ) {
+      if( term ) *term = hdr.term;
+      log_read_buf( log, entry.id, buf, len, NULL );
+      if( entryid ) *entryid = entry.id;
+      return entry.msglen;
+    }
+
+    id = entry.id;
+  }
+
+  return -1;  
+}
+
+/* get highest seq written */
+static int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
+  int sts, ne;
+  struct log_s *log;
+  struct log_entry entry;
+  struct log_iov iov[1];
+  struct raft_cmd_header hdr;
+
+  if( term ) *term = 0;
+  if( seq ) *seq = 0;
+  
+  log = clog_by_id( clid );
+  if( !log ) return -1;
+
+  memset( &entry, 0, sizeof(entry) );
+  iov[0].buf = (char *)&hdr;
+  iov[0].len = sizeof(hdr);
+  entry.iov = iov;
+  entry.niov = 1;
+  sts = log_read_end( log, 0, &entry, 1, &ne );
+  if( sts ) return -1;
+  if( term ) *term = ne ? hdr.term : 0;
+  if( seq ) *seq = ne ? hdr.seq : 0;
+  return 0;    
+}
+
+/* store a command buffer */
+static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *buf, int len ) {
+  int sts;
+  struct log_s *log;
+  struct log_entry entry;
+  struct log_iov iov[2];
+  struct raft_cmd_header hdr;
+  uint64_t nseq;
+
+  /* get highest seq written */
+  sts = raft_command_seq( clid, NULL, &nseq );
+  if( sts ) return sts;
+
+  /* disallow writing entries out of order */
+  if( (nseq == 0) || (seq != (nseq - 1)) ) return -1;
+  
+  log = clog_by_id( clid );
+  if( !log ) return -1;
+
+  hdr.term = term;
+  hdr.seq = seq;
+  
+  memset( &entry, 0, sizeof(entry) );
+  entry.iov = iov;
+  entry.niov = 2;
+  iov[0].buf = (char *)&hdr;
+  iov[0].len = sizeof(hdr);
+  iov[1].buf = buf;
+  iov[1].len = len;
+  entry.flags = LOG_BINARY;
+  log_write( log, &entry );
+
+  /* wait for command to be written to stable storage */
+  log_sync( log, MMF_SYNC_NOW );
+  return 0;
+}
+
+static int raft_cluster_quorum( struct raft_cluster *cl ) {
+  return ((1 + cl->nmember) / 2) + 1;
+}
+
+/* find the highest storedseq confirmed on quorum of nodes */
+static uint64_t raft_quorum_commitseq( struct raft_cluster *cl ) {
+  int i, q, c;
+  uint64_t lseq;
+
+  /* get quorum */
+  q = raft_cluster_quorum( cl );
+
+  /* get local highest stored seq */
+  raft_command_seq( cl->clid, NULL, &lseq );
+
+  while( lseq ) {
+    c = 1;
+    for( i = 0; i < cl->nmember; i++ ) {
+      if( cl->member[i].storedseq >= lseq ) c++;
+    }
+    if( c >= q ) break;
+    lseq--;
+  }
+  
+  return lseq;
+}
+
+static void raft_apply_commands( struct raft_cluster *cl ) {
+  struct raft_app *app;
+  uint64_t s;
+  int sts;
+  
+  /* apply any commands commited but not yet applied */
+  app = raft_app_by_appid( cl->appid );
+  if( app && cl->appliedseq < cl->commitseq ) {
+    for( s = cl->appliedseq + 1; s <= cl->commitseq; s++ ) {
+      raft_log( LOG_LVL_INFO, "raft_apply_command seq=%"PRIu64"", s );
+      sts = raft_command_by_seq( cl->clid, s, NULL, glob.buf, sizeof(glob.buf), NULL );
+      if( sts ) break; /* command buffer not found */
+
+      app->command( cl, glob.buf, sts );
+      cl->appliedseq = s;
+      raft_cluster_set( cl );
+    }
+  }
+  
+}
+
+
+#if 0
+static uint64_t raft_min_storedseq( struct raft_cluster *cl ) {
+  int i;
+  uint64_t seq = 0;
+  for( i = 0; i < cl->nmember; i++ ) {
+    if( cl->member[i].storedseq < seq ) seq = cl->member[i].storedseq;
+  }
+  return seq;
+}
+#endif
+
+
+
+
+
+
+
+static void raft_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
+  uint64_t clid, hostid, term, seq;
+  struct raft_cluster *cl;
+  struct raft_member *mp;
+  int i, success, sts;
+  
+  raft_log( LOG_LVL_TRACE, "raft_ping_cb %s count=%d", res ? "Success" : "Timeout", res ? res->count - res->offset : -1 );
+  if( !res ) return;
+  
+  clid = hcallp->cxt2;
+  cl = cl_by_id( clid );
+  if( !cl ) {
+    raft_log( LOG_LVL_TRACE, "Unknown cluster" );
+    return;
+  }
+  hostid = hcallp->hostid;
+
+  mp = NULL;
+  for( i = 0; i < cl->nmember; i++ ) {
+    if( cl->member[i].hostid == hostid ) {
+      mp = &cl->member[i];
+      break;
+    }
+  }
+  if( !mp ) {
+    raft_log( LOG_LVL_ERROR, "Unknown member" );
+    return;
+  }
+
+  sts = xdr_decode_boolean( res, &success );
+  if( !sts ) sts = xdr_decode_uint64( res, &term );
+  if( !sts ) sts = xdr_decode_uint64( res, &seq );
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "Xdr decode error" );
+    return;
+  }
+
+  raft_log( LOG_LVL_TRACE, "raft_vote_cb success=%s term=%"PRIu64" storeseq=%"PRIu64"", success ? "true" : "false", term, seq );
+  if( term > cl->term ) {
+    raft_log( LOG_LVL_TRACE, "Remote term higher - convert to follower" );
+    cl->voteid = 0;
+    raft_convert_follower( cl, term, hcallp->hostid );
+  }
+  
+  if( !success ) {
+    raft_log( LOG_LVL_TRACE, "ping rejected" );
+  }
+  
+  mp->lastseen = time( NULL );
+  mp->storedseq = seq;
+  raft_cluster_set( cl );
+  return;  
+}
+
+static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
+  struct hrauth_call hcall;
+  struct xdr_s args;
+  char argbuf[256];
+  int sts;
+
+  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+  /* encode args */
+  xdr_encode_uint64( &args, cl->clid );
+  xdr_encode_uint64( &args, cl->leaderid ); /* leaderid (must match sender id!) */
+  xdr_encode_uint64( &args, cl->term ); /* current term */
+  xdr_encode_uint64( &args, cl->commitseq ); /* leaders commit seq */
+
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = RAFT_RPC_PROG;
+  hcall.vers = RAFT_RPC_VERS;
+  hcall.proc = 1; /* ping */
+  hcall.donecb = raft_ping_cb;
+  hcall.cxt2 = cl->clid;
+  hcall.timeout = glob.prop.rpc_timeout;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  sts = hrauth_call_async( &hcall, &args, 1 );
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
+    return;
+  }
+
+  
+}
+
+static void raft_send_pings( struct raft_cluster *cl ) {
+  int i;
+  for( i = 0; i < cl->nmember; i++ ) {
+    raft_call_ping( cl, cl->member[i].hostid );
+  }
+}
+
+static void raft_vote_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
+  uint64_t clid, hostid, term;
+  struct raft_cluster *cl;
+  struct raft_member *mp;
+  int i, success, sts, count;
+  
+  raft_log( LOG_LVL_DEBUG, "raft_vote_cb %s", res ? "Success" : "timeout" );
+  if( !res ) return;
+  
+  clid = hcallp->cxt2;
+  cl = cl_by_id( clid );
+  if( !cl ) {
+    raft_log( LOG_LVL_TRACE, "Unknown cluster %"PRIx64"", clid );
+    return;
+  }
+  hostid = hcallp->hostid;
+
+  mp = NULL;
+  for( i = 0; i < cl->nmember; i++ ) {
+    if( cl->member[i].hostid == hostid ) {
+      mp = &cl->member[i];
+      break;
+    }
+  }
+  if( !mp ) {
+    raft_log( LOG_LVL_ERROR, "Unknown member" );
+    return;
+  }
+
+  sts = xdr_decode_boolean( res, &success );
+  if( !sts ) sts = xdr_decode_uint64( res, &term );
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "Xdr decode error" );
+    return;
+  }
+
+  if( term > cl->term ) {
+    raft_log( LOG_LVL_TRACE, "Vote returned newer term - convert to follower" );
+    raft_convert_follower( cl, term, hostid );
+  } else if( success ) {
+    mp->flags |= RAFT_MEMBER_VOTED;
     count = 1;
-    for( i = 0; i < glob.file->header.member_count; i++ ) {
-      if( glob.file->member[i].clid == clid ) count++;
+    for( i = 0; i < cl->nmember; i++ ) {
+      if( cl->member[i].flags & RAFT_MEMBER_VOTED ) count++;
     }
 
-    raft_unlock();
-
-    return (count / 2) + 1;
-}
-
-int raft_member_list( uint64_t clid, struct raft_member *member, int n ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    sts = 0;
-    for( i = 0; i < glob.file->header.member_count; i++ ) {
-	if( (clid == 0) || (glob.file->member[i].clid == clid) ) {
-	    if( sts < n ) {
-		member[sts] = glob.file->member[i];
-	    }
-	    sts++;
-	}
+    raft_log( LOG_LVL_TRACE, "Vote success count=%u", count );
+    if( count >= raft_cluster_quorum( cl ) ) {
+      raft_log( LOG_LVL_TRACE, "Sufficient votes received - convert to leader" );
+      raft_convert_leader( cl );
     }
-    raft_unlock();
-    return sts;
+  }
+  
+  mp->lastseen = time( NULL );
+  raft_cluster_set( cl );
+  return;  
 }
 
-int raft_member_by_hostid( uint64_t clid, uint64_t hostid, struct raft_member *member ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    sts = -1;
-    for( i = 0; i < glob.file->header.member_count; i++ ) {
-      if( (glob.file->member[i].clid == clid) && (glob.file->member[i].hostid == hostid) ) {
-            if( member ) *member = glob.file->member[i];
-            sts = 0;
-            break;
-        }
+static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
+  struct hrauth_call hcall;
+  struct xdr_s args;
+  char argbuf[256];
+  int sts;
+  uint64_t lastterm, lastseq;
+  
+  raft_command_seq( cl->clid, &lastterm, &lastseq );
+  
+  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+  /* encode args */
+  xdr_encode_uint64( &args, cl->clid );
+  xdr_encode_uint64( &args, hostreg_localid() ); /* leaderid (must match sender id!) */
+  xdr_encode_uint64( &args, cl->term );
+  xdr_encode_uint64( &args, lastterm ); /* last command term */
+  xdr_encode_uint64( &args, lastseq ); /* last command seq */
+
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = RAFT_RPC_PROG;
+  hcall.vers = RAFT_RPC_VERS;
+  hcall.proc = 2; /* vote */
+  hcall.donecb = raft_vote_cb;
+  hcall.cxt2 = cl->clid;
+  hcall.timeout = glob.prop.rpc_timeout;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  sts = hrauth_call_async( &hcall, &args, 1 );
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
+    return;
+  }
+
+  
+}
+
+
+static void raft_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
+  uint64_t clid, hostid, term, seq;
+  struct raft_cluster *cl;
+  struct raft_member *mp;
+  int i, success, sts;
+  
+  raft_log( LOG_LVL_TRACE, "raft_putcmd_cb %s", res ? "Success" : "Timeout" );
+  if( !res ) return;
+  
+  clid = hcallp->cxt2;
+  cl = cl_by_id( clid );
+  if( !cl ) {
+    raft_log( LOG_LVL_TRACE, "Unknown cluster" );
+    return;
+  }
+  hostid = hcallp->hostid;
+
+  mp = NULL;
+  for( i = 0; i < cl->nmember; i++ ) {
+    if( cl->member[i].hostid == hostid ) {
+      mp = &cl->member[i];
+      break;
     }
-    raft_unlock();
-    return sts;
+  }
+  if( !mp ) {
+    raft_log( LOG_LVL_ERROR, "Unknown member" );
+    return;
+  }
+
+  sts = xdr_decode_boolean( res, &success );
+  if( !sts ) sts = xdr_decode_uint64( res, &term );
+  if( !sts ) sts = xdr_decode_uint64( res, &seq );
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "Xdr decode error" );
+    return;
+  }
+
+  if( success ) {
+    mp->storedseq = seq;
+  }
+  
+  mp->lastseen = time( NULL );
+  cl->commitseq = raft_quorum_commitseq( cl );
+  raft_cluster_set( cl );
+
+  /* apply any commands now acked by quorum */
+  raft_apply_commands( cl );
+
+  /* send next command if any */
+  raft_call_putcmd( cl, hostid, 0 );
+  
+  return;  
 }
 
-int raft_member_set( struct raft_member *member ) {
-    int sts, i;
-    
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
+static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t cseq ) {
+  struct hrauth_call hcall;
+  struct xdr_s args[3];
+  char argbuf[256];
+  int sts, len, i;
+  uint64_t cterm;
 
-    /* check cluster exists */
-    sts = -1;
-    for( i = 0; i < glob.file->header.cluster_count; i++ ) {
-      if( glob.file->cluster[i].id == member->clid ) {
-	sts = 0;
+  if( cseq == 0 ) {
+    for( i = 0; i < cl->nmember; i++ ) {
+      if( cl->member[i].hostid == hostid ) {
+	cseq = cl->member[i].storedseq + 1;
 	break;
       }
     }
-    if( sts == -1 ) goto done;
+    if( cseq == 0 ) return;
+  }
+  
+  len = raft_command_by_seq( cl->clid, cseq, &cterm, glob.buf, sizeof(glob.buf), NULL );
+  if( len < 0 ) return;
+  
+  xdr_init( &args[0], (uint8_t *)argbuf, sizeof(argbuf) );
+  /* encode args */
+  xdr_encode_uint64( &args[0], cl->clid );
+  xdr_encode_uint64( &args[0], cl->term ); /* current term */
+  xdr_encode_uint64( &args[0], cterm ); /* command term */
+  xdr_encode_uint64( &args[0], cseq ); /* command seq */
+  xdr_encode_uint32( &args[0], len );
+  xdr_init( &args[1], (uint8_t *)glob.buf, len );
+  if( len % 4 ) len += 4 - (len % 4);
+  args[1].offset = len;
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = RAFT_RPC_PROG;
+  hcall.vers = RAFT_RPC_VERS;
+  hcall.proc = 3; /* putcmd */
+  hcall.donecb = raft_putcmd_cb;
+  hcall.cxt2 = cl->clid;
+  hcall.timeout = glob.prop.rpc_timeout;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  sts = hrauth_call_async( &hcall, args, 2 );
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
+    return;
+  }
 
-    /* update existing */
-    sts = -1;
-    for( i = 0; i < glob.file->header.member_count; i++ ) {
-      if( (glob.file->member[i].clid == member->clid) && (glob.file->member[i].hostid == member->hostid) ) {
-	glob.file->member[i] = *member;
-	glob.file->header.seq++;
-	sts = 0;
-	goto done;
-      }
-    }
+}
 
-    /* add new */
-    sts = -1;	  
-    if( glob.file->header.member_count < glob.file->header.member_max ) {
-        i = glob.file->header.member_count;
-        glob.file->member[i] = *member;
-        glob.file->header.member_count++;
-        glob.file->header.seq++;
-        sts = 0;
-    }
-    
+
+
+
+
+
+
+
+
+
+
+static void raft_convert_follower( struct raft_cluster *cl, uint64_t term, uint64_t leaderid ) {
+  int i;
+  
+  raft_log( LOG_LVL_INFO, "Convert to follower term=%"PRIu64" leader=%"PRIx64"", term, leaderid );  
+  cl->state = RAFT_STATE_FOLLOWER;
+  cl->term = term;
+  cl->timeout = raft_term_timeout();
+  cl->leaderid = leaderid;
+  for( i = 0; i < cl->nmember; i++ ) {
+    cl->member[i].flags &= ~RAFT_MEMBER_VOTED;
+  }
+  raft_cluster_set( cl );
+  raft_set_iter_timeout();
+}
+
+static void raft_convert_candidate( struct raft_cluster *cl ) {
+  int i;
+  raft_log( LOG_LVL_INFO, "Convert to candidate" );
+  cl->state = RAFT_STATE_CANDIDATE;
+  cl->term++;
+  cl->timeout = raft_elec_timeout();
+  cl->leaderid = 0;
+  cl->voteid = hostreg_localid();  
+  for( i = 0; i < cl->nmember; i++ ) {
+    cl->member[i].flags &= ~RAFT_MEMBER_VOTED;
+    raft_call_vote( cl, cl->member[i].hostid );
+  }
+  raft_cluster_set( cl );
+  raft_set_iter_timeout();  
+}
+
+static void raft_convert_leader( struct raft_cluster *cl ) {
+  int i;
+  
+  raft_log( LOG_LVL_INFO, "Convert to leader" );
+
+  cl->state = RAFT_STATE_LEADER;
+  cl->timeout = rpc_now() + glob.prop.term_low;
+  cl->leaderid = hostreg_localid();
+  for( i = 0; i < cl->nmember; i++ ) {
+    cl->member[i].flags &= ~RAFT_MEMBER_VOTED;
+  }
+  
+  raft_send_pings( cl );
+  raft_cluster_set( cl );
+  raft_set_iter_timeout();  
+}
+
+
+
+
+
+
+static int raft_proc_null( struct rpc_inc *inc ) {
+  int handle;
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
+/* 
+ * send from leaders to keep their term alive
+ */
+static int raft_proc_ping( struct rpc_inc *inc ) {
+  int handle, sts, success;
+  uint64_t clid, hostid, term, commitseq, s, storedseq;
+  struct raft_cluster *clp;
+  struct hrauth_context *hc;
+  struct xdr_s res;
+  char resbuf[64];
+  
+  /* we can guarantee this because we set a mandatory authenticator */
+  hc = (struct hrauth_context *)inc->pcxt;
+  success = 0;
+  storedseq = 0;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &hostid ); /* leaderid (must match sender id!) */
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term ); /* current term */
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &commitseq ); /* leaders commit seq */
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  raft_log( LOG_LVL_TRACE, "raft_proc_ping clid=%"PRIx64" leaderid=%"PRIx64" term=%"PRIu64" commitseq=%"PRIu64"",
+	     clid, hostid, term, commitseq );
+  
+  if( hc->remoteid != hostid ) {
+    /* sender is different to claimed leader */
+    raft_log( LOG_LVL_WARN, "Remoteid mismatch" );
+  }
+  
+  clp = cl_by_id( clid );
+  if( !clp ) goto done;
+
+  if( term < clp->term ) {
+    /* term too old, reject */
+    raft_log( LOG_LVL_WARN, "Term old - rejected" );
+    term = clp->term;
+    goto done;
+  }
+
+  if( term > clp->term ) {
+    /* term increased, convert to follower */
+    raft_log( LOG_LVL_INFO, "Term incresed - Convert to follower %"PRIx64"", hostid );
+    clp->voteid = 0;
+    raft_convert_follower( clp, term, hostid );
+  }
+
+  /* checks successful, we now accept the update and apply any changes required */
+  clp->leaderid = hostid;
+  clp->timeout = raft_term_timeout();
+  clp->state = RAFT_STATE_FOLLOWER;
+  raft_cluster_set( clp );
+
+  /* leader has incremented commitseq indicating quorum have received this entry */
+  if( commitseq > clp->commitseq ) {
+    raft_command_seq( clp->clid, NULL, &s );
+    clp->commitseq = commitseq < s ? commitseq : s;
+    raft_cluster_set( clp );
+  }
+
+  /* apply any commands commited but not yet applied */
+  raft_apply_commands( clp );
+
+  raft_command_seq( clid, NULL, &storedseq );
+  success = 1;
+
  done:
-    raft_unlock();
-    return sts;
+  xdr_init( &res, (uint8_t *)resbuf, sizeof(resbuf) );
+  xdr_encode_boolean( &res, success );
+  xdr_encode_uint64( &res, term );
+  xdr_encode_uint64( &res, storedseq );
+  return hrauth_reply( inc, &res, 1 );
 }
 
-int raft_member_rem( uint64_t clid, uint64_t hostid ) {
-    int sts, i;
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    sts = -1;
-    for( i = 0; i < glob.file->header.member_count; i++ ) {
-        if( (glob.file->member[i].clid == clid) && (glob.file->member[i].hostid == hostid) ) {
-	    if( i != (glob.file->header.member_count - 1) ) glob.file->member[i] = glob.file->member[glob.file->header.member_count - 1];
-            glob.file->header.member_count--;
-            glob.file->header.seq++;
-            sts = 0;
-            break;
-        }
+/* 
+ * sent from candidates to gather votes 
+ */
+static int raft_proc_vote( struct rpc_inc *inc ) {
+  int handle, sts, success;
+  uint64_t clid, hostid, term, lastterm, lastseq, seq;
+  struct raft_cluster *clp;
+  struct hrauth_context *hc;
+  struct xdr_s res;
+  char resbuf[16];
+
+  /* we can guarantee this because we set a mandatory authenticator */
+  hc = (struct hrauth_context *)inc->pcxt;
+  success = 0;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &hostid ); /* leaderid (must match sender id!) */
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term ); /* current term */
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &lastterm ); /* last command term */
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &lastseq ); /* last command seq */
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  raft_log( LOG_LVL_TRACE, "raft_proc_vote clid=%"PRIx64" leaderid=%"PRIx64" term=%"PRIu64" lastterm=%"PRIu64" lastseq=%"PRIu64"",
+	     clid, hostid, term, lastterm, lastseq );
+  
+  if( hc->remoteid != hostid ) {
+    /* sender is different to claimed leader */
+    raft_log( LOG_LVL_WARN, "Remoteid mismatch" );
+  }
+  
+  clp = cl_by_id( clid );
+  if( !clp ) goto done;
+
+  if( term < clp->term ) {
+    /* term too old, reject */
+    raft_log( LOG_LVL_WARN, "Old term - rejecting" );
+    term = clp->term;
+    goto done;
+  }
+
+  if( term > clp->term ) {
+    /* term increased, convert to follower */
+    raft_log( LOG_LVL_INFO, "Term increased - convert to follower" );
+    clp->state = RAFT_STATE_FOLLOWER;
+    clp->term = term;
+    clp->voteid = 0;    
+    raft_cluster_set( clp );    
+  }
+
+  /* grant vote if not voted yet or voted for this host already AND the candidate is at least as up to date as us */
+  raft_command_seq( clp->clid, NULL, &seq );
+  if( (clp->voteid == 0 || clp->voteid == hostid) && (lastseq >= seq) ) {
+    raft_log( LOG_LVL_DEBUG, "Granting vote" );
+    clp->voteid = hostid;
+    success = 1;
+  }
+
+  
+ done:
+  xdr_init( &res, (uint8_t *)resbuf, sizeof(resbuf) );
+  xdr_encode_boolean( &res, success );
+  xdr_encode_uint64( &res, term );
+  return hrauth_reply( inc, &res, 1 );
+}
+
+/*
+ * sent from leaders to distribute command buffers. 
+ */
+static int raft_proc_putcmd( struct rpc_inc *inc ) {
+  int handle, sts, len;
+  char *bufp;
+  uint64_t term, cterm, cseq, entryid, clid, bterm;
+  struct hrauth_context *hc;
+  struct raft_cluster *cl;
+  struct xdr_s res;
+  char resbuf[64];
+  
+  hc = (struct hrauth_context *)inc->pcxt;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &cterm );  
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &cseq );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );
+  
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  raft_log( LOG_LVL_TRACE, "raft_proc_putcmd clid=%"PRIx64" term=%"PRIu64" cterm=%"PRIu64" cseq=%"PRIu64" len=%u",
+	     clid, term, cterm, cseq, len );
+  
+  /* lookup cluster */
+  sts = -1;
+  cl = cl_by_id( clid );
+  if( !sts ) {
+    raft_log( LOG_LVL_ERROR, "Unknown cluster %"PRIx64"", clid );
+    term = 0;
+    goto done;
+  }
+
+  /* check term */
+  if( term > cl->term ) {
+    raft_log( LOG_LVL_TRACE, "Term increase - convert to follower" );
+    raft_convert_follower( cl, term, hc->remoteid );
+  }
+
+  /* check sender is leader */
+  if( cl->leaderid != hc->remoteid ) {
+    raft_log( LOG_LVL_ERROR, "Sender not leader" );
+    goto done;
+  }
+  
+  sts = raft_command_by_seq( clid, cseq, &bterm, NULL, 0, &entryid );
+  if( !sts && bterm != term ) {
+    /* found this entry already */
+    raft_log( LOG_LVL_WARN, "Found conflicting existing command - deleting entries after %"PRIu64"", cseq );
+    log_truncate( clog_by_id( clid ), entryid );
+  }
+  
+  sts = raft_command_put( clid, cterm, cseq, bufp, len );
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "Failed to write command buffer" );
+  }
+ 
+ done:
+  xdr_init( &res, (uint8_t *)resbuf, sizeof(resbuf) );
+  xdr_encode_uint64( &res, sts ? 1 : 0 );
+  xdr_encode_uint64( &res, term );
+  xdr_encode_uint64( &res, sts ? 0 : cseq );
+  return hrauth_reply( inc, &res, 1 );
+}
+
+/* 
+ * Sent from nodes that come online to update their state 
+ */
+static int raft_proc_getcmd( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint64_t term, seq, clid;
+  struct hrauth_context *hc;
+  struct xdr_s res[2];
+  char resbuf[64];
+  
+  hc = (struct hrauth_context *)inc->pcxt;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  raft_log( LOG_LVL_TRACE, "raft_proc_getcmd clid=%"PRIx64" seq=%"PRIu64"",
+	     clid, seq );
+
+  sts = raft_command_by_seq( clid, seq, &term, glob.buf, sizeof(glob.buf), NULL );
+
+  xdr_init( &res[0], (uint8_t *)resbuf, sizeof(resbuf) );
+  xdr_encode_boolean( &res[0], sts ? 0 : 1 );
+  if( !sts ) {    
+    xdr_encode_uint64( &res[0], term );
+    xdr_encode_uint64( &res[0], seq );    
+    xdr_encode_uint32( &res[0], sts );
+    xdr_init( &res[1], (uint8_t *)glob.buf, sts );
+    res[1].offset = sts;
+  } else {
+    xdr_init( &res[1], NULL, 0 );
+  }
+  
+  return hrauth_reply( inc, res, 2 );
+}
+
+/* rpc interface to command api */
+static int raft_proc_command( struct rpc_inc *inc ) {
+  int handle, sts;
+  char *bufp;
+  int len;
+  uint64_t clid;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  raft_log( LOG_LVL_TRACE, "raft_proc_command clid=%"PRIx64" len=%u", clid, len );
+
+  sts = raft_cluster_command( clid, bufp, len );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
+
+static struct rpc_proc raft_procs[] = {
+  { 0, raft_proc_null },
+  { 1, raft_proc_ping },
+  { 2, raft_proc_vote },  
+  { 3, raft_proc_putcmd },
+  { 4, raft_proc_getcmd },
+  { 5, raft_proc_command },
+  { 0, NULL }
+};
+
+static struct rpc_version raft_vers = {
+  NULL, RAFT_RPC_VERS, raft_procs
+};
+
+static uint32_t raft_prog_auths[] = { RPC_AUTH_HRAUTH, 0 };
+static struct rpc_program raft_prog = {
+    NULL, RAFT_RPC_PROG, &raft_vers, raft_prog_auths
+};
+
+
+static void raft_iter_cb( struct rpc_iterator *iter ) {
+  uint64_t now;
+  int i, j;
+  
+  //raft_log( LOG_LVL_TRACE, "raft iterator" );
+  raft_prop( &glob.prop );
+  glob.ncl = raft_cluster_list( glob.cl, RAFT_MAX_CLUSTER );
+
+  /* open all logs */
+  for( i = 0; i < glob.ncl; i++ ) {
+    clog_by_id( glob.cl[i].clid );
+  }
+  
+  /* ensure connections registered */
+  for( i = 0; i < glob.ncl; i++ ) {
+    for( j = 0; j < glob.cl[i].nmember; j++ ) {
+      hrauth_conn_register( glob.cl[i].member[j].hostid, NULL );
     }
-    raft_unlock();
-    return sts;
-}
-
-int raft_member_clear_voted( uint64_t clid ) {
-    int sts, i;
-    
-    if( glob.ocount <= 0 ) return -1;
-    raft_lock();
-    
-    sts = -1;
-    for( i = 0; i < glob.file->header.member_count; i++ ) {
-      if( glob.file->member[i].clid == clid ) {
-	glob.file->member[i].flags &= ~RAFT_MEMBER_VOTED;
-	glob.file->header.seq++;
-	sts = 0;
+  }
+  
+  /* check timeouts */
+  now = rpc_now();
+  for( i = 0; i < glob.ncl; i++ ) {
+    if( now >= glob.cl[i].timeout ) {
+      switch( glob.cl[i].state ) {
+      case RAFT_STATE_FOLLOWER:
+	/* term timeout - convert to candidate */
+	raft_log( LOG_LVL_TRACE, "Term timeout - convert to candidate" );
+	raft_convert_candidate( &glob.cl[i] );
+	break;
+      case RAFT_STATE_CANDIDATE:
+	/* election timeout - start new election */
+	raft_log( LOG_LVL_TRACE, "Election timeout - new election" );
+	raft_convert_candidate( &glob.cl[i] );
+	break;
+      case RAFT_STATE_LEADER:
+	/* send pings to keep term alive */
+	raft_log( LOG_LVL_TRACE, "Send pings to keep term alive" );
+	raft_send_pings( &glob.cl[i] );
+	glob.cl[i].timeout = rpc_now() + glob.prop.term_low;
+	raft_cluster_set( &glob.cl[i] );
+	break;
       }
     }
+  }
+
+  /* set timeout to min cluster timeout */
+  raft_set_iter_timeout();
+}
+
+
+static struct rpc_iterator raft_iter =
+  {
+   NULL,
+   0,
+   1000,
+   raft_iter_cb,
+   NULL
+  };
+
+static void raft_set_iter_timeout( void ) {
+  int i;
+  uint64_t to;
+  
+  /* set timeout to min cluster timeout */
+  to = raft_iter.timeout;
+  for( i = 0; i < glob.ncl; i++ ) {
+    if( glob.cl[i].timeout < to ) to = glob.cl[i].timeout;
+  }
+  raft_iter.timeout = to;  
+}
+
+
+void raft_register( void ) {
+  int i;
+  
+  raft_open();
+  glob.ncl = raft_cluster_list( glob.cl, RAFT_MAX_CLUSTER );
+
+  /* initiaze by immediately going into follower state */
+  for( i = 0; i < glob.ncl; i++ ) {
+    glob.cl[i].state = RAFT_STATE_FOLLOWER;
+    glob.cl[i].timeout = 0;
+    raft_cluster_set( &glob.cl[i] );
+  }
+
+  rpc_program_register( &raft_prog );
+  rpc_iterator_register( &raft_iter );
+}
+
+int raft_app_register( struct raft_app *app ) {
+  struct raft_app *ap;
+  ap = glob.app;
+  while( ap ) {
+    if( ap == app ) return -1;
+    ap = ap->next;
+  }
+  app->next = glob.app;
+  glob.app = app;
+  return 0;    
+}
+
+static struct raft_app *raft_app_by_appid( uint32_t appid ) {
+  struct raft_app *app;
+  app = glob.app;
+  while( app ) {
+    if( app->appid == appid ) return app;
+    app = app->next;
+  }
+  return NULL;
+}
     
-    raft_unlock();
-    return sts;
-}  
+  
+
+int raft_cluster_command( uint64_t clid, char *buf, int len ) {
+  struct raft_cluster *cl;
+  int sts, i;
+  uint64_t seq;
+  
+  /* lookup cluster */
+  cl = cl_by_id( clid );
+  if( !cl ) return -1;
+
+  /* reject if not leader */
+  if( cl->state != RAFT_STATE_LEADER ) return -1;
+
+  /* save buffer locally */
+  sts = raft_command_seq( clid, NULL, &seq );
+  if( sts ) return sts;
+  
+  sts = raft_command_put( clid, cl->term, seq + 1, buf, len );
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "Failed to store command buffer" );
+    return -1;
+  }
+  
+  /* distribute buffer */
+  for( i = 0; i < cl->nmember; i++ ) {
+    raft_call_putcmd( cl, cl->member[i].hostid, 0 );
+  }
+
+  return 0;
+}
 

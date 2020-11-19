@@ -574,7 +574,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     
   switch( inc->msg.tag ) {
   case RPC_CALL:
-    rpc_log( RPC_LOG_DEBUG, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
+    rpc_log( RPC_LOG_DEBUG, "CALL %d:%d:%d AUTH=%u Count=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour, inc->xdr.count );
 
     /* lookup function */
     sts = rpc_program_find( inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,
@@ -663,7 +663,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     break;
   case RPC_REPLY:
     /* check for a waiter or drop */
-    rpc_log( RPC_LOG_DEBUG, "REPLY %u %s %s",
+    rpc_log( RPC_LOG_DEBUG, "REPLY %u %s %s Count=%u",
 	     inc->msg.xid,
 	     inc->msg.u.reply.tag == RPC_MSG_ACCEPT ? "Accept" : "Reject",
 	     inc->msg.u.reply.tag == RPC_MSG_ACCEPT ?
@@ -680,7 +680,8 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_BADVERF ? "BadVerf" :
 	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_REJECTEDVERF ? "RejectedVerf" :
 	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_TOOWEAK ? "TooWeak" :
-	      "Other") );
+	      "Other"),
+	     inc->xdr.count );
 	     
     rpc_waiter_invoke( inc->msg.xid, inc );
     return 1;

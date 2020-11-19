@@ -380,7 +380,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     /* lookup existing context */
     sa = hrauth_context_by_nickname( auth.u.nickname );
     if( !sa ) return -1;
-    hrauth_log( LOG_LVL_TRACE, "hrauth: nickname=%d", auth.u.nickname );
+    hrauth_log( LOG_LVL_TRACE, "hrauth: nickname=%u", auth.u.nickname );
     break;
   case HRAUTH_FULL:
     /* allocate new context */
@@ -402,7 +402,7 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
     sa->window = cred.window;
     sa->cipher = cred.cipher;
     sec_rand( &sa->nickname, 4 );
-    hrauth_log( LOG_LVL_TRACE, "hrauth: full service=%d window=%d cipher=%08x nickname=%d", cred.service, cred.window, cred.cipher, sa->nickname );
+    hrauth_log( LOG_LVL_TRACE, "hrauth: full service=%d window=%d cipher=%08x nickname=%u", cred.service, cred.window, cred.cipher, sa->nickname );
     break;
   default:
     return -1;

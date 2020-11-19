@@ -260,7 +260,7 @@ static struct raft2_cluster *cl_by_id( uint64_t clid ) {
 static struct log_s *clog_by_id( uint64_t clid ) {
   int i;
   /* return already open log */
-  for( i = 0; RAFT2_MAX_CLUSTER; i++ ) {
+  for( i = 0; i < RAFT2_MAX_CLUSTER; i++ ) {
     if( glob.clog[i].clid == clid ) return &glob.clog[i].log;
   }
 
@@ -471,7 +471,7 @@ static void raft2_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   struct raft2_member *mp;
   int i, success, sts;
   
-  raft2_log( LOG_LVL_TRACE, "raft2_ping_cb %s", res ? "Success" : "Timeout" );
+  raft2_log( LOG_LVL_TRACE, "raft2_ping_cb %s count=%d", res ? "Success" : "Timeout", res ? res->count - res->offset : -1 );
   if( !res ) return;
   
   clid = hcallp->cxt2;
@@ -832,7 +832,7 @@ static int raft_proc_ping( struct rpc_inc *inc ) {
   struct raft2_cluster *clp;
   struct hrauth_context *hc;
   struct xdr_s res;
-  char resbuf[16];
+  char resbuf[64];
   
   /* we can guarantee this because we set a mandatory authenticator */
   hc = (struct hrauth_context *)inc->pcxt;

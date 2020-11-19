@@ -439,7 +439,7 @@ static void raft_apply_commands( struct raft_cluster *cl ) {
       sts = raft_command_by_seq( cl->clid, s, NULL, glob.buf, sizeof(glob.buf), NULL );
       if( sts ) break; /* command buffer not found */
 
-      app->command( cl, glob.buf, sts );
+      app->command( app, cl, s, glob.buf, sts );
       cl->appliedseq = s;
       raft_cluster_set( cl );
     }
@@ -928,7 +928,10 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   }
   
   clp = cl_by_id( clid );
-  if( !clp ) goto done;
+  if( !clp ) {
+    raft_log( LOG_LVL_ERROR, "Unknown cluster %"PRIx64"", clid );
+    goto done;
+  }
 
   if( term < clp->term ) {
     /* term too old, reject */
@@ -1185,10 +1188,11 @@ void raft_register( void ) {
   raft_open();
   glob.ncl = raft_cluster_list( glob.cl, RAFT_MAX_CLUSTER );
 
-  /* initiaze by immediately going into follower state */
+  /* initialize by immediately going into follower state */
   for( i = 0; i < glob.ncl; i++ ) {
     glob.cl[i].state = RAFT_STATE_FOLLOWER;
     glob.cl[i].timeout = 0;
+    glob.cl[i].voteid = 0;
     raft_cluster_set( &glob.cl[i] );
   }
 

@@ -24,7 +24,6 @@ ssh root@${remoteip} mkdir -p /usr/local/bin
 ssh root@${remoteip} mkdir -p /usr/local/lib
 scp bin/* root@${remoteip}:/usr/local/bin
 scp lib/libfju.so root@${remoteip}:/usr/local/lib
-scp lib/librex.so root@${remoteip}:~
 scp fvm/programs/test-rpc.fvm root@${remoteip}:~
 
 ## restart remote services

@@ -45,8 +45,8 @@
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
-            "          add cluster [clid=ID] [typeid=TYPEID] [witness=true|false]\n"
-            "          set cluster ID [appid=TYPEID] [witness=true|false]\n"
+            "          add cluster [clid=ID] [appid=APPID] [witness=true|false]\n"
+            "          set cluster ID [appid=APPID] [witness=true|false]\n"
             "          rem cluster ID\n"
             "          add member [clid=CLID] [hostid=HOSTID]\n"
             "          set member\n"
@@ -293,7 +293,7 @@ static void print_cluster( struct raft_cluster *cluster ) {
   int j;
 
       printf( "cluster id=%"PRIx64" state=%s term=%"PRIu64" leader=%"PRIx64" (%s)\n"
-	      "        appliedseq=%"PRIu64" commitseq=%"PRIu64" appid=%u flags=%s (0x%x)\n",
+	      "        appliedseq=%"PRIu64" commitseq=%"PRIu64" appid=%u flags=%s (0x%x) voteid=%"PRIx64"\n",
 	      cluster->clid,
 	      cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
 	      cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
@@ -302,7 +302,8 @@ static void print_cluster( struct raft_cluster *cluster ) {
 	      cluster->term,
 	      cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
 	      cluster->appliedseq, cluster->commitseq,
-	      cluster->appid, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", cluster->flags );
+	      cluster->appid, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", cluster->flags,
+	      cluster->voteid);
 	          
       for( j = 0; j < cluster->nmember; j++ ) {
 	  if( cluster->member[j].lastseen ) {

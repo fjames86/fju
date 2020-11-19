@@ -86,6 +86,7 @@ static void init_cb( void ) {
   cht_rsync_initialize();
   cmdprog_register();
   raft_register();
+  rex_register();
   
   //rpc_iterator_register( &rusage_iter );
 }

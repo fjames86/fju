@@ -90,7 +90,7 @@ struct raft_app {
   uint32_t appid;
 
   /* apply command to state machine */
-  void (*command)( struct raft_cluster *cl, char *buf, int len );
+  void (*command)( struct raft_app *app, struct raft_cluster *cl, uint64_t cmdseq, char *buf, int len );
 };
 int raft_app_register( struct raft_app *app );
 

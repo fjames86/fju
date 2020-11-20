@@ -96,6 +96,8 @@ static void fvm_readvar_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_readvar_results( struct xdr_s *xdr );
 static void fvm_writevar_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_writevar_results( struct xdr_s *xdr );
+static void raft_command_results( struct xdr_s *xdr );
+static void raft_command_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -124,6 +126,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 9, fvm_run_args, fvm_run_results, "fvm.run", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
     { FVM_RPC_PROG, 1, 10, fvm_readvar_args, fvm_readvar_results, "fvm.readvar", "progid=* procid=*" },
     { FVM_RPC_PROG, 1, 11, fvm_writevar_args, fvm_writevar_results, "fvm.writevar", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
+    { RAFT_RPC_PROG, 1, 5, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1407,3 +1410,45 @@ static void cmdprog_connlist_results( struct xdr_s *xdr ) {
   }
 
 }
+
+static void raft_command_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t cseq;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( !sts ) sts = xdr_decode_uint64( xdr, &cseq );
+  if( sts ) usage( "XDR error" );
+  if( !b ) printf( "Failure\n" );
+  else printf( "Success cseq=%"PRIu64"\n", cseq );
+}
+
+static void raft_command_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  char *term;
+  uint64_t clid = 0;
+  char *cmdstr = NULL;
+  int sts;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, &term, 16 );
+      if( *term ) usage( "Failed to parse CLID" );
+    } else if( strcmp( argname, "command" ) == 0 ) {
+      cmdstr = argval;
+    } else usage( NULL );
+    i++;
+  }
+
+  if( !clid ) usage( "Need CLID" );
+  xdr_encode_uint64( xdr, clid );
+  if( cmdstr ) {
+    sts = base64_decode( (char *)(xdr->buf + xdr->offset + 4), (xdr->count - xdr->offset) - 4, cmdstr );
+    if( sts < 0 ) usage( "Failed to decode base64 command buffer" );
+    xdr_encode_uint32( xdr, sts );
+    xdr->offset += sts;
+    if( sts % 4 ) xdr->offset += 4 - (sts % 4);
+  } else {
+    xdr_encode_opaque( xdr, NULL, 0 );
+  }
+}
+

@@ -418,8 +418,11 @@ int log_read_end( struct log_s *log, uint64_t id, struct log_entry *elist, int n
     the_id = hdr->last_id;
     log_unlock( log );
   }  
-  if( the_id == 0 ) return -1;
-
+  if( the_id == 0 ) {
+    if( nelist ) *nelist = 0;
+    return 0;
+  }
+    
   for( i = 0; i < n; i++ ) {
     ne = 0;
     sts = log_read( log, the_id | LOG_FLAG_READ, &elist[i], 1, &ne );
@@ -544,6 +547,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   hdr->last_id = e->id;
 
   entry->id = e->id;
+  entry->prev_id = e->prev_id;
   entry->msglen = msglen;
   entry->seq = e->seq;
   

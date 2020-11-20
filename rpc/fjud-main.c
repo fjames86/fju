@@ -49,6 +49,7 @@
 #include <time.h>
 
 int cmdprog_register( void );
+void rex_register( void );
 
 #if 0
 

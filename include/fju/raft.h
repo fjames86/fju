@@ -98,12 +98,14 @@ int raft_app_register( struct raft_app *app );
 /* 
  * Start process of initiating command:
  * - save command buffer locally 
- * - send command buffer to follower nodes
- * - wait for quorum of nodes has acknowledged receipt of command
- * - increment seqno and send ping rpc to followers
- * - apply command 
+ * - distribute to remote nodes
+ * - function returns here
+ * - asynchronously, when quorum of nodes has received the command, the app->command 
+ * callback is invoked 
  */
-int raft_cluster_command( uint64_t clid, char *buf, int len );
+int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
+
+int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq );
 
 #endif
 

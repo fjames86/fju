@@ -291,9 +291,12 @@ int main( int argc, char **argv ) {
 static void print_cluster( struct raft_cluster *cluster ) {
   char timestr[128], namestr[HOSTREG_MAX_NAME];
   int j;
-
+  uint64_t cseq;
+  
+  raft_command_seq( cluster->clid, NULL, &cseq );
+  
       printf( "cluster id=%"PRIx64" state=%s term=%"PRIu64" leader=%"PRIx64" (%s)\n"
-	      "        appliedseq=%"PRIu64" commitseq=%"PRIu64" appid=%u flags=%s (0x%x) voteid=%"PRIx64"\n",
+	      "        appliedseq=%"PRIu64" commitseq=%"PRIu64" storedseq=%"PRIu64" appid=%u flags=%s (0x%x) voteid=%"PRIx64"\n",
 	      cluster->clid,
 	      cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
 	      cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
@@ -301,7 +304,7 @@ static void print_cluster( struct raft_cluster *cluster ) {
 	      "Unknown",
 	      cluster->term,
 	      cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
-	      cluster->appliedseq, cluster->commitseq,
+	      cluster->appliedseq, cluster->commitseq, cseq,
 	      cluster->appid, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", cluster->flags,
 	      cluster->voteid);
 	          

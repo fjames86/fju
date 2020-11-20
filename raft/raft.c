@@ -298,9 +298,8 @@ static int raft_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, cha
   int sts, ne;
   struct log_s *log;
   struct log_entry entry;
-  struct log_iov iov[1];
+  struct log_iov iov[2];
   struct raft_cmd_header hdr;
-  uint64_t id;
   
   log = clog_by_id( clid );
   if( !log ) return -1;
@@ -317,27 +316,34 @@ static int raft_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, cha
   entry.iov = iov;
   iov[0].buf = (char *)&hdr;
   iov[0].len = sizeof(hdr);
-  entry.niov = 1;
-  id = 0;
-  while( 1 ) {
-    sts = log_read_end( log, id, &entry, 1, &ne );
-    if( sts || !ne ) break;
+  iov[1].buf = buf;
+  iov[1].len = len;
+  entry.niov = 2;
 
+  /* start at final entry */
+  sts = log_read_end( log, 0, &entry, 1, &ne );
+  if( sts || !ne ) return -1;
+
+  do {  
     if( hdr.seq == seq ) {
+      /* found it */
       if( term ) *term = hdr.term;
-      log_read_buf( log, entry.id, buf, len, NULL );
       if( entryid ) *entryid = entry.id;
-      return entry.msglen;
+      return entry.msglen - sizeof(hdr);
     }
 
-    id = entry.id;
-  }
+    /* try previous entry, if any */
+    if( entry.prev_id == 0 ) return -1;
+
+    sts = log_read_entry( log, entry.prev_id, &entry );
+    if( sts ) return -1;
+  } while( 1 );
 
   return -1;  
 }
 
 /* get highest seq written */
-static int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
+int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
   int sts, ne;
   struct log_s *log;
   struct log_entry entry;
@@ -376,8 +382,8 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
   if( sts ) return sts;
 
   /* disallow writing entries out of order */
-  if( (nseq == 0) || (seq != (nseq - 1)) ) return -1;
-  
+  if( (nseq != 0) && (seq != (nseq + 1)) ) return -1;
+
   log = clog_by_id( clid );
   if( !log ) return -1;
 
@@ -393,7 +399,8 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
   iov[1].len = len;
   entry.flags = LOG_BINARY;
   log_write( log, &entry );
-
+  raft_log( LOG_LVL_TRACE, "raft_command_put entry.id=%"PRIx64" entry.prev_id=%"PRIx64"", entry.id, entry.prev_id );
+  
   /* wait for command to be written to stable storage */
   log_sync( log, MMF_SYNC_NOW );
   return 0;
@@ -433,13 +440,21 @@ static void raft_apply_commands( struct raft_cluster *cl ) {
   
   /* apply any commands commited but not yet applied */
   app = raft_app_by_appid( cl->appid );
-  if( app && cl->appliedseq < cl->commitseq ) {
+  if( cl->appliedseq < cl->commitseq ) {
     for( s = cl->appliedseq + 1; s <= cl->commitseq; s++ ) {
       raft_log( LOG_LVL_INFO, "raft_apply_command seq=%"PRIu64"", s );
+      
       sts = raft_command_by_seq( cl->clid, s, NULL, glob.buf, sizeof(glob.buf), NULL );
-      if( sts ) break; /* command buffer not found */
+      if( sts < 0 ) {
+	raft_log( LOG_LVL_ERROR, "Failed to get command seq=%"PRIu64"", s );
+	break;
+      }
 
-      app->command( app, cl, s, glob.buf, sts );
+      /* send command to application */
+      if( app && app->command ) {
+	app->command( app, cl, s, glob.buf, sts );
+      }
+      
       cl->appliedseq = s;
       raft_cluster_set( cl );
     }
@@ -552,6 +567,10 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
 
 static void raft_send_pings( struct raft_cluster *cl ) {
   int i;
+  uint64_t seq;
+
+
+  raft_command_seq( cl->clid, NULL, &seq );
   for( i = 0; i < cl->nmember; i++ ) {
     raft_call_ping( cl, cl->member[i].hostid );
   }
@@ -652,13 +671,12 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
 
 
 static void raft_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
-  uint64_t clid, hostid, term, seq;
+  uint64_t clid, hostid, term, seq, comseq;
   struct raft_cluster *cl;
   struct raft_member *mp;
   int i, success, sts;
   
   raft_log( LOG_LVL_TRACE, "raft_putcmd_cb %s", res ? "Success" : "Timeout" );
-  if( !res ) return;
   
   clid = hcallp->cxt2;
   cl = cl_by_id( clid );
@@ -680,6 +698,13 @@ static void raft_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
     return;
   }
 
+  if( !res ) {
+    raft_log( LOG_LVL_TRACE, "raft_putcmd_cb timeout - retrying" );
+    raft_call_putcmd( cl, hostid, 0 );
+    return;
+  }
+
+  
   sts = xdr_decode_boolean( res, &success );
   if( !sts ) sts = xdr_decode_uint64( res, &term );
   if( !sts ) sts = xdr_decode_uint64( res, &seq );
@@ -693,7 +718,12 @@ static void raft_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   }
   
   mp->lastseen = time( NULL );
-  cl->commitseq = raft_quorum_commitseq( cl );
+  comseq = raft_quorum_commitseq( cl );
+  if( comseq > cl->commitseq ) {
+    cl->timeout = 0;
+    raft_set_iter_timeout();
+  }
+  cl->commitseq = comseq;
   raft_cluster_set( cl );
 
   /* apply any commands now acked by quorum */
@@ -711,7 +741,7 @@ static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t
   char argbuf[256];
   int sts, len, i;
   uint64_t cterm;
-
+  
   if( cseq == 0 ) {
     for( i = 0; i < cl->nmember; i++ ) {
       if( cl->member[i].hostid == hostid ) {
@@ -721,9 +751,11 @@ static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t
     }
     if( cseq == 0 ) return;
   }
-  
+
   len = raft_command_by_seq( cl->clid, cseq, &cterm, glob.buf, sizeof(glob.buf), NULL );
   if( len < 0 ) return;
+
+  raft_log( LOG_LVL_TRACE, "raft_call_putcmd clid=%"PRIx64" hostid=%"PRIx64" cseq=%"PRIu64"", cl->clid, hostid, cseq );
   
   xdr_init( &args[0], (uint8_t *)argbuf, sizeof(argbuf) );
   /* encode args */
@@ -969,7 +1001,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
  * sent from leaders to distribute command buffers. 
  */
 static int raft_proc_putcmd( struct rpc_inc *inc ) {
-  int handle, sts, len;
+  int handle, sts, len, i;
   char *bufp;
   uint64_t term, cterm, cseq, entryid, clid, bterm;
   struct hrauth_context *hc;
@@ -1005,29 +1037,49 @@ static int raft_proc_putcmd( struct rpc_inc *inc ) {
     raft_convert_follower( cl, term, hc->remoteid );
   }
 
+  if( term < cl->term ) {
+    raft_log( LOG_LVL_TRACE, "Term too low - rejected" );
+    term = cl->term;
+    goto done;
+  }
+  
   /* check sender is leader */
   if( cl->leaderid != hc->remoteid ) {
     raft_log( LOG_LVL_ERROR, "Sender not leader" );
     goto done;
   }
-  
+
+  /* heard from the leader so refresh the term timeout */
+  cl->timeout = raft_term_timeout();
+  for( i = 0; i < cl->nmember; i++ ) {
+    if( cl->member[i].hostid == hc->remoteid ) cl->member[i].lastseen = time( NULL );
+  }
+  raft_cluster_set( cl );
+
+  /* Lookup the entry in our local log */
   sts = raft_command_by_seq( clid, cseq, &bterm, NULL, 0, &entryid );
-  if( !sts && bterm != term ) {
+  if( sts >= 0 && bterm != term ) {
     /* found this entry already */
     raft_log( LOG_LVL_WARN, "Found conflicting existing command - deleting entries after %"PRIu64"", cseq );
     log_truncate( clog_by_id( clid ), entryid );
   }
-  
+
+  /* store it */
   sts = raft_command_put( clid, cterm, cseq, bufp, len );
   if( sts ) {
     raft_log( LOG_LVL_ERROR, "Failed to write command buffer" );
   }
- 
+
+  /* get highest seq locally stored */
+  raft_command_seq( clid, NULL, &cseq );
+
+  sts = 0;
+    
  done:
   xdr_init( &res, (uint8_t *)resbuf, sizeof(resbuf) );
   xdr_encode_uint64( &res, sts ? 1 : 0 );
   xdr_encode_uint64( &res, term );
-  xdr_encode_uint64( &res, sts ? 0 : cseq );
+  xdr_encode_uint64( &res, cseq );
   return hrauth_reply( inc, &res, 1 );
 }
 
@@ -1054,7 +1106,7 @@ static int raft_proc_getcmd( struct rpc_inc *inc ) {
 
   xdr_init( &res[0], (uint8_t *)resbuf, sizeof(resbuf) );
   xdr_encode_boolean( &res[0], sts ? 0 : 1 );
-  if( !sts ) {    
+  if( sts >= 0 ) {    
     xdr_encode_uint64( &res[0], term );
     xdr_encode_uint64( &res[0], seq );    
     xdr_encode_uint32( &res[0], sts );
@@ -1072,7 +1124,7 @@ static int raft_proc_command( struct rpc_inc *inc ) {
   int handle, sts;
   char *bufp;
   int len;
-  uint64_t clid;
+  uint64_t clid, cseq;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );
@@ -1080,10 +1132,12 @@ static int raft_proc_command( struct rpc_inc *inc ) {
 
   raft_log( LOG_LVL_TRACE, "raft_proc_command clid=%"PRIx64" len=%u", clid, len );
 
-  sts = raft_cluster_command( clid, bufp, len );
-
+  sts = raft_cluster_command( clid, bufp, len, &cseq );
+  if( sts ) raft_log( LOG_LVL_ERROR, "raft_proc_command failure" );
+  
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  xdr_encode_uint64( &inc->xdr, sts ? 0 : cseq );
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }
@@ -1224,25 +1278,36 @@ static struct raft_app *raft_app_by_appid( uint32_t appid ) {
     
   
 
-int raft_cluster_command( uint64_t clid, char *buf, int len ) {
+int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   struct raft_cluster *cl;
   int sts, i;
   uint64_t seq;
+
+  if( cseq ) *cseq = 0;
   
   /* lookup cluster */
   cl = cl_by_id( clid );
-  if( !cl ) return -1;
+  if( !cl ) {
+    raft_log( LOG_LVL_TRACE, "Unknown cluster" );
+    return -1;
+  }
 
   /* reject if not leader */
-  if( cl->state != RAFT_STATE_LEADER ) return -1;
+  if( cl->state != RAFT_STATE_LEADER ) {
+    raft_log( LOG_LVL_ERROR, "Not leader" );
+    return -1;
+  }
 
   /* save buffer locally */
   sts = raft_command_seq( clid, NULL, &seq );
-  if( sts ) return sts;
-  
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "Failed to get command seq" );
+    return sts;
+  }
+
   sts = raft_command_put( clid, cl->term, seq + 1, buf, len );
   if( sts ) {
-    raft_log( LOG_LVL_ERROR, "Failed to store command buffer" );
+    raft_log( LOG_LVL_ERROR, "Failed to store command buffer seq=%"PRIu64"", seq + 1 );
     return -1;
   }
   
@@ -1251,6 +1316,8 @@ int raft_cluster_command( uint64_t clid, char *buf, int len ) {
     raft_call_putcmd( cl, cl->member[i].hostid, 0 );
   }
 
+  if( cseq ) *cseq = seq + 1;
+  
   return 0;
 }
 

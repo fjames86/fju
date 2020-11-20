@@ -379,7 +379,10 @@ static int hrauth_sauth( struct rpc_provider *pvr, struct rpc_msg *msg, void **p
   case HRAUTH_NICKNAME:
     /* lookup existing context */
     sa = hrauth_context_by_nickname( auth.u.nickname );
-    if( !sa ) return -1;
+    if( !sa ) {
+      hrauth_log( LOG_LVL_TRACE, "hrauth bad nickname %u", auth.u.nickname );
+      return -1;
+    }
     hrauth_log( LOG_LVL_TRACE, "hrauth: nickname=%u", auth.u.nickname );
     break;
   case HRAUTH_FULL:
@@ -1142,6 +1145,10 @@ static void hrauth_conn_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   }
 
   /* do anything required with the connection context */
+  if( inc && inc->msg.u.reply.tag == RPC_REJECT_AUTH_ERROR ) {
+    hrauth_log( LOG_LVL_ERROR, "Reply auth error, reinitializing auth context" );
+    hrauth_init( &hc->hcxt, hc->hostid );
+  }
   
   hrauth_call_cb( w, inc );
 }

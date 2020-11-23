@@ -107,5 +107,13 @@ int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
 
 int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq );
 
+struct raft_command_info {
+  uint64_t term;
+  uint64_t seq;
+  uint64_t stored;  
+  uint32_t len;
+};
+int raft_command_list( uint64_t clid, struct raft_command_info *clist, int n );
+
 #endif
 

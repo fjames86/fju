@@ -290,42 +290,53 @@ int main( int argc, char **argv ) {
 
 static void print_cluster( struct raft_cluster *cluster ) {
   char timestr[128], namestr[HOSTREG_MAX_NAME];
-  int j;
+  int j, n;
   uint64_t cseq;
+  struct raft_command_info *clist;
   
   raft_command_seq( cluster->clid, NULL, &cseq );
   
-      printf( "cluster id=%"PRIx64" state=%s term=%"PRIu64" leader=%"PRIx64" (%s)\n"
-	      "        appliedseq=%"PRIu64" commitseq=%"PRIu64" storedseq=%"PRIu64" appid=%u flags=%s (0x%x) voteid=%"PRIx64"\n",
-	      cluster->clid,
-	      cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
-	      cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
-	      cluster->state == RAFT_STATE_LEADER ? "Leader" :
-	      "Unknown",
-	      cluster->term,
-	      cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
-	      cluster->appliedseq, cluster->commitseq, cseq,
-	      cluster->appid, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", cluster->flags,
-	      cluster->voteid);
+  printf( "Cluster ID=%"PRIx64" State=%s Term=%"PRIu64" Leader=%"PRIx64" (%s)\n"
+	  "        AppliedSeq=%"PRIu64" CommitSeq=%"PRIu64" StoredSeq=%"PRIu64" AppID=%u Flags=0x%x (%s) VoteID=%"PRIx64"\n",
+	  cluster->clid,
+	  cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
+	  cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
+	  cluster->state == RAFT_STATE_LEADER ? "Leader" :
+	  "Unknown",
+	  cluster->term,
+	  cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
+	  cluster->appliedseq, cluster->commitseq, cseq,
+	  cluster->appid, cluster->flags, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", 
+	  cluster->voteid);
 	          
-      for( j = 0; j < cluster->nmember; j++ ) {
-	  if( cluster->member[j].lastseen ) {
-	    sec_timestr( cluster->member[j].lastseen, timestr );
-	  } else {
-	      strcpy( timestr, "Never" );
-	  }
-
-	  printf( "    member hostid=%"PRIx64" (%s) flags=%s (0x%x) lastseen=%s ", 
-		  cluster->member[j].hostid,
-		  hostreg_name_by_hostid( cluster->member[j].hostid, namestr ),
-		  cluster->member[j].flags & RAFT_MEMBER_VOTED ? "Voted," : "",
-		  cluster->member[j].flags,
-		  timestr );
-	  if( cluster->state == RAFT_STATE_LEADER ) {
-	    printf( "seq=%"PRIu64"", cluster->member[j].storedseq );
-	  }
-	  printf( "\n" );
+  for( j = 0; j < cluster->nmember; j++ ) {
+    if( cluster->member[j].lastseen ) {
+      sec_timestr( cluster->member[j].lastseen, timestr );
+    } else {
+      strcpy( timestr, "Never" );
     }
+
+    printf( "    Member HostID=%"PRIx64" (%s) Flags=%s (0x%x) LastSeen=%s ", 
+	    cluster->member[j].hostid,
+	    hostreg_name_by_hostid( cluster->member[j].hostid, namestr ),
+	    cluster->member[j].flags & RAFT_MEMBER_VOTED ? "Voted," : "",
+	    cluster->member[j].flags,
+	    timestr );
+    if( cluster->state == RAFT_STATE_LEADER ) {
+      printf( "StoredSeq=%"PRIu64"", cluster->member[j].storedseq );
+    }
+    printf( "\n" );
+  }
+
+  n = raft_command_list( cluster->clid, NULL, 0 );
+  if( n > 0 ) {
+    clist = malloc( sizeof(*clist) * n );
+    raft_command_list( cluster->clid, clist, n );
+    for( j = 0; j < n; j++ ) {      
+      printf( "    Command Seq=%"PRIu64" Term=%"PRIu64" Len=%u Stored=%s\n", clist[j].seq, clist[j].term, clist[j].len, sec_timestr( clist[j].stored, timestr ) );
+    }
+    free( clist );
+  }
 }
 
 static void cmd_list( void ) {

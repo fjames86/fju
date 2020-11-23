@@ -126,7 +126,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 9, fvm_run_args, fvm_run_results, "fvm.run", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
     { FVM_RPC_PROG, 1, 10, fvm_readvar_args, fvm_readvar_results, "fvm.readvar", "progid=* procid=*" },
     { FVM_RPC_PROG, 1, 11, fvm_writevar_args, fvm_writevar_results, "fvm.writevar", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
-    { RAFT_RPC_PROG, 1, 5, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
+    { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
     
     { 0, 0, 0, NULL, NULL, NULL }
 };

@@ -734,7 +734,7 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
 
 
 static void raft_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
-  uint64_t clid, hostid, term, seq, comseq;
+  uint64_t clid, hostid, term, seq;
   struct raft_cluster *cl;
   struct raft_member *mp;
   int i, success, sts;

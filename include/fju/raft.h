@@ -91,8 +91,15 @@ struct raft_app {
 
   /* apply command to state machine */
   void (*command)( struct raft_app *app, struct raft_cluster *cl, uint64_t cmdseq, char *buf, int len );
+
+  /* TODO: add support for snapshotting and log compaction */
+  /* Tell application to generate a snapshot of its state machine at this seqno */
+  // void (*snapshot)( struct raft_app *app, struct raft_cluster *cl, uint64_t seq );
 };
 int raft_app_register( struct raft_app *app );
+
+/* Inform raft that the snapshot at this seq has been taken (may be called from within init_snapshot routine) */
+// void raft_snapshot_complete( uint64_t clid, uint64_t seq );
 
 #define RAFT_MAX_COMMAND (32*1024)
 /* 

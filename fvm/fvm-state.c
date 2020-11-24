@@ -141,15 +141,9 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
   }
   end = rpc_now();
   fvm_log( LOG_LVL_DEBUG, "fvm_run name=%s progid=%u took %"PRIu64"ms in %u steps", state->module->header.name, state->module->header.progid, end - start, ns );
-  
-  //if( sts ) return sts;
 
-  /* if clustered then send pings etc */
+  /* if state changed then write back */
   if( state->flags & FVM_STATE_DIRTY ) {
-    if( state->module->clusterid ) {
-      fvm_cluster_update( state->module );
-    }
-
     if( state->module->header.flags & FVM_MODULE_PERSISTENT ) {
       fvm_module_save_data( state->module );
     }
@@ -221,7 +215,6 @@ int fvm_write_uint32( struct fvm_module *m, uint32_t procid, uint32_t val ) {
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 4) ) {
     val = htonl( val );
     memcpy( &m->data[addr - FVM_ADDR_DATA], &val, 4 );
-    if( m->clusterid ) fvm_cluster_update( m );
     return 0;
   }
 
@@ -261,7 +254,6 @@ int fvm_write_uint64( struct fvm_module *m, uint32_t procid, uint64_t val ) {
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - 8) ) {
     xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], 8 );
     xdr_encode_uint64( &xdr, val );
-    if( m->clusterid ) fvm_cluster_update( m );    
     return 0;
   }
   
@@ -317,7 +309,6 @@ int fvm_write_string( struct fvm_module *m, uint32_t procid, char *str ) {
   if( addr >= FVM_ADDR_DATA && addr < (FVM_ADDR_DATA + m->header.datasize - xsize) ) {
     xdr_init( &xdr, &m->data[addr - FVM_ADDR_DATA], xsize );
     xdr_encode_string( &xdr, str );
-    if( m->clusterid ) fvm_cluster_update( m );    
     return 0;
   }
   

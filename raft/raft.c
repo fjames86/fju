@@ -636,7 +636,11 @@ static void raft_send_pings( struct raft_cluster *cl ) {
 
   raft_command_seq( cl->clid, NULL, &seq );
   for( i = 0; i < cl->nmember; i++ ) {
-    raft_call_ping( cl, cl->member[i].hostid );
+    if( cl->member[i].storedseq < seq ) {
+      raft_call_putcmd( cl, cl->member[i].hostid, 0 );
+    } else {
+      raft_call_ping( cl, cl->member[i].hostid );
+    }
   }
 }
 
@@ -1191,8 +1195,14 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
       switch( glob.cl[i].state ) {
       case RAFT_STATE_FOLLOWER:
 	/* term timeout - convert to candidate */
-	raft_log( LOG_LVL_TRACE, "Term timeout - convert to candidate" );
-	raft_convert_candidate( &glob.cl[i] );
+	if( !(glob.cl[i].flags & RAFT_CLUSTER_WITNESS) ) {
+	  raft_log( LOG_LVL_TRACE, "Term timeout - convert to candidate" );
+	  raft_convert_candidate( &glob.cl[i] );
+	} else {
+	  raft_log( LOG_LVL_ERROR, "Term timeout - witness node cannot be candidate" );
+	  glob.cl[i].timeout = raft_term_timeout();
+	  raft_cluster_set( &glob.cl[i] );
+	}
 	break;
       case RAFT_STATE_CANDIDATE:
 	/* election timeout - start new election */
@@ -1285,38 +1295,38 @@ int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   uint64_t seq;
 
   if( cseq ) *cseq = 0;
-  
+    
   /* lookup cluster */
   cl = cl_by_id( clid );
   if( !cl ) {
     raft_log( LOG_LVL_TRACE, "Unknown cluster" );
     return -1;
   }
-
+    
   /* reject if not leader */
   if( cl->state != RAFT_STATE_LEADER ) {
     raft_log( LOG_LVL_ERROR, "Not leader" );
     return -1;
   }
-
+    
   /* save buffer locally */
   sts = raft_command_seq( clid, NULL, &seq );
   if( sts ) {
     raft_log( LOG_LVL_ERROR, "Failed to get command seq" );
     return sts;
   }
-
+    
   sts = raft_command_put( clid, cl->term, seq + 1, buf, len );
   if( sts ) {
     raft_log( LOG_LVL_ERROR, "Failed to store command buffer seq=%"PRIu64"", seq + 1 );
     return -1;
   }
-  
+    
   /* distribute buffer */
   for( i = 0; i < cl->nmember; i++ ) {
     raft_call_putcmd( cl, cl->member[i].hostid, 0 );
   }
-
+    
   if( cseq ) *cseq = seq + 1;
   
   return 0;

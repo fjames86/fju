@@ -63,12 +63,12 @@ int raft_open( void );
 int raft_close( void );
 int raft_prop( struct raft_prop *prop );
 
-#define RAFT_PROP_ELEC_LOW 0x0001
-#define RAFT_PROP_ELEC_HIGH 0x0002
-#define RAFT_PROP_TERM_LOW 0x0004
-#define RAFT_PROP_TERM_HIGH 0x0008
-#define RAFT_PROP_RPC_TIMEOUT 0x0010
-#define RAFT_PROP_FLAGS 0x0020
+#define RAFT_PROP_ELEC_LOW     0x0001
+#define RAFT_PROP_ELEC_HIGH    0x0002
+#define RAFT_PROP_TERM_LOW     0x0004
+#define RAFT_PROP_TERM_HIGH    0x0008
+#define RAFT_PROP_RPC_TIMEOUT  0x0010
+#define RAFT_PROP_FLAGS        0x0020
 int raft_prop_set( uint32_t mask, struct raft_prop *prop );
 
 /* database functions */
@@ -80,6 +80,17 @@ int raft_cluster_rem( uint64_t clid );
 
 /* open command log */
 int raft_log_open( uint64_t clid, struct log_s *log );
+
+/* list info about the commands in the log */
+struct raft_command_info {
+  uint64_t term;  /* term when command issued */
+  uint64_t seq;   /* command seqno */
+  uint64_t stored; /* when command stored */
+  uint32_t len;  /* size of command buffer */
+};
+int raft_command_list( uint64_t clid, struct raft_command_info *clist, int n );
+
+/* ----------- functions below only valid when called from within rpcd ------ */
 
 /* register rpc service */
 void raft_register( void );
@@ -101,26 +112,21 @@ int raft_app_register( struct raft_app *app );
 /* Inform raft that the snapshot at this seq has been taken (may be called from within init_snapshot routine) */
 // void raft_snapshot_complete( uint64_t clid, uint64_t seq );
 
+/* max size of a command buffer */
 #define RAFT_MAX_COMMAND (32*1024)
+
 /* 
  * Start process of initiating command:
- * - save command buffer locally 
- * - distribute to remote nodes
- * - function returns here
- * - asynchronously, when quorum of nodes has received the command, the app->command 
- * callback is invoked 
+ * - only valid when called on leader node (fails otherwise)
+ * - save command buffer locally and distribute to remote nodes
+ * - function returns at this point 
+ * - when quorum of nodes has received the command, command is commited and app->command 
+ * is called on all nodes
  */
 int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
 
+/* get last command stored */
 int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq );
-
-struct raft_command_info {
-  uint64_t term;
-  uint64_t seq;
-  uint64_t stored;  
-  uint32_t len;
-};
-int raft_command_list( uint64_t clid, struct raft_command_info *clist, int n );
 
 #endif
 

@@ -55,6 +55,7 @@ struct raft_prop {
   uint16_t term_low;
   uint16_t term_high;
   uint32_t rpc_timeout;
+  uint32_t snapth; /* snapshot threshold: take snapshot when log exceeds this percentage */
   
   uint32_t spare[7];
 };
@@ -69,6 +70,7 @@ int raft_prop( struct raft_prop *prop );
 #define RAFT_PROP_TERM_HIGH    0x0008
 #define RAFT_PROP_RPC_TIMEOUT  0x0010
 #define RAFT_PROP_FLAGS        0x0020
+#define RAFT_PROP_SNAPTH       0x0040
 int raft_prop_set( uint32_t mask, struct raft_prop *prop );
 
 /* database functions */
@@ -104,8 +106,11 @@ struct raft_app {
   void (*command)( struct raft_app *app, struct raft_cluster *cl, uint64_t cmdseq, char *buf, int len );
 
   /* TODO: add support for snapshotting and log compaction */
-  /* Tell application to generate a snapshot of its state machine at this seqno */
-  // void (*snapshot)( struct raft_app *app, struct raft_cluster *cl, uint64_t seq );
+  /* 
+   * Tell application to generate a snapshot of its state machine at this seqno 
+   * Application should call raft_snapshot_save() repeatedly, completing with len=0
+   */
+  void (*snapshot)( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq );
 };
 int raft_app_register( struct raft_app *app );
 
@@ -127,6 +132,22 @@ int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
 
 /* get last command stored */
 int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq );
+
+struct raft_snapshot_info {
+  uint32_t magic;
+#define RAFT_SNAPSHOT_MAGIC 0x2f55b097
+  uint32_t version;
+#define RAFT_SNAPSHOT_VERSION 1
+  uint64_t clid;
+  uint64_t term;
+  uint64_t seq;
+  uint32_t complete;
+  
+  uint32_t spare[7];  
+};
+int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t offset, char *buf, int len );
+int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info );
+int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len );
 
 #endif
 

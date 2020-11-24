@@ -28,6 +28,7 @@
 #endif
 
 #include <fju/mmf.h>
+#include <stdio.h>
 
 #ifdef WIN32
 #include <Shlobj.h>
@@ -199,6 +200,14 @@ int mmf_delete_file( char *path ) {
   return 0;
 }
 
+int mmf_rename( char *dirpath, char *oldname, char *newname ) {
+  char oldpath[256], newpath[256];
+  sprintf( oldpath, "%s\\%s", dirpath, oldname );
+  sprintf( newpath, "%s\\%s", dirpath, newname );
+  MoveFileA( oldpath, newpath );
+  return 0;
+}
+
 #else
 int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 	memset( mmf, 0, sizeof(*mmf) );
@@ -307,6 +316,14 @@ int mmf_truncate( struct mmf_s *mmf, int size ) {
 
 int mmf_delete_file( char *path ) {
   unlink( path );
+  return 0;
+}
+
+int mmf_rename( char *dirpath, char *oldname, char *newname ) {
+  char oldpath[256], newpath[256];
+  sprintf( oldpath, "%s/%s", dirpath, oldname );
+  sprintf( newpath, "%s/%s", dirpath, newname );
+  rename( oldpath, newpath );
   return 0;
 }
 

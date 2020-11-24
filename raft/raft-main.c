@@ -274,6 +274,12 @@ int main( int argc, char **argv ) {
 		     prop.rpc_timeout = strtoul( argval, NULL, 10 );
 		     mask |= RAFT_PROP_RPC_TIMEOUT;
 		   }
+		 } else if( strcmp( argname, "snapth" ) == 0 ) {
+		   if( argval ) {
+		     prop.snapth = strtoul( argval, NULL, 10 );
+		     if( prop.snapth > 100 ) prop.snapth = 100;
+		     mask |= RAFT_PROP_SNAPTH;
+		   }
                  } else {
 		   printf( "Unknown field name %s\n", argname ); usage( NULL );
 		 }
@@ -328,6 +334,15 @@ static void print_cluster( struct raft_cluster *cluster ) {
     printf( "\n" );
   }
 
+  {
+    struct raft_snapshot_info info;
+    int sts;
+    sts = raft_snapshot_info( cluster->clid, &info );
+    if( !sts ) {
+      printf( "    Snapshot Term=%"PRIu64" Seq=%"PRIu64"\n", info.term, info.seq );
+    }
+  }
+  
   n = raft_command_list( cluster->clid, NULL, 0 );
   if( n > 0 ) {
     clist = malloc( sizeof(*clist) * n );
@@ -361,6 +376,7 @@ static void cmd_prop( void ) {
      printf( "seq=%"PRIu64" rpc-timeout=%u\n", prop.seq, prop.rpc_timeout );
      printf( "Timeouts: election=[%d, %d] term=[%d, %d]\n",
 	     prop.elec_low, prop.elec_high, prop.term_low, prop.term_high );
-     printf( "cluster=%d/%d\n", prop.count, RAFT_MAX_CLUSTER );
+     printf( "Cluster=%u/%u\n", prop.count, RAFT_MAX_CLUSTER );
+     printf( "Snapshot threshold: %u%%\n", prop.snapth );
 }
 

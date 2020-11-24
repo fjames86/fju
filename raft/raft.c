@@ -78,6 +78,7 @@ int raft_open( void ) {
     glob.file->prop.term_low = 3000;
     glob.file->prop.term_high = 8000;
     glob.file->prop.rpc_timeout = 200;
+    glob.file->prop.snapth = 90;
   }
   
   glob.ocount = 1;
@@ -120,6 +121,9 @@ int raft_prop_set( uint32_t mask, struct raft_prop *prop ) {
   }
   if( mask & RAFT_PROP_RPC_TIMEOUT ) {
     glob.file->prop.rpc_timeout = prop->rpc_timeout;
+  }
+  if( mask & RAFT_PROP_SNAPTH ) {
+    glob.file->prop.snapth = prop->snapth;
   }
   raft_unlock();
   return 0;
@@ -415,7 +419,10 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
   struct log_iov iov[2];
   struct raft_cmd_header hdr;
   uint64_t nseq;
-
+  struct log_prop prop;
+  
+  if( len > RAFT_MAX_COMMAND ) return -1;
+  
   /* get highest seq written */
   sts = raft_command_seq( clid, NULL, &nseq );
   if( sts ) return sts;
@@ -444,6 +451,22 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
   
   /* wait for command to be written to stable storage */
   log_sync( log, MMF_SYNC_NOW );
+
+  /* check log capacity */
+  log_prop( log, &prop );
+  if( ((100 * prop.count) / prop.lbacount) >= glob.prop.snapth ) {
+    struct raft_app *app;
+    struct raft_cluster *cl;
+    raft_log( LOG_LVL_INFO, "Requesting snapshot clid=%"PRIx64"", clid );
+    cl = cl_by_id( clid );
+    if( cl ) {
+      app = raft_app_by_appid( cl->appid );
+      if( app && app->snapshot ) {
+	app->snapshot( app, cl, term, seq );
+      }
+    }
+  }
+  
   return 0;
 }
 
@@ -1295,7 +1318,9 @@ int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   uint64_t seq;
 
   if( cseq ) *cseq = 0;
-    
+
+  if( len > RAFT_MAX_COMMAND ) return -1;
+  
   /* lookup cluster */
   cl = cl_by_id( clid );
   if( !cl ) {
@@ -1332,3 +1357,91 @@ int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   return 0;
 }
 
+
+/* ---- snapshots --- */
+
+struct raft_snapshot_file {
+  struct raft_snapshot_info info;
+  char data[1];
+};
+
+int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t offset, char *buf, int len ) {
+  int sts;
+  struct mmf_s mmf;
+  char clstr[64];
+  char *path;
+  struct raft_snapshot_info info;
+  
+  sprintf( clstr, "%"PRIx64"-snapshot.dat.new", clid );
+  path = mmf_default_path( "raft", clstr, NULL );
+  if( offset == 0 ) {
+    /* start new file */
+    mmf_delete_file( path );
+  }
+
+  sts = mmf_open( path, &mmf );
+  if( sts ) return sts;
+
+  if( offset == 0 ) {
+    memset( &info, 0, sizeof(info) );
+    info.magic = RAFT_SNAPSHOT_MAGIC;
+    info.version = RAFT_SNAPSHOT_VERSION;
+    info.clid = clid;
+    info.term = term;
+    info.seq = seq;
+    mmf_write( &mmf, (char *)&info, sizeof(info), 0 );
+  } else if( len > 0 ) {
+    offset += sizeof(info);
+    mmf_write( &mmf, buf, len, offset );
+  } else if( len == 0 ) {
+    /* final block - mark as complete */
+    mmf_read( &mmf, (char *)&info, sizeof(info), 0 );
+    info.complete = 1;
+    mmf_write( &mmf, (char *)&info, sizeof(info), 0 );
+  }
+  
+  mmf_close( &mmf );
+  
+  if( len == 0 ) {
+    /* this was final block - rename over the top of the old snapshot file */
+    char clstr2[64];
+    sprintf( clstr2, "%"PRIx64"-snapshot.dat", clid );
+    mmf_rename( mmf_default_path( "raft", NULL ), clstr, clstr2 );
+
+    /* TODO: truncate log? */
+  }
+
+  return 0;
+}
+
+int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info ) {
+  int sts;
+  struct mmf_s mmf;
+  char clstr[64];
+  
+  sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
+  
+  sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
+  if( sts ) return sts;
+
+  if( info ) mmf_read( &mmf, (char *)info, sizeof(*info), 0 );
+  
+  mmf_close( &mmf );
+  
+  return 0;
+}
+
+int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len ) {
+  int sts;
+  char clstr[64];
+  struct mmf_s mmf;
+
+  sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
+  sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
+  if( sts ) return sts;
+
+  sts = mmf_read( &mmf, buf, len, offset + sizeof(struct raft_snapshot_info) );
+  
+  mmf_close( &mmf );
+  return sts;
+}

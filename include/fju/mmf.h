@@ -70,6 +70,7 @@ int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset );
 int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset );
 int mmf_truncate( struct mmf_s *mmf, int size );
 int mmf_delete_file( char *path );
+int mmf_rename( char *dirpath, char *oldname, char *newname );
 
 #endif
 

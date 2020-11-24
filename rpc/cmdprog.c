@@ -34,7 +34,7 @@ static int cmdprog_proc_stop( struct rpc_inc *inc ) {
 static int cmdprog_proc_event( struct rpc_inc *inc ) {
   int handle, sts, lenp;
   uint32_t eventid;
-  char *bufp;
+  char *bufp = NULL;
   struct xdr_s args;
   
   sts = xdr_decode_uint32( &inc->xdr, &eventid );

@@ -299,7 +299,7 @@ static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint6
   opts.fd = glob.fd;  
   xdr_init( &opts.tmpbuf, glob.buf, sizeof(glob.buf) );
   opts.port = glob.port;
-  sts = hrauth_call_udp_async( &hcall, &xdr, &opts );
+  sts = hrauth_call_udp_async( &hcall, &xdr, 1, &opts );
   if( sts ) {
     free( nlscxtp );
   }

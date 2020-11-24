@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include <fju/cht.h>
 #include <fju/rpc.h>
@@ -51,7 +52,7 @@ static void call_read_donecb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   /* write result back into local table */
   struct cht_rsync_context *cxt = (struct cht_rsync_context *)hcallp->cxt;
   struct cht_entry entry;
-  char *bufp;
+  char *bufp = NULL;
   int lenp, sts, b;
 
   log_writef( NULL, LOG_LVL_DEBUG, "cht rsync read donecb" );

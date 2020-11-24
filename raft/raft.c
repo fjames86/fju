@@ -1,4 +1,10 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
+#include <inttypes.h>
+
 #include <fju/raft.h>
 #include <fju/mmf.h>
 #include <fju/rpc.h>
@@ -1151,7 +1157,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 /* rpc interface to command api */
 static int raft_proc_command( struct rpc_inc *inc ) {
   int handle, sts;
-  char *bufp;
+  char *bufp = NULL;
   int len;
   uint64_t clid, cseq;
   

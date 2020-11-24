@@ -187,8 +187,8 @@ int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct
  eccp = (BCRYPT_ECCKEY_BLOB *)pout;
  eccp->dwMagic = BCRYPT_ECDH_PRIVATE_P256_MAGIC;
  eccp->cbKey = SEC_ECDH_KEYLEN;
- memcpy( pout + sizeof( *eccp ), remote_public->buf, 2 * SEC_ECDH_KEYLEN );
- memcpy( pout + sizeof(*eccp) + 2*SEC_ECDH_KEYLEN, local_priv->buf, SEC_ECDH_KEYLEN );
+ //memcpy( pout + sizeof( *eccp ), remote_public->buf, 2 * SEC_ECDH_KEYLEN );
+ memcpy(pout + sizeof(*eccp) + 2 * SEC_ECDH_KEYLEN, privkey->buf, SEC_ECDH_KEYLEN);
  sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPRIVATE_BLOB, &hkey, pout, outlen, 0 );
  if( sts ) {
    printf( "BCryptImportKeyPair priv failed %u (%x)\n", sts, sts );
@@ -213,7 +213,7 @@ int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struc
   char digest[SEC_SHA1_MAX_HASH];
   int sts;
   BCRYPT_ALG_HANDLE handle;
-  BCRYPT_KEY_HANDLE hkey;
+  BCRYPT_KEY_HANDLE hrkey;
   int outlen;
   BCRYPT_ECCKEY_BLOB *eccp;
   char pout[3*SEC_ECDH_KEYLEN + sizeof(BCRYPT_ECCKEY_BLOB)];
@@ -238,9 +238,9 @@ int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struc
     
   sha1( (uint8_t *)digest, dataiov, niov );
 
-  sts = BCryptVerifySignature( hkey, NULL, digest, SEC_SHA1_MAX_HASH, sig->buf, sig->len, 0 );
+  sts = BCryptVerifySignature( hrkey, NULL, digest, SEC_SHA1_MAX_HASH, sig->buf, sig->len, 0 );
 
-  BCryptDestroyKey( hkey );
+  BCryptDestroyKey( hrkey );
   BCryptCloseAlgorithmProvider( handle, 0 );
 
   /* TODO */

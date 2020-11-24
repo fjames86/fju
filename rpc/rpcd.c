@@ -34,11 +34,14 @@
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
+#include <WinSock2.h>
+#include <Windows.h>
 #endif
 
 #include <fju/rpcd.h>
 #include "rpc-private.h"
 #include <fju/freg.h>
+#include <inttypes.h>
 
 #ifdef WIN32
 #else

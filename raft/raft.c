@@ -239,9 +239,8 @@ int raft_log_open( uint64_t clid, struct log_s *log ) {
   
   sprintf( clstr, "%"PRIx64".log", clid );
   memset( &opts, 0, sizeof(opts) );
-  opts.mask = LOG_OPT_COOKIE|LOG_OPT_FLAGS;
+  opts.mask = LOG_OPT_COOKIE;
   strcpy( opts.cookie, "raft" );
-  opts.flags = LOG_FLAG_FIXED|LOG_FLAG_GROW;
   return log_open( mmf_default_path( "raft", clstr, NULL ), &opts, log );
 }
 
@@ -1029,7 +1028,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
       struct log_s *logp;
       raft_log( LOG_LVL_WARN, "Conflicting log entry found" );
       logp = clog_by_id( clid );
-      if( logp ) log_truncate( logp, entryid );
+      if( logp ) log_truncate( logp, entryid, 0 );
     }
   }
 
@@ -1405,10 +1404,19 @@ int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t off
   if( len == 0 ) {
     /* this was final block - rename over the top of the old snapshot file */
     char clstr2[64];
+    struct log_s *log;
+    struct log_entry entry;
+    int ne;
+    
     sprintf( clstr2, "%"PRIx64"-snapshot.dat", clid );
     mmf_rename( mmf_default_path( "raft", NULL ), clstr, clstr2 );
 
     /* TODO: truncate log? */
+    log = clog_by_id( clid );
+    if( log ) {
+      sts = log_read_end( log, 0, &entry, 1, &ne );
+      if( !sts && ne ) log_truncate( log, entry.id, LOG_TRUNC_END );
+    }
   }
 
   return 0;

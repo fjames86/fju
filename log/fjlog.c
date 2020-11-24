@@ -262,7 +262,7 @@ int main( int argc, char **argv ) {
     break;
   case CMD_TRUNCATE:
     if( !fju.start_id ) usage( "Need entry ID" );
-    sts = log_truncate( &fju.log, fju.start_id );
+    sts = log_truncate( &fju.log, fju.start_id, fju.read_reverse ? LOG_TRUNC_END : 0 );
     if( sts ) usage( "Failed to truncate" );
     break;
   }

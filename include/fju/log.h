@@ -171,7 +171,9 @@ int _name( int lvl, char *fmt, ... ) {\
   return log_write( NULL, &entry );  \
 }
 
-int log_truncate( struct log_s *log, uint64_t id );
+#define LOG_TRUNC_START 0x0000
+#define LOG_TRUNC_END   0x0001
+int log_truncate( struct log_s *log, uint64_t id, uint32_t flags );
 
 
 

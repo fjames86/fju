@@ -686,7 +686,7 @@ int log_set_cookie( struct log_s *log, char *cookie, int size ) {
 }
 
 
-int log_truncate( struct log_s *log, uint64_t id ) {
+int log_truncate( struct log_s *log, uint64_t id, uint32_t flags ) {
   struct _header *hdr;
   int sts;
   uint32_t idx, ecount;
@@ -715,23 +715,29 @@ int log_truncate( struct log_s *log, uint64_t id ) {
   if( e->magic != LOG_MAGIC ) goto done;
   if( e->id != id ) goto done;
 
-  /* get previous id */
-  id = e->prev_id;
-  if( id ) {
-    p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
-    e = (struct _entry *)p;
-    if( e->magic != LOG_MAGIC ) goto done;
-    if( e->id != id ) goto done;
+  if( flags & LOG_TRUNC_END ) {
+    /* delete all entries before here - just adjust start andcount */
+    hdr->count = (hdr->count - (idx - hdr->start) + hdr->lbacount) % hdr->lbacount;
+    hdr->start = idx;
+  } else {
+    /* get previous id */
+    id = e->prev_id;
+    if( id ) {
+      p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
+      e = (struct _entry *)p;
+      if( e->magic != LOG_MAGIC ) goto done;
+      if( e->id != id ) goto done;
+    }
+    
+    ecount = 1 + (e->msglen / LOG_LBASIZE) + (e->msglen % LOG_LBASIZE ? 1 : 0);
+    idx = (idx + ecount) % hdr->lbacount;
+    
+    /* id is correct, truncate to here */
+    hdr->count = (idx - hdr->start + hdr->lbacount) % hdr->lbacount;
+    //hdr->seq++;
+    hdr->last_id = id;
   }
-
-  ecount = 1 + (e->msglen / LOG_LBASIZE) + (e->msglen % LOG_LBASIZE ? 1 : 0);
-  idx = (idx + ecount) % hdr->lbacount;
-
-  /* id is correct, truncate to here */
-  hdr->count = (idx - hdr->start + hdr->lbacount) % hdr->lbacount;
-  //hdr->seq++;
-  hdr->last_id = id;
-
+  
  done:
   log_unlock( log );
 

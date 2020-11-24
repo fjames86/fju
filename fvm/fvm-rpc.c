@@ -18,6 +18,7 @@
 #include <fju/programs.h>
 #include <fju/log.h>
 #include <fju/freg.h>
+#include <fju/raft.h>
 
 
 /* rpc interface */
@@ -626,7 +627,13 @@ static void fvm_event_cb( uint32_t eventid, struct xdr_s *args, void *cxt ) {
   
 }
 
-
+static void fvm_raft_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len );
+static struct raft_app fvm_app = {
+    NULL,
+    RAFT_RPC_PROG,
+    fvm_raft_command,
+};
+  
 void fvm_rpc_register( void ) {
   int sts;
   uint32_t nsteps;
@@ -806,6 +813,94 @@ void fvm_rpc_register( void ) {
   rpc_program_register( &fvm_prog );
 
   rpcd_event_subscribe( 0, fvm_event_cb, NULL );
+
+  raft_app_register( &fvm_app );
 }
 
 
+/* --------- clustering --------------- */
+
+typedef enum {
+    FVM_CMDTYPE_RUN = 0,
+    FVM_CMDTYPE_WU32 = 1,
+    FVM_CMDTYPE_WU64 = 2,
+    FVM_CMDTYPE_WSTR = 3,
+} fvm_cmdtype_t;
+
+static void fvm_raft_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len ) {
+  int sts;
+  uint32_t progid, procid;
+  char *argbuf;
+  int arglen;
+  fvm_cmdtype_t cmdtype;
+  struct xdr_s args;
+  struct fvm_s state;
+  uint32_t u32;
+  uint64_t u64;
+  char str[1024];
+  struct fvm_module *m;
+
+  xdr_init( &args, (uint8_t *)buf, len );
+  sts = xdr_decode_uint32( &args, &progid );
+  if( !sts ) sts = xdr_decode_uint32( &args, &procid );
+  if( !sts ) sts = xdr_decode_uint32( &args, &cmdtype );
+  if( !sts ) {
+    switch( cmdtype ) {
+    case FVM_CMDTYPE_RUN:
+      sts = xdr_decode_opaque_ref( &args, (uint8_t **)&argbuf, &arglen );
+      break;
+    case FVM_CMDTYPE_WU32:
+      sts = xdr_decode_uint32( &args, &u32 );
+      break;
+    case FVM_CMDTYPE_WU64:
+      sts = xdr_decode_uint64( &args, &u64 );
+      break;
+    case FVM_CMDTYPE_WSTR:
+      sts = xdr_decode_string( &args, str, sizeof(str) );
+      break;    
+    default:
+      break;
+    }
+  }
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "Xdr error decoding command args" );
+    return;
+  }
+
+  m = fvm_module_by_progid( progid );
+  if( !m ) {
+    fvm_log( LOG_LVL_ERROR, "Module not found" );
+    return;
+  }
+
+  switch( cmdtype ) {
+  case FVM_CMDTYPE_RUN:    
+    fvm_log( LOG_LVL_TRACE, "fvm_raft_command run clid=%"PRIu64" seq=%"PRIu64" progid=%u procid=%u arglen=%u", cl->clid, seq, progid, procid, arglen );
+  
+    sts = fvm_state_init( &state, progid, procid );
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "Failed to init state" );
+      return;
+    }
+    
+    fvm_set_args( &state, argbuf, arglen );
+    sts = fvm_run( &state, 0 );
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "fvm_run progid=%u procid=%u failed", progid, procid );
+    }
+    break;
+  case FVM_CMDTYPE_WU32:
+    fvm_log( LOG_LVL_TRACE, "fvm_raft_command writeu32 clid=%"PRIu64" seq=%"PRIu64" progid=%u procid=%u arg=%u", cl->clid, seq, progid, procid, u32);    
+    fvm_write_uint32( m, procid, u32 );
+    break;
+  case FVM_CMDTYPE_WU64:
+    fvm_log( LOG_LVL_TRACE, "fvm_raft_command write u64 clid=%"PRIu64" seq=%"PRIu64" progid=%u procid=%u arg=%"PRIu64"", cl->clid, seq, progid, procid, u64 );    
+    fvm_write_uint64( m, procid, u64 );
+    break;
+  case FVM_CMDTYPE_WSTR:
+    fvm_log( LOG_LVL_TRACE, "fvm_raft_command write str clid=%"PRIu64" seq=%"PRIu64" progid=%u procid=%u arg=%s", cl->clid, seq, progid, procid, str ); 
+    fvm_write_string( m, procid, str );
+    break;
+  }
+  
+}

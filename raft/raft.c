@@ -1608,6 +1608,7 @@ int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t off
   sts = mmf_open( path, &mmf );
   if( sts ) return sts;
 
+  /* offset==0 means new file so write header */
   if( offset == 0 ) {
     memset( &info, 0, sizeof(info) );
     info.magic = RAFT_SNAPSHOT_MAGIC;
@@ -1616,7 +1617,9 @@ int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t off
     info.term = term;
     info.seq = seq;
     mmf_write( &mmf, (char *)&info, sizeof(info), 0 );
-  } else if( len > 0 ) {
+  }
+  
+  if( len > 0 ) {
     offset += sizeof(info);
     mmf_write( &mmf, buf, len, offset );
   } else if( len == 0 ) {

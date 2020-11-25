@@ -177,12 +177,13 @@ int main( int argc, char **argv ) {
     if( sp ) {      
       sig.buf = sigbuf;
       sig.len = SEC_MAX_SIG;
-      do {
-	sts = sec_sign( &secret, dataiov, 1, &sig );
+
+	sts = sec_sign( &secret, &public, dataiov, 1, &sig );
 	if( sts ) usage( "Sign failed" );
-      } while( sig.len != 70 );
-      
-      memset( hex, 0, sizeof(hex) );
+   
+	sts = sec_verify( &public, dataiov, 1, &sig );
+
+	  memset( hex, 0, sizeof(hex) );
       base64_encode( sig.buf, sig.len, hex );
       //bn2hex( sig.buf, hex, sig.len );
       printf( "SIG %s\n", hex );

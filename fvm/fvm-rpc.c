@@ -830,7 +830,7 @@ typedef enum {
 static void fvm_raft_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len ) {
   int sts;
   uint32_t progid, procid;
-  char *argbuf;
+  char *argbuf = NULL;
   int arglen;
   fvm_cmdtype_t cmdtype;
   struct xdr_s args;

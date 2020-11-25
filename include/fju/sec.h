@@ -80,7 +80,7 @@ int base64_encode( char *buf, int buflen, char *str );
 int base64_decode( char *buf, int buflen, char *str );
 
 #define SEC_MAX_SIG 72 
-int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig );
+int sec_sign( struct sec_buf *privkey, struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig );
 int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig );
 
 #endif

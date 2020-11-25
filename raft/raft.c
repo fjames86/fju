@@ -1043,6 +1043,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
   while( b ) {
+    bufp = NULL;
     sts = xdr_decode_uint64( &inc->xdr, &pterm );
     if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &pseq );
     if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );

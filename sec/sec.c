@@ -124,7 +124,7 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   eccp = (BCRYPT_ECCKEY_BLOB *)pout;
   eccp->dwMagic = BCRYPT_ECDH_PRIVATE_P256_MAGIC;
   eccp->cbKey = SEC_ECDH_KEYLEN;
-  memcpy( pout + sizeof( *eccp ), remote_public->buf, 2 * SEC_ECDH_KEYLEN ); //??? why do this?
+  memcpy( pout + sizeof( *eccp ), remote_public->buf, 2 * SEC_ECDH_KEYLEN ); // private keys require public key component 
   memcpy( pout + sizeof(*eccp) + 2*SEC_ECDH_KEYLEN, local_priv->buf, SEC_ECDH_KEYLEN );
   sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPRIVATE_BLOB, &hkey, pout, outlen, 0 );
   if( sts ) {
@@ -166,7 +166,7 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   return 0;
 }
 
-int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig ) {
+int sec_sign( struct sec_buf *privkey, struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig ) {
  char digest[SEC_SHA1_MAX_HASH];
  int sts;
  ULONG len, lenp;
@@ -177,7 +177,7 @@ int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct
  char pout[3*SEC_ECDH_KEYLEN + sizeof(BCRYPT_ECCKEY_BLOB)];
  int nbytes;
  
- sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDH_P256_ALGORITHM, NULL, 0 );
+ sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDSA_P256_ALGORITHM, NULL, 0 );
  if( sts ) {
    printf( "BCryptOpenAlgorithmProvider failed %u (%x)\n", sts, sts );
    return -1;
@@ -185,9 +185,9 @@ int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct
 
  outlen = sizeof(*eccp) + 3*SEC_ECDH_KEYLEN;
  eccp = (BCRYPT_ECCKEY_BLOB *)pout;
- eccp->dwMagic = BCRYPT_ECDH_PRIVATE_P256_MAGIC;
+ eccp->dwMagic = BCRYPT_ECDSA_PRIVATE_P256_MAGIC;
  eccp->cbKey = SEC_ECDH_KEYLEN;
- //memcpy( pout + sizeof( *eccp ), remote_public->buf, 2 * SEC_ECDH_KEYLEN );
+ memcpy( pout + sizeof( *eccp ), pubkey->buf, 2 * SEC_ECDH_KEYLEN );
  memcpy(pout + sizeof(*eccp) + 2 * SEC_ECDH_KEYLEN, privkey->buf, SEC_ECDH_KEYLEN);
  sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPRIVATE_BLOB, &hkey, pout, outlen, 0 );
  if( sts ) {
@@ -200,13 +200,13 @@ int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct
  len = sig->len;
  lenp = 0;
  sts = BCryptSignHash( hkey, NULL, digest, SEC_SHA1_MAX_HASH, sig->buf, len, &lenp, 0 );
- sig->len = lenp;
+
+ if( !sts ) sig->len = lenp;
 
  BCryptDestroyKey( hkey );
  BCryptCloseAlgorithmProvider( handle, 0 );
 
- /* TODO */
- return -1;
+ return sts ? -1 : 0;
 }
 
 int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig ) {
@@ -219,7 +219,7 @@ int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struc
   char pout[3*SEC_ECDH_KEYLEN + sizeof(BCRYPT_ECCKEY_BLOB)];
   int nbytes;
   
-  sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDH_P256_ALGORITHM, NULL, 0 );
+  sts = BCryptOpenAlgorithmProvider( &handle, BCRYPT_ECDSA_P256_ALGORITHM, NULL, 0 );
   if( sts ) {
     printf( "BCryptOpenAlgorithmProvider failed %u (%x)\n", sts, sts );
     return -1;
@@ -227,7 +227,7 @@ int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struc
   
   outlen = sizeof(*eccp) + 2*SEC_ECDH_KEYLEN;
   eccp = (BCRYPT_ECCKEY_BLOB *)pout;
-  eccp->dwMagic = BCRYPT_ECDH_PUBLIC_P256_MAGIC;
+  eccp->dwMagic = BCRYPT_ECDSA_PUBLIC_P256_MAGIC;
   eccp->cbKey = SEC_ECDH_KEYLEN;
   memcpy( pout + sizeof(*eccp), pubkey->buf, SEC_ECDH_MAX_PUBKEY );
   sts = BCryptImportKeyPair( handle, NULL, BCRYPT_ECCPUBLIC_BLOB, &hrkey, pout, outlen, 0 );
@@ -239,12 +239,11 @@ int sec_verify( struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struc
   sha1( (uint8_t *)digest, dataiov, niov );
 
   sts = BCryptVerifySignature( hrkey, NULL, digest, SEC_SHA1_MAX_HASH, sig->buf, sig->len, 0 );
-
+  
   BCryptDestroyKey( hrkey );
   BCryptCloseAlgorithmProvider( handle, 0 );
 
-  /* TODO */
-  return -1;
+  return sts ? -1 : 0;
 }
 
 #else
@@ -359,7 +358,7 @@ int ecdh_common( struct sec_buf *local_priv, struct sec_buf *remote_public, stru
   return 0;
 }
 
-int sec_sign( struct sec_buf *privkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig ) {
+int sec_sign( struct sec_buf *privkey, struct sec_buf *pubkey, struct sec_buf *dataiov, int niov, struct sec_buf *sig ) {
  char digest[SEC_SHA1_MAX_HASH];
  int sts;
  EC_KEY *hkey;

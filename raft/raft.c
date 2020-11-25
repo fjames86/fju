@@ -1350,7 +1350,7 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
       sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
       if( !sts ) {
 	sts = mmf_remap( &mmf, mmf.fsize );
-	app->snapshot_load( app, cl, (char *)mmf.file + sizeof(struct raft_snapshot_info), mmf.fsize - sizeof(raft_snapshot_info) );
+	app->snapshot_load( app, cl, (char *)mmf.file + sizeof(struct raft_snapshot_info), mmf.fsize - sizeof(struct raft_snapshot_info) );
 	mmf_close( &mmf );
       }
     }

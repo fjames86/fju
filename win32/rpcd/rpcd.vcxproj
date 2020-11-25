@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\raft\raft-example.c" />
     <ClCompile Include="..\..\rpc\fjud-main.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

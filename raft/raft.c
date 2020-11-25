@@ -245,8 +245,9 @@ int raft_log_open( uint64_t clid, struct log_s *log ) {
   
   sprintf( clstr, "%"PRIx64".log", clid );
   memset( &opts, 0, sizeof(opts) );
-  opts.mask = LOG_OPT_COOKIE;
+  opts.mask = LOG_OPT_COOKIE|LOG_OPT_FLAGS;
   strcpy( opts.cookie, "raft" );
+  opts.flags = LOG_FLAG_FIXED;
   return log_open( mmf_default_path( "raft", clstr, NULL ), &opts, log );
 }
 
@@ -268,7 +269,7 @@ static struct raft_cluster *cl_by_id( uint64_t clid ) {
   return NULL;
 }
 static struct log_s *clog_by_id( uint64_t clid ) {
-  int i;
+  int i, sts;
   /* return already open log */
   for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
     if( glob.clog[i].clid == clid ) return &glob.clog[i].log;
@@ -277,18 +278,24 @@ static struct log_s *clog_by_id( uint64_t clid ) {
   /* open a new log descriptor */
   for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
     if( glob.clog[i].clid == 0 ) {
-      glob.clog[i].clid = clid;
-      raft_log_open( clid, &glob.clog[i].log );
+      sts = raft_log_open( clid, &glob.clog[i].log );
+      if( sts ) return NULL;
+      
+      glob.clog[i].clid = clid;      
       return &glob.clog[i].log;
     }
   }
 
-  /* all a log we don't need anymore */
+  /* close a log we don't need anymore */
   for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
     if( !cl_by_id( glob.clog[i].clid ) ) {
       log_close( &glob.clog[i].log );
-      glob.clog[i].clid = clid;
-      raft_log_open( clid, &glob.clog[i].log );
+      glob.clog[i].clid = 0;
+      
+      sts = raft_log_open( clid, &glob.clog[i].log );
+      if( sts ) return NULL;
+      
+      glob.clog[i].clid = clid;      
       return &glob.clog[i].log;
     }
   }
@@ -466,8 +473,8 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
     cl = cl_by_id( clid );
     if( cl ) {
       app = raft_app_by_appid( cl->appid );
-      if( app && app->snapshot ) {
-	app->snapshot( app, cl, term, seq );
+      if( app && app->snapshot_save ) {
+	app->snapshot_save( app, cl, term, seq );
       }
     }
   }
@@ -808,10 +815,7 @@ static void raft_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
     return;
   }
 
-  if( success ) {
-    mp->storedseq = seq;
-  }
-  
+  mp->storedseq = seq;
   mp->lastseen = time( NULL );
   raft_cluster_set( cl );
 
@@ -1179,11 +1183,64 @@ static int raft_proc_command( struct rpc_inc *inc ) {
 }
 
 
+static int raft_proc_snapsave( struct rpc_inc *inc ) {
+  int handle, sts;
+  char *bufp = NULL;
+  int len;
+  uint64_t clid, term, seq, bterm, entryid;
+  struct raft_cluster *cl;
+  uint32_t offset;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &offset );  
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  raft_log( LOG_LVL_TRACE, "raft_proc_snapsave clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64" len=%u", clid, term, seq, len );
+
+  cl = cl_by_id( clid );
+  
+  sts = raft_snapshot_save( clid, term, seq, offset, bufp, len );
+  if( len == 0 ) {
+    struct raft_app *app;
+    
+    raft_log( LOG_LVL_INFO, "reloading from snapshot" );
+    app = raft_app_by_appid( cl->appid );
+    if( app && app->snapshot_load ) {
+      struct mmf_s mmf;
+      char clstr[64];
+      sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
+      
+      sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
+      if( !sts ) {
+	sts = mmf_remap( &mmf, mmf.fsize );
+	app->snapshot_load( app, cl, mmf.file + sizeof(struct raft_snapshot_info), mmf.fsize - sizeof(raft_snapshot_info) );
+	mmf_close( &mmf );
+      }
+    }
+
+    /* truncate log to here */
+    sts = raft_command_by_seq( clid, seq, &bterm, NULL, 0, &entryid );
+    if( !sts && entryid ) log_truncate( clog_by_id( clid ), entryid, LOG_TRUNC_END );
+
+    sts = 0;
+  }
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
+
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_append },
   { 2, raft_proc_vote },  
   { 3, raft_proc_command },
+  { 4, raft_proc_snapsave },
   { 0, NULL }
 };
 

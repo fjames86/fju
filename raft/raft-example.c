@@ -17,11 +17,17 @@ static void rex_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
   log_writef( NULL, LOG_LVL_INFO, "rex_command clid=%"PRIx64" seq=%"PRIu64" len=%u", cl->clid, cmdseq, len );
 }
 
+static void rex_snapshot( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq ) {
+  log_writef( NULL, LOG_LVL_INFO, "rex_snapshot clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64"", cl->clid, term, seq );
+  raft_snapshot_save( cl->clid, term, seq, 0, NULL, 0 );
+}
+
 static struct raft_app rex_app =
   {
    NULL,
    REX_APPID,
    rex_command,
+   rex_snapshot,
   };
 
 void rex_register( void ) {

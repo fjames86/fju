@@ -628,10 +628,44 @@ static void fvm_event_cb( uint32_t eventid, struct xdr_s *args, void *cxt ) {
 }
 
 static void fvm_raft_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len );
+static void fvm_raft_snapshot( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq ) {
+  struct fvm_module *m;
+  
+  fvm_log( LOG_LVL_INFO, "fvm save snapshot" );
+
+  /* lookup module by cluster id */
+  m = fvm_module_by_clid( cl->clid );
+  if( !m ) return;
+  
+  /* save module state */
+  raft_snapshot_save( cl->clid, term, seq, 0, (char *)m->data, m->header.datasize );
+  raft_snapshot_save( cl->clid, term, seq, m->header.datasize, NULL, 0 );
+}
+
+static void fvm_raft_snapload( struct raft_app *app, struct raft_cluster *cl, char *buf, int len ) {
+  struct fvm_module *m;
+  
+  fvm_log( LOG_LVL_INFO, "fvm load snapshot" );
+
+  /* lookup module by clusterid */
+  m = fvm_module_by_clid( cl->clid );
+  if( !m ) return;
+  
+  /* set module state from buffer */
+  if( m->header.datasize != len ) {
+    fvm_log( LOG_LVL_ERROR, "Bad datasize" );
+    return;
+  }
+  
+  memcpy( m->data, buf, len );
+}
+
 static struct raft_app fvm_app = {
     NULL,
     RAFT_RPC_PROG,
     fvm_raft_command,
+    fvm_raft_snapshot,
+    fvm_raft_snapload,
 };
   
 void fvm_rpc_register( void ) {

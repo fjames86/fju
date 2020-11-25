@@ -98,6 +98,8 @@ static void fvm_writevar_args( int argc, char **argv, int i, struct xdr_s *xdr )
 static void fvm_writevar_results( struct xdr_s *xdr );
 static void raft_command_results( struct xdr_s *xdr );
 static void raft_command_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void raft_snapshot_results( struct xdr_s *xdr );
+static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -127,6 +129,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 10, fvm_readvar_args, fvm_readvar_results, "fvm.readvar", "progid=* procid=*" },
     { FVM_RPC_PROG, 1, 11, fvm_writevar_args, fvm_writevar_results, "fvm.writevar", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
     { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
+    { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },    
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1450,5 +1453,32 @@ static void raft_command_args( int argc, char **argv, int i, struct xdr_s *xdr )
   } else {
     xdr_encode_opaque( xdr, NULL, 0 );
   }
+}
+
+static void raft_snapshot_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  
+  if( !b ) printf( "Failure\n" );
+  else printf( "Success\n" );
+}
+
+static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  char *term;
+  uint64_t clid = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, &term, 16 );
+      if( *term ) usage( "Failed to parse CLID" );
+    } else usage( NULL );
+    i++;
+  }
+
+  if( !clid ) usage( "Need CLID" );
+  xdr_encode_uint64( xdr, clid );
 }
 

@@ -207,6 +207,16 @@ struct fvm_module *fvm_module_by_progid( uint32_t progid ) {
   return NULL;
 }
 
+struct fvm_module *fvm_module_by_clid( uint64_t clid ) {
+  struct fvm_module *m;
+  m = modules;
+  while( m ) {
+    if( m->clusterid == clid ) return m;
+    m = m->next;
+  }
+  return NULL;
+}
+
 int fvm_module_save_data( struct fvm_module *m ) {
   struct mmf_s mmf;
   uint32_t offset;

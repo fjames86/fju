@@ -141,11 +141,12 @@ struct raft_snapshot_info {
   uint64_t term;
   uint64_t seq;
   uint32_t complete;
+  uint32_t size;
   
-  uint32_t spare[7];  
+  uint32_t spare[6];  
 };
 int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t offset, char *buf, int len );
-int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info );
+int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info, struct raft_snapshot_info *newinfo );
 int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len );
 
 #endif

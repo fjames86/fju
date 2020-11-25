@@ -204,7 +204,7 @@ int mmf_rename( char *dirpath, char *oldname, char *newname ) {
   char oldpath[256], newpath[256];
   sprintf( oldpath, "%s\\%s", dirpath, oldname );
   sprintf( newpath, "%s\\%s", dirpath, newname );
-  MoveFileA( oldpath, newpath );
+  MoveFileExA( oldpath, newpath, MOVEFILE_REPLACE_EXISTING );
   return 0;
 }
 

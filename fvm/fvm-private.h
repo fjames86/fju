@@ -62,6 +62,7 @@ typedef enum {
 
 struct fvm_module *fvm_module_by_name( char *name );
 struct fvm_module *fvm_module_by_progid( uint32_t progid );
+struct fvm_module *fvm_module_by_clid( uint64_t clid );
 uint32_t fvm_progid_by_name( char *name );
 uint32_t fvm_symbol_addr( struct fvm_module *m, char *name );
 uint32_t fvm_symbol_index( struct fvm_module *m, char *name );

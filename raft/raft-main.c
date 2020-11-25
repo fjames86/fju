@@ -296,9 +296,8 @@ int main( int argc, char **argv ) {
 
 static void print_cluster( struct raft_cluster *cluster ) {
   char timestr[128], namestr[HOSTREG_MAX_NAME];
-  int j, n;
+  int j;
   uint64_t cseq;
-  struct raft_command_info *clist;
   
   raft_command_seq( cluster->clid, NULL, &cseq );
   
@@ -337,21 +336,31 @@ static void print_cluster( struct raft_cluster *cluster ) {
   {
     struct raft_snapshot_info info;
     int sts;
-    sts = raft_snapshot_info( cluster->clid, &info );
+    sts = raft_snapshot_info( cluster->clid, &info, NULL );
     if( !sts ) {
-      printf( "    Snapshot Term=%"PRIu64" Seq=%"PRIu64"\n", info.term, info.seq );
+      printf( "    Snapshot Size=%u Term=%"PRIu64" Seq=%"PRIu64"\n", info.size, info.term, info.seq );
+    }
+    sts = raft_snapshot_info( cluster->clid, NULL, &info );
+    if( !sts ) {
+      printf( "    Snapshot Partial Term=%"PRIu64" Seq=%"PRIu64" Complete=%s\n", info.term, info.seq, info.complete ? "True" : "False" );
     }
   }
-  
-  n = raft_command_list( cluster->clid, NULL, 0 );
-  if( n > 0 ) {
-    clist = malloc( sizeof(*clist) * n );
-    raft_command_list( cluster->clid, clist, n );
-    for( j = 0; j < n; j++ ) {      
-      printf( "    Command Seq=%"PRIu64" Term=%"PRIu64" Len=%u Stored=%s\n", clist[j].seq, clist[j].term, clist[j].len, sec_timestr( clist[j].stored, timestr ) );
+
+#if 0
+  {
+    struct raft_command_info *clist;
+    int n;
+    n = raft_command_list( cluster->clid, NULL, 0 );
+    if( n > 0 ) {
+      clist = malloc( sizeof(*clist) * n );
+      raft_command_list( cluster->clid, clist, n );
+      for( j = 0; j < n; j++ ) {      
+	printf( "    Command Seq=%"PRIu64" Term=%"PRIu64" Len=%u Stored=%s\n", clist[j].seq, clist[j].term, clist[j].len, sec_timestr( clist[j].stored, timestr ) );
+      }
+      free( clist );
     }
-    free( clist );
   }
+  #endif
 }
 
 static void cmd_list( void ) {

@@ -1145,7 +1145,7 @@ static void hrauth_conn_call_cb( struct rpc_waiter *w, struct rpc_inc *inc ) {
   }
 
   /* do anything required with the connection context */
-  if( inc && inc->msg.u.reply.tag == RPC_REJECT_AUTH_ERROR ) {
+  if( inc && inc->msg.u.reply.tag == RPC_MSG_REJECT && inc->msg.u.reply.u.reject.tag == RPC_REJECT_AUTH_ERROR ) {
     hrauth_log( LOG_LVL_ERROR, "Reply auth error, reinitializing auth context" );
     hrauth_init( &hc->hcxt, hc->hostid );
   }

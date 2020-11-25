@@ -495,6 +495,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   hdrlvl = (hdr->flags & LOG_FLAG_LVLMASK) >> 4;
   if( (entry->flags & LOG_LVL_MASK) < hdrlvl ) {
     /* lvl too low - discard */
+    sts = 0;
     goto done;
   }
   
@@ -509,7 +510,10 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
     hdr = (struct _header *)log->mmf.file;
     hdr->lbacount = nlbacount;    
   } else {
-    if( cnt > (int)hdr->lbacount ) goto done;
+    if( cnt > (int)hdr->lbacount ) {
+      sts = -1;
+      goto done;
+    }
   }
   
   /* get next location */
@@ -520,6 +524,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
 
     if( hdr->flags & LOG_FLAG_FIXED ) {
       /* fixed log - no space left so bail out here */
+      sts = -1;
       goto done;
     }
     
@@ -585,12 +590,13 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   }
 
   hdr->seq++;
-
+  sts = 0;
+  
  done:
   if( log->flags & (LOG_SYNC|LOG_ASYNC) ) log_sync( log, log->flags & LOG_SYNC ? 1 : 0 );
   
   log_unlock( log );
-  return 0;
+  return sts;
 }
 
 int log_writev( struct log_s *log, int lvl, char *fmt, va_list args ) {
@@ -723,6 +729,9 @@ int log_truncate( struct log_s *log, uint64_t id, uint32_t flags ) {
     /* get previous id */
     id = e->prev_id;
     if( id ) {
+      idx = (uint32_t)(id & LOG_INDEX_MASK);
+      if( idx >= hdr->lbacount ) goto done;
+      
       p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
       e = (struct _entry *)p;
       if( e->magic != LOG_MAGIC ) goto done;
@@ -737,7 +746,8 @@ int log_truncate( struct log_s *log, uint64_t id, uint32_t flags ) {
     //hdr->seq++;
     hdr->last_id = id;
   }
-  
+
+  sts = 0;
  done:
   log_unlock( log );
 

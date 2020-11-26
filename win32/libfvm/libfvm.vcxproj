@@ -136,7 +136,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\fvm\fvm-audit.c" />
+    <ClCompile Include="..\..\fvm\fvm-cluster.c" />
     <ClCompile Include="..\..\fvm\fvm-module.c" />
     <ClCompile Include="..\..\fvm\fvm-native.c" />
     <ClCompile Include="..\..\fvm\fvm-opcodes.c" />

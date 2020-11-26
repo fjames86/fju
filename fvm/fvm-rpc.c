@@ -919,6 +919,8 @@ void fvm_rpc_register( void ) {
   rpc_program_register( &fvm_prog );
 
   rpcd_event_subscribe( 0, fvm_event_cb, NULL );
+
+  fvm_cluster_register();
 }
 
 

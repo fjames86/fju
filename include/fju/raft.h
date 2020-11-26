@@ -112,10 +112,10 @@ struct raft_app {
    * Tell application to generate a snapshot of its state machine at this seqno 
    * Application should call raft_snapshot_save() repeatedly, completing with len=0
    */
-  void (*snapshot_save)( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq );
+  void (*snapsave)( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq );
 
   /* Instruct application to reload state from this snapshot buffer */
-  void (*snapshot_load)( struct raft_app *app, struct raft_cluster *cl, char *buf, int len );
+  void (*snapload)( struct raft_app *app, struct raft_cluster *cl, char *buf, int len );
 };
 int raft_app_register( struct raft_app *app );
 

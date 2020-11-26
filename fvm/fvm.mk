@@ -23,10 +23,11 @@ libfvm_source+=fvm/fvm-state.c
 libfvm_source+=fvm/fvm-opcodes.c
 libfvm_source+=fvm/fvm-native.c
 libfvm_source+=fvm/fvm-rpc.c
+libfvm_source+=fvm/fvm-cluster.c
 
 ${LIBDIR}/libfvm.a: ${libfvm_source} include/fju/fvm.h fvm/fvm-private.h 
 	${CC} -c ${libfvm_source} ${CFLAGS} 
-	${AR} rcs $@ fvm-module.o fvm-state.o fvm-opcodes.o fvm-native.o fvm-rpc.o 
+	${AR} rcs $@ fvm-module.o fvm-state.o fvm-opcodes.o fvm-native.o fvm-rpc.o fvm-cluster.o
 
 ${BINDIR}/fvmc: fvm/fvmc.c include/fju/sec.h fvm/fvmc-pascal.c 
 	${CC} -o $@ fvm/fvmc.c fvm/fvmc-pascal.c ${CFLAGS} ${LFLAGS} 

@@ -96,5 +96,7 @@ int fvm_write_string( struct fvm_module *m, uint32_t procid, char *str );
 
 int fvm_module_save_data( struct fvm_module *m );
 
+void fvm_cluster_register( void );
+
 #endif
 

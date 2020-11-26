@@ -1279,7 +1279,7 @@ int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat,
 
 
 static void hrauth_ping_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
-  hrauth_log( LOG_LVL_TRACE, "hrauth ping %s", xdr ? "timeout" : "success" );
+  hrauth_log( LOG_LVL_TRACE, "hrauth ping %"PRIx64" %s", hcallp->hostid, xdr ? "Success" : "Timeout" );
 }
 
 static void hrauth_send_ping( struct hrauth_conn *hc ) {

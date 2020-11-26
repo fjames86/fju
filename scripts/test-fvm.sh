@@ -16,7 +16,7 @@ echo "------------- TEST6 -------------------------- "
 fvm fvm/test/test6.fvm
 
 echo "Waiting for cluster to come online..."
-while [ $(raft | grep leader | awk '{print $5}' | sed 's/leader=//') = "0" ]
+while [ $(raft | grep Leader | awk '{print $5}' | sed 's/Leader=//') = "0" ]
 do
     sleep 0.1
 done

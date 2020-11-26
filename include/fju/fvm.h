@@ -35,7 +35,6 @@ struct fvm_module_info {
   char name[FVM_MAX_NAME];
   uint32_t datasize;
   uint32_t textsize;
-  uint64_t clusterid;
   uint32_t flags;
 #define FVM_MODULE_PERSISTENT   0x0002 /* save data segment after each run */
   uint64_t utime;

@@ -154,7 +154,6 @@ int fvm_module_info( uint32_t progid, struct fvm_module_info *minfo ) {
       minfo->textsize = m->header.textsize;
       minfo->progid = m->header.progid;
       minfo->versid = m->header.versid;
-      minfo->clusterid = m->clusterid;
       minfo->flags = m->header.flags;
       return 0;
     }
@@ -177,7 +176,6 @@ int fvm_module_list( struct fvm_module_info *minfo, int n ) {
       minfo[i].textsize = m->header.textsize;
       minfo[i].progid = m->header.progid;
       minfo[i].versid = m->header.versid;
-      minfo[i].clusterid = m->clusterid;
       minfo[i].utime = m->utime;
     }
     i++;
@@ -202,16 +200,6 @@ struct fvm_module *fvm_module_by_progid( uint32_t progid ) {
   m = modules;
   while( m ) {
     if( m->header.progid == progid ) return m;
-    m = m->next;
-  }
-  return NULL;
-}
-
-struct fvm_module *fvm_module_by_clid( uint64_t clid ) {
-  struct fvm_module *m;
-  m = modules;
-  while( m ) {
-    if( m->clusterid == clid ) return m;
     m = m->next;
   }
   return NULL;

@@ -46,7 +46,7 @@
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
             "          add cluster [clid=ID] [appid=APPID] [witness=true|false]\n"
-            "          set cluster ID [appid=APPID] [witness=true|false]\n"
+            "          set cluster ID [appid=APPID] [witness=true|false] [cookie=*]\n"
             "          rem cluster ID\n"
             "          add member [clid=CLID] [hostid=HOSTID]\n"
             "          set member\n"
@@ -233,7 +233,11 @@ int main( int argc, char **argv ) {
 	      if( argval ) {
 		if( strcmp( argval, "true" ) == 0 ) cl.flags |= RAFT_CLUSTER_WITNESS;
 		else cl.flags &= ~RAFT_CLUSTER_WITNESS;
-	      }		   
+	      }
+	    } else if( strcmp( argname, "cookie" ) == 0 ) {
+	      if( argval ) {
+		strncpy( cl.cookie, argval, sizeof(cl.cookie) - 1 );
+	      }
 	    } else usage( NULL );
 	    i++;
 	  }
@@ -302,7 +306,8 @@ static void print_cluster( struct raft_cluster *cluster ) {
   raft_command_seq( cluster->clid, NULL, &cseq );
   
   printf( "Cluster ID=%"PRIx64" State=%s Term=%"PRIu64" Leader=%"PRIx64" (%s)\n"
-	  "        AppliedSeq=%"PRIu64" CommitSeq=%"PRIu64" StoredSeq=%"PRIu64" AppID=%u Flags=0x%x (%s) VoteID=%"PRIx64"\n",
+	  "        AppliedSeq=%"PRIu64" CommitSeq=%"PRIu64" StoredSeq=%"PRIu64" AppID=%u Flags=0x%x (%s) VoteID=%"PRIx64"\n"
+	  "        Cookie=%s\n", 
 	  cluster->clid,
 	  cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
 	  cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
@@ -312,7 +317,8 @@ static void print_cluster( struct raft_cluster *cluster ) {
 	  cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
 	  cluster->appliedseq, cluster->commitseq, cseq,
 	  cluster->appid, cluster->flags, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", 
-	  cluster->voteid);
+	  cluster->voteid,
+	  cluster->cookie );
 	          
   for( j = 0; j < cluster->nmember; j++ ) {
     if( cluster->member[j].lastseen ) {

@@ -658,6 +658,7 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   xdr_encode_uint64( &args, cl->commitseq ); /* leaders commit seq */
   xdr_encode_uint64( &args, pterm ); /* previous log term/seq */
   xdr_encode_uint64( &args, pseq );
+  xdr_encode_fixed( &args, (uint8_t *)cl->cookie, RAFT_MAX_COOKIE );
   xdr_encode_boolean( &args, 0 ); /* no commands follow */
   
   memset( &hcall, 0, sizeof(hcall) );
@@ -894,6 +895,7 @@ static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t
   xdr_encode_uint64( &args[0], cl->commitseq ); /* commitseq */
   xdr_encode_uint64( &args[0], pterm ); /* prev term/seq */
   xdr_encode_uint64( &args[0], pseq );
+  xdr_encode_fixed( &args[0], (uint8_t *)cl->cookie, RAFT_MAX_COOKIE );
   xdr_encode_boolean( &args[0], 1 ); /* sending commands */  
   xdr_encode_uint64( &args[0], cterm ); /* command term */
   xdr_encode_uint64( &args[0], cseq ); /* command seq */
@@ -1115,6 +1117,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   char resbuf[64];
   char *bufp;
   int len, b;
+  char cookie[RAFT_MAX_COOKIE];
  
   /* we can guarantee this because we set a mandatory authenticator */
   hc = (struct hrauth_context *)inc->pcxt;
@@ -1126,7 +1129,8 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term ); /* current term */
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &commitseq ); /* leaders commit seq */
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &prevlogterm ); /* log term/seq immediately before the entries included */  
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &prevlogseq ); 
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &prevlogseq );
+  if( !sts ) sts = xdr_decode_fixed( &inc->xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
   raft_log( LOG_LVL_TRACE, "raft_proc_append clid=%"PRIx64" leaderid=%"PRIx64" term=%"PRIu64" commitseq=%"PRIu64"",
@@ -1198,6 +1202,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   clp->leaderid = hostid;
   clp->timeout = raft_term_timeout();
   clp->state = RAFT_STATE_FOLLOWER;
+  memcpy( clp->cookie, cookie, RAFT_MAX_COOKIE );
   raft_cluster_set( clp );
   
   /* leader has incremented commitseq indicating quorum have received this entry */

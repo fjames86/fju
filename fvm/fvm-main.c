@@ -28,8 +28,6 @@ static void usage( char *fmt, ... ) {
 	    "   -s      start symbol\n"
 	    "   -n      max steps\n"
 	    "   -v      Verbose\n"
-	    "   -r      Replay audit log\n"
-	    "   -R      Save to audit log\n"
 	    "   --u32 u32 | --u64 u64 | --str str  Set arg values\n" 
 	    "\n" );
   }
@@ -55,7 +53,6 @@ int main( int argc, char **argv ) {
   int nsteps = -1;
   uint32_t progid = 0, procid = 0;
   struct xdr_s argxdr;
-  int replay = 0, saveaudit = 0;
   char *resbuf;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
@@ -97,10 +94,6 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       xdr_encode_string( &argxdr, argv[i] );
-    } else if( strcmp( argv[i], "-r" ) == 0 ) {
-      replay = 1;
-    } else if( strcmp( argv[i], "-R" ) == 0 ) {
-      saveaudit = 1;
     } else break;
     
     i++;
@@ -132,8 +125,6 @@ int main( int argc, char **argv ) {
     fvm_printf( "--------------------------------------\n" );
   }
 
-  if( replay ) fvm_audit_replay();
-  
   if( !mname[0] ) usage( "No module" );
   fvm_printf( "Initializing to module %s\n", mname );
 
@@ -173,7 +164,6 @@ int main( int argc, char **argv ) {
     fvm_set_args( &state, (char *)argbuf, argxdr.offset );
   }
 
-  if( saveaudit ) fvm_audit_write( progid, procid, (char *)argbuf, argxdr.offset );
   sts = fvm_run( &state, nsteps );
   if( sts ) usage( "Failed to run" );
 

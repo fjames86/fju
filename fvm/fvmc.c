@@ -1275,8 +1275,7 @@ static void disassemble( char *filename ) {
   printf( "PROGID      \t%08x (%u) %u\n", header.progid, header.progid, header.versid );
   printf( "DATASIZE    \t%u\n", header.datasize );
   printf( "TEXTSIZE    \t%u\n", header.textsize );
-  printf( "FLAGS       \t0x%x\t%s%s\n", header.flags,
-	  header.flags & FVM_MODULE_AUDIT ? "AUDIT " : "",
+  printf( "FLAGS       \t0x%x\t%s\n", header.flags,
 	  header.flags & FVM_MODULE_PERSISTENT ? "PERSISTENT " : "" );
   printf( ";; ------------- SYMBOLS ------------ \n" );
   sym = malloc( sizeof(*sym) * header.symcount );

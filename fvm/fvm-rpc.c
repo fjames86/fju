@@ -70,8 +70,6 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   procid = inc->msg.u.call.proc;
   if( procid >= m->header.symcount ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  if( m->flags & FVM_MODULE_AUDIT ) fvm_audit_write( progid, procid, (char *)(inc->xdr.buf + inc->xdr.offset), inc->xdr.count - inc->xdr.offset );
-  
   type = m->symbols[procid].flags & FVM_SYMBOL_TYPE_MASK;
   fvm_log( LOG_LVL_DEBUG, "fvm_rpc_proc progid=%u procid=%u type=%s", progid, procid,
 	   type == FVM_SYMBOL_PROC ? "PROC" : type == FVM_SYMBOL_UINT32 ? "UINT32" : type == FVM_SYMBOL_UINT64 ? "UINT64" : type == FVM_SYMBOL_STRING ? "STRING" : "UNKNOWN" );  
@@ -363,7 +361,6 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   sts = fvm_set_args( &state, bufp, lenp );
   if( sts ) goto done;
 
-  if( state.module->flags & FVM_MODULE_AUDIT ) fvm_audit_write( progid, procid, bufp, lenp );
   sts = fvm_run( &state, 0 );
 
  done:
@@ -561,7 +558,6 @@ static void fvm_iter_cb( struct rpc_iterator *it ) {
     return;
   }
 
-  if( state.module->flags & FVM_MODULE_AUDIT ) fvm_audit_write( fvm->progid, fvm->procid, NULL, 0 );
   sts = fvm_run( &state, 0 );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "Failed to run %u %u", fvm->progid, fvm->procid );
@@ -712,11 +708,6 @@ void fvm_rpc_register( void ) {
     }
   }
 
-  /* TODO: replay audit logs from cluster leader? */
-
-  /* clear audit log */
-  fvm_audit_reset();  
-
   /* register all these modules as rpc programs on startup */
   sts = freg_subkey( NULL, 0, "/fju/fvm/programs", FREG_CREATE, &key );
   if( !sts ) {
@@ -833,7 +824,6 @@ void fvm_rpc_register( void ) {
 	  if( sts ) {
 	    fvm_log( LOG_LVL_ERROR, "FVM initializing proc failed" );
 	  } else {
-	    if( state.module->flags & FVM_MODULE_AUDIT ) fvm_audit_write( progid, procid, NULL, 0 );
 	    fvm_run( &state, 0 );
 	  }
 	}

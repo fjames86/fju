@@ -252,3 +252,5 @@ cht_set_flags
 cht_set_alog 
 cht_rsync_initialize
 raft_snapshot_save
+rpc_conn_list
+rex_register

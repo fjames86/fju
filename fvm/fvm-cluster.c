@@ -192,7 +192,7 @@ int fvm_cluster_run( uint64_t clid, uint32_t progid, uint32_t procid, char *args
   xdr_init( &buf, (uint8_t *)c->buf, c->count );
   xdr_encode_uint32( &buf, progid );
   xdr_encode_uint32( &buf, FVM_MODE_RUN );
-  xdr_encode_uint64( &buf, 0 );
+  xdr_encode_uint64( &buf, 0 ); /* hostid */
   xdr_encode_uint32( &buf, procid );
   xdr_encode_opaque( &buf, (uint8_t *)args, len );
   sts = raft_cluster_command( clid, (char *)buf.buf, buf.offset, NULL );

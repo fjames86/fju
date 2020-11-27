@@ -92,6 +92,15 @@ void fvm_rpc_register( void );
 
 /* ----------------- clustering ---------- */
 
+/*
+ * To use fvm clustering: 
+ * - allocate a raft cluster and set its appid=FVM_RPC_PROG
+ * - either: 
+ * - call fvm_cluster_run to request a given prog/proc is run across all nodes in the cluster
+ * - call fvm_cluster_updatestate to distribute the current local data segment to all nodes in the cluster
+ *
+ */
+
 /* 
  * Issue a clustered command which distributes the local data segment to all nodes 
  * clid ::= cluster id or 0 for default (first cluster with appid=FVM_RPC_PROG)

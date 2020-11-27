@@ -1312,7 +1312,9 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   return hrauth_reply( inc, &res, 1 );
 }
 
-/* rpc interface to command api */
+/*
+ * rpc interface to allow appending commands 
+ */
 static int raft_proc_command( struct rpc_inc *inc ) {
   int handle, sts;
   char *bufp = NULL;
@@ -1345,7 +1347,7 @@ static int raft_proc_command( struct rpc_inc *inc ) {
   return 0;
 }
 
-
+/* internal procedure used to distribute snapshots */
 static int raft_proc_snapsave( struct rpc_inc *inc ) {
   int handle, sts;
   char *bufp = NULL;
@@ -1403,6 +1405,9 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   return hrauth_reply( inc, &res, 1 );
 }
 
+/*  
+ * rpc interface to instruct raft to take a snapshot and compact log 
+ */
 static int raft_proc_snapshot( struct rpc_inc *inc ) {
   int handle, sts;
   uint64_t clid;
@@ -1428,6 +1433,9 @@ static int raft_proc_snapshot( struct rpc_inc *inc ) {
   return 0;
 }
 
+/*
+ * rpc interface that allows distributing cluster changes
+ */
 static int raft_proc_change( struct rpc_inc *inc ) {
   int sts, handle;  
   char cmdbuf[256];
@@ -1468,7 +1476,11 @@ static int raft_proc_change( struct rpc_inc *inc ) {
   
  bad:
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-  
+
+  /* 
+   * Lookup first cluster with appid=RAFT_RPC_PROG. This is the raft metadata distributor cluster
+   * i.e. all nodes in that cluster get sent the change command 
+   */
   rclid = raft_clid_by_appid( RAFT_RPC_PROG );
   if( !rclid ) goto done;
   
@@ -1916,15 +1928,13 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
   if( bmembers ) {
     clp->nmember = 0;
     for( i = 0; i < nmember; i++ ) {
-      if( (member[i] != hostreg_localid()) && (clp->member[clp->nmember].hostid != member[i]) ) {
+      if( (member[i] != hostreg_localid()) ) {
 	raft_log( LOG_LVL_INFO, "Raft member changing %"PRIx64" -> %"PRIx64"", clp->member[clp->nmember].hostid, member[i] );
 	
 	clp->member[clp->nmember].hostid = member[i];
 	clp->nmember++;
       }
     }
-  
-    clp->nmember = nmember;
   }
 
   if( bappid ) {

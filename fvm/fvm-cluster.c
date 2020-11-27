@@ -167,22 +167,10 @@ int fvm_cluster_run( uint64_t clid, uint32_t progid, uint32_t procid, char *args
   struct xdr_s buf;
   struct rpc_conn *c;
   int sts;
-  
-  if( clid == 0 ) {
-    int i, n;
-    uint64_t clidl[RAFT_MAX_CLUSTER];
-    struct raft_cluster cl;
-    
-    n = raft_clid_list( clidl, RAFT_MAX_CLUSTER );
-    for( i = 0; i < n; i++ ) {
-      sts = raft_cluster_by_clid( clidl[i], &cl );
-      if( sts ) continue;
-      if( cl.appid == FVM_RPC_PROG ) {
-	clid = clidl[i];
-	break;
-      }
-    }
 
+  /* If cluster not specified lookup first cluster with appid=FVM_RPC_PROG */
+  if( clid == 0 ) {
+    clid = raft_clid_by_appid( FVM_RPC_PROG );
     if( clid == 0 ) return -1;
   }
 
@@ -196,6 +184,7 @@ int fvm_cluster_run( uint64_t clid, uint32_t progid, uint32_t procid, char *args
   xdr_encode_uint32( &buf, procid );
   xdr_encode_opaque( &buf, (uint8_t *)args, len );
   sts = raft_cluster_command( clid, (char *)buf.buf, buf.offset, NULL );
+  
   rpc_conn_release( c );
   
   return sts;
@@ -211,20 +200,7 @@ int fvm_cluster_updatestate( uint64_t clid, uint32_t progid ) {
   if( !m ) return -1;
   
   if( clid == 0 ) {
-    int i, n;
-    uint64_t clidl[RAFT_MAX_CLUSTER];
-    struct raft_cluster cl;
-    
-    n = raft_clid_list( clidl, RAFT_MAX_CLUSTER );
-    for( i = 0; i < n; i++ ) {
-      sts = raft_cluster_by_clid( clidl[i], &cl );
-      if( sts ) continue;
-      if( cl.appid == FVM_RPC_PROG ) {
-	clid = clidl[i];
-	break;
-      }
-    }
-
+    clid = raft_clid_by_appid( FVM_RPC_PROG );
     if( clid == 0 ) return -1;
   }
 
@@ -236,6 +212,7 @@ int fvm_cluster_updatestate( uint64_t clid, uint32_t progid ) {
   xdr_encode_uint32( &buf, FVM_MODE_UPDATESTATE );
   xdr_encode_opaque( &buf, (uint8_t *)m->data, m->header.datasize );
   sts = raft_cluster_command( clid, (char *)buf.buf, buf.offset, NULL );
+
   rpc_conn_release( c );
   
   return sts;

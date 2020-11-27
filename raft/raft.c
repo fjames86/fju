@@ -161,6 +161,21 @@ int raft_clid_list( uint64_t *clid, int ncl ) {
   return i;  
 }
 
+uint64_t raft_clid_by_appid( uint32_t appid ) {
+  int i;
+  uint64_t clid = 0;
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  for( i = 0; i < glob.file->prop.count; i++ ) {
+    if( glob.file->cluster[i].appid == appid ) {
+      clid = glob.file->cluster[i].clid;
+      break;
+    }
+  }
+  raft_unlock();
+  return clid;
+}
+
 int raft_cluster_by_clid( uint64_t clid, struct raft_cluster *cl ) {
   int i, sts;
 
@@ -261,6 +276,7 @@ static struct raft_app *raft_app_by_appid( uint32_t appid );
 static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t cseq );
 static void raft_apply_commands( struct raft_cluster *cl );
 static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid, uint32_t offset );
+static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len );
 
 static struct raft_cluster *cl_by_id( uint64_t clid ) {
   int i;
@@ -1394,7 +1410,7 @@ static int raft_proc_snapshot( struct rpc_inc *inc ) {
   struct raft_cluster *cl;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
   
   raft_log( LOG_LVL_TRACE, "raft_proc_snapshot clid=%"PRIx64"", clid );
   cl = cl_by_id( clid );
@@ -1412,6 +1428,74 @@ static int raft_proc_snapshot( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int raft_proc_change( struct rpc_inc *inc ) {
+  int sts, handle;  
+  char cmdbuf[256];
+  struct xdr_s xdr;
+  int i, bmembers, bcookie, bappid;
+  uint64_t rclid, clid;
+  char cookie[RAFT_MAX_COOKIE];
+  uint64_t members[RAFT_MAX_MEMBER];
+  uint32_t nmembers, appid;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( sts ) goto bad;
+  sts = xdr_decode_boolean( &inc->xdr, &bcookie );
+  if( sts ) goto bad;
+  if( bcookie ) {
+    sts = xdr_decode_fixed( &inc->xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
+    if( sts ) goto bad;
+  }
+  sts = xdr_decode_boolean( &inc->xdr, &bmembers );
+  if( sts ) goto bad;
+  sts = xdr_decode_uint32( &inc->xdr, &nmembers );
+  if( sts ) goto bad;
+  if( nmembers > RAFT_MAX_MEMBER ) {
+    sts = -1;
+    goto bad;
+  }
+  for( i = 0; i < nmembers; i++ ) {
+    sts = xdr_decode_uint64( &inc->xdr, &members[i] );
+    if( sts ) goto bad;
+  }
+
+  sts = xdr_decode_boolean( &inc->xdr, &bappid );
+  if( sts ) goto bad;
+  if( bappid ) {
+    sts = xdr_decode_uint32( &inc->xdr, &appid );
+    if( sts ) goto bad;
+  }
+  
+ bad:
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+  
+  rclid = raft_clid_by_appid( RAFT_RPC_PROG );
+  if( !rclid ) goto done;
+  
+  xdr_init( &xdr, (uint8_t *)cmdbuf, sizeof(cmdbuf) );
+  xdr_encode_uint64( &xdr, clid );
+  xdr_encode_boolean( &xdr, bcookie );
+  if( bcookie ) xdr_encode_fixed( &xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
+  xdr_encode_boolean( &xdr, bmembers );
+  if( bmembers ) {
+    xdr_encode_uint32( &xdr, nmembers );
+    for( i = 0; i < nmembers; i++ ) {
+      xdr_encode_uint64( &xdr, members[i] );
+    }
+  }
+  xdr_encode_boolean( &xdr, bappid );
+  if( bappid ) xdr_encode_uint32( &xdr, appid );
+  
+  raft_cluster_command( rclid, cmdbuf, xdr.offset, NULL );
+
+
+ done:
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_append },
@@ -1419,6 +1503,7 @@ static struct rpc_proc raft_procs[] = {
   { 3, raft_proc_command },
   { 4, raft_proc_snapsave },
   { 5, raft_proc_snapshot },
+  { 6, raft_proc_change },
   { 0, NULL }
 };
 
@@ -1510,6 +1595,13 @@ static void raft_set_iter_timeout( void ) {
   raft_iter.timeout = to;  
 }
 
+static struct raft_app raft_app =
+{
+   NULL,
+   RAFT_RPC_PROG,
+   raft_app_command,
+};
+
 
 void raft_register( void ) {
   int i;
@@ -1527,6 +1619,7 @@ void raft_register( void ) {
 
   rpc_program_register( &raft_prog );
   rpc_iterator_register( &raft_iter );
+  raft_app_register( &raft_app );
 }
 
 int raft_app_register( struct raft_app *app ) {
@@ -1558,6 +1651,11 @@ static int raft_call_command( struct raft_cluster *cl, char *buf, int len ) {
   char argbuf[256], tmpbuf[4];
   int sts;
 
+  if( !cl->leaderid ) {
+    raft_log( LOG_LVL_ERROR, "No leader" );
+    return -1;
+  }
+  
   xdr_init( &args[0], (uint8_t *)argbuf, sizeof(argbuf) );
   /* encode args */
   xdr_encode_uint64( &args[0], cl->clid );
@@ -1608,7 +1706,6 @@ int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   /* if not leader then send it */
   if( cl->state != RAFT_STATE_LEADER ) {
     raft_log( LOG_LVL_INFO, "Not leader - forwarding command" );
-    *cseq = 0;
     return raft_call_command( cl, buf, len );
   }
     
@@ -1740,5 +1837,102 @@ int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len ) {
   return sts;
 }
 
+
+
+/* --------------------------- raft app ----------------------- */
+
+/*
+ * We register our own application to facilitate distributing raft cluster configuration changes
+ * across clusters.
+ */
+
+static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len ) {
+  struct xdr_s xdr;
+  int sts, i, bcookie, bmembers, bappid;
+  uint64_t clid;
+  char cookie[RAFT_MAX_COOKIE];
+  uint32_t nmember, appid;
+  uint64_t member[RAFT_MAX_MEMBER];
+  struct raft_cluster *clp;
+  
+  xdr_init( &xdr, (uint8_t *)buf, len );
+  sts = xdr_decode_uint64( &xdr, &clid );
+  if( sts ) return;
+
+  sts = xdr_decode_boolean( &xdr, &bcookie );
+  if( sts ) return;
+  if( bcookie ) {
+    sts = xdr_decode_fixed( &xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
+    if( sts ) return;
+  }
+
+  sts = xdr_decode_boolean( &xdr, &bmembers );
+  if( sts ) return;
+  if( bmembers ) {
+    sts = xdr_decode_uint32( &xdr, &nmember );
+    if( sts ) return;
+    if( nmember > RAFT_MAX_MEMBER ) return;
+    for( i = 0; i < nmember; i++ ) {
+      sts = xdr_decode_uint64( &xdr, &member[i] );
+      if( sts ) return;
+    }
+  }
+
+  sts = xdr_decode_boolean( &xdr, &bappid );
+  if( sts ) return;
+  if( bappid ) {
+    sts = xdr_decode_uint32( &xdr, &appid );
+    if( sts ) return;
+  }
+ 
+
+  clp = cl_by_id( clid );
+  if( !clp ) {
+    struct raft_cluster clpp;
+    memset( &clpp, 0, sizeof(clpp) );
+    clpp.clid = clid;
+    if( bcookie ) memcpy( clpp.cookie, cookie, RAFT_MAX_COOKIE );
+    if( bmembers ) {
+      clpp.nmember = 0;
+      for( i = 0; i < nmember; i++ ) {
+	if( member[i] != hostreg_localid() ) {
+	  clpp.member[clpp.nmember].hostid = member[i];
+	  clpp.nmember++;
+	}
+      }
+    }
+    if( bappid ) clpp.appid = appid;
+    raft_cluster_set( &clpp );
+    return;
+  }
+
+  if( bcookie ) {
+    if( memcmp( clp->cookie, (uint8_t *)cookie, RAFT_MAX_COOKIE ) != 0 ) {
+      raft_log( LOG_LVL_INFO, "Raft cookie changing" );
+      memcpy( clp->cookie, cookie, RAFT_MAX_COOKIE );
+    }
+  }
+
+  if( bmembers ) {
+    clp->nmember = 0;
+    for( i = 0; i < nmember; i++ ) {
+      if( (member[i] != hostreg_localid()) && (clp->member[clp->nmember].hostid != member[i]) ) {
+	raft_log( LOG_LVL_INFO, "Raft member changing %"PRIx64" -> %"PRIx64"", clp->member[clp->nmember].hostid, member[i] );
+	
+	clp->member[clp->nmember].hostid = member[i];
+	clp->nmember++;
+      }
+    }
+  
+    clp->nmember = nmember;
+  }
+
+  if( bappid ) {
+    clp->appid = appid;
+  }
+
+  raft_cluster_set( clp );
+  
+}
 
 

@@ -49,6 +49,7 @@
 #include <fju/sec.h>
 #include <fju/programs.h>
 #include <fju/fvm.h>
+#include <fju/raft.h>
 
 struct clt_info {
     uint32_t prog;
@@ -98,6 +99,8 @@ static void raft_command_results( struct xdr_s *xdr );
 static void raft_command_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void raft_snapshot_results( struct xdr_s *xdr );
 static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void raft_change_results( struct xdr_s *xdr );
+static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -126,7 +129,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 7, fvm_readvar_args, fvm_readvar_results, "fvm.readvar", "progid=* procid=*" },
     { FVM_RPC_PROG, 1, 8, fvm_writevar_args, fvm_writevar_results, "fvm.writevar", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
     { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
-    { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },    
+    { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
+    { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*]" },
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1445,5 +1449,61 @@ static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr 
 
   if( !clid ) usage( "Need CLID" );
   xdr_encode_uint64( xdr, clid );
+}
+
+static void raft_change_results( struct xdr_s *xdr ) {
+}
+
+static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  char *term;  
+  uint64_t clid;
+  int bcookie, bmembers, bappid;
+  char cookie[RAFT_MAX_COOKIE];
+  uint32_t nmember, appid;
+  uint64_t members[RAFT_MAX_MEMBER];
+  
+  bcookie = 0;
+  bmembers = 0;
+  clid = 0;
+  memset( cookie, 0, sizeof(cookie) );
+  nmember = 0;
+  bappid = 0;
+  appid = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, &term, 16 );
+      if( *term ) usage( "Failed to parse CLID" );
+    } else if( strcmp( argname, "cookie" ) == 0 ) {
+      strncpy( cookie, argval, RAFT_MAX_COOKIE - 1 );
+      bcookie = 1;
+    } else if( strcmp( argname, "member" ) == 0 ) {
+      if( nmember >= RAFT_MAX_MEMBER ) usage( "Max members" );
+      members[nmember] = strtoull( argval, &term, 16 );
+      if( *term ) usage( "Failed to parse hostid" );
+      nmember++;
+      bmembers = 1;
+    } else if( strcmp( argname, "appid" ) == 0 ) {
+      appid = strtol( argval, NULL, 10 );
+      bappid = 1;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !clid ) usage( "Need CLID" );
+
+  xdr_encode_uint64( xdr, clid );
+  xdr_encode_boolean( xdr, bcookie );
+  if( bcookie ) xdr_encode_fixed( xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
+  xdr_encode_boolean( xdr, bmembers );
+  if( bmembers ) {
+    xdr_encode_uint32( xdr, nmember );
+    for( i = 0; i < nmember; i++ ) xdr_encode_uint64( xdr, members[i] );
+  }
+  xdr_encode_boolean( xdr, bappid );
+  if( bappid ) xdr_encode_uint32( xdr, appid );
 }
 

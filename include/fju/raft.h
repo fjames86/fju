@@ -80,6 +80,7 @@ int raft_prop_set( uint32_t mask, struct raft_prop *prop );
 int raft_cluster_list( struct raft_cluster *cl, int ncl );
 int raft_clid_list( uint64_t *clid, int n );
 int raft_cluster_by_clid( uint64_t clid, struct raft_cluster *cl );
+uint64_t raft_clid_by_appid( uint32_t appid );
 int raft_cluster_set( struct raft_cluster *cl );
 int raft_cluster_rem( uint64_t clid );
 
@@ -151,6 +152,8 @@ struct raft_snapshot_info {
 int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t offset, char *buf, int len );
 int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info, struct raft_snapshot_info *newinfo );
 int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len );
+
+int raft_change_config( uint64_t clid, uint64_t *members, int nmember, char *cookie );
 
 #endif
 

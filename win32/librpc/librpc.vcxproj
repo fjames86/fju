@@ -137,7 +137,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\rpc\cmdprog.c" />
     <ClCompile Include="..\..\rpc\rpc.c" />
     <ClCompile Include="..\..\rpc\rpcd.c" />
     <ClCompile Include="..\..\rpc\shauth.c" />

@@ -232,7 +232,6 @@ cht_purge
 cht_entry_by_index
 rpcd_stop
 fju_check_license
-cmdprog_register
 base64_encode
 base64_decode
 sec_sign

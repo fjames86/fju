@@ -9,7 +9,6 @@ fvm_programs+=fvm/programs/msgq.fvm
 
 fvm_stdlib+=fvm/stdlib/native.asm
 fvm_stdlib+=fvm/stdlib/xdr.asm
-fvm_stdlib+=fvm/stdlib/clusterinvoke.fvm
 
 fvm_test+=fvm/test/test1.fvm
 fvm_test+=fvm/test/test2.fvm
@@ -40,8 +39,6 @@ fvm/stdlib/native.asm: ${BINDIR}/fvmc fvm/stdlib/native.pas
 	${BINDIR}/fvmc fvm/stdlib/native.pas
 fvm/stdlib/xdr.asm: ${BINDIR}/fvmc fvm/stdlib/xdr.pas
 	${BINDIR}/fvmc fvm/stdlib/xdr.pas
-fvm/stdlib/clusterinvoke.fvm: ${BINDIR}/fvmc fvm/stdlib/clusterinvoke.pas 
-	${BINDIR}/fvmc -o $@ fvm/stdlib/constants.pas ${fvm_flags} fvm/stdlib/clusterinvoke.pas 
 
 fvm/programs/test-rpc.fvm: ${BINDIR}/fvmc fvm/programs/test-rpc.pas 
 	${BINDIR}/fvmc -o $@ ${fvm_flags} fvm/programs/test-rpc.pas

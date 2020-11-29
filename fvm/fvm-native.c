@@ -16,6 +16,7 @@
 #include <fju/log.h>
 #include <fju/freg.h>
 #include <fju/cht.h>
+#include <fju/raft.h>
 
 
 /*
@@ -666,6 +667,40 @@ static int native_writecht( struct fvm_s *state ) {
   return 0;
 }
 
+static int native_raftcommand( struct fvm_s *state ) {
+  int sts;
+  uint32_t clidlow, clidhigh, bufaddr, buflen;
+  uint64_t clid;
+  char *buf;
+  
+  clidhigh = ntohl( fvm_stack_read( state, 16 ) );
+  clidlow = ntohl( fvm_stack_read( state, 12 ) );
+  clid = (((uint64_t)clidhigh) << 32) | (uint64_t)clidlow;
+  bufaddr = ntohl( fvm_stack_read( state, 8 ) );
+  buf = fvm_getaddr( state, bufaddr );  
+  buflen = ntohl( fvm_stack_read( state, 4 ) );
+
+  sts = raft_cluster_command( clid, buf, buf ? buflen : 0, NULL );
+  (void)sts;
+  
+  return 0;
+}
+
+static int native_fvmclrun( struct fvm_s *state ) {
+  uint32_t progid, procid, bufaddr, len;
+  char *buf;
+  
+  len = ntohl( fvm_stack_read( state, 4 ) );
+  bufaddr = ntohl( fvm_stack_read( state, 8 ) );
+  procid = ntohl( fvm_stack_read( state, 12 ) );
+  progid = ntohl( fvm_stack_read( state, 16 ) );
+  buf = fvm_getaddr( state, bufaddr );
+  
+  fvm_cluster_run( 0, progid, procid, buf, buf ? len : 0 );
+  
+  return 0;
+}
+
 
 static struct fvm_native_proc native_procs[] =
   {
@@ -692,6 +727,8 @@ static struct fvm_native_proc native_procs[] =
    { 20, native_logwarn },   
    { 21, native_logerror },
    { 22, native_nextregentry },
+   { 23, native_raftcommand },
+   { 24, native_fvmclrun },
    
    { 0, NULL }
   };

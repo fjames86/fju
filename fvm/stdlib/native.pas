@@ -43,5 +43,7 @@ Begin
    Declare Syscall LogWarn(str : string) : 20;
    Declare Syscall LogError(str : string) : 21;   
    Declare Syscall NextRegEntry(path : string, name : string, var type : integer) : 22;
+   Declare Syscall RaftCommand(clidHigh : integer, clidLow : integer, buf : opaque, len : integer) : 23;
+   Declare Syscall FvmClusterRun(ProgId : integer, ProcId : integer, buf : opaque, len : integer) : 24;
    
 End.

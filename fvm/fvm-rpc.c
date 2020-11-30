@@ -512,6 +512,30 @@ static int fvm_proc_writevar( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_clusterrun( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint32_t progid, procid;
+  char *bufp = NULL;
+  int lenp;
+  uint64_t clid;
+
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &progid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &procid );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  fvm_log( LOG_LVL_DEBUG, "fvm_proc_clusterrun clid=%"PRIx64" progid=%u procid=%u buflen=%u",
+	   clid, progid, procid, lenp );
+
+  sts = fvm_cluster_run( clid, progid, procid, bufp, lenp );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
 
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
@@ -523,6 +547,7 @@ static struct rpc_proc fvm_procs[] = {
   { 6, fvm_proc_run },
   { 7, fvm_proc_readvar },
   { 8, fvm_proc_writevar },
+  { 9, fvm_proc_clusterrun },
   
   { 0, NULL }
 };

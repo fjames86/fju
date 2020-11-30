@@ -101,6 +101,8 @@ static void raft_snapshot_results( struct xdr_s *xdr );
 static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void raft_change_results( struct xdr_s *xdr );
 static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_clrun_results( struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -128,6 +130,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 6, fvm_run_args, fvm_run_results, "fvm.run", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
     { FVM_RPC_PROG, 1, 7, fvm_readvar_args, fvm_readvar_results, "fvm.readvar", "progid=* procid=*" },
     { FVM_RPC_PROG, 1, 8, fvm_writevar_args, fvm_writevar_results, "fvm.writevar", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
+    { FVM_RPC_PROG, 1, 9, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "[clid=*] progid=* procid=* [u32=*] [u64=*] [str=*]" },
     { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
     { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
     { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*]" },
@@ -1505,5 +1508,52 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   }
   xdr_encode_boolean( xdr, bappid );
   if( bappid ) xdr_encode_uint32( xdr, appid );
+}
+
+static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  struct xdr_s argx;
+  uint32_t progid, procid;
+  uint64_t clid;  
+  char argbuf[16*1024];
+
+  clid = 0;
+  progid = 0;
+  procid = 0;
+    
+  xdr_init( &argx, (uint8_t *)argbuf, sizeof(argbuf) );
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "u32" ) == 0 ) {
+      xdr_encode_uint32( &argx, strtoul( argval, NULL, 0 ) );
+    } else if( strcmp( argname, "u64" ) == 0 ) {
+      xdr_encode_uint64( &argx, strtoull( argval, NULL, 0 ) );
+    } else if( strcmp( argname, "str" ) == 0 ) {
+      xdr_encode_string( &argx, argval );
+    } else if( strcmp( argname, "bool" ) == 0 ) {
+      xdr_encode_boolean( &argx, strcmp( argval, "true" ) == 0 );
+    } else if( strcmp( argname, "progid" ) == 0 ) {
+      progid = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "procid" ) == 0 ) {
+      procid = strtoul( argval, NULL, 0 );
+    } else usage( NULL );
+    i++;
+  }
+
+  xdr_encode_uint64( xdr, clid );
+  xdr_encode_uint32( xdr, progid );
+  xdr_encode_uint32( xdr, procid );
+  xdr_encode_opaque( xdr, (uint8_t *)argx.buf, argx.offset );
+
+}
+
+static void fvm_clrun_results( struct xdr_s *xdr ) {
+  int sts, b;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  if( !b ) usage( "Failed" );
 }
 

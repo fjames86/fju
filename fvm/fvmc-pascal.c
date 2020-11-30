@@ -629,7 +629,8 @@ static void parseprogram( void );
 static char *genlabel( char *prefix ) {
   static char labelname[64];
 
-  sprintf( labelname, "L%s%s%s%u", prefix ? "-" : "", prefix ? prefix : "", prefix ? "-" : "", ++glob.labelidx );
+  sprintf( labelname, "L%s%s%s%u$", prefix ? "-" : "", prefix ? prefix : "", prefix ? "-" : "", ++glob.labelidx );
+
   return labelname;
 }
 

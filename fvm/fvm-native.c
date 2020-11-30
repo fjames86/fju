@@ -597,6 +597,7 @@ static int native_writeregstring( struct fvm_s *state ) {
 
   sts = freg_ensure( NULL, 0, path, FREG_TYPE_STRING, strp + 4, strsize, NULL );
   (void)(sts);
+  freg_put( NULL, 0, path, FREG_TYPE_STRING, strp + 4, strsize, NULL );
 	       
   return 0;
 }

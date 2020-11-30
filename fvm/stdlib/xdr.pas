@@ -38,30 +38,33 @@ End;
 
 Procedure DecodeString(var buf : opaque, val : string, var valsize : integer)
 Begin
-	var len : integer;
+	var strlen : integer;
 	var ln : integer;
 	var p : opaque;
+	var tmpstr : string[256];
 
-	len := ^buf;
-	If len % 4 Then len := len + 4 - (len % 4);
+	strlen := ^buf;
+	If strlen % 4 Then strlen := strlen + 4 - (strlen % 4);
 	
-	If len > valsize Then
-	   len := valsize;
-	ln := len - valsize;
-
 	p := val;
-	^p := len;
+	^p := strlen;
 	p := p + 4;
-	While len > 0 Do
+	While strlen > 0 Do
 	Begin
-		^p := ^buf;
+		If valsize >= 0 Then
+		Begin
+			^p := ^buf;
+		End;
+		
 		p := p + 4;
-		buf := buf + 4;
-		len := len - 4;
+		strlen := strlen - 4;
+		valsize := valsize - 4;
 	End;
-	buf := buf + ln;
-	
-	valsize := len;
+	buf := buf + strlen;	
+	valsize := strlen;
+
+	Syscall Sprintf(tmpstr,256,"val.len: %d\n", AddressOf strlen);
+	Syscall Puts(tmpstr);
 End;
 
 End.

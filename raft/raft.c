@@ -1007,9 +1007,13 @@ static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid, uint32
   struct raft_snapshot_info info;
   char *buf;
   
-  raft_log( LOG_LVL_TRACE, "raft_call_snapsave" );
+  raft_log( LOG_LVL_TRACE, "raft_call_snapsave clid=%"PRIx64" hostid=%"PRIx64"", cl->clid, hostid );
   sts = raft_snapshot_info( cl->clid, &info, NULL );
-  if( sts ) return;
+  if( sts ) {
+    raft_log( LOG_LVL_ERROR, "Failed to find local snapshot - sending empty snapshot data" );
+    memset( &info, 0, sizeof(info) );
+    raft_command_seq( cl->clid, &info.term, &info.seq );
+  }
 
   if( offset == info.size ) {
     len = 0;

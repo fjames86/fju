@@ -301,8 +301,10 @@ int main( int argc, char **argv ) {
 
 static void print_cluster( struct raft_cluster *cluster ) {
   char timestr[128], namestr[HOSTREG_MAX_NAME];
-  int j;
+  int j, sts;
   uint64_t cseq;
+  struct log_prop prop;
+  struct log_s log;
   
   raft_command_seq( cluster->clid, NULL, &cseq );
   
@@ -320,7 +322,14 @@ static void print_cluster( struct raft_cluster *cluster ) {
 	  cluster->appid, cluster->flags, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", 
 	  cluster->voteid,
 	  cluster->cookie );
-	          
+
+  sts = raft_log_open( cluster->clid, &log );
+  if( !sts ) {
+    log_prop( &log, &prop );
+    printf( "    Command Log: %u/%u (%u%%)\n", prop.count, prop.lbacount, (100 * prop.count) / prop.lbacount );
+    log_close( &log );
+  }
+  
   for( j = 0; j < cluster->nmember; j++ ) {
     if( cluster->member[j].lastseen ) {
       sec_timestr( cluster->member[j].lastseen, timestr );

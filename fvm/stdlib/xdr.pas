@@ -41,10 +41,9 @@ Begin
 	var strlen : integer;
 	var ln : integer;
 	var p : opaque;
-	var tmpstr : string[256];
 
 	strlen := ^buf;
-	If strlen % 4 Then strlen := strlen + 4 - (strlen % 4);
+	If strlen % 4 <> 0 Then strlen := strlen + 4 - (strlen % 4);
 	
 	p := val;
 	^p := strlen;
@@ -63,8 +62,6 @@ Begin
 	buf := buf + strlen;	
 	valsize := strlen;
 
-	Syscall Sprintf(tmpstr,256,"val.len: %d\n", AddressOf strlen);
-	Syscall Puts(tmpstr);
 End;
 
 End.

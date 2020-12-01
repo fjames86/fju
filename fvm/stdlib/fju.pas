@@ -7,7 +7,7 @@
   * interface or other fvm programs.
 }
 
-Program Template(10000,1,FregPutString,LogWriteMsg);
+Program Template(10000,1,FregPutString,LogWriteMsg,ChtWrite);
 Begin
 
 { write an freg string. args: path to entry, value to write }
@@ -41,7 +41,23 @@ Begin
 	Syscall LogStr(msgp);
 End;
 
+Procedure ChtWrite(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque)
+Begin
+	var key : opaque;
+	var buf : opaque;
+	var size : integer;
 
+	key := argbuf;
+	argbuf := argbuf + 16;
+	size := ^argbuf;
+	argbuf := argbuf + 4;
+	buf := argbuf;
+
+	If argcount >= (size + 20) Then Syscall WriteCht(key,buf,size)
+	Else Syscall LogStr("ChtWrite bad args");
+		
+
+End;
 
 
 End.

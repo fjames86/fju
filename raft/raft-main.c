@@ -377,6 +377,8 @@ static void print_cluster( struct raft_cluster *cluster ) {
     }
   }
   #endif
+
+  printf( "\n" );
 }
 
 static void cmd_list( void ) {
@@ -391,6 +393,7 @@ static void cmd_list( void ) {
   for( i = 0; i < n; i++ ) {
     print_cluster( &cluster[i] );
   }
+
   free( cluster );
   printf( "\n" );
 }

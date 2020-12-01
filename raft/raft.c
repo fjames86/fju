@@ -1711,6 +1711,31 @@ int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   if( cseq ) *cseq = 0;
 
   if( len > RAFT_MAX_COMMAND ) return -1;
+
+  if( !rpcdp() ) {
+    /* not running in rpcd so need to make rpc call out to local daemon */
+    
+    struct xdr_s args[2];
+    struct hrauth_call hcall;
+    char argbuf[32];
+
+    xdr_init( &args[0], (uint8_t *)argbuf, sizeof(argbuf) );
+    xdr_encode_uint64( &args[0], clid );
+    xdr_encode_uint32( &args[0], len );
+    xdr_init( &args[1], (uint8_t *)buf, len );
+    args[1].offset = len;
+
+    memset( &hcall, 0, sizeof(hcall) );
+    hcall.hostid = hostreg_localid();
+    hcall.prog = RAFT_RPC_PROG;
+    hcall.vers = RAFT_RPC_VERS;
+    hcall.proc = 3; /* command */
+    sts = hrauth_call_udp_async( &hcall, args, 2, NULL );
+    if( sts ) return -1;
+
+    return 0;
+  }
+
   
   /* lookup cluster */
   cl = cl_by_id( clid );

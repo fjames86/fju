@@ -19,7 +19,7 @@ do
 done
 
 if [ $CMDLIST ]; then
-    freg /fju/rpc/progreg | tail -n +2 | awk '{print $3 " " $6}'     
+    freg /fju/rpc/progreg | tail -n +2 | awk '{printf "%-16s %d\n", $3, $6}'     
 elif [ $CMDUNREG ]; then
     if [ $PROGNAME ]; then
 	freg rem /fju/rpc/progreg/$PROGNAME
@@ -30,7 +30,7 @@ elif [ $CMDUNREG ]; then
 else
     if [ $PROGNAME ]; then
     else
-	freg /fju/rpc/progreg | tail -n +2 | awk '{print $3 " " $6}' 
+	freg /fju/rpc/progreg | tail -n +2 | awk '{printf "%-16s %d\n", $3, $6}' 
 	exit 0
     fi
     
@@ -46,7 +46,7 @@ else
 	done
     fi
     
-    echo "$PROGNAME $PROGID" 
+    printf "%-16s %d" $PROGNAME $PROGID 
 fi
 
 	

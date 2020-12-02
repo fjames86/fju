@@ -45,5 +45,6 @@ Begin
    Declare Syscall NextRegEntry(path : string, name : string, var type : integer) : 22;
    Declare Syscall RaftCommand(clidHigh : integer, clidLow : integer, buf : opaque, len : integer) : 23;
    Declare Syscall FvmClusterRun(ProgId : integer, ProcId : integer, buf : opaque, len : integer) : 24;
+   Declare Syscall RpcdEventPublish(EventId : integer, args : opaque, len : integer ) : 25;
    
 End.

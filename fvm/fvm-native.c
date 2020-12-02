@@ -702,6 +702,22 @@ static int native_fvmclrun( struct fvm_s *state ) {
   return 0;
 }
 
+static int native_rpcdeventpublish( struct fvm_s *state ) {
+  uint32_t evtid, argaddr, arglen;
+  char *buf;
+  struct xdr_s args;
+
+  arglen = ntohl( fvm_stack_read( state, 4 ) );
+  argaddr = ntohl( fvm_stack_read( state, 8 ) );
+  evtid = ntohl( fvm_stack_read( state, 12 ) );
+  buf = fvm_getaddr( state, argaddr );
+
+  xdr_init( &args, (uint8_t *)(buf ? buf : NULL), buf ? arglen : 0 );
+  rpcd_event_publish( evtid, &args );
+  
+  return 0;
+}
+
 
 static struct fvm_native_proc native_procs[] =
   {
@@ -730,6 +746,7 @@ static struct fvm_native_proc native_procs[] =
    { 22, native_nextregentry },
    { 23, native_raftcommand },
    { 24, native_fvmclrun },
+   { 25, native_rpcdeventpublish },
    
    { 0, NULL }
   };

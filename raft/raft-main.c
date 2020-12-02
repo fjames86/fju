@@ -83,7 +83,8 @@ static void argval_split( char *instr, char *argname, char **argval ) {
 
 static void cmd_list( void );
 static void cmd_prop( void );
-			   
+static void print_cluster( struct raft_cluster *cluster );
+
 int main( int argc, char **argv ) {
     int sts, i;
 
@@ -105,6 +106,29 @@ int main( int argc, char **argv ) {
         cmd_list();
     } else if( strcmp( argv[i], "prop" ) == 0 ) {
         cmd_prop();
+    } else if( strcmp( argv[i], "get" ) == 0 ) {
+      uint64_t clid = 0;
+      uint32_t appid = 0;
+      struct raft_cluster cl;
+      char argname[64], *argval;
+      
+      i++;
+      while( i < argc ) {
+	argval_split( argv[i], argname, &argval );
+	if( strcmp( argname, "clid" ) == 0 ) {
+	  clid = strtoull( argval, NULL, 16 );
+	} else if( strcmp( argname, "appid" ) == 0 ) {
+	  appid = strtoul( argval, NULL, 0 );
+	} else usage( NULL );
+	i++;
+      }
+      if( appid ) {
+	clid = raft_clid_by_appid( appid );
+	if( !clid ) usage( "No cluster with appid=%u", appid );
+      }
+      sts = raft_cluster_by_clid( clid, &cl );
+      if( sts ) usage( "Failed to find cluster" );
+      print_cluster( &cl );
     } else if( strcmp( argv[i], "add" ) == 0 ) {
         i++;
         if( i >= argc ) usage( NULL );
@@ -384,14 +408,28 @@ static void print_cluster( struct raft_cluster *cluster ) {
 static void cmd_list( void ) {
   int i, n, m;
   struct raft_cluster *cluster;
+  char hname[HOSTREG_MAX_NAME];
   
   n = raft_cluster_list( NULL, 0 );
   cluster = (struct raft_cluster *)malloc( sizeof(*cluster) * n );
 
+  printf( "%-16s %-10s %-16s %-10s %-8s %-8s\n", "CLID", "State", "Leader", "AppID", "Term", "CommitSeq" );
   m = raft_cluster_list( cluster, n );
   if( m < n ) n = m;
   for( i = 0; i < n; i++ ) {
-    print_cluster( &cluster[i] );
+    strcpy( hname, "" );
+    if( cluster[i].leaderid ) hostreg_name_by_hostid( cluster[i].leaderid, hname );
+    
+    printf( "%"PRIx64" %-10s %-16s %-10u %-8"PRIu64" %-8"PRIu64"\n",
+	    cluster[i].clid,
+	    cluster[i].state == RAFT_STATE_LEADER ? "Leader" :
+	    cluster[i].state == RAFT_STATE_CANDIDATE ? "Candidate" :
+	    cluster[i].state == RAFT_STATE_FOLLOWER ? "Follower" :
+	    "Other",
+	    hname,
+	    cluster[i].appid,
+	    cluster[i].term,
+	    cluster[i].commitseq );
   }
 
   free( cluster );

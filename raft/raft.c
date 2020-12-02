@@ -1830,6 +1830,7 @@ int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t off
     /* truncate log to free space */
     log = clog_by_id( clid );
     if( log ) {
+      memset( &entry, 0, sizeof(entry) );
       sts = log_read_end( log, 0, &entry, 1, &ne );
       if( !sts && ne ) log_truncate( log, entry.id, LOG_TRUNC_END );
     }

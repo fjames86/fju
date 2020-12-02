@@ -295,7 +295,10 @@ int base64_decode( char *buf, int buflen, char *str ) {
 	break;
       } else {
 	c = base64_valid_char( *str );
-	if( c < 0 ) goto done;
+	if( c < 0 ) {
+	  if( i == 0 ) goto done;
+	  else return -1;
+	}
 	
 	tmp[i] = c;
       }
@@ -310,7 +313,7 @@ int base64_decode( char *buf, int buflen, char *str ) {
     } else {
       uint8_t tbuf[3];
       base64_decode_block( tmp, tbuf );
-      
+
       c = endp == 1 ? 1 : endp == 2 ? 1 : endp == 3 ? 2 : 3;
       if( buflen >= c ) {
 	memcpy( buf, tbuf, c );

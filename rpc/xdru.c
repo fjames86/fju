@@ -73,7 +73,8 @@ int main( int argc, char **argv ) {
 	xdr_encode_string( &xdr, argval );
       } else if( strcmp( argname, "opaque" ) == 0 ) {
 	sts = base64_decode( (char *)(xdr.buf + xdr.offset + 4), xdr.count - xdr.offset - 4, argval );
-	if( sts < 0 ) usage( "Failed to parse base64 opaque" );
+	if( sts < 0 ) usage( "Failed to parse base64 opaque %s", argval );
+	
 	xdr_encode_uint32( &xdr, sts );
 	xdr.offset += sts;
 	if( sts % 4 ) xdr.offset += 4 - (sts % 4);
@@ -92,7 +93,7 @@ int main( int argc, char **argv ) {
     i++;
     if( i >= argc ) usage( NULL );
     sts = base64_decode( buf, sizeof(buf), argv[i] );
-    if( sts < 0 ) usage( "Failed to decode base64" );
+    if( sts < 0 ) usage( "Failed to decode base64 %s", argv[i] );
     if( sts % 4 ) usage( "XDR buffer not a multiple of 4" );
     xdr_init( &xdr, (uint8_t *)buf, sts );
     i++;
@@ -100,20 +101,20 @@ int main( int argc, char **argv ) {
       argval_split( argv[i], argname, &argval );      
       if( strcmp( argname, "u32" ) == 0 ) {
 	sts = xdr_decode_uint32( &xdr, &u32 );
-	if( sts ) usage( "XDR Error" );
+	if( sts ) usage( "XDR Error decoding uint32" );
 	printf( "%u ", u32 );
       } else if( strcmp( argname, "u64" ) == 0 ) {
 	sts = xdr_decode_uint64( &xdr, &u64 );
-	if( sts ) usage( "XDR Error" );
+	if( sts ) usage( "XDR Error decoding uint64" );
 	printf( "%"PRIu64" ", u64 );
       } else if( strcmp( argname, "str" ) == 0 ) {
 	sts = xdr_decode_string( &xdr, str, sizeof(str) );
-	if( sts ) usage( "XDR Error" );
+	if( sts ) usage( "XDR Error decoding string" );
 	printf( "%s ", str );
       } else if( strcmp( argname, "opaque" ) == 0 ) {
 	sts = xdr_decode_uint32( &xdr, (uint32_t *)&len );
-	if( sts ) usage( "XDR Error" );
-	if( xdr.count - xdr.offset > len ) usage( "XDR Error" );
+	if( sts ) usage( "XDR Error decoding opaque" );
+	if( xdr.count - xdr.offset < len ) usage( "XDR Error count=%u offset=%u len=%u", xdr.count, xdr.offset, len );
 	base64_encode( (char *)(xdr.buf + xdr.offset), len, bufstr );
 	printf( "%s ", bufstr );
 	xdr.offset += len;

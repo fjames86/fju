@@ -79,7 +79,6 @@ int main( int argc, char **argv ) {
   uint64_t hostid;
   char *term;
   char str[256];
-  uint8_t *p;
   char hostpubkey[SEC_ECDH_MAX_PUBKEY];
   char commonbuf[SEC_ECDH_MAX_COMMON];
   struct sec_buf hostpubkeybuf, seckeybuf, common;
@@ -139,12 +138,7 @@ int main( int argc, char **argv ) {
   
   aes_encrypt( (uint8_t *)common.buf, (uint8_t *)&lic, sizeof(lic) );
   
-  p = (uint8_t *)&lic;
-  strcpy( str, "" );
-  for( i = 0; i < sizeof(lic); i++ ) {
-    sprintf( str + strlen( str ), "%02x", (uint32_t)p[i] );
-  }
-  
+  base64_encode( (char *)&lic, sizeof(lic), str );
   printf( "put /fju/lic opaque %s\n", str );
   
   return 0;

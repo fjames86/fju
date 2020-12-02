@@ -413,14 +413,15 @@ static void cmd_list( void ) {
   n = raft_cluster_list( NULL, 0 );
   cluster = (struct raft_cluster *)malloc( sizeof(*cluster) * n );
 
-  printf( "%-16s %-10s %-16s %-10s %-8s %-8s\n", "CLID", "State", "Leader", "AppID", "Term", "CommitSeq" );
+  printf( "%-16s %-10s %-16s %-10s %-8s %-8s %-8s %s\n",
+	  "CLID", "State", "Leader", "AppID", "Term", "Applied", "Commit", "Cookie" );
   m = raft_cluster_list( cluster, n );
   if( m < n ) n = m;
   for( i = 0; i < n; i++ ) {
     strcpy( hname, "" );
     if( cluster[i].leaderid ) hostreg_name_by_hostid( cluster[i].leaderid, hname );
     
-    printf( "%"PRIx64" %-10s %-16s %-10u %-8"PRIu64" %-8"PRIu64"\n",
+    printf( "%"PRIx64" %-10s %-16s %-10u %-8"PRIu64" %-8"PRIu64" %-8"PRIu64" %s\n",
 	    cluster[i].clid,
 	    cluster[i].state == RAFT_STATE_LEADER ? "Leader" :
 	    cluster[i].state == RAFT_STATE_CANDIDATE ? "Candidate" :
@@ -429,11 +430,11 @@ static void cmd_list( void ) {
 	    hname,
 	    cluster[i].appid,
 	    cluster[i].term,
-	    cluster[i].commitseq );
+	    cluster[i].appliedseq, cluster[i].commitseq,
+	    cluster[i].cookie );
   }
 
   free( cluster );
-  printf( "\n" );
 }
 
 static void cmd_prop( void ) {

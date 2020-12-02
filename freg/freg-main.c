@@ -114,7 +114,7 @@ static void cmd_put( int argc, char **argv, int i );
 
 static void cmd_list( int argc, char **argv, int i ) {
   struct freg_entry *elist;
-  int sts, n, j;
+  int sts, n;
   uint64_t id;
   uint32_t u32;
   uint64_t u64;
@@ -180,9 +180,13 @@ static void cmd_list( int argc, char **argv, int i ) {
       sts = freg_get( glob.freg, elist[i].id, NULL, NULL, 0, &len );
       buf = malloc( len );
       sts = freg_get( glob.freg, elist[i].id, NULL, buf, len, NULL );
-      for( j = 0; j < len; j++ ) {
-	printf( "%02x", (uint32_t)(uint8_t)buf[j] );
+      {
+	char *strbuf = malloc( len > 0 ? len * 2 : 1 );
+	base64_encode( buf, len, strbuf );
+	printf( "%s", strbuf );
+	free( strbuf );
       }
+      free( buf );
       break;      
     }
     
@@ -236,10 +240,12 @@ static void cmd_get( int argc, char **argv, int ii ) {
 	  printf( "%s\n", buf );
 	  break;
       case FREG_TYPE_OPAQUE:
-	  for( i = 0; i < len; i++ ) {
-	      printf( "%02x", (uint32_t)(uint8_t)buf[i] );
-	  }
-	  printf( "\n" );
+	{
+	  char *strbuf = malloc( len > 0 ? len * 2 : 1 );
+	  base64_encode( buf, len, strbuf );
+	  printf( "%s\n", strbuf );
+	  free( strbuf );
+	}
 	  break;
       }
   }
@@ -400,7 +406,7 @@ int main( int argc, char **argv ) {
 static void cmd_get2( uint64_t parentid, char *path, char *name ) {
   uint32_t flags;
   char *buf;
-  int i, sts;
+  int sts;
   struct freg_entry e;
 
   sts = freg_entry_by_name( glob.freg, parentid, name, &e, NULL );
@@ -425,10 +431,12 @@ static void cmd_get2( uint64_t parentid, char *path, char *name ) {
     break;
   case FREG_TYPE_OPAQUE:
     printf( "%s/%s opaque ", path, name );
-    for( i = 0; i < e.len; i++ ) {
-      printf( "%02x", (uint32_t)(uint8_t)buf[i] );
+    {
+      char *strbuf = malloc( e.len > 0 ? e.len * 2 : 1 );
+      base64_encode( buf, e.len, strbuf );
+      printf( "%s\n", strbuf );
+      free( strbuf );
     }
-    printf( "\n" );
     break;
   }
  done:
@@ -523,8 +531,7 @@ static void cmd_put( int argc, char **argv, int i ) {
     uint32_t flags, u32;
     uint64_t u64, id, setid;
     char *buf;
-    int len, sts, j;
-    char tmpstr[32];
+    int len, sts;
     char *term;
     int opfile = 0;
     
@@ -618,17 +625,12 @@ static void cmd_put( int argc, char **argv, int i ) {
 	    mmf_close( &mmf );
 	} else {
 	    len = 0;
-	    buf = malloc( 4096 );
-	    while( i < argc ) {	
-		for( j = 0; j < strlen( argv[i] ) / 2; j++ ) {
-		    tmpstr[0] = argv[i][2*j];
-		    tmpstr[1] = argv[i][2*j + 1];
-		    tmpstr[2] = '\0';
-		    buf[len] = strtoul( tmpstr, NULL, 16 );
-		    len++;
-		}
-		i++;
+	    buf = malloc( 32*1024 );
+	    if( i < argc ) {
+	      len = base64_decode( buf, 32*1024, argv[i] );
+	      if( len < 0 ) usage( "Failed to decode base64" );
 	    }
+	    free( buf );
 	}
       break;
     default:

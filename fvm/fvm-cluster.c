@@ -101,7 +101,7 @@ static void fvm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
     {
       struct fvm_s state;
 
-      fvm_log( LOG_LVL_TRACE, "fvm run progid=%u procid=%u", cmd.progid, cmd.u.run.procid );
+      fvm_log( LOG_LVL_TRACE, "fvm run progid=%u procid=%u arglen=%u", cmd.progid, cmd.u.run.procid, cmd.u.run.len );
       
       if( cmd.u.run.hostid == 0 ) {
 	sts = fvm_state_init( &state, cmd.progid, cmd.u.run.procid );

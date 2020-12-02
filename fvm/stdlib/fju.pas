@@ -58,6 +58,7 @@ Begin
 	
 	msgp := argbuf;
 	len := ^msgp;
+	msgp := msgp + 4;
 	argcount := argcount - (4 + len);
 
 	If argcount >= 0 Then Syscall WriteLog(lognamep, msgp, len);

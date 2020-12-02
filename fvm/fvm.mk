@@ -60,7 +60,7 @@ fvm/programs/msgq.fvm: ${BINDIR}/fvmc fvm/programs/msgq.pas
 	rm fvm/programs/msgq.asm
 
 fvm/stdlib/fju.fvm: ${BINDIR}/fvmc fvm/stdlib/fju.pas 
-	${BINDIR}/fvmc -o $@ ${fvm_flags} fvm/stdlib/native.pas fvm/stdlib/fju.pas
+	${BINDIR}/fvmc -o $@ ${fvm_flags} fvm/stdlib/constants.pas fvm/stdlib/native.pas fvm/stdlib/fju.pas
 	rm fvm/stdlib/fju.asm
 
 fvm/test/test1.fvm: ${BINDIR}/fvmc ${BINDIR}/fvm fvm/test/test1.asm fvm/stdlib/native.asm

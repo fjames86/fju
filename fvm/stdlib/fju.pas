@@ -7,7 +7,7 @@
   * interface or other fvm programs.
 }
 
-Program Template(10000,1,FregPutString,LogWriteMsg,ChtWrite);
+Program FJU(PROG_STDLIB,1,FregPutString,LogWriteMsg,LogWrite,ChtWrite);
 Begin
 
 { write an freg string. args: path to entry, value to write }
@@ -41,6 +41,28 @@ Begin
 	Syscall LogStr(msgp);
 End;
 
+Procedure LogWrite(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
+Begin
+	var msgp, lognamep : string;
+	var len : integer;
+	
+	rescount := 0;
+	resbuf := 0;
+
+	lognamep := argbuf;
+
+	len := ^lognamep;
+	If len % 4 <> 0 Then len := len + 4 - (len % 4);
+	argbuf := argbuf + 4 + len;
+	argcount := argcount - (4 + len);
+	
+	msgp := argbuf;
+	len := ^msgp;
+	argcount := argcount - (4 + len);
+
+	If argcount >= 0 Then Syscall WriteLog(lognamep, msgp, len);
+End;
+
 Procedure ChtWrite(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque)
 Begin
 	var key : opaque;
@@ -58,6 +80,7 @@ Begin
 		
 
 End;
+
 
 
 End.

@@ -103,14 +103,14 @@ void fvm_rpc_register( void );
 
 /* 
  * Issue a clustered command which distributes the local data segment to all nodes 
- * clid ::= cluster id or 0 for default (first cluster with appid=FVM_RPC_PROG)
+ * clid ::= cluster id or 0 for default first cluster with appid=FVM_RPC_PROG
  * progid ::= module progid to distribute
 */
 int fvm_cluster_updatestate( uint64_t clid, uint32_t progid );
 
 /* 
  * Issue a clustered command which runs the specified procedure 
- * clid ::= cluster id or 0 for default 
+ * clid ::= cluster id or 0 for default first cluster with appid=FVM_RPC_PROG
  * progid,procid,args,len ::= procedure and args to run 
  */
 int fvm_cluster_run( uint64_t clid, uint32_t progid, uint32_t procid, char *args, int len );

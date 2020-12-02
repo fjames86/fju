@@ -733,7 +733,7 @@ static void parseexpr( int reg ) {
     if( accepttok( TOK_NAME ) ) {
       v = getvar( tok.token );
       if( v ) {
-	if( v->type != VAR_OPAQUE ) usage( "deference must be a variable of pointer type" );
+	if( (v->type != VAR_OPAQUE) && (v->type != VAR_STRING) ) usage( "deference must be a variable of pointer type" );
 	
 	fvmc_emit( "\tLDSP\tR%u\t-%u\n", reg, v->offset + glob.stackoffset );
 	fvmc_emit( "\tLD\tR%u\tR%u\n", reg, reg );

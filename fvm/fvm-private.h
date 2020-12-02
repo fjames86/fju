@@ -44,6 +44,8 @@ struct fvm_module {
   uint32_t flags; /* module flags */
   char path[256]; /* path to module file, if any */
   uint64_t utime; /* total user runtime in ms */
+  uint64_t totalsteps; /* total steps taken */
+  uint32_t totalrun; /* total number o ftimes run */
 };
 
 typedef enum {

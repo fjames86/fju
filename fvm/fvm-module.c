@@ -177,6 +177,8 @@ int fvm_module_list( struct fvm_module_info *minfo, int n ) {
       minfo[i].progid = m->header.progid;
       minfo[i].versid = m->header.versid;
       minfo[i].utime = m->utime;
+      minfo[i].totalsteps = m->totalsteps;
+      minfo[i].totalrun = m->totalrun;
     }
     i++;
     m = m->next;

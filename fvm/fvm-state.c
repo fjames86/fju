@@ -152,6 +152,8 @@ int fvm_run( struct fvm_s *state, int nsteps ) {
 
   /* increment runtime counter */
   state->module->utime += end - start;
+  state->module->totalsteps += ns;
+  state->module->totalrun++;
   
   return 0;
 }

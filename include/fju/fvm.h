@@ -37,7 +37,9 @@ struct fvm_module_info {
   uint32_t textsize;
   uint32_t flags;
 #define FVM_MODULE_PERSISTENT   0x0002 /* save data segment after each run */
-  uint64_t utime;
+  uint64_t utime; /* total milliseconds of user runtime */
+  uint64_t totalsteps; /* total number of steps executed */
+  uint32_t totalrun; /* total number of times run */
 };
   
 struct fvm_module;

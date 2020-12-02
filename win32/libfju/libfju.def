@@ -254,3 +254,4 @@ raft_snapshot_save
 rpc_conn_list
 rex_register
 raft_log_open
+raft_clid_by_appid 

@@ -1113,10 +1113,6 @@ static void raft_convert_leader( struct raft_cluster *cl ) {
 }
 
 
-
-
-
-
 static int raft_proc_null( struct rpc_inc *inc ) {
   int handle;
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );

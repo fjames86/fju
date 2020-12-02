@@ -125,7 +125,7 @@ int raft_app_register( struct raft_app *app );
 
 /* 
  * Start process of initiating command:
- * - only valid when called on leader node (fails otherwise)
+ * - only valid when called on leader node (forwards call to leader otherwise)
  * - save command buffer locally and distribute to remote nodes
  * - function returns at this point 
  * - when quorum of nodes has received the command, command is commited and app->command 

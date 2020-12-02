@@ -46,7 +46,7 @@ else
 	done
     fi
     
-    printf "%-16s %d" $PROGNAME $PROGID 
+    printf "%-16s %d\n" $PROGNAME $PROGID 
 fi
 
 	

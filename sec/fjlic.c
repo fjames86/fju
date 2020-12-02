@@ -137,7 +137,8 @@ int main( int argc, char **argv ) {
   lic.nverf = sig.len;
   
   aes_encrypt( (uint8_t *)common.buf, (uint8_t *)&lic, sizeof(lic) );
-  
+
+  memset( str, 0, sizeof(str) );
   base64_encode( (char *)&lic, sizeof(lic), str );
   printf( "put /fju/lic opaque %s\n", str );
   

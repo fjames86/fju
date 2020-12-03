@@ -1315,6 +1315,8 @@ static void parsestatement( void ) {
     /* push args from left to right */
     glob.stackoffset = 0;
     do {
+      if( !v ) usage( "Invalid args supplied to proc %s", name );
+      
       if( v->flags & VAR_ISVAR ) {
 	vartok = glob.tok;
 	if( glob.tok.type != TOK_NAME ) usage( "Parameter %s is a VAR and expects a variable reference, not %s", v->name, glob.tok.token );

@@ -17,15 +17,7 @@
 #include <fju/freg.h>
 #include <fju/cht.h>
 #include <fju/raft.h>
-
-
-/*
- * TODO: go through and sort out the calling convention. 
- * These are written assuming cdecl but we seem to be settling on pascal calling convention.
- * cdecl: push args from right to left, R0 contains return value.
- * pascal: push args from left to right. No return value. Any return values are passed as pointers.
- * note that this means variable length parameters are not possible e.g. sprintf 
- */
+#include <fju/hostreg.h>
 
 static uint32_t fvm_stack_read( struct fvm_s *state, int depth ) {
   return fvm_read( state, state->reg[FVM_REG_SP] - depth );
@@ -172,6 +164,27 @@ static int native_procid_by_name( struct fvm_s *state ) {
 static struct log_s prevlog;
 static char prevlogname[64];
 
+static int openloghandle( char *name ) {
+  char str[256];
+  int sts;
+  
+  if( strcmp( prevlogname, name ) != 0 ) {
+    if( prevlog.pid ) log_close( &prevlog );
+    memset( &prevlog, 0, sizeof(prevlog) );
+    strcpy( prevlogname, name );
+    sprintf( str, "%s.log", name );
+
+    fvm_printf( "openloghandle opening file \"%s\"\n", str );
+    sts = log_open( mmf_default_path( str, NULL ), NULL, &prevlog );
+    if( sts ) {
+      strcpy( prevlogname, "" );
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
 /* procedure writelog(logname : string, buf : opaque, count : integer) */
 static int native_writelog( struct fvm_s *state ) {
   int sts;
@@ -185,19 +198,8 @@ static int native_writelog( struct fvm_s *state ) {
   if( !bufp ) return -1;  
   bufcount = ntohl( fvm_stack_read( state, 4 ) );
 
-  if( strcmp( prevlogname, str ) != 0 ) {
-    if( prevlog.pid ) log_close( &prevlog );
-    memset( &prevlog, 0, sizeof(prevlog) );
-    strcpy( prevlogname, str );  
-    strcat( str, ".log" );
-
-    fvm_printf( "native_writelog opening file \"%s\" count=%u\n", str, bufcount );
-    sts = log_open( mmf_default_path( str, NULL ), NULL, &prevlog );
-    if( sts ) {
-      strcpy( prevlogname, "" );
-      return -1;
-    }
-  }
+  sts = openloghandle( str );
+  if( sts ) return -1;
     
   log_write_buf( &prevlog, LOG_LVL_INFO, bufp, bufcount, NULL );
 
@@ -222,22 +224,10 @@ static int native_readlog( struct fvm_s *state ) {
   if( !bufp ) return -1;  
   countaddr = ntohl( fvm_stack_read( state, 4 ) );
   count = ntohl( fvm_read( state, countaddr ) );
-  
-  if( strcmp( prevlogname, str ) != 0 ) {
-    if( prevlog.pid ) log_close( &prevlog );
-    memset( &prevlog, 0, sizeof(prevlog) );
-    strcpy( prevlogname, str );  
-    strcat( str, ".log" );
 
-    fvm_printf( "native_writelog opening file \"%s\" count=%u\n", str, count );
-    sts = log_open( mmf_default_path( str, NULL ), NULL, &prevlog );
-    if( sts ) {
-      strcpy( prevlogname, "" );
-      return -1;
-    }
-  }
-  
-  
+  sts = openloghandle( str );
+  if( sts ) return -1;
+    
   memset( &entry, 0, sizeof(entry) );
   iov[0].buf = bufp;
   iov[0].len = count;
@@ -268,20 +258,10 @@ static int native_nextlogentry( struct fvm_s *state ) {
   idhighaddr = ntohl( fvm_stack_read( state, 12 ) );
   idhigh = ntohl( fvm_read( state, idhighaddr ) );
   idlow = ntohl( fvm_read( state, idlowaddr ) );
-  
-  if( strcmp( prevlogname, str ) != 0 ) {
-    if( prevlog.pid ) log_close( &prevlog );
-    memset( &prevlog, 0, sizeof(prevlog) );
-    strcpy( prevlogname, str );  
-    strcat( str, ".log" );
 
-    fvm_printf( "native_nextlogentry opening file \"%s\"\n", str );
-    sts = log_open( mmf_default_path( str, NULL ), NULL, &prevlog );
-    if( sts ) {
-      strcpy( prevlogname, "" );
-      return -1;
-    }
-  }
+  sts = openloghandle( str );
+  if( sts ) return -1;
+
 
   id = (((uint64_t)idhigh) << 32) | (uint64_t)idlow;
   sts = log_read( &prevlog, id, &entry, 1, &ne );
@@ -719,6 +699,56 @@ static int native_rpcdeventpublish( struct fvm_s *state ) {
 }
 
 
+static int native_localid( struct fvm_s *state ) {
+  uint32_t idlowaddr, idhighaddr;
+  uint64_t id;
+
+  idlowaddr = ntohl( fvm_stack_read( state, 4 ) );
+  idhighaddr = ntohl( fvm_stack_read( state, 8 ) );
+  id = hostreg_localid();
+
+  fvm_write( state, idhighaddr, htonl( id >> 32 ) );
+  fvm_write( state, idlowaddr, htonl( id & 0xffffffff ) );
+  
+  return 0;
+}
+
+static int native_logprop( struct fvm_s *state ) {
+  uint32_t idlowaddr, idhighaddr;
+  char str[64];
+  struct log_prop prop;
+  int sts;
+
+  idlowaddr = ntohl( fvm_stack_read( state, 4 ) );
+  idhighaddr = ntohl( fvm_stack_read( state, 8 ) );
+  native_readstr( state, ntohl( fvm_stack_read( state, 12 ) ), str, sizeof(str) );
+  
+  sts = openloghandle( str );
+  if( sts ) return -1;
+
+  memset( &prop, 0, sizeof(prop) );
+  log_prop( &prevlog, &prop );
+
+  fvm_write( state, idhighaddr, htonl( prop.last_id >> 32 ) );
+  fvm_write( state, idlowaddr, htonl( prop.last_id & 0xffffffff ) );
+  
+  return 0;
+}
+
+static int native_strcmp( struct fvm_s *state ) {
+  uint32_t resultaddr;
+  char str1[256], str2[256];
+  
+  resultaddr = ntohl( fvm_stack_read( state, 4 ) );
+  native_readstr( state, ntohl( fvm_stack_read( state, 8 ) ), str2, sizeof(str2) );
+  native_readstr( state, ntohl( fvm_stack_read( state, 12 ) ), str1, sizeof(str1) );    
+
+  fvm_write( state, 4, htonl( strcmp( str1, str2 ) ) );
+  
+  return 0;
+}
+
+
 static struct fvm_native_proc native_procs[] =
   {
    { 0, native_nop },
@@ -747,6 +777,9 @@ static struct fvm_native_proc native_procs[] =
    { 23, native_raftcommand },
    { 24, native_fvmclrun },
    { 25, native_rpcdeventpublish },
+   { 26, native_localid },
+   { 27, native_logprop },
+   { 28, native_strcmp },
    
    { 0, NULL }
   };

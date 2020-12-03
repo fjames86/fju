@@ -46,5 +46,8 @@ Begin
    Declare Syscall RaftCommand(clidHigh : integer, clidLow : integer, buf : opaque, len : integer) : 23;
    Declare Syscall FvmClusterRun(ProgId : integer, ProcId : integer, buf : opaque, len : integer) : 24;
    Declare Syscall RpcdEventPublish(EventId : integer, args : opaque, len : integer ) : 25;
-   
+   Declare Syscall LocalID(IdHigh : integer, IdLow : integer) : 26;
+   Declare Syscall LogProp( logname : string, var idhigh : integer, var idlow : integer) : 27;
+   Declare Syscall Strcmp(str1 : string, str2 : string, var result : integer) : 28;
+
 End.

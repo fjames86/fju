@@ -40,7 +40,6 @@ struct fvm_module {
   uint8_t *data; /* module data segment */
   uint8_t *text; /* module text segment */
   
-  uint64_t clusterid; /* non-zero if clustered */
   uint32_t flags; /* module flags */
   char path[256]; /* path to module file, if any */
   uint64_t utime; /* total user runtime in ms */

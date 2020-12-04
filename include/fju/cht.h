@@ -29,16 +29,12 @@ struct cht_s {
   uint32_t count;  /* database size, max entry count */
   uint32_t rdepth; /* recursion depth, scales as sqrt(count) */
   uint32_t flags;
-#define CHT_AUDIT  0x0001 
-  struct log_s alog;
 };
 
 struct cht_opts {
   uint32_t mask;
 #define CHT_OPT_COUNT   0x0001    /* set the initial count if creating the table */
-#define CHT_OPT_ALOG    0x0002   /* write all write/delete/purge/setflags operations to the audit log */
   uint32_t count;
-  uint64_t alog_hshare;
 };
 
 int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts );
@@ -53,7 +49,6 @@ struct cht_prop {
   uint64_t seq;     /* database seqno */
   uint32_t count;   /* database size */
   uint32_t fill;    /* database fill count */
-  uint64_t alog_hshare;
   
   uint32_t spare[22]; /* future expansion */
 };
@@ -93,6 +88,5 @@ int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags );
  */
 int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags );
 
-int cht_set_alog( struct cht_s *cht, uint64_t alog_hshare );
 
 #endif

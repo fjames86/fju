@@ -12,7 +12,7 @@
   * 
 }
 
-Program NLS(10001,1,NlsInit, NlsService, NlsCommand);
+Program NLS(10001,1,NlsProcNull,NlsProcList,NlsInit,NlsService,NlsCommand);
 Begin
 
 const MaxLog := 8;
@@ -22,6 +22,31 @@ const MaxLogName := 512; { MaxLog * 64 }
 var nlogs : integer;
 var msgids : opaque[MaxLog];
 var lognames : opaque[MaxLogName];
+
+Procedure NlsProcNull(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
+Begin
+	rescount := 0;
+	resbuf := 0;
+End;
+
+Procedure NlsProcList(argcount : integer, argbuf : opaque, var rescount : integer, var resbuf : opaque )
+Begin
+	var res : opaque[512];
+	var resbufp : opaque;
+	var i : integer;
+	
+	resbufp := res;
+	
+	Call EncodeInteger(resbufp, nlogs);
+	i := 0;
+	Do Begin
+	   Call EncodeString(resbufp,lognames + i*64);
+	   i := i + 1;
+ 	End While i < nlogs;
+	
+	resbuf := res;
+	rescount := resbufp - res;
+End;
 
 Procedure GetLogId(logname : string, var logidHigh : integer, var logidLow : integer)
 Begin
@@ -127,8 +152,8 @@ Begin
     ^p := count;
     offset := offset + 4 + count;
 
-    { procid=2 is NlsCommand procedure }
-    Syscall FvmClusterRun(10001, 2, buf, offset);
+    { procid=4 is NlsCommand procedure }
+    Syscall FvmClusterRun(10001, 4, buf, offset);
 
 End;
 

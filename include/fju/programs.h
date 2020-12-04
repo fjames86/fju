@@ -37,9 +37,6 @@
  */
 #define FJU_BASE_PROG 0x2FFF7770 
 
-#define NLS_RPC_PROG (FJU_BASE_PROG + 0)
-#define NLS_RPC_VERS 1
-
 #define RAFT_RPC_PROG (FJU_BASE_PROG + 1)
 #define RAFT_RPC_VERS 1
 
@@ -57,9 +54,6 @@
 
 #define FJUD_RPC_PROG (FJU_BASE_PROG + 7)
 #define FJUD_RPC_VERS 1
-
-#define CHT_RSYNC_RPC_PROG (FJU_BASE_PROG + 8)
-#define CHT_RSYNC_RPC_VERS 1
 
 #define RAFT2_RPC_PROG (FJU_BASE_PROG + 9)
 #define RAFT2_RPC_VERS 1

@@ -568,7 +568,7 @@ static void cmd_put( int argc, char **argv, int i ) {
     switch( flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_KEY:
       sts = freg_subkey( glob.freg, 0, path, FREG_CREATE, &id );
-      if( sts ) usage( "Failed to create subkey" );      
+      if( sts ) usage( "Failed to create subkey %s", path );      
       break;
     case FREG_TYPE_UINT32:
       if( i < argc ) {
@@ -641,7 +641,7 @@ static void cmd_put( int argc, char **argv, int i ) {
     if( (flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
       if( setid ) sts = freg_set( glob.freg, setid, NULL, NULL, buf, len );
       else sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
-      if( sts ) usage( "Failed to put" );
+      if( sts ) usage( "Failed to put %s", path );
     }
 
     if( ((flags & FREG_TYPE_MASK) == FREG_TYPE_STRING) && buf ) free( buf );

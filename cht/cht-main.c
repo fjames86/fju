@@ -15,7 +15,7 @@
 
 #include <fju/cht.h>
 #include <fju/sec.h>
-#include <fju/nls.h>
+//#include <fju/nls.h>
 
 #include "cht-private.h"
 
@@ -38,7 +38,6 @@ static void usage( char *fmt, ... ) {
 	  "    -f             Operate on whole file (default is single block)\n"
 	  "    -F flags       Set flags on write, valid flags are: sticky, readonly\n"
 	  "    -c count       Table count\n"
-	  "    -A hshare      Set alog hshare\n"
 	  "    -C cookie      Set cookie on write\n" 
 	  "\n" 
 	  "   COMMAND:\n" 
@@ -50,13 +49,7 @@ static void usage( char *fmt, ... ) {
 	  "    -s             Set flags\n"
 	  "    -R             Rehash. Pass -o for new table path and -c for new table count\n"
 	  "\n"
-	  "Tables may be synced remoted with the following process:\n"
-	  " - On server machine create an audit log with cookie=CHT. Share it with NLS.\n"
-	  " - On server machine create an freg entry /fju/cht/local/xxx str /path/to/cht/database where xxx is the NLS share handle.\n" 
-	  " - On client machine, register this remote log with NLS. Ensure its cookie=CHT.\n"
-	  " - On client machine, create an freg entry /fju/cht/remote/xxx str /path/to/cht/database where xxx is the NLS share handle.\n"
-	  " - From this point, writes to the server's database should be sent to the client machine.\n" 
-	  "\n" );
+	  );
   exit( 0 );
 }
 
@@ -85,7 +78,6 @@ int main( int argc, char **argv ) {
   struct cht_entry entry;
   struct cht_opts opts;
   uint32_t flags = 0;
-  uint64_t alog_hshare = 0;
   char cookie[CHT_MAX_COOKIE];
   
   memset( &opts, 0, sizeof(opts) );
@@ -130,10 +122,6 @@ int main( int argc, char **argv ) {
       opsetflags = 1;
     } else if( strcmp( argv[i], "-R" ) == 0 ) {
       oprehash = 1;
-    } else if( strcmp( argv[i], "-A" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      alog_hshare = strtoull( argv[i], NULL, 16 );
     } else if( strcmp( argv[i], "-C" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -142,18 +130,6 @@ int main( int argc, char **argv ) {
     i++;
   }
 
-  nls_open();
-
-  if( alog_hshare ) {
-    sts = cht_open( path, &glob.cht, &opts );
-    if( sts ) usage( "Failed to open database" );
-
-    cht_set_alog( &glob.cht, alog_hshare );
-
-    cht_close( &glob.cht );
-  }
-
-  
   sts = cht_open( path, &glob.cht, &opts );
   if( sts ) usage( "Failed to open database" );
 
@@ -244,12 +220,11 @@ int main( int argc, char **argv ) {
 	    prop.fill,
 	    prop.count,
 	    (100 * prop.fill) / prop.count );
-    if( prop.alog_hshare ) printf( "Audit log: %"PRIx64"\n", prop.alog_hshare );
   }
   
   cht_close( &glob.cht );
 
-  nls_close();
+  //  nls_close();
   
   return 0;
 }

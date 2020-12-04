@@ -34,10 +34,8 @@
 #include <fju/shauth.h>
 #include <fju/hrauth.h>
 #include <fju/log.h>
-#include <fju/nls.h>
 #include <fju/freg.h>
 #include <fju/fvm.h>
-#include <fju/cht-rsync.h>
 #include <fju/sec.h>
 #include <fju/lic.h>
 #include <fju/hostreg.h>
@@ -81,10 +79,8 @@ static void init_cb( void ) {
    * These could be moved out to separate modules and dynamically loaded but for now 
    * they are included in libfju so can be called directly from here.
    */     
-  nls_register();
   freg_register();
   fvm_rpc_register();
-  cht_rsync_initialize();
   cmdprog_register();
   raft_register();
   rex_register();

@@ -774,13 +774,12 @@ static struct raft_app fvm_app = {
 #endif
 
 void fvm_rpc_register( void ) {
-  int sts;
-  uint32_t nsteps;
+  int sts, regp;
+  uint32_t nsteps, period;
   uint64_t key, clid;
   struct freg_entry entry;
   char path[256];
   char name[FVM_MAX_NAME];
-  struct fvm_module *m;
   uint32_t progid, procid, flags;
   struct fvm_s state;
   
@@ -799,81 +798,45 @@ void fvm_rpc_register( void ) {
  	  if( sts ) fvm_log( LOG_LVL_ERROR, "Failed to load module %s", path );
 	}
 	
-	sts = freg_get_by_name( NULL, entry.id, "cluster", FREG_TYPE_UINT64, (char *)&clid, sizeof(clid), NULL );
-	if( !sts ) {
-	  m = fvm_module_by_progid( progid );
-	  if( m ) m->clusterid = clid;
-	  else fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
-	}
-
 	sts = freg_get_by_name( NULL, entry.id, "flags", FREG_TYPE_UINT32, (char *)&flags, sizeof(flags), NULL );
 	if( !sts ) {
 	  sts = fvm_module_set_flags( progid, flags, 0xffffffff );
 	  if( sts ) fvm_log( LOG_LVL_ERROR, "Failed to get module %u", progid );
 	}
 
-      }
-      sts = freg_next( NULL, key, entry.id, &entry );
-    }
-  }
-
-  /* register all these modules as rpc programs on startup */
-  sts = freg_subkey( NULL, 0, "/fju/fvm/programs", FREG_CREATE, &key );
-  if( !sts ) {
-    sts = freg_next( NULL, key, 0, &entry );
-    while( !sts ) {
-      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ) {
-	sts = freg_get( NULL, entry.id, NULL, name, sizeof(name), NULL );
-	if( !sts ) {
-	  fvm_log( LOG_LVL_INFO, "FVM registering program %s", name );
-	  fvm_register_program( fvm_progid_by_name( name ) );
-	}
-      }
+	sts = freg_get_by_name( NULL, entry.id, "service-period", FREG_TYPE_UINT32, (char *)&period, sizeof(period), NULL );
+	if( sts ) period = 1000;
 	
-      sts = freg_next( NULL, key, entry.id, &entry );
-    }    
-  }
-
-  /* register service routines */
-  sts = freg_subkey( NULL, 0, "/fju/fvm/service", FREG_CREATE, &key );
-  if( !sts ) {
-    sts = freg_next( NULL, key, 0, &entry );
-    while( !sts ) {
-      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
-	char mname[FVM_MAX_NAME], pname[FVM_MAX_NAME];
-	uint32_t period = 1000;
-	
-	sts = freg_get_by_name( NULL, entry.id, "module", FREG_TYPE_STRING, mname, sizeof(mname), NULL );
-	if( !sts ) sts = freg_get_by_name( NULL, entry.id, "proc", FREG_TYPE_STRING, pname, sizeof(pname), NULL );
-	if( !sts ) {
-	  sts = freg_get_by_name( NULL, entry.id, "period", FREG_TYPE_UINT32, (char *)&period, sizeof(period), NULL );
-	  if( sts ) {
-	    period = 1000;
-	    sts = 0;
-	  }
-	}
-	
-	
+	sts = freg_get_by_name( NULL, entry.id, "service", FREG_TYPE_STRING, (char *)path, sizeof(path), NULL );
 	if( !sts ) {
 	  struct fvm_iterator *iter;
 	  iter = malloc( sizeof(*iter) + 8 );
 	  memset( iter, 0, sizeof(*iter) );
 	  iter->iter.period = period;
 	  iter->iter.cb = fvm_iter_cb;
-	  iter->progid = fvm_progid_by_name( mname );
-	  iter->procid = fvm_procid_by_name( iter->progid, pname );
+	  iter->progid = fvm_progid_by_name( entry.name );
+	  iter->procid = fvm_procid_by_name( iter->progid, path );
 	  if( iter->progid == -1 || iter->procid == -1 ) {
-	    fvm_log( LOG_LVL_ERROR, "Failed to register iterator for %s %s", mname, pname );
+	    fvm_log( LOG_LVL_ERROR, "Failed to register iterator for %s %s", entry.name, path );
 	    free( iter );
 	  } else {
-	    fvm_log( LOG_LVL_INFO, "FVM registering iterator %s %s", mname, pname );
+	    fvm_log( LOG_LVL_INFO, "FVM registering iterator %s %s", entry.name, path );
 	    rpc_iterator_register( &iter->iter );
 	  }
+	  
 	}
-      }
+
+	regp = 0;
+	sts = freg_get_by_name( NULL, entry.id, "register", FREG_TYPE_UINT32, (char *)&regp, sizeof(regp), NULL );
+	if( !sts && regp ) {
+	  fvm_log( LOG_LVL_INFO, "FVM registering program %s", name );	  
+	  fvm_register_program( fvm_progid_by_name( entry.name ) );
+	}
 	
+
+      }
       sts = freg_next( NULL, key, entry.id, &entry );
-    }    
+    }
   }
 
   sts = freg_subkey( NULL, 0, "/fju/fvm/events", FREG_CREATE, &key );

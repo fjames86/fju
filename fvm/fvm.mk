@@ -6,7 +6,7 @@ fvm_programs+=fvm/programs/test-service.fvm
 fvm_programs+=fvm/programs/watchdog.fvm
 fvm_programs+=fvm/programs/eventlog.fvm
 fvm_programs+=fvm/programs/msgq.fvm
-fvm_programs+=fvm/stdlib/fju.fvm
+fvm_programs+=${BINDIR}/fju.fvm
 
 fvm_stdlib+=fvm/stdlib/native.asm
 fvm_stdlib+=fvm/stdlib/xdr.asm
@@ -59,7 +59,7 @@ fvm/programs/msgq.fvm: ${BINDIR}/fvmc fvm/programs/msgq.pas
 	${BINDIR}/fvmc -o $@ ${fvm_flags} fvm/programs/msgq.pas
 	rm fvm/programs/msgq.asm
 
-fvm/stdlib/fju.fvm: ${BINDIR}/fvmc fvm/stdlib/fju.pas 
+${BINDIR}/fju.fvm: ${BINDIR}/fvmc fvm/stdlib/fju.pas 
 	${BINDIR}/fvmc -o $@ ${fvm_flags} fvm/stdlib/constants.pas fvm/stdlib/native.pas fvm/stdlib/fju.pas
 	rm fvm/stdlib/fju.asm
 

@@ -1,25 +1,56 @@
 
-modpath=$1
-
 # get module name by disassembling module binary 
-progname=$(fvmc -d $modpath | head -n 2 | grep NAME | awk '{print $2}')
 
-# optional cluster 
-clusterid=$2
+modpath=""
+serviceproc=""
+initproc=""
+regprog=""
 
-# if not set, try and get default cluster 
-if [ ! $clusterid ]; then
-    clusterid=$(freg -q get /fju/raft/clusterid || echo -n "")
+while getopts 'p:s:i:r' c
+do
+    case $c in
+	p) modpath=$OPTARG ;;
+	s) serviceproc=$OPTARG ;;
+	i) initproc=$OPTARG ;;
+	r) regprog="y" ;;
+    esac
+done
+
+if [ ! $modpath ]; then
+    echo "Need module path"
+    exit 1
 fi
 
-# write registry values
+progname=$(fvmc -d $modpath | head -n 2 | grep NAME | awk '{print $2}')
+if [ ! $progname ]; then
+    echo "Need progname"
+    exit 1
+fi
+
+# install module
 freg put /fju/fvm key
 freg put /fju/fvm/modules key 
 freg put /fju/fvm/modules/$progname key
 freg put /fju/fvm/modules/$progname/path str $modpath
-if [ $clusterid ]; then
-    freg put /fju/fvm/modules/$progname/cluster u64 $clusterid
+
+# set init routine
+if [ $initproc ]; then
+    freg put /fju/fvm/modules/$progname/init str $initproc
+else
+    freg rem /fju/fvm/modules/$progname/init > /dev/null
 fi
-freg put /fju/fvm/programs/$progname str $progname
-freg put /fju/fvm/service key
-freg put /fju/fvm/service/$progname
+
+# set service proc 
+if [ $serviceproc ]; then
+    freg put /fju/fvm/modules/$progname/service str $serviceproc
+else
+    freg rem /fju/fvm/modules/$progname/service > /dev/null
+fi
+
+# register as rpc program
+if [ $regprog ]; then
+    freg put /fju/fvm/modules/$progname/register u32 1
+else
+    freg put /fju/fvm/modules/$progname/register u32 0    
+fi
+

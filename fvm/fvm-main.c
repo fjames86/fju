@@ -13,7 +13,6 @@
 #include <fju/fvm.h>
 #include <fju/rpc.h>
 #include <fju/freg.h>
-#include <fju/nls.h>
 
 #include "fvm-private.h"
 
@@ -158,7 +157,6 @@ int main( int argc, char **argv ) {
   if( sts ) usage( "Failed to initialize" );
 
   freg_open( NULL, NULL );
-  nls_open();
   
   if( argxdr.offset > 0 ) {
     fvm_set_args( &state, (char *)argbuf, argxdr.offset );

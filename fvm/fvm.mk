@@ -16,7 +16,7 @@ fvm_test+=fvm/test/test2.fvm
 fvm_test+=fvm/test/test3.fvm
 fvm_test+=fvm/test/test6.fvm
 
-fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm ${fvm_programs} ${fvm_stdlib} ${fvm_test} 
+fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm ${fvm_programs} ${fvm_stdlib} ${fvm_test} ${BINDIR}/fvmc2 
 
 libfvm_source+=fvm/fvm-module.c
 libfvm_source+=fvm/fvm-state.c
@@ -31,6 +31,9 @@ ${LIBDIR}/libfvm.a: ${libfvm_source} include/fju/fvm.h fvm/fvm-private.h
 
 ${BINDIR}/fvmc: fvm/fvmc.c include/fju/sec.h fvm/fvmc-pascal.c 
 	${CC} -o $@ fvm/fvmc.c fvm/fvmc-pascal.c ${CFLAGS} ${LFLAGS} 
+
+${BINDIR}/fvmc2: fvm/fvmc2.c 
+	${CC} -o $@ fvm/fvmc2.c ${CFLAGS} ${LFLAGS} 
 
 fvm_deps+=${LIBDIR}/libfvm.a
 ${BINDIR}/fvm: fvm/fvm-main.c ${LIBDIR}/libfvm.a 

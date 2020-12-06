@@ -175,7 +175,7 @@ static int getnexttoken( FILE *f, char *token, int toksize ) {
 
 /* 
  * Information we need to keep track of: 
- * - location of local variables on the stack. Need a list of local variables and their stack offsets.
+x * - location of local variables on the stack. Need a list of local variables and their stack offsets.
  * - names of global variables (unknown locals can be assumed to be globals)
  * - Contents of registers i.e. whether a register is known to contain a variable or is unused  
  */

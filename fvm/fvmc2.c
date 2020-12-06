@@ -449,6 +449,10 @@ static void addincludepath( char *path ) {
   glob.includepaths = p;
 }
 
+
+
+/* --------------- */
+
 static void parsefile( char *path ) {
   FILE *f;
   struct includepath *p;

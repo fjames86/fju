@@ -23,4 +23,10 @@ u = 123L;
    a = "hello test string \n \x1234";
 ENd;	 
 
-End.		     
+Procedure Proc1(str : string, flags : u32, var result : u32)
+Begin
+   Syscall Log(flags,str);
+   result = 123;
+End;
+
+End.		    

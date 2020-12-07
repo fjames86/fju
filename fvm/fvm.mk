@@ -33,7 +33,7 @@ ${BINDIR}/fvmc: fvm/fvmc.c include/fju/sec.h fvm/fvmc-pascal.c
 	${CC} -o $@ fvm/fvmc.c fvm/fvmc-pascal.c ${CFLAGS} ${LFLAGS} 
 
 ${BINDIR}/fvmc2: fvm/fvmc2.c 
-	${CC} -o $@ fvm/fvmc2.c ${CFLAGS} ${LFLAGS} 
+	${CC} -o $@ fvm/fvmc2.c ${CFLAGS} ${LFLAGS}
 
 fvm_deps+=${LIBDIR}/libfvm.a
 ${BINDIR}/fvm: fvm/fvm-main.c ${LIBDIR}/libfvm.a 

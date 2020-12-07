@@ -3,24 +3,32 @@ Program TestProgram(123,1,TestProc);
 
 Begin
 
+   var global1 : u32;
+var u32arry :  u32[12];
+var str	:  string;
+var p :  opaque;
+   
    { proc comment 1 }
-Procedure testProc(a : u32)
+
+const var conststr = "hello";
+   
+Procedure testProc(a : u32, var b : string)
 Begin
    VAR a : u32;
 var u	: u64;
+var opp	:  opaque[64];
 
-u = 123L;
-   
-   a = 444 + 123 * 1 -1;
-   a = 0x123;
-      a >= 123;
+u = 123;
+
+a = 444 + 123 * 1 - 1;
+
    if a = 123 then
-      b = "hello";
+      b = "hello"
    else if a > 123 then
       b = "goodbye";
-   end;
 
-   a = "hello test string \n \x1234";
+# single line comment 
+   a = "hello test string \n \x1234 \"ggg\"";
 ENd;	 
 
 Procedure Proc1(str : string, flags : u32, var result : u32)
@@ -29,4 +37,5 @@ Begin
    result = 123;
 End;
 
-End.		    
+End.
+

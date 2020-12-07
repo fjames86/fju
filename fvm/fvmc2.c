@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
+#include "fvmc2.h"
 
 static void usage( char *fmt, ... ) {
   va_list args;
@@ -450,11 +451,14 @@ static int getnexttok( FILE *f, struct token *tok ) {
       }
       
       c = fgetc( f );
-      if( (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_') ) {
+      if( (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_') || (c == ':') ) {
 	/* continue reading */
 	*p = c;
 	p++;
 	i++;
+
+	/* allow final character to be a colon to cope with label identifiers */
+	if( c == ':' ) break;
       } else {
 	ungetc( c, f );
 	break;
@@ -474,13 +478,6 @@ static void emitdata( void *data, int len );
 #define MAXPROC 32 
 #define MAXPARAM 8
 #define MAXNAME 64
-
-typedef enum {
-    VAR_TYPE_U32 = 0,
-    VAR_TYPE_U64 = 1,
-    VAR_TYPE_STRING = 2,
-    VAR_TYPE_OPAQUE = 3,
-} var_t;
 
 struct includepath {
   struct includepath *next;
@@ -523,7 +520,7 @@ struct proc {
 
 struct label {
   struct label *next;
-  uint32_t id;
+  char name[MAXNAME];
   uint32_t address;
 };
 
@@ -578,26 +575,29 @@ static struct {
   struct proc *currentproc;
 } glob;
 
-static struct label *getlabel( void ) {
+static struct label *getlabel( char *prefix ) {
   struct label *l;
+  char lname[MAXNAME];
+  sprintf( lname, "%s-%u", prefix ? prefix : "L", glob.labelidx );
   l = glob.labels;
   while( l ) {
-    if( l->id == glob.labelidx ) return l;
+    if( strcasecmp( l->name, lname ) == 0 ) return l;
     l = l->next;
   }
   return NULL;
 }
-static struct label *addlabel( void ) {
+static struct label *addlabel( char *prefix ) {
   struct label *l;
-  
+
   if( glob.pass == 2 ) {
-    l = getlabel();
+    l = getlabel( prefix );
     glob.labelidx++;
     return l;
   }
+
   
   l = malloc( sizeof(*l) );
-  l->id = glob.labelidx;
+  sprintf( l->name, "%s-%u", prefix ? prefix : "L", glob.labelidx );
   glob.labelidx++;
   l->address = glob.pc;
   l->next = glob.labels;
@@ -892,42 +892,6 @@ static void expectkeyword( FILE *f, char *name ) {
 
 /* ---------------- */
 
-typedef enum {
-    OP_NOP = 0,    /* no op */
-    OP_LDI32 = 1,  /* load 32bit immediate arg:u32*/
-    OP_LDI64 = 2,  /* load 64bit immediate arg:u64*/
-    OP_LEA = 3,    /* load address relative to pc arg:u16 */
-    OP_ADDSP = 4,  /* add constant to sp (allocate stack space) arg:u16*/
-    OP_SUBSP = 5,  /* subtract const from sp (free stack space) arg:u16*/
-    OP_CALL = 6,   /* push pc and jump arg:u16*/
-    OP_RET = 7,    /* pop pc and jump */
-    OP_LEASP = 8,  /* load address relative to sp arg:u16*/
-    OP_LDSP = 9,   /* load value relative to sp arg:u16*/
-    OP_STSP = 10,  /* store value relative to sp arg:u16*/
-    OP_BR = 11,    /* jump to const address if true arg:u16 */
-    OP_EQ = 12,    /* pop two values, push 1 if equal 0 if false */
-    OP_NEQ = 13,
-    OP_GT = 14,
-    OP_GTE = 15,
-    OP_LT = 16,
-    OP_LTE = 17,
-    OP_JMP = 18,   /* unconditional jump arg:u16*/
-    OP_ADD = 19,
-    OP_SUB = 20,
-    OP_MUL = 21,
-    OP_DIV = 22,
-    OP_MOD = 23,
-    OP_AND = 24,
-    OP_OR = 25,
-    OP_XOR = 26,
-    OP_NOT = 27,
-    OP_SHL = 28,
-    OP_SHR = 29,
-    OP_LD = 30, /* load from address */
-    OP_ST = 31, /* store to address */
-    OP_SYSCALL = 32, /* syscall arg:u16 */
-} op_t;
-
 
 static void emitopcode( op_t op, void *data ) {
   uint8_t u8;
@@ -1061,11 +1025,11 @@ static void parseexpr( FILE *f ) {
     emitopcode( OP_LDI64, &glob.tok.u64 );
     expecttok( f, TOK_U64 );    
   } else if( glob.tok.type == TOK_STRING ) {
-    l = getlabel();
+    l = getlabel( NULL );
     addr = l ? l->address : 0;
     emitopcode( OP_JMP, &addr );
     emitdata( glob.tok.val, strlen( glob.tok.val ) + 1 );
-    addlabel();
+    addlabel( NULL );
 
     addr = -(strlen( glob.tok.val ) + 1);
     emitopcode( OP_LEA, &addr );
@@ -1255,9 +1219,9 @@ static int parsestatement( FILE *f ) {
     uint16_t elseaddr, endaddr;
     struct label *l;
     
-    l = getlabel();
+    l = getlabel( "ELSE" );
     elseaddr = l ? l->address : 0;
-    l = getlabel();
+    l = getlabel( "ENDIF" );
     endaddr = l ? l->address : 0;
     
     parseexpr( f );
@@ -1266,11 +1230,11 @@ static int parsestatement( FILE *f ) {
     expectkeyword( f, "then" );
     parsestatement( f );
     emitopcode( OP_JMP, &endaddr );
-    addlabel(); // else address 
+    addlabel( "ELSE" ); // else address 
     if( acceptkeyword( f, "else" ) ) {
       parsestatement( f );
     }
-    addlabel(); // end address
+    addlabel( "ENDIF" ); // end address
     
   } else if( acceptkeyword( f, "do" ) ) {
     /* do statement while expr */
@@ -1279,9 +1243,9 @@ static int parsestatement( FILE *f ) {
     struct label *l;
     uint16_t addr1, addr2;
 
-    l = addlabel();
+    l = addlabel( "WHILE" );
     addr1 = l ? l->address : 0;
-    l = getlabel();
+    l = getlabel( "DO" );
     addr2 = l ? l->address : 0;
     
     parseexpr( f );
@@ -1290,13 +1254,35 @@ static int parsestatement( FILE *f ) {
     expectkeyword( f, "Do" );
     parsestatement( f );
     emitopcode( OP_JMP, &addr1 );
-    addlabel();
+    addlabel( "DO" );
+
+  } else if( acceptkeyword( f, "goto" ) ) {
+    /* goto label */
+    struct label *l;
+    uint16_t addr;
     
+    if( glob.tok.type != TOK_NAME ) usage( "Expected label identifier" );
+    l = getlabel( glob.tok.val );
+    //if( !l ) usage( "Unknown label %s", glob.tok.val );
+    addr = l ? l->address : 0;
+    emitopcode( OP_JMP, &addr );
+    expecttok( f, TOK_NAME );
   } else if( glob.tok.type == TOK_NAME ) {
     /* varname = expr */
     struct var *v;
     struct param *p;
     uint16_t addr;
+
+    if( glob.tok.val[strlen( glob.tok.val ) - 1] == ':' ) {
+      glob.tok.val[strlen( glob.tok.val ) - 1] = '\0';
+      addlabel( glob.tok.val );
+      free( glob.tok.val );
+      memset( &glob.tok, 0, sizeof(glob.tok) );
+      glob.tok.type = TOK_SEMICOLON;
+      
+      return 1;
+    }
+    
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {
       expecttok( f, TOK_NAME );
@@ -1458,7 +1444,7 @@ static void parsefile( FILE *f ) {
 	expecttok( f, TOK_SEMICOLON );
       }
       
-      
+      emitopcode( OP_RET, NULL );
       expectkeyword( f, "End" );
       expecttok( f, TOK_SEMICOLON );
       
@@ -1647,7 +1633,7 @@ static void compile_file( char *path, char *outpath ) {
     struct label *l;
     l = glob.labels;
     while( l ) {
-      printf( "Label: %u 0x%x\n", l->id, l->address );
+      printf( "Label: %s 0x%x\n", l->name, l->address );
       l = l->next;
     }
   }

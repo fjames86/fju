@@ -18,6 +18,7 @@ Begin
 var u	: u64;
 var opp	:  opaque[64];
 
+
 u = 123;
 
 a = 444 + 123 * 1 - 1;
@@ -26,9 +27,13 @@ a = 444 + 123 * 1 - 1;
       b = "hello"
    else if a > 123 then
       b = "goodbye";
-
+   
+Goto label;
+   
 # single line comment 
    a = "hello test string \n \x1234 \"ggg\"";
+
+label:
 ENd;	 
 
 Procedure Proc1(str : string, flags : u32, var result : u32)

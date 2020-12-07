@@ -154,25 +154,6 @@ struct token {
   uint64_t u64;
 };
 
-static struct token *copytoken( struct token *tok ) {
-  struct token *c;
-  c = malloc( sizeof(*c) );
-  memset( c, 0, sizeof(*c) );
-  c->len = tok->len;
-  c->type = tok->type;
-  c->u32 = tok->u32;
-  c->u64 = tok->u64;
-  if( tok->val ) {
-    c->val = malloc( tok->len );
-    memcpy( c->val, tok->val, tok->len );
-  }
-  return c;
-}
-static void freetoken( struct token *tok ) {
-  if( tok->val ) free( tok->val );
-  free( tok );
-}
-
 static int getnexttok( FILE *f, struct token *tok ) {
   int c, c2, i;
   char *p;
@@ -538,6 +519,14 @@ struct constvar {
   int len;
 };
 
+struct constval {
+  struct constval *next;
+  char name[MAXNAME];
+  var_t type;
+  char *val;
+  int len;
+};
+
 /*
  * stack: 
  *  - parameter 7    ;; parameters pushed from right to left 
@@ -565,6 +554,7 @@ static struct {
   struct proc *procs;
   struct export *exports;
   struct constvar *consts;
+  struct constval *constvals;
   
   struct token tok;
   uint32_t pc;
@@ -573,6 +563,7 @@ static struct {
 
   FILE *outfile;
   struct proc *currentproc;
+  uint32_t stackoffset;  /* offset relative to last local var. */
 } glob;
 
 static struct label *getlabel( char *prefix ) {
@@ -838,6 +829,57 @@ static struct constvar *addconst( char *name, var_t type, char *val, int len ) {
   return v;
 }
 
+static struct constval *getconstval( char *name ) {
+  struct constval *v;
+  v = glob.constvals;
+  while( v ) {
+    if( strcasecmp( v->name, name ) == 0 ) return v;
+    v = v->next;
+  }
+  return NULL;
+}
+
+static struct constval *addconstval( char *name, var_t type, char *val, int len ) {
+  struct constval *v;
+
+  if( glob.pass == 2 ) return getconstval( name );
+  
+  v = getconstval( name );
+  if( v ) usage( "Const name %s already exists", name );
+
+  v = malloc( sizeof(*v) );
+  strncpy( v->name, name, MAXNAME - 1 );
+  v->type = type;
+  v->val = val;
+  v->len = len;
+  v->next = glob.constvals;
+  glob.constvals = v;
+
+  return v;
+}
+
+
+static int getvarbyname( char *name, struct var **localvar, struct var **globalvar, struct param **param, struct constvar **constvar ) {
+  *localvar = NULL;
+  *globalvar = NULL;
+  *param = NULL;
+  *constvar = NULL;
+  
+  *localvar = getlocal( glob.currentproc, name );
+  if( *localvar ) return 1;
+
+  *globalvar = getglobal( name );
+  if( *globalvar ) return 1;
+
+  *param = getparam( glob.currentproc, name );
+  if( *param ) return 1;
+
+  *constvar = getconst( name );
+  if( *constvar ) return 1;
+
+  return 0;
+}
+
 
 
 static void addincludepath( char *path ) {
@@ -892,44 +934,184 @@ static void expectkeyword( FILE *f, char *name ) {
 
 /* ---------------- */
 
+struct opinfo {  
+  op_t op;
+  char *name;
+  uint32_t pcdata;
+  int32_t stackadjust;
+};
 
-static void emitopcode( op_t op, void *data ) {
-  uint8_t u8;
-
-  printf( "Emitopcode: %u\n", op );
-  
-  u8 = op;
-  fwrite( &u8, 1, 1, glob.outfile );
-  glob.pc += 1;
-  switch( op ) {
-  case OP_LDI32:
-    fwrite( data, 1, 4, glob.outfile );
-    glob.pc += 4;    
-    break;
-  case OP_LDI64:
-    fwrite( data, 1, 8, glob.outfile );
-    glob.pc += 8;    
-    break;
-  case OP_LEA:
-  case OP_ADDSP:
-  case OP_SUBSP:
-  case OP_CALL:
-  case OP_LEASP:
-  case OP_LDSP:
-  case OP_STSP:
-  case OP_BR:
-  case OP_JMP:
-  case OP_SYSCALL:
-    fwrite( data, 1, 2, glob.outfile );
-    glob.pc += 2;
-    break;
-  default:
-    break;
+static struct opinfo opcodeinfo[] =
+  {
+   { OP_NOP, "NOP", 0, 0 },
+   { OP_LDI32, "LDI32", 4, 4 },
+   { OP_LDI64, "LDI64", 8, 8 },
+   { OP_LEA, "LEA", 2, 4 },
+   { OP_ADDSP, "ADDSP", 2, 0 }, /* opcode adjusts sp directly */
+   { OP_SUBSP, "SUBSP", 2, 0 }, /* ditto */
+   { OP_CALL, "CALL", 2, 4 },
+   { OP_RET, "RET", 0, -4 },
+   { OP_LEASP, "LEASP", 2, 4 },
+   { OP_LDSP, "LDSP", 2, 4 },
+   { OP_STSP, "STSP", 2, -4 },
+   { OP_BR, "BR", 2, -4 },
+   { OP_EQ, "EQ", 0, -8 },
+   { OP_NEQ, "NEQ", 0, -8 },
+   { OP_GT, "GT", 0, -8 },
+   { OP_GTE, "GTE", 0, -8 },
+   { OP_LT, "LT", 0, -8 },
+   { OP_LTE, "LTE", 0, -8 },
+   { OP_JMP, "JMP", 2, 0 },
+   { OP_ADD, "ADD", 0, -4 },
+   { OP_SUB, "SUB", 0, -4 },
+   { OP_MUL, "MUL", 0, -4 },
+   { OP_DIV, "DIV", 0, -4 },      
+   { OP_MOD, "MOD", 0, -4 },      
+   { OP_AND, "AND", 0, -4 },
+   { OP_OR, "OR", 0, -4 },
+   { OP_XOR, "XOR", 0, -4 },      
+   { OP_NOT, "NOT", 0, 0 },
+   { OP_SHL, "SHL", 0, -4 },
+   { OP_SHR, "SHR", 0, -4 },
+   { OP_LD, "LD", 0, 0 },  /* ( address -- value ) */
+   { OP_ST, "ST", 0, -8 },  /* (value address -- ) */
+   { OP_SYSCALL, "SYSCALL", 2, 0 },
+   { 0, NULL, 0, 0 }
+  };
+static struct opinfo *getopinfo( op_t op ) {
+  int i;
+  for( i = 0; opcodeinfo[i].name; i++ ) {
+    if( opcodeinfo[i].op == op ) return &opcodeinfo[i];
   }
+  return NULL;
 }
 
+static void emitopcode( op_t op, void *data, int len ) {
+  uint8_t u8;
+  struct opinfo *info;
+
+  info = getopinfo( op );
+  if( !info ) usage( "Unknown opcode" );
+  if( len != info->pcdata ) usage( "opcode %s data mismatch %u != %u", info->name, len, info->pcdata );
+  
+
+  if( len == 0 ) printf( ";; Emitopcode: %s\n", info->name );  
+  else if( len == 2 ) {
+    uint16_t u16 = *((uint16_t *)data);
+    printf( ";; Emitopcode: %s %u\n", info->name, (uint32_t)u16 );
+  } else if( len == 4 ) {
+    uint32_t u32 = *((uint32_t *)data);
+    printf( ";; Emitopcode %s %u\n", info->name, u32 );
+  }
+  
+  u8 = op;
+  if( glob.pass == 2 ) fwrite( &u8, 1, 1, glob.outfile );
+  glob.pc += 1 + info->pcdata;
+  glob.stackoffset += info->stackadjust;
+  if( glob.pass == 2 ) fwrite( data, 1, info->pcdata, glob.outfile );
+}
+
+
+static void emit_ldi32( uint32_t val ) {
+  emitopcode( OP_LDI32, &val, 4 );
+}
+static void emit_ldi64( uint64_t val ) {
+  emitopcode( OP_LDI64, &val, 8 );
+}
+static void emit_lea( int16_t offset ) {
+  emitopcode( OP_LEA, &offset, 2 );
+}
+static void emit_addsp( int16_t offset ) {
+  emitopcode( OP_ADDSP, &offset, 2 );
+}
+static void emit_subsp( int16_t offset ) {
+  emitopcode( OP_SUBSP, &offset, 2 );
+}
+static void emit_call( uint16_t addr ) {
+  emitopcode( OP_CALL, &addr, 2 );
+}
+static void emit_ret( void ) {
+  emitopcode( OP_RET, NULL, 0 );
+}
+static void emit_leasp( uint16_t u ) {
+  emitopcode( OP_LEASP, &u, 2 );
+}
+static void emit_ldsp( uint16_t u ) {
+  emitopcode( OP_LDSP, &u, 2 );
+}
+static void emit_stsp( uint16_t u ) {
+  emitopcode( OP_STSP, &u, 2 );
+}
+static void emit_br( uint16_t u ) {
+  emitopcode( OP_BR, &u, 2 );
+}
+static void emit_eq( void ) {
+  emitopcode( OP_EQ, NULL, 0 );
+}
+static void emit_neq( void ) {
+  emitopcode( OP_NEQ, NULL, 0 );
+}
+static void emit_gt( void ) {
+  emitopcode( OP_GT, NULL, 0 );
+}
+static void emit_gte( void ) {
+  emitopcode( OP_GTE, NULL, 0 );
+}
+static void emit_lt( void ) {
+  emitopcode( OP_LT, NULL, 0 );
+}
+static void emit_lte( void ) {
+  emitopcode( OP_LTE, NULL, 0 );
+}
+static void emit_jmp( uint16_t addr ) {
+  emitopcode( OP_JMP, &addr, 2 );
+}
+static void emit_add( void ) {
+  emitopcode( OP_ADD, NULL, 0 );
+}
+static void emit_sub( void ) {
+  emitopcode( OP_SUB, NULL, 0 );
+}
+static void emit_mul( void ) {
+  emitopcode( OP_MUL, NULL, 0 );
+}
+static void emit_div( void ) {
+  emitopcode( OP_DIV, NULL, 0 );
+}
+static void emit_mod( void ) {
+  emitopcode( OP_MOD, NULL, 0 );
+}
+static void emit_and( void ) {
+  emitopcode( OP_AND, NULL, 0 );
+}
+static void emit_or( void ) {
+  emitopcode( OP_OR, NULL, 0 );
+}
+static void emit_xor( void ) {
+  emitopcode( OP_XOR, NULL, 0 );
+}
+static void emit_not( void ) {
+  emitopcode( OP_NOT, NULL, 0 );
+}
+static void emit_shl( void ) {
+  emitopcode( OP_SHL, NULL, 0 );
+}
+static void emit_shr( void ) {
+  emitopcode( OP_SHR, NULL, 0 );
+}
+static void emit_ld( void ) {
+  emitopcode( OP_LD, NULL, 0 );
+}
+static void emit_st( void ) {
+  emitopcode( OP_ST, NULL, 0 );
+}
+static void emit_syscall( uint16_t u ) {
+  emitopcode( OP_SYSCALL, &u, 2 );
+}
+
+
 static void emitdata( void *data, int len ) {
-  fwrite( data, 1, len, glob.outfile );
+  if( glob.pass == 2 ) fwrite( data, 1, len, glob.outfile );
   glob.pc += len;
 }
 
@@ -1017,22 +1199,22 @@ static void parseexpr( FILE *f ) {
     expecttok( f, TOK_CPAREN );
   } else if( accepttok( f, TOK_TILDE ) || accepttok( f, TOK_NOT ) ) {
     parseexpr( f );
-    emitopcode( OP_NOT, NULL );    
+    emit_not();
   } else if( glob.tok.type == TOK_U32 ) {
-    emitopcode( OP_LDI32, &glob.tok.u32 );
+    emit_ldi32( glob.tok.u32 );
     expecttok( f, TOK_U32 );
   } else if( glob.tok.type == TOK_U64 ) {
-    emitopcode( OP_LDI64, &glob.tok.u64 );
+    emit_ldi64( glob.tok.u64 );
     expecttok( f, TOK_U64 );    
   } else if( glob.tok.type == TOK_STRING ) {
     l = getlabel( NULL );
     addr = l ? l->address : 0;
-    emitopcode( OP_JMP, &addr );
+    emit_jmp( addr );
     emitdata( glob.tok.val, strlen( glob.tok.val ) + 1 );
     addlabel( NULL );
 
     addr = -(strlen( glob.tok.val ) + 1);
-    emitopcode( OP_LEA, &addr );
+    emit_lea( addr );
 
     expecttok( f, TOK_STRING );
   } else if( glob.tok.type == TOK_NAME ) {
@@ -1042,17 +1224,18 @@ static void parseexpr( FILE *f ) {
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {
       addr = v->offset;
-      emitopcode( OP_LDSP, &addr );
+      emit_ldsp( addr );
     } else {
       v = getglobal( glob.tok.val );
       if( !v ) {
 	p = getparam( glob.currentproc, glob.tok.val );
 	if( !p ) return;
 	addr = p->offset;
-	emitopcode( OP_LDSP, &addr );
+	emit_ldsp( addr );
       } else {
 	addr = v->address;
-	emitopcode( OP_LD, &addr ); /* xxx */
+	emit_ldi32( addr );
+	emit_ld(); /* xxx */
       }
     }
     
@@ -1068,82 +1251,82 @@ static void parseexpr( FILE *f ) {
     case TOK_PLUS:
       expecttok( f, optype );
       parseexpr( f );      
-      emitopcode( OP_ADD, NULL );
+      emit_add();
       break;
     case TOK_MINUS:
       expecttok( f, optype );
       parseexpr( f );      
-      emitopcode( OP_SUB, NULL );
+      emit_sub();
       break;
     case TOK_MUL:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_MUL, NULL );
+      emit_mul();
       break;
     case TOK_DIV:
       expecttok( f, optype );
       parseexpr( f );         
-      emitopcode( OP_DIV, NULL );
+      emit_div();
       break;
     case TOK_MOD:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_MOD, NULL );
+      emit_mod();
       break;
     case TOK_AND:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_AND, NULL );
+      emit_and();
       break;
     case TOK_OR:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_OR, NULL );
+      emit_or();
       break;
     case TOK_XOR:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_XOR, NULL );
+      emit_xor();
       break;
     case TOK_SHL:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_SHL, NULL );
+      emit_shl();
       break;
     case TOK_SHR:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_SHR, NULL );
+      emit_shr();
       break;
     case TOK_EQ:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_EQ, NULL );
+      emit_eq();
       break;
     case TOK_NEQ:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_NEQ, NULL );
+      emit_neq();
       break;            
     case TOK_GT:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_GT, NULL );
+      emit_gt();
       break;            
     case TOK_GTE:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_GTE, NULL );
+      emit_gte();
       break;            
     case TOK_LT:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_LT, NULL );
+      emit_lt();
       break;            
     case TOK_LTE:
       expecttok( f, optype );
       parseexpr( f );            
-      emitopcode( OP_LTE, NULL );
+      emit_lte();
       break;                  
     default:
       break;
@@ -1165,7 +1348,8 @@ static int parsestatement( FILE *f ) {
     if( glob.tok.type != TOK_NAME ) usage( "Expected procname" );
     proc = getproc( glob.tok.val );
     if( !proc && glob.pass == 2 ) usage( "Unknown proc %s", glob.tok.val );
-
+    expecttok( f, TOK_NAME );
+    
     expecttok( f, TOK_OPAREN );
     ipar = 0;
     while( glob.tok.type != TOK_CPAREN ) {
@@ -1174,17 +1358,17 @@ static int parsestatement( FILE *f ) {
       if( proc->params[ipar].isvar ) {
 	/* var type param requires a variable name */
 	if( glob.tok.type != TOK_NAME ) usage( "Param %s expected a var name", proc->params[ipar].name );
-	v = getlocal( proc, glob.tok.val );
+	v = getlocal( glob.currentproc, glob.tok.val );
 	if( v ) {
 	  /* local var - push address */
 	  addr = v->offset;
-	  emitopcode( OP_LEASP, &addr );
+	  emit_leasp( addr );
 	} else {
 	  v = getglobal( glob.tok.val );
 	  if( !v ) usage( "Unknown variable %s", glob.tok.val );
 
 	  /* global var - push address */
-	  emitopcode( OP_LDI32, &v->address );
+	  emit_ldi32( v->address );
 	}
 	
       } else {
@@ -1199,7 +1383,11 @@ static int parsestatement( FILE *f ) {
     if( ipar < proc->nparams ) usage( "Insufficient params supplied to proc %s", proc->name );
     
     addr = proc ? proc->address : 0;
-    emitopcode( OP_CALL, &addr );
+    emit_call( addr );
+
+    /* remove args from stack */
+    if( proc->paramsize ) emit_subsp( proc->paramsize );
+    
   } else if( acceptkeyword( f, "syscall" ) ) {
     /* syscall procname(Args...) */
     struct syscall *sc;
@@ -1213,7 +1401,7 @@ static int parsestatement( FILE *f ) {
       if( !accepttok( f, TOK_COMMA ) ) break;
     }
     expecttok( f, TOK_CPAREN );
-    emitopcode( OP_SYSCALL, &sc->id );
+    emit_syscall( sc->id );
   } else if( acceptkeyword( f, "if" ) ) {
     /* if expr then statement [ else statement ] */
     uint16_t elseaddr, endaddr;
@@ -1225,11 +1413,11 @@ static int parsestatement( FILE *f ) {
     endaddr = l ? l->address : 0;
     
     parseexpr( f );
-    emitopcode( OP_NOT, NULL );
-    emitopcode( OP_BR, &elseaddr );
+    emit_not();
+    emit_br( elseaddr );
     expectkeyword( f, "then" );
     parsestatement( f );
-    emitopcode( OP_JMP, &endaddr );
+    emit_jmp( endaddr );
     addlabel( "ELSE" ); // else address 
     if( acceptkeyword( f, "else" ) ) {
       parsestatement( f );
@@ -1249,11 +1437,11 @@ static int parsestatement( FILE *f ) {
     addr2 = l ? l->address : 0;
     
     parseexpr( f );
-    emitopcode( OP_NOT, NULL );
-    emitopcode( OP_BR, &addr2 );
+    emit_not();
+    emit_br( addr2 );
     expectkeyword( f, "Do" );
     parsestatement( f );
-    emitopcode( OP_JMP, &addr1 );
+    emit_jmp( addr1 );
     addlabel( "DO" );
 
   } else if( acceptkeyword( f, "goto" ) ) {
@@ -1265,7 +1453,7 @@ static int parsestatement( FILE *f ) {
     l = getlabel( glob.tok.val );
     //if( !l ) usage( "Unknown label %s", glob.tok.val );
     addr = l ? l->address : 0;
-    emitopcode( OP_JMP, &addr );
+    emit_jmp( addr );
     expecttok( f, TOK_NAME );
   } else if( glob.tok.type == TOK_NAME ) {
     /* varname = expr */
@@ -1290,7 +1478,7 @@ static int parsestatement( FILE *f ) {
       parseexpr( f );
       
       addr = v->offset;    
-      emitopcode( OP_STSP, &addr );
+      emit_stsp( addr );
     } else {
       v = getglobal( glob.tok.val );
       if( v ) {
@@ -1298,8 +1486,9 @@ static int parsestatement( FILE *f ) {
 	expecttok( f, TOK_EQ );
 	parseexpr( f );
 	
-	addr = v->offset;    
-	emitopcode( OP_ST, &addr );	 /* XXX */
+	addr = v->offset;
+	emit_ldi32( addr );
+	emit_st();	 /* XXX */
       } else {
 	p = getparam( glob.currentproc, glob.tok.val );
 	if( !p ) return 0;
@@ -1310,10 +1499,10 @@ static int parsestatement( FILE *f ) {
 
 	if( p->isvar ) {
 	  addr = p->offset;
-	  emitopcode( OP_ST, NULL );
+	  emit_st();
 	} else {
 	  addr = p->offset;
-	  emitopcode( OP_STSP, &addr );
+	  emit_stsp( addr );
 	}
       }
     }
@@ -1358,6 +1547,35 @@ static void parsefile( FILE *f ) {
   expecttok( f, TOK_SEMICOLON );
 
   expectkeyword( f, "begin" );
+
+  /* in-memory constants */
+  while( acceptkeyword( f, "const" ) ) {
+    /* const name = value */
+    char cname[MAXNAME];
+    
+    if( glob.tok.type != TOK_NAME ) usage( "const expects name not %s", gettokname( glob.tok.type ) );
+    strncpy( cname, glob.tok.val, MAXNAME - 1 );
+    expecttok( f, TOK_NAME );
+    expecttok( f, TOK_EQ );
+    switch( glob.tok.type ) {
+    case TOK_U32:
+      addconstval( cname, VAR_TYPE_U32, (char *)&glob.tok.u32, 4 );
+      expecttok( f, TOK_U32 );
+      break;
+    case TOK_U64:
+      addconstval( cname, VAR_TYPE_U64, (char *)&glob.tok.u64, 8 );
+      expecttok( f, TOK_U64 );      
+      break;
+    case TOK_STRING:
+      addconstval( cname, VAR_TYPE_STRING, strdup( glob.tok.val ), strlen( glob.tok.val ) + 1 );
+      expecttok( f, TOK_STRING );      
+      break;
+    default:
+      usage( "Bad constant type" );
+      break;
+    }
+    expecttok( f, TOK_SEMICOLON );
+  }
   
   /* parse data segment - i.e. global variables */
   while( acceptkeyword( f, "var" ) ) {
@@ -1440,11 +1658,21 @@ static void parsefile( FILE *f ) {
 	expecttok( f, TOK_SEMICOLON );
       }
 
+      /* allocate space for local variables */
+      if( proc->localsize ) {
+	emit_addsp( proc->localsize );
+      }
+      
       while( parsestatement( f ) ) {
 	expecttok( f, TOK_SEMICOLON );
       }
+
+      /* free local vars */
+      if( proc->localsize ) {
+	emit_subsp( proc->localsize );
+      }
       
-      emitopcode( OP_RET, NULL );
+      emit_ret();
       expectkeyword( f, "End" );
       expecttok( f, TOK_SEMICOLON );
       
@@ -1572,6 +1800,9 @@ static void processfile( char *path ) {
 struct headerinfo {
   uint32_t magic;
   uint32_t version;
+  char name[MAXNAME];
+  uint32_t progid;
+  uint32_t versid;
   uint32_t datasize;
   uint32_t textsize;
   uint32_t nprocs;
@@ -1603,6 +1834,9 @@ static void compile_file( char *path, char *outpath ) {
   memset( &header, 0, sizeof(header) );
   header.magic = 123;
   header.version = 1;
+  strcpy( header.name, glob.progname );
+  header.progid = glob.progid;
+  header.versid = glob.versid;
   header.datasize = glob.datasize;
   header.textsize = glob.textsize;
   e = glob.exports;
@@ -1678,6 +1912,14 @@ static void compile_file( char *path, char *outpath ) {
     v = glob.consts;
     while( v ) {
       printf( "Const: %s 0x%0x\n", v->name, v->address );
+      v = v->next;
+    }
+  }
+  {
+    struct constval *v;
+    v = glob.constvals;
+    while( v ) {
+      printf( "Const val: %s\n", v->name );
       v = v->next;
     }
   }

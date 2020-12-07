@@ -3,6 +3,10 @@ Program TestProgram(123,1,TestProc);
 
 Begin
 
+
+   const CONST = 123;
+const CONSTVAL =  "hello";
+   
    var global1 : u32;
 var u32arry :  u32[12];
 var str	:  string;
@@ -14,14 +18,15 @@ const var conststr = "hello";
    
 Procedure testProc(a : u32, var b : string)
 Begin
-   VAR a : u32;
-var u	: u64;
+   
+   VAR a : u32;	  
+var u	: u64;	  
 var opp	:  opaque[64];
 
 
 u = 123;
 
-a = 444 + 123 * 1 - 1;
+a = 444 + (123 * 1) - 1;
 
    if a = 123 then
       b = "hello"
@@ -38,7 +43,9 @@ ENd;
 
 Procedure Proc1(str : string, flags : u32, var result : u32)
 Begin
+   var b :  string;
    Syscall Log(flags,str);
+#   Call testProc(flags + 1, b);
    result = 123;
 End;
 

@@ -927,8 +927,13 @@ typedef enum {
     OP_ST = 31, /* store to address */
     OP_SYSCALL = 32, /* syscall arg:u16 */
 } op_t;
+
+
 static void emitopcode( op_t op, void *data ) {
   uint8_t u8;
+
+  printf( "Emitopcode: %u\n", op );
+  
   u8 = op;
   fwrite( &u8, 1, 1, glob.outfile );
   glob.pc += 1;

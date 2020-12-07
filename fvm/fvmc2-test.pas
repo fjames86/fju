@@ -37,5 +37,7 @@ Begin
    result = 123;
 End;
 
+const var xxx = 123;
+   
 End.
 

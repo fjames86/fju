@@ -471,14 +471,15 @@ static int getnexttok( FILE *f, struct token *tok ) {
 
 static void emitdata( void *data, int len );
 
+#define MAXPROC 32 
 #define MAXPARAM 8
 #define MAXNAME 64
 
 typedef enum {
-    VAR_TYPE_U32,
-    VAR_TYPE_U64,
-    VAR_TYPE_STRING,
-    VAR_TYPE_OPAQUE,
+    VAR_TYPE_U32 = 0,
+    VAR_TYPE_U64 = 1,
+    VAR_TYPE_STRING = 2,
+    VAR_TYPE_OPAQUE = 3,
 } var_t;
 
 struct includepath {
@@ -517,6 +518,7 @@ struct proc {
   uint32_t paramsize; /* total size of all params */
   struct var *locals;
   uint32_t localsize; /* total size of all locals */
+  uint32_t siginfo;
 };
 
 struct label {
@@ -1394,12 +1396,15 @@ static void parsefile( FILE *f ) {
       int isvar;
       struct proc *proc;
       uint32_t arraylen;
+      int nparam;
       
       if( glob.tok.type != TOK_NAME ) usage( "Expected procname not %s", gettokname( glob.tok.type ) );
       proc = addproc( glob.tok.val );
       glob.currentproc = proc;
       expecttok( f, TOK_NAME );
-      
+
+      nparam = 0;
+      proc->siginfo = 0;
       expecttok( f, TOK_OPAREN );
       /* parse params */
       while( glob.tok.type != TOK_CPAREN ) {
@@ -1421,10 +1426,14 @@ static void parsefile( FILE *f ) {
 	
 	printf( ";; add param %s type=%u isvar=%s\n", name, vartype, isvar ? "true" : "false" );
 	addparam( proc, name, vartype, isvar );
+	proc->siginfo |= ((vartype | (isvar ? 4 : 0)) << (nparam * 3));
+	nparam++;
+	
 	if( !accepttok( f, TOK_COMMA ) ) break;
       }
       expecttok( f, TOK_CPAREN );
-
+      proc->siginfo |= (nparam << 24);
+      
       expectkeyword( f, "Begin" );
       /* parse body: var definitions followed by statements */
       while( acceptkeyword( f, "var" ) ) {
@@ -1574,11 +1583,19 @@ struct headerinfo {
   uint32_t version;
   uint32_t datasize;
   uint32_t textsize;
+  uint32_t nprocs;
+  struct {
+    char name[MAXNAME];
+    uint32_t address;
+    uint32_t siginfo;
+  } procs[MAXPROC];
   uint32_t spare[32];
 };
   
 static void compile_file( char *path, char *outpath ) {
   struct headerinfo header;
+  struct export *e;
+  struct proc *proc;
   
   glob.outfile = fopen( outpath, "wb" );
   if( !glob.outfile ) usage( "Unable to open output file" );
@@ -1597,6 +1614,18 @@ static void compile_file( char *path, char *outpath ) {
   header.version = 1;
   header.datasize = glob.datasize;
   header.textsize = glob.textsize;
+  e = glob.exports;
+  while( e ) {
+    if( header.nprocs >= MAXPROC ) usage( "Max procs exceeded" );
+    
+    proc = getproc( e->name );
+    if( !proc ) usage( "Cannot export %s - no proc found", e->name );
+    strcpy( header.procs[header.nprocs].name, proc->name );
+    header.procs[header.nprocs].address = proc->address;
+    header.procs[header.nprocs].siginfo = proc->siginfo;
+    header.nprocs++;
+    e = e->next;
+  }
   fwrite( &header, 1, sizeof(header), glob.outfile );
 
   /* reset label counter */
@@ -1606,4 +1635,60 @@ static void compile_file( char *path, char *outpath ) {
   processfile( path );
 
   fclose( glob.outfile );
+
+
+  printf( "--------------\n" );
+  {
+    struct label *l;
+    l = glob.labels;
+    while( l ) {
+      printf( "Label: %u 0x%x\n", l->id, l->address );
+      l = l->next;
+    }
+  }
+  {
+    struct var *v;
+    v = glob.globals;
+    while( v ) {
+      printf( "Global: %s 0x%0x\n", v->name, v->address );
+      v = v->next;
+    }
+  }
+  {
+    struct proc *p;
+    int i;
+    
+    p = glob.procs;
+    while( p ) {
+      printf( "Proc: %s 0x%0x siginfo 0x%08x\n", p->name, p->address, p->siginfo );
+      for( i = 0; i < p->nparams; i++ ) {
+	printf( "  Param %u: %s%s : %s\n",
+		i, p->params[i].isvar ? "var " : "",
+		p->params[i].name,
+		p->params[i].type == VAR_TYPE_U32 ? "U32" :
+		p->params[i].type == VAR_TYPE_U64 ? "U64" :
+		p->params[i].type == VAR_TYPE_STRING ? "String" :
+		p->params[i].type == VAR_TYPE_OPAQUE ? "Opaque" :
+		"Other" );
+      }
+      p = p->next;
+    }
+  }
+  {
+    struct export *e;
+    e = glob.exports;
+    while( e ) {
+      printf( "Export: %s\n", e->name );
+      e = e->next;
+    }
+  }
+  {
+    struct constvar *v;
+    v = glob.consts;
+    while( v ) {
+      printf( "Const: %s 0x%0x\n", v->name, v->address );
+      v = v->next;
+    }
+  }
+      
 }

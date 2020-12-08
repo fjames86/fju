@@ -5,7 +5,7 @@
 typedef enum {
     OP_NOP = 0,    /* no op */
     OP_LDI32 = 1,  /* load 32bit immediate arg:u32*/
-    OP_LDI64 = 2,  /* load 64bit immediate arg:u64*/
+    OP_UNUSED1 = 2,
     OP_LEA = 3,    /* load address relative to pc arg:u16 */
     OP_ADDSP = 4,  /* add constant to sp (allocate stack space) arg:u16*/
     OP_SUBSP = 5,  /* subtract const from sp (free stack space) arg:u16*/
@@ -38,11 +38,12 @@ typedef enum {
     OP_SYSCALL = 32, /* syscall arg:u16 */
 } op_t;
 
+/* any procthat needs a u64 just has a something like Proc( high : u32, low : u32 ) i.e. high word followed by low word */
 typedef enum {
     VAR_TYPE_U32 = 0,
-    VAR_TYPE_U64 = 1,
-    VAR_TYPE_STRING = 2,
-    VAR_TYPE_OPAQUE = 3,
+    VAR_TYPE_STRING = 1,
+    VAR_TYPE_OPAQUE = 2,
+    VAR_TYPE_SPARE = 3,
 } var_t;
 
 

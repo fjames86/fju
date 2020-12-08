@@ -1204,12 +1204,16 @@ static void parseexpr( FILE *f ) {
     
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {
-      emit_ldsp( v->offset + glob.stackoffset );
+      if( v->arraylen ) emit_leasp( v->offset + glob.stackoffset );
+      else emit_ldsp( v->offset + glob.stackoffset );
     } else {
       v = getglobal( glob.tok.val );
       if( v ) {
-	emit_ldi32( v->address );
-	emit_ld(); 	
+	if( v->arraylen ) emit_ldi32( v->address );
+	else {
+	  emit_ldi32( v->address );
+	  emit_ld();
+	}
       } else {
 	p = getparam( glob.currentproc, glob.tok.val );
 	if( p ) {
@@ -1732,10 +1736,11 @@ static void parsefile( FILE *f ) {
 	  }
 	}
       } else if( acceptkeyword( f, "const" ) ) {
-	/* declare const name : type */
+	/* declare const var name : type */
 	var_t type;
 	char name[MAXNAME];
 
+	expectkeyword( f, "var" );
 	if( glob.tok.type != TOK_NAME ) usage( "Expected constant name" );
 	strncpy( name, glob.tok.val, MAXNAME - 1 );
 	expecttok( f, TOK_NAME );
@@ -1961,7 +1966,7 @@ static void processfile( char *path ) {
     glob.pc = 0x8000;
     parsefile( f );
     glob.datasize = glob.globals ? glob.globals->address + glob.globals->size : 0;
-    glob.textsize = glob.pc;
+    glob.textsize = glob.pc - 0x8000;
     break;
   case 2:
     /* second pass - generate code */
@@ -2043,6 +2048,11 @@ static void compile_file( char *path, char *outpath ) {
 
 
   printf( "--------------\n" );
+  printf( "Module: %s\n", header.name );
+  printf( "Progid: %u:%u\n", header.progid, header.versid );
+  printf( "DataSize: %u\n", header.datasize );
+  printf( "TextSize: %u\n", header.textsize );
+  
   {
     struct label *l;
     l = glob.labels;

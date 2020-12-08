@@ -4,7 +4,9 @@ Program TestProgram(123,1,TestProc);
 Begin
 
    Declare Procedure TestProc2(var a :  u32);
-   Declare const fred : u32; 
+   Declare const var fred : u32; 
+
+   var mystr : string[64];
       
 Procedure TestProc(init		     : u32,  var b : u32 )
 Begin
@@ -30,8 +32,10 @@ Begin
    while a < 10 do
       begin
 	 a = a + 1;
+	 if a = 5 then goto done;
       end;
-   
+
+   done:
    a = fred;
    
 End;

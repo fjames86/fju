@@ -3,10 +3,15 @@ Program TestProgram(123,1,TestProc);
 
 Begin
 
+   { declarations }
+   
    Declare Procedure TestProc2(var a :  u32);
    Declare const var fred : u32; 
 
+   { globals }
    var mystr : string[64];
+
+   { procedures }
       
 Procedure TestProc(init		     : u32,  var b : u32 )
 Begin

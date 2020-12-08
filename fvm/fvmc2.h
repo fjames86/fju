@@ -46,6 +46,26 @@ typedef enum {
     VAR_TYPE_SPARE = 3,
 } var_t;
 
+#define FVM_MAXPROC 32 
+#define FVM_MAXPARAM 8
+#define FVM_MAXNAME 64
+
+struct fvm_headerinfo {
+  uint32_t magic;
+  uint32_t version;
+  char name[FVM_MAXNAME];
+  uint32_t progid;
+  uint32_t versid;
+  uint32_t datasize;
+  uint32_t textsize;
+  uint32_t nprocs;
+  struct {
+    char name[FVM_MAXNAME];
+    uint32_t address;
+    uint32_t siginfo;
+  } procs[FVM_MAXPROC];
+  uint32_t spare[32];
+};
 
 #endif
 

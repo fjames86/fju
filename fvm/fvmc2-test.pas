@@ -13,7 +13,9 @@ Begin
    Call TestProc2(a);
    b = a;
 
-   
+   if b = 12 then
+      b = b + 1;
+      
 End;
 
 Procedure TestProc2(var a :  u32)

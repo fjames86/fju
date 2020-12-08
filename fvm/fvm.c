@@ -8,6 +8,7 @@
 #include <fju/fvm.h>
 #include <fju/mmf.h>
 #include <fju/rpc.h>
+#include <fju/log.h>
 
 #include "fvmc.h"
 
@@ -183,13 +184,12 @@ static uint32_t fvm_read_u32( struct fvm_state *state, uint32_t addr ) {
 static uint16_t fvm_read_pcu16( struct fvm_state *state ) {
   uint16_t u;
   uint32_t addr = state->pc;
+  u = 0;
   if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
     memcpy( &u, &state->module->text[addr - FVM_ADDR_TEXT], 2 );
-    state->pc += 2;
-    return u;
   }
-  
-  return 0;  
+  state->pc += 2;  
+  return u;
 }
 
 static int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
@@ -206,6 +206,9 @@ static int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
   return -1;  
 }
 
+static uint32_t fvm_stack_read( struct fvm_state *state, uint32_t depth ) {
+  return fvm_read_u32( state, FVM_ADDR_STACK + state->sp - depth );
+}
 
 static int fvm_step( struct fvm_state *state ) {
   op_t op;  
@@ -366,7 +369,31 @@ static int fvm_step( struct fvm_state *state ) {
     break;
   case OP_SYSCALL:
     u16 = fvm_read_pcu16( state );
-    /* TODO: iplement syscalls */
+    switch( u16 ) {
+    case 1:
+      /* LogWrite(flags,len,buf) */
+      {
+	char *buf;
+	uint32_t len, flags;
+	struct log_entry entry;
+	struct log_iov iov[1];
+	
+	addr = fvm_stack_read( state, 4 ); /* bufadd */
+	buf = fvm_getptr( state, addr );
+	len = fvm_stack_read( state, 8 ); /* buflen */
+	flags = fvm_stack_read( state, 12 ); 
+	memset( &entry, 0, sizeof(entry) );
+	iov[0].buf = buf;
+	iov[0].len = buf ? len : 0;
+	entry.iov = iov;
+	entry.niov = 1;
+	entry.flags = flags;
+	log_write( NULL, &entry );
+      }
+      break;
+    default:
+      return -1;
+    }
     break;
   default:
     return -1;

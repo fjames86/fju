@@ -332,7 +332,6 @@ static int getnexttok( FILE *f, struct token *tok ) {
 	}
       } while( 1 );
 
-      printf( "nstr: %s\n", nstr );
       tok->u32 = strtol( nstr, NULL, 0 );
       tok->type = TOK_U32;
     } else {
@@ -461,7 +460,6 @@ static struct param *getparam( struct proc *proc, char *name );
 static struct var *getlocal( struct proc *proc, char *name );
 static struct constvar *getconst( char *name );
 static struct constval *getconstval( char *name );
-static int getvarbyname( char *name, struct var **localvar, struct var **globalvar, struct param **param, struct constvar **constvar, struct constval **constval );
 
 #define MAXPROC 32 
 #define MAXPARAM 8
@@ -696,7 +694,6 @@ static struct var *getlocal( struct proc *proc, char *name ) {
 
 static struct var *addlocal( struct proc *proc, char *name, var_t type, uint32_t arraylen ) {
   struct var *v, **vp, *v2;
-  int i;
 
   if( glob.pass == 2 ) return getlocal( proc, name );
   
@@ -859,52 +856,6 @@ static struct constval *addconstval( char *name, var_t type, char *val, int len 
   glob.constvals = v;
 
   return v;
-}
-
-
-static int getvarbyname( char *name, struct var **localvar, struct var **globalvar, struct param **param, struct constvar **constvar, struct constval **constval ) {
-  struct var *v;
-  struct param *p;
-  struct constvar *cv;
-  struct constval *cl;
-  
-  if( localvar ) *localvar = NULL;
-  if( globalvar ) *globalvar = NULL;
-  if( param ) *param = NULL;
-  if( constvar ) *constvar = NULL;
-  if( constval ) *constval = NULL;
-  
-  v = getlocal( glob.currentproc, name );
-  if( v ) {
-    if( localvar ) *localvar = v;
-    return 1;
-  }
-
-  v = getglobal( name );
-  if( v ) {
-    if( globalvar ) *globalvar = v;
-    return 1;
-  }
-
-  p = getparam( glob.currentproc, name );
-  if( p ) {
-    if( param ) *param = p;
-    return 1;
-  }
-
-  cv = getconst( name );
-  if( cv ) {
-    if( constvar ) *constvar = cv;
-    return 1;
-  }
-
-  cl = getconstval( name );
-  if( cl ) {
-    if( constval ) *constval = cl;
-    return 1;
-  }
-
-  return 0;
 }
 
 
@@ -1261,11 +1212,49 @@ static void parseexpr( FILE *f ) {
 	emit_ld(); 	
       } else {
 	p = getparam( glob.currentproc, glob.tok.val );
-	if( !p ) return;
-	emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
-	if( p->isvar ) {
-	  emit_ld();
-	}
+	if( p ) {
+	  emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	  if( p->isvar ) {
+	    emit_ld();
+	  }
+	} else {
+	  struct constvar *cv;
+	  cv = getconst( glob.tok.val );
+	  if( cv ) {
+	    if( cv->type == VAR_TYPE_U32 ) {
+	      emit_ldi32( cv->address );
+	      emit_ld();
+	    } else if( cv->type == VAR_TYPE_STRING ) {
+	      emit_ldi32( cv->address );
+	    } else usage( "Bad const type" );
+						      
+	  } else {
+	    struct constval *cl = getconstval( glob.tok.val );
+	    if( !cl ) usage( "Variable %s does not name a known local, global, param, const or contsval", glob.tok.val );
+	    
+	    if( cl->type == VAR_TYPE_U32 ) {
+	      emit_ldi32( *((uint32_t *)cl->val) );
+	    } else if( cl->type == VAR_TYPE_STRING ) {
+	      char lname[MAXNAME];
+	      struct label *l;
+	      uint16_t startaddr;
+	      
+	      getlabelname( "STRING", lname );
+	      if( glob.pass == 1 ) l = NULL;
+	      else {
+		l = getlabel( lname );
+		if( !l ) usage( "Failed to get label" );
+	      }
+	      addr = l ? l->address : 0;
+	      emit_jmp( addr );
+	      startaddr = glob.pc;
+	      emitdata( glob.tok.val, strlen( cl->val ) + 1 );
+	      addlabel( lname );
+	      
+	      emit_lea( startaddr - glob.pc );
+	    }
+	  }
+	}	  
       }
     }
     
@@ -1487,12 +1476,9 @@ static int parsestatement( FILE *f ) {
     emit_jmp( endaddr );
     addlabel( lnameelse ); // else address 
     if( acceptkeyword( f, "else" ) ) {
-      printf( "1 end if/then/else current tok: %s\n", glob.tok.val );      
       parsestatement( f );
-      printf( "2 end if/then/else current tok: %s\n", glob.tok.val );
     }
     addlabel( lnameend ); // end address
-    printf( "3 end if/then/else current tok: %s\n", glob.tok.val );
     
   } else if( acceptkeyword( f, "do" ) ) {
     /* do statement while expr */
@@ -1732,18 +1718,45 @@ static void parsefile( FILE *f ) {
       int nparams;
       uint32_t siginfo;
       struct proc *proc;
-      
-      expectkeyword( f, "procedure" );
-      parseproceduresig( f, procname, params, &nparams, &siginfo );
-      if( glob.pass == 1 ) {
-	proc = getproc( procname );
-	if( proc ) {
-	  if( proc->siginfo != siginfo ) usage( "Declaration does not match definition for %s", procname );
-	} else {
-	  proc = addproc( procname, params, nparams, siginfo );
-	  proc->address = 0;
+
+      if( acceptkeyword( f, "procedure" ) ) {
+	/* declare procedure name(...) */
+	parseproceduresig( f, procname, params, &nparams, &siginfo );
+	if( glob.pass == 1 ) {
+	  proc = getproc( procname );
+	  if( proc ) {
+	    if( proc->siginfo != siginfo ) usage( "Declaration does not match definition for %s", procname );
+	  } else {
+	    proc = addproc( procname, params, nparams, siginfo );
+	    proc->address = 0;
+	  }
 	}
-      }
+      } else if( acceptkeyword( f, "const" ) ) {
+	/* declare const name : type */
+	var_t type;
+	char name[MAXNAME];
+
+	if( glob.tok.type != TOK_NAME ) usage( "Expected constant name" );
+	strncpy( name, glob.tok.val, MAXNAME - 1 );
+	expecttok( f, TOK_NAME );
+	
+	expecttok( f, TOK_COLON );
+	if( acceptkeyword( f, "u32" ) ) {
+	  type = VAR_TYPE_U32;
+	} else if( acceptkeyword( f, "string" ) ) {
+	  type = VAR_TYPE_STRING;
+	} else usage( "Invalid constant type" );
+
+	if( glob.pass == 1 ) {
+	  struct constvar *cv = getconst( name );
+	  if( cv ) {
+	    if( cv->type != type ) usage( "Constant type mismatch for %s", name );
+	  } else {
+	    cv = addconst( name, type, NULL, 0 );
+	    cv->address = 0;
+	  }
+	}
+      } else usage( "Invalid declaration" );
       
       expecttok( f, TOK_SEMICOLON );
     } else break;
@@ -1832,7 +1845,7 @@ static void parsefile( FILE *f ) {
       printf( ";; ------------------------\n\n" );
       
     } else if( acceptkeyword( f, "const" ) ) {
-      /* parse constant data: const var name := value (type infered from value) */
+      /* parse constant data: const var name = value (type infered from value) */
       char varname[MAXNAME];
       var_t vartype;
       char *val;
@@ -1867,8 +1880,25 @@ static void parsefile( FILE *f ) {
 	usage( "Invalid const type, must be u32 or string" );
 	break;
       }
-      
-      addconst( varname, vartype, val, len );
+
+      if( glob.pass == 1 ) {
+	struct constvar *cv;
+	cv = getconst( varname );
+	if( cv ) {
+	  if( cv->address ) usage( "Duplicate definition of const var %s", varname );
+	  if( cv->type != vartype ) usage( "Declaration type does not match definition type for const %s", varname );
+	  cv->val = val;
+	  cv->len = len;
+	  cv->address = glob.pc;
+	  glob.pc += len;
+	} else {
+	  addconst( varname, vartype, val, len );
+	}
+      } else {
+	struct constvar *cv = getconst( varname );
+	if( !cv ) usage( "Unknown const %s", varname );
+	emitdata( cv->val, cv->len );
+      }
       
       expecttok( f, TOK_SEMICOLON );
     } else expectkeyword( f, "end" );
@@ -1970,8 +2000,8 @@ static void compile_file( char *path, char *outpath ) {
   glob.outfile = fopen( outpath, "wb" );
   if( !glob.outfile ) usage( "Unable to open output file" );
   
-  glob.pass = 0;  
-  processfile( path );
+  //glob.pass = 0;  
+  //processfile( path );
 
   printf( "--------------------- Pass 1 -------------------- \n" );
   glob.pass = 1;  

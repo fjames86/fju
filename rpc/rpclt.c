@@ -47,7 +47,6 @@
 #include <fju/freg.h>
 #include <fju/sec.h>
 #include <fju/programs.h>
-#include <fju/fvm.h>
 #include <fju/raft.h>
 
 struct clt_info {
@@ -76,27 +75,14 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_licinfo_results( struct xdr_s *xdr );
 static void cmdprog_connlist_results( struct xdr_s *xdr );
-static void fvm_list_results( struct xdr_s *xdr );
-static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_load_results( struct xdr_s *xdr );
-static void fvm_register_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_register_results( struct xdr_s *xdr );
 static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void rawmode_results( struct xdr_s *xdr );
-static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_run_results( struct xdr_s *xdr );
-static void fvm_readvar_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_readvar_results( struct xdr_s *xdr );
-static void fvm_writevar_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_writevar_results( struct xdr_s *xdr );
 static void raft_command_results( struct xdr_s *xdr );
 static void raft_command_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void raft_snapshot_results( struct xdr_s *xdr );
 static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void raft_change_results( struct xdr_s *xdr );
 static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_clrun_results( struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -113,15 +99,6 @@ static struct clt_info clt_procs[] = {
     { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "eventid=* parm=*" },
     { FJUD_RPC_PROG, 1, 3, NULL, cmdprog_licinfo_results, "fjud.licinfo", "" },
     { FJUD_RPC_PROG, 1, 4, NULL, cmdprog_connlist_results, "fjud.connlist", "" },        
-    { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
-    { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* register=true|false run=true|false" },
-    { FVM_RPC_PROG, 1, 3, fvm_register_args, fvm_register_results, "fvm.unload", "name=*" },
-    { FVM_RPC_PROG, 1, 4, fvm_register_args, fvm_register_results, "fvm.register", "name=*" },
-    { FVM_RPC_PROG, 1, 5, fvm_register_args, fvm_register_results, "fvm.unregister", "name=*" },
-    { FVM_RPC_PROG, 1, 6, fvm_run_args, fvm_run_results, "fvm.run", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
-    { FVM_RPC_PROG, 1, 7, fvm_readvar_args, fvm_readvar_results, "fvm.readvar", "progid=* procid=*" },
-    { FVM_RPC_PROG, 1, 8, fvm_writevar_args, fvm_writevar_results, "fvm.writevar", "progid=* procid=* [u32=*] [u64=*] [str=*]" },
-    { FVM_RPC_PROG, 1, 9, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "[clid=*] progid=* procid=* [u32=*] [u64=*] [str=*]" },
     { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
     { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
     { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*]" },
@@ -832,123 +809,6 @@ static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr 
   xdr_encode_opaque( xdr, parm, parmlen );
 }
 
-static void fvm_list_results( struct xdr_s *xdr ) {
-  int sts, b;
-  char name[64];
-  uint32_t progid, versid, datasize, textsize;
-  int c;
-  uint64_t utime, totalsteps;
-  uint32_t flags, totalrun;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  while( b ) {
-    sts = xdr_decode_string( xdr, name, sizeof(name) );
-    sts = xdr_decode_uint32( xdr, &progid );
-    sts = xdr_decode_uint32( xdr, &versid );
-    sts = xdr_decode_uint32( xdr, &datasize );
-    sts = xdr_decode_uint32( xdr, &textsize );
-    sts = xdr_decode_uint32( xdr, &flags );
-    sts = xdr_decode_uint64( xdr, &utime );
-    sts = xdr_decode_uint64( xdr, &totalsteps );
-    sts = xdr_decode_uint32( xdr, &totalrun );
-    printf( "%s Program %u:%u Data %u Text %u Flags 0x%08x UTime %"PRIu64" TotalSteps %"PRIu64" TotalRun %u\n",
-	    name, progid, versid, datasize, textsize, flags, utime, totalsteps, totalrun );
-    
-    sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) usage( "xdr error" );
-    c = 0;
-    while( b ) {
-      sts = xdr_decode_string( xdr, name, sizeof(name) );
-      sts = xdr_decode_uint32( xdr, &flags );
-      printf( "  ID %-4u Name %-16s Flags 0x%08x", c, name, flags );
-      if( (flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_UINT32 ) printf( " Type %-8s", "UINT32" );
-      else if( (flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_UINT64 ) printf( " Type %-8s", "UINT64" );
-      else if( (flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_STRING ) printf( " Type %-8s", "STRING" );
-      else if( (flags & FVM_SYMBOL_TYPE_MASK) == FVM_SYMBOL_PROC ) printf( " Type %-8s", "PROC" ); 
-      else printf( "?" );
-      printf( " Size %u", flags & FVM_SYMBOL_SIZE_MASK );
-      
-      printf( "\n" );
-      c++;
-      
-      sts = xdr_decode_boolean( xdr, &b );
-      if( sts ) usage( "xdr error" );
-    }
-    
-    sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) usage( "xdr error" );
-  }
-  
-}
-
-static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char *filename = NULL;
-  struct mmf_s mmf;
-  char *buf;
-  int sts, flags;
-  char argname[64], *argval;
-
-  flags = 0;
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "filename" ) == 0 ) {
-      filename = argval;
-    } else if( strcmp( argname, "register" ) == 0 ) {
-      flags |= (strcasecmp( argval, "true" ) == 0 ? 1 : 0);
-    } else if( strcmp( argname, "run" ) == 0 ) {
-      flags |= (strcasecmp( argval, "true" ) == 0 ? 2 : 0);           
-    } else usage( NULL );
-    i++;
-  }
-
-  if( !filename ) usage( NULL );
-
-  sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
-  if( sts ) usage( "Failed to open file" );
-
-  buf = malloc( mmf.fsize );
-  mmf_read( &mmf, buf, mmf.fsize, 0 );
-  xdr_encode_opaque( xdr, (uint8_t *)buf, mmf.fsize );
-  free( buf );
-  xdr_encode_uint32( xdr, flags );
-  
-  mmf_close( &mmf );
-}
-
-static void fvm_load_results( struct xdr_s *xdr ) {
-  int b;
-  
-  xdr_decode_boolean( xdr, &b );
-  printf( "%s\n", b ? "failure" : "success" );
-}
-
-
-static void fvm_register_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  char name[64];
-
-  memset( name, 0, sizeof(name) );
-  
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "name" ) == 0 ) {
-      strncpy( name, argval, 63 );
-    } else usage( NULL );
-    i++;
-  }
-
-  if( !name[0] ) usage( "Need name" );
-  
-  xdr_encode_string( xdr, name );
-}
-
-static void fvm_register_results( struct xdr_s *xdr ) {
-  int b;
-  
-  xdr_decode_boolean( xdr, &b );
-  printf( "%s\n", b ? "failure" : "success" );
-}
 
 static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
@@ -1006,173 +866,6 @@ static void rawmode_results( struct xdr_s *xdr ) {
     }
   }
   
-}
-
-static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  struct xdr_s argx;
-  uint32_t progid, procid;
-  char argbuf[16*1024];
-
-  xdr_init( &argx, (uint8_t *)argbuf, sizeof(argbuf) );
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "u32" ) == 0 ) {
-      xdr_encode_uint32( &argx, strtoul( argval, NULL, 0 ) );
-    } else if( strcmp( argname, "u64" ) == 0 ) {
-      xdr_encode_uint64( &argx, strtoull( argval, NULL, 0 ) );
-    } else if( strcmp( argname, "str" ) == 0 ) {
-      xdr_encode_string( &argx, argval );
-    } else if( strcmp( argname, "bool" ) == 0 ) {
-      xdr_encode_boolean( &argx, strcmp( argval, "true" ) == 0 );
-    } else if( strcmp( argname, "progid" ) == 0 ) {
-      progid = strtoul( argval, NULL, 0 );
-    } else if( strcmp( argname, "procid" ) == 0 ) {
-      procid = strtoul( argval, NULL, 0 );
-    } else usage( NULL );
-    i++;
-  }
-
-  xdr_encode_uint32( xdr, progid );
-  xdr_encode_uint32( xdr, procid );
-  xdr_encode_opaque( xdr, (uint8_t *)argx.buf, argx.offset );
-
-}
-
-static void fvm_run_results( struct xdr_s *xdr ) {
-  int sts, b, i, j, count, c;  
-  char *bufp;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  if( !b ) usage( "Failed" );
-
-  xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &count );
-  
-  for( i = 0; i < count; i += 16 ) {
-    for( j = 0; j < 16; j++ ) {
-      if( (i + j) < count ) {
-	printf( "%02x ", (uint32_t)bufp[i + j] );
-      }
-    }
-    for( j = 0; j < 16; j++ ) {
-      if( (i + j) < count ) {
-	c = bufp[i + j];
-	if( !isalnum( c ) ) c = '.';
-	printf( "%c", c );
-      }
-    }
-    
-    printf( "\n" );
-  }
-}
-
-static void fvm_readvar_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  uint32_t progid = 0, procid = 0;
-
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "progid" ) == 0 ) {
-      progid = strtoul( argval, NULL, 0 );
-    } else if( strcmp( argname, "procid" ) == 0 ) {
-      procid = strtoul( argval, NULL, 0 );
-    } else usage( NULL );
-    i++;
-  }
-
-  xdr_encode_uint32( xdr, progid );
-  xdr_encode_uint32( xdr, procid );
-}
-
-static void fvm_readvar_results( struct xdr_s *xdr ) {
-  int sts, b;
-  uint32_t u32, type;
-  uint64_t u64;
-  char str[256];
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  if( !b ) usage( "Failed" );
-
-  sts = xdr_decode_uint32( xdr, &type );
-  if( sts ) usage( "xdr error" );
-
-  switch( type ) {
-  case FVM_SYMBOL_UINT32:
-    sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) usage( "xdr error" );
-    printf( "%u (0x%x)", u32, u32 );
-    break;
-  case FVM_SYMBOL_UINT64:
-    sts = xdr_decode_uint64( xdr, &u64 );
-    if( sts ) usage( "xdr error" );
-    printf( "%"PRIu64" (0x%"PRIx64")", u64, u64 );
-    break;
-  case FVM_SYMBOL_STRING:
-    sts = xdr_decode_string( xdr, str, sizeof(str) );
-    if( sts ) usage( "xdr error" );
-    printf( "%s", str );
-    break;
-  default:
-    usage( "Unknown typecode" );
-  }
-}
-
-static void fvm_writevar_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  uint32_t progid, procid, type, u32;
-  uint64_t u64;
-  char *str = NULL;
-
-  progid = 0;
-  procid = 0;
-  type = 0;
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "u32" ) == 0 ) {
-      type = FVM_SYMBOL_UINT32;
-      u32 = strtoul( argval, NULL, 0 );
-    } else if( strcmp( argname, "u64" ) == 0 ) {
-      type = FVM_SYMBOL_UINT64;
-      u64 = strtoull( argval, NULL, 0 );
-    } else if( strcmp( argname, "str" ) == 0 ) {
-      type = FVM_SYMBOL_STRING;
-      str = argval;
-    } else if( strcmp( argname, "progid" ) == 0 ) {
-      progid = strtoul( argval, NULL, 0 );
-    } else if( strcmp( argname, "procid" ) == 0 ) {
-      procid = strtoul( argval, NULL, 0 );
-    } else usage( NULL );
-    i++;
-  }
-
-  xdr_encode_uint32( xdr, progid );
-  xdr_encode_uint32( xdr, procid );
-  xdr_encode_uint32( xdr, type );
-  switch( type ) {
-  case FVM_SYMBOL_UINT32:
-    xdr_encode_uint32( xdr, u32 );
-    break;
-  case FVM_SYMBOL_UINT64:
-    xdr_encode_uint64( xdr, u64 );
-    break;
-  case FVM_SYMBOL_STRING:
-    xdr_encode_string( xdr, str );
-    break;
-  default:
-    usage( NULL );
-  }
-  
-}
-
-static void fvm_writevar_results( struct xdr_s *xdr ) {
-  int sts, b;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  if( !b ) usage( "Failed" );
-
 }
 
 static void cmdprog_licinfo_results( struct xdr_s *xdr ) {
@@ -1383,52 +1076,5 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   }
   xdr_encode_boolean( xdr, bappid );
   if( bappid ) xdr_encode_uint32( xdr, appid );
-}
-
-static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  struct xdr_s argx;
-  uint32_t progid, procid;
-  uint64_t clid;  
-  char argbuf[16*1024];
-
-  clid = 0;
-  progid = 0;
-  procid = 0;
-    
-  xdr_init( &argx, (uint8_t *)argbuf, sizeof(argbuf) );
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "clid" ) == 0 ) {
-      clid = strtoull( argval, NULL, 16 );
-    } else if( strcmp( argname, "u32" ) == 0 ) {
-      xdr_encode_uint32( &argx, strtoul( argval, NULL, 0 ) );
-    } else if( strcmp( argname, "u64" ) == 0 ) {
-      xdr_encode_uint64( &argx, strtoull( argval, NULL, 0 ) );
-    } else if( strcmp( argname, "str" ) == 0 ) {
-      xdr_encode_string( &argx, argval );
-    } else if( strcmp( argname, "bool" ) == 0 ) {
-      xdr_encode_boolean( &argx, strcmp( argval, "true" ) == 0 );
-    } else if( strcmp( argname, "progid" ) == 0 ) {
-      progid = strtoul( argval, NULL, 0 );
-    } else if( strcmp( argname, "procid" ) == 0 ) {
-      procid = strtoul( argval, NULL, 0 );
-    } else usage( NULL );
-    i++;
-  }
-
-  xdr_encode_uint64( xdr, clid );
-  xdr_encode_uint32( xdr, progid );
-  xdr_encode_uint32( xdr, procid );
-  xdr_encode_opaque( xdr, (uint8_t *)argx.buf, argx.offset );
-
-}
-
-static void fvm_clrun_results( struct xdr_s *xdr ) {
-  int sts, b;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  if( !b ) usage( "Failed" );
 }
 

@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <inttypes.h>
 
+#include <fju/fvm.h>
+
 #include "fvmc.h"
 
 static void usage( char *fmt, ... ) {
@@ -472,7 +474,7 @@ struct includepath {
 /* global or local variable */
 struct var {
   struct var *next;
-  char name[FVM_MAXNAME];
+  char name[FVM_MAX_NAME];
   
   var_t type;
   uint32_t arraylen;
@@ -483,7 +485,7 @@ struct var {
 
 /* procedure parameter */
 struct param {
-  char name[FVM_MAXNAME];
+  char name[FVM_MAX_NAME];
   var_t type;
   int isvar;
   uint32_t size;    /* size is 4 for everything */
@@ -492,7 +494,7 @@ struct param {
 
 struct proc {
   struct proc *next;
-  char name[FVM_MAXNAME];
+  char name[FVM_MAX_NAME];
   uint32_t address;
   struct param params[FVM_MAXPARAM];
   int nparams;
@@ -503,18 +505,18 @@ struct proc {
 
 struct label {
   struct label *next;
-  char name[FVM_MAXNAME];
+  char name[FVM_MAX_NAME];
   uint32_t address;
 };
 
 struct export {
   struct export *next;
-  char name[FVM_MAXNAME];
+  char name[FVM_MAX_NAME];
 };
 
 struct constvar {
   struct constvar *next;
-  char name[FVM_MAXNAME];
+  char name[FVM_MAX_NAME];
   var_t type;
   uint32_t address;
   char *val;
@@ -523,7 +525,7 @@ struct constvar {
 
 struct constval {
   struct constval *next;
-  char name[FVM_MAXNAME];
+  char name[FVM_MAX_NAME];
   var_t type;
   char *val;
   int len;
@@ -547,7 +549,7 @@ static struct {
   int pass;
   struct includepath *includepaths;
 
-  char progname[FVM_MAXNAME];
+  char progname[FVM_MAX_NAME];
   uint32_t progid, versid;
 
   uint32_t labelidx;
@@ -623,7 +625,7 @@ static struct var *addglobal( char *name, var_t type, uint32_t arraylen ) {
   strcpy( v->name, name );
   v->type = type;
   v->arraylen = arraylen;
-  v->address = glob.globals ? glob.globals->address + glob.globals->size : 0;
+  v->address = glob.globals ? glob.globals->address + glob.globals->size : FVM_ADDR_DATA;
   v->size = 4;
   if( arraylen ) {
     if( type == VAR_TYPE_STRING || type == VAR_TYPE_OPAQUE ) {
@@ -813,7 +815,7 @@ static struct constvar *addconst( char *name, var_t type, char *val, int len ) {
 
   printf( ";; Adding const %s\n", name );
   v = malloc( sizeof(*v) );
-  strncpy( v->name, name, FVM_MAXNAME - 1 );
+  strncpy( v->name, name, FVM_MAX_NAME - 1 );
   v->type = type;
   v->val = val;
   v->len = len;
@@ -845,7 +847,7 @@ static struct constval *addconstval( char *name, var_t type, char *val, int len 
   if( v ) usage( "Const name %s already exists", name );
 
   v = malloc( sizeof(*v) );
-  strncpy( v->name, name, FVM_MAXNAME - 1 );
+  strncpy( v->name, name, FVM_MAX_NAME - 1 );
   v->type = type;
   v->val = val;
   v->len = len;
@@ -1183,7 +1185,7 @@ static void parseexpr( FILE *f ) {
     emit_ldi32( glob.tok.u32 );
     expecttok( f, TOK_U32 );
   } else if( glob.tok.type == TOK_STRING ) {
-    char lname[FVM_MAXNAME];
+    char lname[FVM_MAX_NAME];
     struct label *l;
     uint16_t startaddr;
 
@@ -1243,7 +1245,7 @@ static void parseexpr( FILE *f ) {
 	    if( cl->type == VAR_TYPE_U32 ) {
 	      emit_ldi32( *((uint32_t *)cl->val) );
 	    } else if( cl->type == VAR_TYPE_STRING ) {
-	      char lname[FVM_MAXNAME];
+	      char lname[FVM_MAX_NAME];
 	      struct label *l;
 	      uint16_t startaddr;
 	      
@@ -1375,7 +1377,7 @@ static int parsestatement( FILE *f ) {
     int ipar;
     struct var *v;
     uint32_t siginfo;
-    char procname[FVM_MAXNAME];
+    char procname[FVM_MAX_NAME];
     
     /* call|syscall procname(args...) */
     if( glob.tok.type != TOK_NAME ) usage( "Expected procname" );
@@ -1458,7 +1460,7 @@ static int parsestatement( FILE *f ) {
     /* if expr then statement [ else statement ] */
     uint16_t elseaddr, endaddr;
     struct label *l;
-    char lnameelse[FVM_MAXNAME], lnameend[FVM_MAXNAME];
+    char lnameelse[FVM_MAX_NAME], lnameend[FVM_MAX_NAME];
 
     getlabelname( "ELSE", lnameelse );
     getlabelname( "END", lnameend );
@@ -1490,7 +1492,7 @@ static int parsestatement( FILE *f ) {
     
   } else if( acceptkeyword( f, "do" ) ) {
     /* do statement while expr */
-    char lnamestart[FVM_MAXNAME];
+    char lnamestart[FVM_MAX_NAME];
     struct label *l;
     
     getlabelname( "DO", lnamestart );
@@ -1506,7 +1508,7 @@ static int parsestatement( FILE *f ) {
     /* while expr do statement */
     struct label *l;
     uint16_t addr1, addr2;
-    char lnamew[FVM_MAXNAME], lnamedo[FVM_MAXNAME];
+    char lnamew[FVM_MAX_NAME], lnamedo[FVM_MAX_NAME];
 
     getlabelname( "WHILE", lnamew );
     getlabelname( "DO", lnamedo );
@@ -1633,7 +1635,7 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
     }
     if( getglobal( glob.tok.val ) ) usage( "Param %s name clash with global", glob.tok.val );
     
-    strncpy( params[nparam].name, glob.tok.val, FVM_MAXNAME - 1 );
+    strncpy( params[nparam].name, glob.tok.val, FVM_MAX_NAME - 1 );
     expecttok( f, TOK_NAME );
     expecttok( f, TOK_COLON );
     parsevartype( f, &params[nparam].type, &arraylen );
@@ -1699,10 +1701,10 @@ static void parsefile( FILE *f ) {
   while( 1 ) {
     if( acceptkeyword( f, "const" ) ) {
       /* const name = value */
-      char cname[FVM_MAXNAME];
+      char cname[FVM_MAX_NAME];
       
       if( glob.tok.type != TOK_NAME ) usage( "const expects name not %s", gettokname( glob.tok.type ) );
-      strncpy( cname, glob.tok.val, FVM_MAXNAME - 1 );
+      strncpy( cname, glob.tok.val, FVM_MAX_NAME - 1 );
       expecttok( f, TOK_NAME );
       expecttok( f, TOK_EQ );
       switch( glob.tok.type ) {
@@ -1721,7 +1723,7 @@ static void parsefile( FILE *f ) {
       expecttok( f, TOK_SEMICOLON );
     } else if( acceptkeyword( f, "declare" ) ) {
       /* declare procedure name(...) */
-      char procname[FVM_MAXNAME];
+      char procname[FVM_MAX_NAME];
       struct param params[FVM_MAXPARAM];
       int nparams;
       uint32_t siginfo;
@@ -1742,11 +1744,11 @@ static void parsefile( FILE *f ) {
       } else if( acceptkeyword( f, "const" ) ) {
 	/* declare const var name : type */
 	var_t type;
-	char name[FVM_MAXNAME];
+	char name[FVM_MAX_NAME];
 
 	expectkeyword( f, "var" );
 	if( glob.tok.type != TOK_NAME ) usage( "Expected constant name" );
-	strncpy( name, glob.tok.val, FVM_MAXNAME - 1 );
+	strncpy( name, glob.tok.val, FVM_MAX_NAME - 1 );
 	expecttok( f, TOK_NAME );
 	
 	expecttok( f, TOK_COLON );
@@ -1773,14 +1775,14 @@ static void parsefile( FILE *f ) {
   
   /* parse data segment - i.e. global variables */
   while( acceptkeyword( f, "var" ) ) {
-    char varname[FVM_MAXNAME];
+    char varname[FVM_MAX_NAME];
     var_t vartype;
     uint32_t arraylen;
     struct var *v;
     
     /* var name : type; */
     if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
-    strncpy( varname, glob.tok.val, FVM_MAXNAME - 1 );
+    strncpy( varname, glob.tok.val, FVM_MAX_NAME - 1 );
     expecttok( f, TOK_NAME );
     expecttok( f, TOK_COLON );
     parsevartype( f, &vartype, &arraylen );
@@ -1793,7 +1795,7 @@ static void parsefile( FILE *f ) {
   while( glob.tok.type == TOK_NAME ) {
     if( acceptkeyword( f, "procedure" ) ) {
       /* parse procedure */
-      char name[FVM_MAXNAME];
+      char name[FVM_MAX_NAME];
       struct param params[FVM_MAXPARAM];
       int nparams;
       uint32_t siginfo;
@@ -1825,7 +1827,7 @@ static void parsefile( FILE *f ) {
       while( acceptkeyword( f, "var" ) ) {
 	/* var name : type; */
 	if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
-	strncpy( name, glob.tok.val, FVM_MAXNAME - 1 );	
+	strncpy( name, glob.tok.val, FVM_MAX_NAME - 1 );	
 	expecttok( f, TOK_NAME );
 	expecttok( f, TOK_COLON );
 	parsevartype( f, &vartype, &arraylen );
@@ -1855,7 +1857,7 @@ static void parsefile( FILE *f ) {
       
     } else if( acceptkeyword( f, "const" ) ) {
       /* parse constant data: const var name = value (type infered from value) */
-      char varname[FVM_MAXNAME];
+      char varname[FVM_MAX_NAME];
       var_t vartype;
       char *val;
       int len;
@@ -1866,7 +1868,7 @@ static void parsefile( FILE *f ) {
       
       expectkeyword( f, "var" );
       if( glob.tok.type != TOK_NAME ) usage( "Expected const var name" );
-      strncpy( varname, glob.tok.val, FVM_MAXNAME - 1 );
+      strncpy( varname, glob.tok.val, FVM_MAX_NAME - 1 );
       expecttok( f, TOK_NAME );
       expecttok( f, TOK_EQ );
       switch( glob.tok.type ) {
@@ -1967,14 +1969,14 @@ static void processfile( char *path ) {
     break;
   case 1:
     /* first pass - collect info on data variables, procs etc */
-    glob.pc = 0x8000;
+    glob.pc = FVM_ADDR_TEXT;
     parsefile( f );
-    glob.datasize = glob.globals ? glob.globals->address + glob.globals->size : 0;
-    glob.textsize = glob.pc - 0x8000;
+    glob.datasize = glob.globals ? (glob.globals->address + glob.globals->size) - FVM_ADDR_DATA : 0;
+    glob.textsize = glob.pc - FVM_ADDR_TEXT;
     break;
   case 2:
     /* second pass - generate code */
-    glob.pc = 0x8000;
+    glob.pc = FVM_ADDR_TEXT;
     glob.stackoffset = 0;
     parsefile( f );
     break;    
@@ -2014,7 +2016,7 @@ static void compile_file( char *path, char *outpath ) {
   header.textsize = glob.textsize;
   e = glob.exports;
   while( e ) {
-    if( header.nprocs >= FVM_MAXPROC ) usage( "Max procs exceeded" );
+    if( header.nprocs >= FVM_MAX_PROC ) usage( "Max procs exceeded" );
     
     proc = getproc( e->name );
     if( !proc ) usage( "Cannot export %s - no proc found", e->name );

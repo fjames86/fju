@@ -1734,7 +1734,7 @@ static void parsedeclaration( FILE *f ) {
     if( glob.tok.type != TOK_U32 ) usage( "Expected syscall id" );
     addsyscall( procname, siginfo, glob.tok.u32 );
     expecttok( f, TOK_U32 );
-  } else usage( "Invalid declaration" );
+  } else usage( "Invalid declaration %s", glob.tok.val );
       
   expecttok( f, TOK_SEMICOLON );  
 }
@@ -1802,7 +1802,9 @@ static void parsefile( FILE *f ) {
       /* include string */
       if( glob.tok.type != TOK_STRING ) usage( "expected include string" );
       processincludefile( glob.tok.val );      
+      glob.tok.type = TOK_STRING;
       expecttok( f, TOK_STRING );
+      expecttok( f, TOK_SEMICOLON );
     } else break;
   }
   
@@ -1979,7 +1981,9 @@ static void processincludefile( char *path ) {
   tok = nexttok( f );
   if( tok ) {
     while( 1 ) {
-      parsedeclaration( f );
+      if( acceptkeyword( f, "declare" ) ) {
+	parsedeclaration( f );
+      } else usage( "Only declarations allowed in include files" );
       if( glob.tok.type == TOK_PERIOD ) break;
     }
   }

@@ -4,6 +4,8 @@ Program TestProgram(123,1,TestProc);
 Begin
 
    { declarations }
+   Include "syscall.pas";
+
    
    Declare Procedure TestProc2(var a :  u32);
    Declare const var fred : u32; 

@@ -462,7 +462,7 @@ static struct param *getparam( struct proc *proc, char *name );
 static struct var *getlocal( struct proc *proc, char *name );
 static struct constvar *getconst( char *name );
 static struct constval *getconstval( char *name );
-
+static void processincludefile( char *path );
 
 struct includepath {
   struct includepath *next;
@@ -1682,6 +1682,63 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
   return; 
 }
 
+static void parsedeclaration( FILE *f ) {
+  char procname[FVM_MAX_NAME];
+  struct param params[FVM_MAX_PARAM];
+  int nparams;
+  uint32_t siginfo;
+  struct proc *proc;
+
+  if( acceptkeyword( f, "procedure" ) ) {
+    /* declare procedure name(...) */
+    parseproceduresig( f, procname, params, &nparams, &siginfo );
+    if( glob.pass == 1 ) {
+      proc = getproc( procname );
+      if( proc ) {
+	if( proc->siginfo != siginfo ) usage( "Declaration does not match definition for %s", procname );
+      } else {
+	proc = addproc( procname, params, nparams, siginfo );
+	proc->address = 0;
+      }
+    }
+  } else if( acceptkeyword( f, "const" ) ) {
+    /* declare const var name : type */
+    var_t type;
+    char name[FVM_MAX_NAME];
+
+    expectkeyword( f, "var" );
+    if( glob.tok.type != TOK_NAME ) usage( "Expected constant name" );
+    strncpy( name, glob.tok.val, FVM_MAX_NAME - 1 );
+    expecttok( f, TOK_NAME );
+	
+    expecttok( f, TOK_COLON );
+    if( acceptkeyword( f, "u32" ) ) {
+      type = VAR_TYPE_U32;
+    } else if( acceptkeyword( f, "string" ) ) {
+      type = VAR_TYPE_STRING;
+    } else usage( "Invalid constant type" );
+
+    if( glob.pass == 1 ) {
+      struct constvar *cv = getconst( name );
+      if( cv ) {
+	if( cv->type != type ) usage( "Constant type mismatch for %s", name );
+      } else {
+	cv = addconst( name, type, NULL, 0 );
+	cv->address = 0;
+      }
+    }
+  } else if( acceptkeyword( f, "syscall" ) ) {
+    /* declare syscall name(args) : id; */
+    parseproceduresig( f, procname, params, &nparams, &siginfo );
+    expecttok( f, TOK_COLON );
+    if( glob.tok.type != TOK_U32 ) usage( "Expected syscall id" );
+    addsyscall( procname, siginfo, glob.tok.u32 );
+    expecttok( f, TOK_U32 );
+  } else usage( "Invalid declaration" );
+      
+  expecttok( f, TOK_SEMICOLON );  
+}
+
 static void parsefile( FILE *f ) {
   struct token *tok;
 
@@ -1690,7 +1747,7 @@ static void parsefile( FILE *f ) {
     printf( ";; Empty file\n" );
     return;
   }
-  
+
   expectkeyword( f, "program" );
   if( glob.tok.type != TOK_NAME ) usage( "Unexpected symbol %s - expected program name", gettokname( glob.tok.type ) );
   strncpy( glob.progname, glob.tok.val, sizeof(glob.progname) - 1 );  
@@ -1740,61 +1797,12 @@ static void parsefile( FILE *f ) {
       }
       expecttok( f, TOK_SEMICOLON );
     } else if( acceptkeyword( f, "declare" ) ) {
-      /* declare procedure name(...) */
-      char procname[FVM_MAX_NAME];
-      struct param params[FVM_MAX_PARAM];
-      int nparams;
-      uint32_t siginfo;
-      struct proc *proc;
-
-      if( acceptkeyword( f, "procedure" ) ) {
-	/* declare procedure name(...) */
-	parseproceduresig( f, procname, params, &nparams, &siginfo );
-	if( glob.pass == 1 ) {
-	  proc = getproc( procname );
-	  if( proc ) {
-	    if( proc->siginfo != siginfo ) usage( "Declaration does not match definition for %s", procname );
-	  } else {
-	    proc = addproc( procname, params, nparams, siginfo );
-	    proc->address = 0;
-	  }
-	}
-      } else if( acceptkeyword( f, "const" ) ) {
-	/* declare const var name : type */
-	var_t type;
-	char name[FVM_MAX_NAME];
-
-	expectkeyword( f, "var" );
-	if( glob.tok.type != TOK_NAME ) usage( "Expected constant name" );
-	strncpy( name, glob.tok.val, FVM_MAX_NAME - 1 );
-	expecttok( f, TOK_NAME );
-	
-	expecttok( f, TOK_COLON );
-	if( acceptkeyword( f, "u32" ) ) {
-	  type = VAR_TYPE_U32;
-	} else if( acceptkeyword( f, "string" ) ) {
-	  type = VAR_TYPE_STRING;
-	} else usage( "Invalid constant type" );
-
-	if( glob.pass == 1 ) {
-	  struct constvar *cv = getconst( name );
-	  if( cv ) {
-	    if( cv->type != type ) usage( "Constant type mismatch for %s", name );
-	  } else {
-	    cv = addconst( name, type, NULL, 0 );
-	    cv->address = 0;
-	  }
-	}
-      } else if( acceptkeyword( f, "syscall" ) ) {
-	/* declare syscall name(args) : id; */
-	parseproceduresig( f, procname, params, &nparams, &siginfo );
-	expecttok( f, TOK_COLON );
-	if( glob.tok.type != TOK_U32 ) usage( "Expected syscall id" );
-	addsyscall( procname, siginfo, glob.tok.u32 );
-	expecttok( f, TOK_U32 );
-      } else usage( "Invalid declaration" );
-      
-      expecttok( f, TOK_SEMICOLON );
+      parsedeclaration( f );
+    } else if( acceptkeyword( f, "include" ) ) {
+      /* include string */
+      if( glob.tok.type != TOK_STRING ) usage( "expected include string" );
+      processincludefile( glob.tok.val );      
+      expecttok( f, TOK_STRING );
     } else break;
   }
   
@@ -1944,6 +1952,40 @@ static void parsefile( FILE *f ) {
   expecttok( f, TOK_PERIOD );
 
   printf( ";; Done\n" );
+}
+
+static void processincludefile( char *path ) {
+  FILE *f;
+  struct includepath *p;
+  char ppath[256];
+  struct token *tok;
+  
+  f = fopen( path, "r" );
+  if( !f ) {
+    p = glob.includepaths;
+    while( p ) {
+#ifdef WIN32
+      sprintf( ppath, "%s\\%s", p->path, path );
+#else
+      sprintf( ppath, "%s/%s", p->path, path );
+#endif
+      f = fopen( ppath, "r" );
+      if( f ) break;
+      p = p->next;
+    }
+    if( !f ) usage( "No file \"%s\"", path );
+  }
+
+  tok = nexttok( f );
+  if( tok ) {
+    while( 1 ) {
+      parsedeclaration( f );
+      if( glob.tok.type == TOK_PERIOD ) break;
+    }
+  }
+  
+
+  fclose( f );
 }
 
 static void processfile( char *path ) {

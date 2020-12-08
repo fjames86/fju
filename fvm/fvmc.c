@@ -531,6 +531,15 @@ struct constval {
   int len;
 };
 
+struct syscall {
+  struct syscall *next;
+  
+  char name[FVM_MAX_NAME];
+  uint16_t id;
+  uint32_t siginfo;
+};
+
+
 /*
  * stack: 
  *  - parameter 7    ;; parameters pushed from right to left 
@@ -559,6 +568,7 @@ static struct {
   struct export *exports;
   struct constvar *consts;
   struct constval *constvals;
+  struct syscall *syscalls;
   
   struct token tok;
   uint32_t pc;
@@ -909,6 +919,35 @@ static void expectkeyword( FILE *f, char *name ) {
   if( !acceptkeyword( f, name ) ) usage( "Unexpected symbol %s - expected %s", glob.tok.val ? glob.tok.val : gettokname( glob.tok.type ), name );
 }
 
+static struct syscall *getsyscall( char *name ) {
+  struct syscall *sc;
+  sc = glob.syscalls;
+  while( sc ) {
+    if( strcasecmp( sc->name, name ) == 0 ) return sc;
+    sc = sc->next;
+  }
+  return NULL;
+}
+
+static struct syscall *addsyscall( char *name, uint32_t siginfo, uint32_t id ) {
+  struct syscall *sc;
+  sc = getsyscall( name );
+  if( sc ) {
+    if( sc->siginfo != siginfo ) usage( "Syscall %s already define with different signature" );
+    return sc;
+  }
+
+  sc = malloc( sizeof(*sc) );
+  strcpy( sc->name, name );
+  sc->id = id;
+  sc->siginfo = siginfo;
+  sc->next = glob.syscalls;
+  glob.syscalls = sc;
+  return sc;  
+}
+
+
+
 /* ---------------- */
 
 struct opinfo {  
@@ -1114,27 +1153,6 @@ static void emitdata( void *data, int len ) {
 	     p))
 #endif
 
-struct syscall {
-  char *name;
-  uint16_t id;
-  uint32_t siginfo;
-};
-
-static struct syscall syscalls[] =
-  {
-   { "Log", 1, 0x02000010 }, /* Log(flags : u32, str : string); */ 
-   { NULL, 0, 0 }
-  };
-
-static struct syscall *getsyscall( char *name ) {
-  int i;
-  for( i = 0; syscalls[i].name; i++ ) {
-    if( strcasecmp( syscalls[i].name, name ) == 0 ) return &syscalls[i];
-  }
-  return NULL;
-}
-  
-  
 
 /* --------------- */
 
@@ -1767,6 +1785,13 @@ static void parsefile( FILE *f ) {
 	    cv->address = 0;
 	  }
 	}
+      } else if( acceptkeyword( f, "syscall" ) ) {
+	/* declare syscall name(args) : id; */
+	parseproceduresig( f, procname, params, &nparams, &siginfo );
+	expecttok( f, TOK_COLON );
+	if( glob.tok.type != TOK_U32 ) usage( "Expected syscall id" );
+	addsyscall( procname, siginfo, glob.tok.u32 );
+	expecttok( f, TOK_U32 );
       } else usage( "Invalid declaration" );
       
       expecttok( f, TOK_SEMICOLON );

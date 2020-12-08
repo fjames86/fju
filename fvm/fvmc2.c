@@ -972,8 +972,8 @@ static struct opinfo opcodeinfo[] =
    { OP_LEA, "LEA", 2, 4 },
    { OP_ADDSP, "ADDSP", 2, 0 }, /* opcode adjusts sp directly */
    { OP_SUBSP, "SUBSP", 2, 0 }, /* ditto */
-   { OP_CALL, "CALL", 2, 4 }, /* ( -- retaddr ) */
-   { OP_RET, "RET", 0, -4 }, /* ( retaddr -- ) */
+   { OP_CALL, "CALL", 2, 0 }, /* ( -- retaddr ) */
+   { OP_RET, "RET", 0, 0 }, /* ( retaddr -- ) */
    { OP_LEASP, "LEASP", 2, 4 }, /* ( -- address ) */
    { OP_LDSP, "LDSP", 2, 4 }, /* ( -- value ) */
    { OP_STSP, "STSP", 2, -4 }, /* (value -- )*/
@@ -1755,7 +1755,7 @@ static void parsefile( FILE *f ) {
       uint32_t arraylen;
       
       /* reset stackoffset at start of new procedure */
-      if( glob.stackoffset != 0 ) printf( "Invalid stack offset?" );
+      if( glob.stackoffset != 0 ) printf( "Invalid stack offset %04x?\n", glob.stackoffset );
       glob.stackoffset = 0;
 
       parseproceduresig( f, name, params, &nparams, &siginfo );

@@ -1,214 +1,580 @@
 
-/*
- * TODO:
- * 
- */
-#ifdef WIN32
-#define _CRT_SECURE_NO_WARNINGS
-#include <WinSock2.h>
-#include <Windows.h>
-#define strcasecmp _stricmp
-#else
-#include <arpa/inet.h>
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <stdint.h>
 #include <time.h>
+#include <stdint.h>
+#include <inttypes.h>
 
-#include <fju/sec.h>
-
-#include "fvm-private.h"
-
-int fvmc_compile( char *sourcefile, char *destfile );
-void fvmc_pas_verbosemode( int lvl );
-
-static FILE *openoutfile;
+#include "fvmc.h"
 
 static void usage( char *fmt, ... ) {
   va_list args;
   
-  printf( "fvmc OPTIONS file...\n"
-	  "\n"
-	  "\n OPTIONS:\n"
-	  "   -o outfile\n"
-	  "   -v verbmose mode\n"
-	  "   -d Disassemble\n"
-	  "   -I include path\n"
-	  "   -F flags\n" 
-	  "\n" );
   if( fmt ) {
     va_start( args, fmt );
-    printf( "Assembler Error: " );
+    printf( "Error: " );
     vprintf( fmt, args );
     va_end( args );
     printf( "\n" );
+  } else {
+    printf( "Usage: fvmc [-o output] [-I includepath] filename\n");
   }
-
-  if( openoutfile ) fclose( openoutfile );
-  exit( 1 );
+   
+  exit( 1 );  
 }
 
-/*
- * TODO:
- * - On first pass, save data entries so we can emit them immediately before the 2nd pass (this avoids the weird middle pass).
- * - General tidy up required. 
- * - parse_directive is far too large.
- * - do we need the export symbol size/type stuff anymore?
- *
- * - First pass: collect labels, data entries (i.e. parse directives, check opcodes are valid but don't emit).
- * - Then Emit header. 
- * - Then Emit data segment (we saved the entries in the first pass).
- * - Second pass: emit text segment (opcodes, text data). Still need to parse directives for e.g. .includes?
- */
+static void compile_file( char *path, char *outpath );
+static void addincludepath( char *path );
 
-/* -------------------- structs ----------------------- */
-
-struct label {
-  struct label *next;
+int main( int argc, char **argv ) {
+  int i;
+  char *outpath = NULL;
   
-  char name[64];
-  uint32_t addr;
-  uint32_t symflags;
-  uint32_t flags;
-#define LABEL_EXPORT 0x01
-  uint32_t exportidx;
+  i = 1;
+  while( i < argc ) {
+    if( strcmp( argv[i], "-o" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      outpath = argv[i];
+    } else if( strcmp( argv[i], "-h" ) == 0 ) {
+      usage( NULL );
+    } else if( strcmp( argv[i], "-I" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      addincludepath( argv[i] );
+    } else {
+      compile_file( argv[i], outpath ? outpath : "out.fvm" );
+      break;
+    }
+    i++;
+  }
+
+  return 0;
+}
+
+/* ----------- lexing ------------------- */
+
+  
+typedef enum {
+    TOK_U32,       /* [-][0-9] | 0x[0-9A-Fa-f] */
+    TOK_STRING,    /* "..." */
+    TOK_NAME,      /* [a-zA-Z0-9_] */
+    TOK_SEMICOLON, /* ; */
+    TOK_COLON,     /* : */
+    TOK_COMMA,     /* , */
+    TOK_PERIOD,    /* . */
+    TOK_OPAREN,    /* ( */
+    TOK_CPAREN,    /* ) */
+    TOK_OARRAY,    /* [ */
+    TOK_CARRAY,    /* ] */
+    TOK_PLUS,      /* + */
+    TOK_MINUS,     /* - */
+    TOK_MUL,       /* * */
+    TOK_DIV,       /* / */
+    TOK_MOD,       /* % */
+    TOK_EQ,        /* = */
+    TOK_NEQ,       /* <> */
+    TOK_GT,        /* > */
+    TOK_GTE,       /* >= */
+    TOK_LT,        /* < */
+    TOK_LTE,       /* <= */
+    TOK_AND,       /* & */
+    TOK_OR,        /* | */
+    TOK_XOR,       /* ^ */
+    TOK_NOT,       /* ! */
+    TOK_TILDE,     /* ~ */
+    TOK_ANDAND,    /* && */
+    TOK_OROR,      /* || */
+    TOK_SHR,       /* >> */
+    TOK_SHL,       /* << */
+} tok_t;
+
+static struct {
+  tok_t type;
+  char *name;
+} toknames[] = { { TOK_U32, "u32" }, { TOK_STRING, "String" }, { TOK_NAME, "Name" }, {TOK_SEMICOLON, "Semicolon" },
+		 { TOK_COLON, "colon" }, { TOK_COMMA, "comma" }, { TOK_PERIOD, "period" }, { TOK_OPAREN, "oparen" }, { TOK_CPAREN, "cparen" },
+		 { TOK_OARRAY, "oarray" }, { TOK_CARRAY, "carray" }, { TOK_PLUS, "plus" }, { TOK_MINUS, "minus" }, { TOK_MUL, "mul" },
+		 { TOK_DIV, "div" }, { TOK_MOD, "mod" }, { TOK_EQ, "eq" }, { TOK_NEQ, "neq" }, { TOK_GT, "gt" }, { TOK_GTE, "gte" },
+		 { TOK_LT, "lt" }, { TOK_LTE, "lte" }, { TOK_AND, "and" }, { TOK_OR, "or" }, { TOK_NOT, "not" }, { TOK_TILDE, "tilde" }, { TOK_ANDAND, "andand" },
+		 { TOK_OROR, "oror" }, { 0, NULL } };
+static char *gettokname( tok_t type ) {
+  int i;
+  for( i = 0; toknames[i].name; i++ ) {
+    if( toknames[i].type == type ) return toknames[i].name;
+  }
+  return "Unknown";
+}
+
+static void skipwhitespace( FILE *f ) {
+  static int whitespacechars[] = { ' ', '\n', '\r', '\t', '\0' };
+  int c;
+  int *w, found;
+  
+  do {
+    c = fgetc( f );
+    if( c == EOF ) return;
+
+    if( c == '{' ) {
+      /* skip comment */
+      do {
+	c = fgetc( f );
+	if( c == EOF ) break;
+	if( c == '}' ) break;
+      } while( 1 );
+      found = 1;
+    } else if( c == '#' ) {
+      /* skip single line comment */
+      do {
+	c = fgetc( f );
+	if( c == '\n' ) break;
+      } while( 1 );	  
+    } else {    
+      found = 0;
+      for( w = whitespacechars; *w; w++ ) {
+	if( c == *w ) {
+	  found = 1;
+	  break;
+	}
+      }
+      if( !found ) ungetc( c, f );
+    }
+    
+  } while( found );
+}
+
+struct token {
+  char *val;
+  int len;
+  tok_t type;
+  uint32_t u32;
 };
 
-struct searchpath {
-  struct searchpath *next;
+static int getnexttok( FILE *f, struct token *tok ) {
+  int c, c2, i;
+  char *p;
+  
+  skipwhitespace( f );
+  
+  c = fgetc( f );
+  if( c == EOF ) return -1;
+
+  if( c == '"' ) {
+    /* read until matching " */
+    tok->val = malloc( 32 );
+    tok->len = 32;
+    
+    p = tok->val;
+    i = 0;
+    while( 1 ) {
+      if( i >= tok->len - 1) {
+	tok->len = (3 * tok->len) / 2;
+	tok->val = realloc( tok->val, tok->len );
+      }
+      
+      c = fgetc( f );
+      if( c == '"' ) break;
+      if( c == '\\' ) {
+	/* escape character */
+	c = fgetc( f );
+	if( c == '\\' ) {
+	  *p = '\\';
+	  p++;
+	  i++;
+	} else if( c == '"' ) {
+	  *p = '"';
+	  p++;
+	  i++;
+	} else if( c == 'a' ) {
+	  *p = '\a';
+	  p++;
+	  i++;
+	} else if( c == 'b' ) {
+	  *p = '\b';
+	  p++;
+	  i++;
+	} else if( c == 'f' ) {
+	  *p = '\f';
+	  p++;
+	  i++;
+	} else if( c == 'n' ) {
+	  *p = '\n';
+	  p++;
+	  i++;
+	} else if( c == 'r' ) {
+	  *p = '\r';
+	  p++;
+	  i++;
+	} else if( c == 't' ) {
+	  *p = '\t';
+	  p++;
+	  i++;
+	} else if( c == 'v' ) {
+	  *p = '\v';
+	  p++;
+	  i++;
+	} else if( c == 'o' ) {
+	  /* octal char */
+	  uint8_t x = 0;
+	  c = fgetc( f );
+	  if( c < '0' || c > '7' ) usage( "Bad octal char %c", c );
+	  x = c - '0';
+	  
+	  c = fgetc( f );
+	  if( c < '0' || c > '7' ) usage( "Bad octal char %c", c );	  
+	  x = (x << 3) | (c - '0');
+
+	  c = fgetc( f );
+	  if( c < '0' || c > '7' ) usage( "Bad octal char %c", c );	  	
+	  x = (x << 3) | (c - '0');
+	  *p = x;
+	  p++;
+	  i++;
+	} else if( c == 'x' ) {
+	  /* parse hex char */
+	  uint8_t x;
+	  c = fgetc( f );
+	  if( c >= '0' && c <= '9' ) x = c - '0';
+	  else if( c >= 'a' && c <= 'f' ) x = 10 + c - 'a';
+	  else if( c >= 'A' && c <= 'F' ) x = 10 - c - 'A';
+	  else usage( "Bad hex char %c", c );
+	  
+	  c = fgetc( f );
+	  if( c >= '0' && c <= '9' ) x = (x << 4) | (c - '0');
+	  else if( c >= 'a' && c <= 'f' ) x = (x << 4) | (10 + c - 'a');
+	  else if( c >= 'A' && c <= 'F' ) x = (x << 4) | (10 + c - 'A');
+	  else usage( "Bad hex char %c", c );
+	  *p = x;
+	  p++;
+	  i++;
+	} else {
+	  usage( "Bad escape character %c", c );
+	}
+      } else {
+	*p = c;
+	p++;
+	i++;
+      }
+      
+    }
+
+    *p = '\0';
+    tok->type = TOK_STRING;
+  } else if( c == '&' ) {
+    /* check for && */
+    c2 = fgetc( f );
+    if( c2 == '&' ) {
+      tok->type = TOK_ANDAND;
+    } else {
+      ungetc( c2, f );
+      tok->type = TOK_AND;
+    }
+  } else if( c == '|' ) {
+    /* check for || */
+    c2 = fgetc( f );
+    if( c2 == '|' ) {
+      tok->type = TOK_OROR;
+    } else {
+      tok->type = TOK_OR;
+      ungetc( c2, f );
+    }
+  } else if( c == '=' ) {
+    tok->type = TOK_EQ;    
+  } else if( c == '<' ) {
+    /* check for <= or <> */
+    c2 = fgetc( f );
+    if( c2 == '=' ) {
+      tok->type = TOK_LTE;
+    } else if( c2 == '>' ) {
+      tok->type = TOK_NEQ;
+    } else if( c2 == '<' ) {
+      tok->type = TOK_SHL;
+    } else {
+      tok->type = TOK_LT;
+      ungetc( c2, f );
+    }
+  } else if( c == '>' ) {
+    /* check for >= */
+    c2 = fgetc( f );
+    if( c2 == '=' ) {
+      tok->type = TOK_GTE;
+    } else if( c2 == '>' ) {
+      tok->type = TOK_SHR;
+    } else {
+      tok->type = TOK_GT;
+      ungetc( c2, f );
+    }
+  } else if( c == '+' ) {
+    tok->type = TOK_PLUS;
+  } else if( c == '-' ) {
+    c2 = fgetc( f );
+    if( c2 >= '0' && c2 <= '9' ) {
+      /* parse negative integer */
+      char nstr[32];
+      char *p;
+      p = nstr;
+      *p = '-';
+      p++;
+      *p = c2;
+      p++;
+
+      do {
+	c2 = fgetc( f );
+	if( c2 >= '0' && c2 <= '9' ) {
+	  *p = c2;
+	  p++;
+	} else {
+	  *p = '\0';
+	  ungetc( c2, f );
+	  break;
+	}
+      } while( 1 );
+
+      tok->u32 = strtol( nstr, NULL, 0 );
+      tok->type = TOK_U32;
+    } else {
+      tok->type = TOK_MINUS;
+      ungetc( c2, f );
+    }
+  } else if( c == '*' ) {
+    tok->type = TOK_MUL;
+  } else if( c == '/' ) {
+    tok->type = TOK_DIV;
+  } else if( c == '%' ) {
+    tok->type = TOK_MUL;
+  } else if( c == '~' ) {
+    tok->type = TOK_TILDE;
+  } else if( c == '.' ) {
+    tok->type = TOK_PERIOD;
+  } else if( c == ';' ) {
+    tok->type = TOK_SEMICOLON;
+  } else if( c == ':' ) {
+    tok->type = TOK_COLON;
+  } else if( c == ',' ) {
+    tok->type = TOK_COMMA;
+  } else if( c == '(' ) {
+    tok->type = TOK_OPAREN;
+  } else if( c == ')' ) {
+    tok->type = TOK_CPAREN;
+  } else if( c == '[' ) {
+    tok->type = TOK_OARRAY;
+  } else if( c == ']' ) {
+    tok->type = TOK_CARRAY;
+  } else if( c == '!' ) {
+    tok->type = TOK_NOT;
+  } else if( c >= '0' && c <= '9' ) {
+    /* parse as integer */
+    c2 = fgetc( f );
+    if( c == '0' && c2 == 'x' ) {
+      /* parse as hex */
+      char nstr[32];
+      char *p;
+      p = nstr;
+      while( 1 ) {
+	c = fgetc( f );
+	if( (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') ) {
+	  *p = c;
+	  p++;
+	} else {
+	  ungetc( c, f );
+	  break;
+	}
+      }
+      *p = '\0';
+      tok->u32 = strtoul( nstr, NULL, 16 );
+      tok->type = TOK_U32;
+    } else {
+      /* parse as decimal */
+      char nstr[32];
+      char *p;
+      p = nstr;
+      *p = c;
+      p++;
+      if( c2 >= '0' && c2 <= '9' ) {
+	*p = c2;
+	p++;
+	while( 1 ) {
+	  c = fgetc( f );
+	  if( (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') ) {
+	    *p = c;
+	    p++;
+	  } else {
+	    ungetc( c, f );
+	    break;
+	  }
+	}
+	*p = '\0';
+	tok->u32 = strtol( nstr, NULL, 10 );
+	tok->type = TOK_U32;
+      } else {
+	ungetc( c2, f );
+	*p = '\0';
+	tok->type = TOK_U32;
+	tok->u32 = strtol( nstr, NULL, 0 );
+      }
+    }
+  } else {
+    /* read until terminal */
+    tok->val = malloc( 32 );
+    tok->len = 32;
+    p = tok->val;
+    *p = c;
+    p++;
+    i = 1;
+    while( 1 ) {
+      if( i >= tok->len - 1 ) {
+	tok->len = (3 * tok->len) / 2;
+	tok->val = realloc( tok->val, tok->len );
+      }
+      
+      c = fgetc( f );
+      if( (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_') || (c == ':') ) {
+	/* continue reading */
+	*p = c;
+	p++;
+	i++;
+
+	/* allow final character to be a colon to cope with label identifiers */
+	if( c == ':' ) break;
+      } else {
+	ungetc( c, f );
+	break;
+      }
+    }
+    *p = '\0';
+    tok->type = TOK_NAME;
+  }
+
+  return 0;
+}
+
+/* ---------- file parsing -------------------------- */
+
+static void emitdata( void *data, int len );
+static struct var *getglobal( char *name );
+static struct label *getlabel( char *prefix );
+static struct proc *getproc( char *name );
+static struct param *getparam( struct proc *proc, char *name );
+static struct var *getlocal( struct proc *proc, char *name );
+static struct constvar *getconst( char *name );
+static struct constval *getconstval( char *name );
+
+
+struct includepath {
+  struct includepath *next;
   char *path;
 };
 
-struct ifclause {
-  struct ifclause *next;
+/* parsed information */
 
-  int skip;
-  char name[64];
+/* global or local variable */
+struct var {
+  struct var *next;
+  char name[FVM_MAXNAME];
+  
+  var_t type;
+  uint32_t arraylen;
+  uint32_t address; /* address if global, stack offset if local */
+  uint32_t offset;
+  uint32_t size; /* size of the variable. u32 is 4 */
 };
 
-struct macroline {
-  struct macroline *next;
-  char line[1024];
+/* procedure parameter */
+struct param {
+  char name[FVM_MAXNAME];
+  var_t type;
+  int isvar;
+  uint32_t size;    /* size is 4 for everything */
+  uint32_t offset;  /* stack offset */
 };
 
-struct defmacro {
-  struct defmacro *next;
-
-  char name[64];  
-  struct macroline *lines;
+struct proc {
+  struct proc *next;
+  char name[FVM_MAXNAME];
+  uint32_t address;
+  struct param params[FVM_MAXPARAM];
+  int nparams;
+  struct var *locals;
+  uint32_t localsize; /* total size of all locals */
+  uint32_t siginfo; /* signature */
 };
 
-struct constdef {
-  struct constdef *next;
-  char name[64];
-  uint32_t val;
+struct label {
+  struct label *next;
+  char name[FVM_MAXNAME];
+  uint32_t address;
 };
 
-/* store things here */
+struct export {
+  struct export *next;
+  char name[FVM_MAXNAME];
+};
+
+struct constvar {
+  struct constvar *next;
+  char name[FVM_MAXNAME];
+  var_t type;
+  uint32_t address;
+  char *val;
+  int len;
+};
+
+struct constval {
+  struct constval *next;
+  char name[FVM_MAXNAME];
+  var_t type;
+  char *val;
+  int len;
+};
+
+/*
+ * stack: 
+ *  - parameter 7    ;; parameters pushed from right to left 
+ *  - parameter 6    ;;
+ *  - ...
+ *  - parameter 0    ;; offset 4
+ *  - return address       
+ *  - local var 1 
+ *  - local var 2 
+ *  - ... 
+ *  - local var n 
+ */
+
+
 static struct {
-  char modulename[64];
-  uint32_t progid;
-  uint32_t versid;
-  int verbosemode;
+  int pass;
+  struct includepath *includepaths;
+
+  char progname[FVM_MAXNAME];
+  uint32_t progid, versid;
+
+  uint32_t labelidx;
   struct label *labels;
-  int datasize;
-  struct searchpath *searchpaths;
-  int exportidx;
-  char *currentfile;
-  int currentfileidx;
-  int currentline;
-  struct ifclause *ifclause;
-  struct defmacro *macros;
-  struct constdef *constdefs;
-  uint32_t headerflags;
+  struct var *globals;
+  struct proc *procs;
+  struct export *exports;
+  struct constvar *consts;
+  struct constval *constvals;
+  
+  struct token tok;
+  uint32_t pc;
+  uint32_t datasize;
+  uint32_t textsize;
+
+  FILE *outfile;
+  struct proc *currentproc;
+  uint32_t stackoffset;  /* offset relative to last local var. */
 } glob;
 
-
-static void fvmc_printf( int lvl, char *fmt, ... ) {
-  va_list args;
-
-  if( glob.verbosemode < lvl ) return;
-  
-  va_start( args, fmt );
-  vprintf( fmt, args );
-  va_end( args );
+static void getlabelname( char *prefix, char *lname ) {
+  sprintf( lname, "%s-%u", prefix ? prefix : "L", glob.labelidx );
+  glob.labelidx++;
 }
 
-static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass );
-static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment );
-static void emit_header( FILE *f, uint32_t addr );
-static void disassemble( char *filename );
-static int emit_opcode( char *buf, uint32_t *addr, int passid, FILE *outfile );
-
-static char *skipwhitespace( char *p ) {
-  while( *p == ' ' || *p == '\t' ) p++;
-  return p;
-}
-
-static char *copytoken( char *p, char *dest ) {
-  char *q;
-  int i;
-  
-  p = skipwhitespace( p );
-  
-  q = dest;
-  i = 0;
-  while( (i < FVM_MAX_NAME) && (*p != '\0') && (*p != ' ') && (*p != '\t') ) {
-    *q = *p;
-    p++;
-    q++;
-    i++;
-  }
-  *q = '\0';
-  if( i == FVM_MAX_NAME ) usage( "Name too long" );
-  
-  return p;
-}
-
-static struct label *addlabel( char *name, uint32_t addr ) {
-  char lname[256];
-  struct label *l, *prev = NULL;
-
-  if( name[strlen( name ) - 1] == '$' ) {
-    sprintf( lname, "%s%u", name, glob.currentfileidx );
-  } else {
-    sprintf( lname, "%s", name );
-  }
-	     
-  l = glob.labels;
-  while( l ) {
-    if( strcasecmp( l->name, lname ) == 0 ) {
-      usage( ";; duplicate label %s\n", lname );
-      return NULL;
-    }
-    prev = l;
-    l = l->next;
-  }
-
-  fvmc_printf( 2, ";; adding label %s addr %x\n", lname, addr );
-  l = malloc( sizeof(*l) );
-  memset( l, 0, sizeof(*l) );
-  strcpy( l->name, lname );
-  l->addr = addr;
-  l->next = NULL;
-  if( prev ) prev->next = l;
-  else glob.labels = l;    
-  return l;
-}
-static struct label *getlabel( char *name ) {
-  char lname[256];
+static struct label *getlabel( char *lname ) {
   struct label *l;
-  
-  if( name[strlen( name ) - 1] == '$' ) {
-    sprintf( lname, "%s%u", name, glob.currentfileidx );
-  } else {
-    sprintf( lname, "%s", name );
-  }
-
   l = glob.labels;
   while( l ) {
     if( strcasecmp( l->name, lname ) == 0 ) return l;
@@ -216,1121 +582,1523 @@ static struct label *getlabel( char *name ) {
   }
   return NULL;
 }
-static uint32_t getlabeladdr( char *name ) {
+static struct label *addlabel( char *lname ) {
   struct label *l;
-  l = getlabel( name );
-  return l ? l->addr : 0;
-}
-static int exportlabel( char *name, uint32_t symflags ) {
-  struct label *l;
-  l = getlabel( name );
-  if( l ) {
-    if( !(l->flags & LABEL_EXPORT) ) {
-      l->exportidx = glob.exportidx;
-      glob.exportidx++;
-    }
-    
-    l->flags |= LABEL_EXPORT;
-    l->symflags |= symflags;
-    return 0;
+
+  if( glob.pass == 2 ) {
+    l = getlabel( lname );
+    printf( ";; PC=%04x SP=%04u %s:\n", l ? l->address : 0, glob.stackoffset, lname );
+    return l;
   }
-  return -1;
+
+  l = getlabel( lname );
+  if( l ) usage( "Label name %s already exists", lname );
+
+  l = malloc( sizeof(*l) );
+  strcpy( l->name, lname );
+  l->address = glob.pc;
+  l->next = glob.labels;
+  glob.labels = l;
+  return l;
 }
 
-
-static struct constdef *getconst( char *name ) {
-  struct constdef *c;
-  c = glob.constdefs;
-  while( c ) {
-    if( strcasecmp( c->name, name ) == 0 ) return c;
-    c = c->next;
+static struct var *getglobal( char *name ) {
+  struct var *v;
+  v = glob.globals;
+  while( v ) {
+    if( strcasecmp( v->name, name ) == 0 ) return v;
+    v = v->next;
   }
   return NULL;
 }
-
-static struct constdef *addconst( char *name, uint32_t val ) {
-  struct constdef *c;
-  c = getconst( name );
-  if( c ) {
-    if( c->val == val ) {
-      fvmc_printf( 2, ";; Redefining constant %s with same value %u\n", name, val );
-      return c;
-    }
-    usage( "Attempt to redefine constant %s with new value %u\n", name, val );
-  }
-
-  c = malloc( sizeof(*c) );
-  memset( c, 0, sizeof(*c) );
-  strcpy( c->name, name );
-  c->val = val;
-  c->next = glob.constdefs;
-  glob.constdefs = c;
-  return c;
-}
-
-static void undefconst( char *name ) {
-  struct constdef *c, *prev;
-  prev = NULL;
-  c = glob.constdefs;
-  while( c ) {
-    if( strcasecmp( c->name, name ) == 0 ) {
-      if( prev ) prev->next = c->next;
-      else glob.constdefs = c->next;
-      free( c );
-      return;
-    }
-    prev = c;
-    c = c->next;
-  }
-
-}
-
-static void resetconsts( void ) {
-  struct constdef *c, *next;
-  c = glob.constdefs;
-  while( c ) {
-    next = c->next;
-    free( c );
-    c = next;
-  }
-  glob.constdefs = NULL;
-}
-
-
-
-static FILE *opensourcefile( char *name, int firstpass ) {
-  static char path[256];
+static struct var *addglobal( char *name, var_t type, uint32_t arraylen ) {
+  struct var *v;
   
-  FILE *f;
-  struct searchpath *sp;
+  if( glob.pass == 2 ) return getglobal( name );
+
+  v = getglobal( name );
+  if( v ) usage( "Global %s already exists", name );
+    
+  v = malloc( sizeof(*v) );
+  strcpy( v->name, name );
+  v->type = type;
+  v->arraylen = arraylen;
+  v->address = glob.globals ? glob.globals->address + glob.globals->size : 0;
+  v->size = 4;
+  if( arraylen ) {
+    if( type == VAR_TYPE_STRING || type == VAR_TYPE_OPAQUE ) {
+      v->size = arraylen;
+      if( arraylen % 4 ) v->size += 4 - (arraylen % 4);
+    } else {
+      v->size *= arraylen;
+    }
+  }
+  v->next = glob.globals;
+  glob.globals = v;
+
+  printf( ";; Adding global %s type=%u arraylen=%u address=%u\n", name, type, arraylen, v->address );
+  
+  return v;
+}
+static struct proc *getproc( char *name ) {
+  struct proc *p;
+  p = glob.procs;
+  while( p ) {
+    if( strcasecmp( p->name, name ) == 0 ) return p;
+    p = p->next;
+  }
+  return NULL;
+}
+static struct proc *addproc( char *name, struct param *params, int nparams, uint32_t siginfo ) {
+  struct proc *p;
+  
+  if( glob.pass == 2 ) usage( "assert" );
+
+  printf( ";; Add procedure %s\n", name );
+  
+  p = getproc( name );
+  if( p ) usage( "Proc %s already exists", name );
+
+  p = malloc( sizeof(*p) );
+  memset( p, 0, sizeof(*p) );
+  strcpy( p->name, name );
+  p->address = glob.pc;
+  memcpy( p->params, params, sizeof(*params) * nparams );
+  p->nparams = nparams;
+  p->siginfo = siginfo;
+  
+  p->next = glob.procs;
+  glob.procs = p;
+  return p;
+}
+static struct param *getparam( struct proc *proc, char *name ) {
   int i;
-
-  for( i = strlen( name ) - 1; i >= 0; i-- ) {
-    if( (name[i] == '.') && (strcasecmp( &name[i], ".pas" ) == 0) ) {
-      /* compile pascal file first */
-      sprintf( path, "%.*s.asm", i, name );
-      if( firstpass ) {
-	fvmc_pas_verbosemode( glob.verbosemode );	
-	fvmc_compile( name, path );
-      }
-      
-      f = fopen( path, "r" );
-      if( !f ) usage( "Failed to compile file %s?", name );
-      glob.currentfileidx++;      
-      return f;
-    }
+  for( i = 0; i < proc->nparams; i++ ) {
+    if( strcasecmp( proc->params[i].name, name ) == 0 ) return &proc->params[i];
   }
-
-   
-  f = fopen( name, "r" );
-  if( f ) {
-    glob.currentfileidx++;
-    return f;
-  }
-  
-  sp = glob.searchpaths;
-  while( sp ) {
-    sprintf( path, "%s/%s", sp->path, name );
-    fvmc_printf( 2, "Trying to open \"%s\"\n", path );
-    f = fopen( path, "r" );
-    if( f ) {
-      glob.currentfile = path;
-      glob.currentfileidx++;
-      return f;
-    }
-    sp = sp->next;
-  }
-  usage( "Failed to open file \"%s\"", name );
   return NULL;
 }
 
-
-static void parse_file( FILE *f, uint32_t *addr, int passid, FILE *outfile ) {
-  char buf[1024];
-  char *p;
-
-  glob.currentline = 0;
-  memset( buf, 0, sizeof(buf) );
-  while( fgets( buf, sizeof(buf) - 1, f ) ) {
-    glob.currentline++;
-    
-    p = buf;
-    while( *p != '\0' ) {
-      if( *p == '\n' ) *p = '\0';
-      p++;
-    }
-    
-    p = buf;
-    p = skipwhitespace( p );
-    if( *p == '\0' ) continue;
-
-    if( parse_directive( buf, addr, passid == 0 ? NULL : outfile, passid == 1 ? 1 : 0 ) == 0 ) continue;
-
-    if( glob.ifclause && glob.ifclause->skip ) continue;
-
-    emit_opcode( buf, addr, passid, outfile );
+static struct var *getlocal( struct proc *proc, char *name ) {
+  struct var *v;
+  v = proc->locals;
+  while( v ) {
+    if( strcasecmp( v->name, name ) == 0 ) return v;
+    v = v->next;
   }
-
-  if( glob.ifclause ) usage( "Unexpected end of file waiting for terminating .ENDIF clause" );
-  
+  return NULL;
 }
 
-static int emit_opcode( char *buf, uint32_t *addr, int passid, FILE *outfile ) {
-  uint32_t opcode;
+static struct var *addlocal( struct proc *proc, char *name, var_t type, uint32_t arraylen ) {
+  struct var *v, **vp, *v2;
+
+  if( glob.pass == 2 ) return getlocal( proc, name );
   
-  if( passid != 1 ) {
-    fvmc_printf( 2, ";; attempting to encode line \"%s\"\n", buf );
-    if( encode_inst( buf, &opcode, FVM_ADDR_TEXT + *addr, passid == 0 ? 1 : 0 ) != -1 ) {
-      if( passid == 2 ) {
-	fvmc_printf( 2, ";; encoding \"%s\" = %08x\n", buf, opcode );
-	opcode = htonl( opcode );
-	fwrite( &opcode, 1, 4, outfile );
-      } else {
-	fvmc_printf( 1, ";; emitting (%u) %04x %s\n", *addr, *addr, buf );	
-	*addr += 4;
-      }
-    } else {
-      fvmc_printf( 2, ";; Failed to encode line\n" );
-    }
-      
-  }
-
-  return 0;
-}
-
-int main( int argc, char **argv ) {
-  FILE *f, *outfile;
-  char outfilename[256];
-  int i, j, starti;
-  uint32_t addr;
-  int disass = 0;
-  struct searchpath *sp;
+  v = getglobal( name );
+  if( v ) printf( ";; Warning: local variable %s shadows existing global\n", name );
   
-  strcpy( outfilename, "" );
+  v = getlocal( proc, name );
+  if( v ) usage( "Local variable with name %s already exists", name );
+
+  printf( ";; add local %s type=%u arraylen=%u\n", name, type, arraylen );
   
-  i = 1;
-  while( i < argc ) {
-    if( strcmp( argv[i], "-o" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      strncpy( outfilename, argv[i], 255 );
-    } else if( strcmp( argv[i], "-v" ) == 0 ) {
-      glob.verbosemode++;
-    } else if( strcmp( argv[i], "-d" ) == 0 ) {
-      disass = 1;
-    } else if( strcmp( argv[i], "-I" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      sp = malloc( sizeof(*sp) );
-      sp->path = argv[i];
-      sp->next = glob.searchpaths;
-      glob.searchpaths = sp;
-    } else if( strcmp( argv[i], "-F" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      glob.headerflags = strtoul( argv[i], NULL, 0 );
-    } else if( strcmp( argv[i], "-h" ) == 0 ) {
-      usage( NULL );
-    } else if( strcmp( argv[i], "--help" ) == 0 ) {
-      usage( NULL );
-    } else break;
-    i++;
-  }
-
-  fvmc_pas_verbosemode( glob.verbosemode );
-  
-  addr = 0;
-
-  fvmc_printf( 1, "\n ------ first pass ------- \n" );
-
-  /* first pass collects labels and computes offsets. does not emit opcodes */
-  glob.currentfileidx = 0;
-  starti = i;
-  while( i < argc ) {
-    if( disass ) {
-      disassemble( argv[i] );
-      i++;
-      continue;
-    }
-    
-    f = opensourcefile( argv[i], 1 );
-    parse_file( f, &addr, 0, NULL );    
-    fclose( f );
-    i++;
-  }
-
-  if( disass ) exit( 0 );
-  
-  fvmc_printf( 1, "\n ------ label table ------- \n" );
-  {
-    struct label *l;
-    j = 0;
-    l = glob.labels;
-    while( l ) {
-      fvmc_printf( 1, ";; Label %-4d %-16s = 0x%08x Flags %x SymFlags 0x%08x\n", j, l->name, l->addr, l->flags, l->symflags );
-      j++;
-      l = l->next;
-    }
-  }
-  
-  fvmc_printf( 1, "\n ------ second pass ------- \n" );
-
-  /* second pass emits output */
-  if( !outfilename[0] ) {
-    strcpy( outfilename, "out.fvm" );
-  }
-
-  fvmc_printf( 1, ";; Opening outfile \"%s\"\n", outfilename );
-  outfile = fopen( outfilename, "w" );  
-  if( !outfile ) usage( "Failed to open outfile \"%s\"", outfilename );
-  openoutfile = outfile;
-  
-  /* write header */
-  emit_header( outfile, addr );
-
-  resetconsts();
-  glob.currentfileidx = 0;      
-  i = starti;
-  while( i < argc ) {
-    f = opensourcefile( argv[i], 0 );
-    parse_file( f, &addr, 1, outfile );
-    fclose( f );
-    i++;
-  }
-
-  resetconsts();
-  glob.currentfileidx = 0;
-  i = starti;
-  while( i < argc ) {
-    f = opensourcefile( argv[i], 0 );
-    parse_file( f, &addr, 2, outfile );
-    fclose( f );
-    i++;
-  }
-  
-  fclose( outfile );
-    
-  return 0;
-}
-
-/* -------------------- directives ---------------------- */
-
-static char *parse_escaped_string( char *qq, FILE *f ) {
-  char c;
-  
-  while( *qq != '"' && *qq != '\0' ) {
-    if( *qq == '\\' ) {
-      qq++;
-      c = *qq;
-      switch( c ) {
-      case '0':
-	c = '\0'; break;
-      case 'a':
-	c = '\a'; break;
-      case 'b':
-	c = '\b'; break;
-      case 'f':
-	c = '\f'; break;
-      case 'n':
-	c = '\n'; break;
-      case 'r':
-	c = '\r'; break;
-      case 't':
-	c = '\t'; break;
-      case 'v':
-	c = '\v'; break;
-      case 'o':
-	// octal
-	qq++;
-	c = (*qq - '0');
-	qq++;
-	c <<= 3; 
-	c |= (*qq - '0');
-	qq++;
-	c <<= 3;
-	c |= (*qq - '0');
-	break;
-      case 'x':
-	// hex
-	qq++;
-	c = 0;
-	if( *qq >= 'a' && *qq <= 'f' ) c = 10 + *qq - 'a';
-	else if ( *qq >= 'A' && *qq <= 'F' ) c = 10 + *qq - 'A';
-	else if ( *qq >= '0' && *qq <= '9' ) c = *qq - '0';
-	qq++;
-	c <<= 4;
-	if( *qq >= 'a' && *qq <= 'f' ) c |= 10 + *qq - 'a';
-	else if ( *qq >= 'A' && *qq <= 'F' ) c |= 10 + *qq - 'A';
-	else if ( *qq >= '0' && *qq <= '9' ) c |= *qq - '0';		  
+  vp = NULL;
+  if( proc->locals ) {
+    v = proc->locals;
+    while( v ) {
+      if( v->next == NULL ) {
+	vp = &v->next;
 	break;
       }
-      fvmc_printf( 3, "writing char %c\n", c );
-      fwrite( &c, 1, 1, f );
-    } else {
-      fvmc_printf( 3, "writing char %c\n", *qq );
-      fwrite( qq, 1, 1, f );
+      v = v->next;
     }
-    qq++;
-  }
-
-  return qq;
-}
-
-static int parse_directive( char *buf, uint32_t *addr, FILE *f, int datasegment ) {
-  char *p;
-  char directive[64], name[64];
-  uint32_t size;
-  
-  p = buf;
-  p = skipwhitespace( p );
-  if( *p == '\0' ) return -1;
-  if( *p != '.' ) return -1;
-  
-  /* assembler directive */
-  memset( directive, 0, sizeof(directive) );
-  p = copytoken( p, directive );
-
-  if( strcasecmp( directive, ".ENDIF" ) == 0 ) {
-    struct ifclause *ifc;
-    
-    if( !glob.ifclause ) usage( "Unexpected .ENDIF clause" );
-    ifc = glob.ifclause;
-    glob.ifclause = ifc->next;
-    free( ifc );
-    return 0;    
-  }
-
-  if( glob.ifclause && glob.ifclause->skip ) return 0;
-  
-  if( (strcasecmp( directive, ".data" ) == 0) ||
-      (strcasecmp( directive, ".text" ) == 0) ) {
-    /* reserve some bytes in the data/text segment */
-    p = skipwhitespace( p );
-    if( *p == '\0' ) usage( "Expected label identifier" );
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-    
-    if( f == NULL ) addlabel( name, strcasecmp( directive, ".data" ) == 0 ? FVM_ADDR_DATA + glob.datasize : FVM_ADDR_TEXT + *addr );
-
-    while( 1 ) {
-      /* data can be either a space separated list of numbers or a string */
-      p = skipwhitespace( p );
-      if( *p == '\0' ) return 0;
-
-      {
-	struct label *l = getlabel( name );
-	if( l ) l->symflags |= FVM_SYMBOL_STRING;
-      }
-      
-      size = 0;
-      if( *p == '"' ) {
-	p++;
-	char *startp = p;
-	
-	/* string */
-	size = 4; /* string length header */
-	while( *p != '"' ) {
-	  if( *p == '\0' ) usage( "Unexpected end of line, expected closing \"" );
-	  if( *p == '\\' ) { 
-	    p++;
-	  }
-	  
-	  size++;
-	  p++;
-	}
-	p++;
-	  
-	fvmc_printf( 3, "String \"%.*s\" length %u\n", size - 4, startp, size - 4 );
-
-	if( f != NULL ) {	  
-	  uint32_t s = size - 4;
-	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
-	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
-	    
-	    s = htonl( s );
-	    fvmc_printf( 3, ";; writing string length %u\n", size - 4 );
-	    fwrite( &s, 1, 4, f );
-
-	    parse_escaped_string( startp, f );
-	    if( size % 4 ) {	      
-	      uint8_t tmp[4];
-	      fvmc_printf( 3, "adding string padding strlen=%u padding=%u\n", size, 4 - (size % 4) );
-	      memset( tmp, 0, 4 );
-	      fwrite( tmp, 1, 4 - (size % 4), f );
-	      size += 4 - (size % 4);
-	    }
-	  }
-	}
-
-	if( size % 4 ) {
-	  fvmc_printf( 2, "size %u not multiple of 4, adding padding\n", size );
-	  size += 4 - (size % 4);
-	}
-
-      } else {
-	/* integer or label always 4 bytes */
-	char numstr[64];
-        int isarray = 0;
-
-	/* integer literal, label identifier or ARRAY */
-	memset( numstr, 0, sizeof(numstr) );
-	p = copytoken( p, numstr );
-
-	/* if value==ARRAY next arg is size of array */
-	if( strcasecmp( numstr, "ARRAY" ) == 0 ) {
-	  memset( numstr, 0, sizeof(numstr) );
-	  p++;
-	  p = skipwhitespace( p );
-
-	  p = copytoken( p, numstr );
-	  size = strtoul( numstr, NULL, 0 );
-	  if( size % 4 ) {
-	    size += 4 - (size % 4);
-	  }
-          isarray = 1;
-	} else {	
-	  size = 4;
-	}
-	
-	if( f != NULL ) {
-	  char *term;
-	  uint32_t x;
-	  
-	  x = strtoul( numstr, &term, 0 );
-	  if( *term ) {
-	    // not a number, try a label
-	    if( numstr[0] == '$' ) {
-	      x = getlabeladdr( numstr + 2 );
-	      if( numstr[1] == '-' ) {
-		if( strcasecmp( directive, ".data" ) == 0 ) x = glob.datasize - x;
-		else x = x - (*addr + 4);
-	      } else if( numstr[1] == '+' ) {
-		if( strcasecmp( directive, ".data" ) == 0 ) x = glob.datasize + x;
-		else x = x + (*addr + 4);
-	      } else usage( "Unknown operator %c", numstr[1] );
-	    } else {
-	      struct label *l = getlabel( numstr );
-	      if( l ) {
-		x = l->addr;
-	      } else {
-		struct constdef *c = getconst( numstr );
-		if( !c ) usage( "Unknown label or constant %s", numstr );
-		x = c->val;
-	      }
-	    }
-	  }
-	  
-	  if( (datasegment && (strcasecmp( directive, ".data" ) == 0)) || 
-	      (!datasegment && (strcasecmp( directive, ".text" ) == 0)) ) {
-            if( isarray ) {
-              char *b = malloc( size );
-              memset( b, 0, size );
-	      fvmc_printf( 3, "writing buffer size %u\n", size );
-              fwrite( b, 1, size, f );
-	      free( b );
-             } else {
-  	       x = htonl( x );
-	       fvmc_printf( 3, "writing uint32 %x\n", x );
-	       fwrite( &x, 1, 4, f );
-             }
-	  }
-	  
-	}
-      }
-
-      if( f == NULL ) {
-	if( size % 4 ) {
-	  usage( "size %u not multiple of 4", size );
-	}
-	
-	if( strcasecmp( directive, ".data" ) == 0 ) {
-	  glob.datasize += size;
-	} else {
-	  *addr = *addr + size;
-	}
-
-	{
-	  struct label *l = getlabel( name );
-	  l->symflags |= size;
-	}
-				      
-      }
-    }
-    return 0;
-  } else if( (strcasecmp( directive, ".DEFINE" ) == 0) || (strcasecmp( directive, ".CONST" ) == 0) ) {
-    char str[64];
-
-    p = skipwhitespace( p );
-    if( *p == '\0' ) usage( "Expected identifier" );
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    p = skipwhitespace( p );
-    if( *p == '\0' ) strcpy( str, "0" );
-    else {
-      memset( str, 0, sizeof(str) );
-      p = copytoken( p, str );
-    }
-    
-    addconst( name, strtoul( str, NULL, 0 ) );
-    
-    return 0;    
-  } else if( strcasecmp( directive, ".EXPORT" ) == 0 ) {
-    uint32_t symflags;
-    char symtype[64];
-    
-    p = skipwhitespace( p );
-    if( *p == '\0' ) return 0;
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    symflags = 0;
-    
-    p = skipwhitespace( p );
-    memset( symtype, 0, sizeof(symtype) );
-    p = copytoken( p, symtype );
-
-    if( strcasecmp( symtype, "PROC" ) == 0 ) symflags |= FVM_SYMBOL_PROC;
-    else if( strcasecmp( symtype, "STRING" ) == 0 ) symflags |= FVM_SYMBOL_STRING;
-    else if( strcasecmp( symtype, "UINT32" ) == 0 ) {
-      symflags |= FVM_SYMBOL_UINT32;
-      symflags |= 0x0004;
-    } else if( strcasecmp( symtype, "UINT64" ) == 0 ) {
-      symflags |= FVM_SYMBOL_UINT64;
-      symflags |= 0x0008;
-    }
-
-    p = skipwhitespace( p );
-    memset( symtype, 0, sizeof(symtype) );
-    p = copytoken( p, symtype );
-
-    if( symtype[0] ) {
-      symflags &= 0xffff0000;
-      symflags |= (getlabeladdr( symtype ) - getlabeladdr( name )) & 0xffff;
-    }
-
-    exportlabel( name, symflags );
-
-    return 0;
-  } else if( strcasecmp( directive, ".MODULE" ) == 0 ) {
-    p = skipwhitespace( p );
-    if( *p == '\0' ) return 0;
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    fvmc_printf( 1, ";; setting modulename to %s\n", name );
-    strcpy( glob.modulename, name );
-
-    return 0;
-  } else if( strcasecmp( directive, ".PROGRAM" ) == 0 ) {
-
-    p = skipwhitespace( p );
-    if( *p == '\0' ) return 0;
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    glob.progid = strtoul( name, NULL, 0 );
-
-    p = skipwhitespace( p );
-    if( *p == '\0' ) return 0;
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    glob.versid = strtoul( name, NULL, 0 );
-    
-    return 0;
-  } else if( strcasecmp( directive, ".INCLUDE" ) == 0 ) {
-    /* include path */
-    FILE *incfile;
-    char *q;
-    char labelname[64];
-    struct constdef *addedconsts = NULL, *ac, *nextac;
-    
-    p = skipwhitespace( p );
-    if( *p == '\0' ) usage( "Unexpected end of line" );
-
-    if( *p != '"' ) usage( "expected .INCLUDE \"path\"" );
-    q = name;
-    memset( name, 0, sizeof(name) );
-    p++;
-    while( *p != '"' ) {
-      if( *p == '\0' ) usage( "Unexpected end of line" );
-      if( *p == '\\' ) {
-	p++;
-      }
-      *q = *p;
-      p++;
-      q++;
-    }
-
-    p++;
-    p = skipwhitespace( p );
-    while( *p ) {
-      p = copytoken( p, labelname );
-      addconst( labelname, 0 );
-
-      ac = malloc( sizeof(*ac) );
-      memset( ac, 0, sizeof(*ac) );
-      strcpy( ac->name, labelname );
-      ac->next = addedconsts;      
-      addedconsts = ac;
-    }
-    
-
-    incfile = opensourcefile( name, f == NULL ? 1 : 0 );
-    if( !incfile ) usage( "failed to open include file \"%s\"", name );
-    fvmc_printf( 2, "including \"%s\"\n", name );
-    parse_file( incfile, addr, f == NULL ? 0 : datasegment ? 1 : 2, f );
-    fclose( incfile );
-
-    ac = addedconsts;
-    while( ac ) {
-      nextac = ac->next;
-      undefconst( ac->name );      
-      free( ac );
-      ac = nextac;
-    }
-    
-    return 0;
-  } else if( (strcasecmp( directive, ".IFDEF" ) == 0) || (strcasecmp( directive, ".IFNDEF" ) == 0 ) ) {
-    /* possibly enter new if clause */
-    int ifdef = 0, skip;
-    struct ifclause *ifc;
-    
-    p = skipwhitespace( p );
-    if( *p == '\0' ) usage( "Expected label identifier" );
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    ifdef = (strcasecmp( directive, ".IFDEF" ) == 0);
-    if( ifdef ) {
-      skip = getconst( name ) ? 0 : 1;
-    } else {
-      skip = getconst( name ) ? 1 : 0;
-    }
-
-    fvmc_printf( 1, "adding if clause name=%s skip=%u\n", name, skip );
-    
-    ifc = malloc( sizeof(*ifc) );
-    memset( ifc, 0, sizeof(*ifc) );
-    strcpy( ifc->name, name );
-    ifc->skip = skip;
-    ifc->next = glob.ifclause;
-    glob.ifclause = ifc;
-    
-    return 0;
-  } else if( strcasecmp( directive, ".ENDIF" ) == 0 ) {
-    struct ifclause *ifc;
-    
-    if( !glob.ifclause ) usage( "Unexpected .ENDIF clause" );
-    ifc = glob.ifclause;
-    glob.ifclause = ifc->next;
-    free( ifc );
-    return 0;
-  } else if( strcasecmp( directive, ".UNDEF" ) == 0 ) {
-    p = skipwhitespace( p );
-    if( *p == '\0' ) usage( "Expected label identifier" );
-    
-    memset( name, 0, sizeof(name) );
-    p = copytoken( p, name );
-
-    if( !f ) {
-      fvmc_printf( 2, "Undefining label %s\n", name );
-      undefconst( name );
-    }
-
-    return 0;
   } else {
-    /* unknown directive */
-    usage( "Unknown directive \"%s\"", directive );
-    return -1;
+    vp = &proc->locals;
+  }
+  if( !vp ) return NULL;
+  
+  /* every time we add a new local we must push the others back in the stack frame i.e. increase their stack offset. this includes params */
+  
+  v = malloc( sizeof(*v) );
+  strcpy( v->name, name );
+  v->type = type;
+  v->arraylen = arraylen;
+  v->size = 4;
+  if( arraylen ) {
+    if( type == VAR_TYPE_STRING || type == VAR_TYPE_OPAQUE ) {
+      v->size = arraylen;
+      if( arraylen % 4 ) v->size += 4 - (arraylen % 4);
+    } else {
+      v->size *= arraylen;
+    }    
   }
 
-  return -1;
+  /* this local is the shallowest variable on stack so can be accessed at depth of its size */
+  v->offset = v->size;
+
+  /* push all other params + locals further back in the stack */
+#if 0
+  for( i = 0; i < proc->nparams; i++ ) {
+    proc->params[i].offset += v->size;
+  }
+#endif
+  v2 = proc->locals;
+  while( v2 ) {
+    v2->offset += v->size;
+    v2 = v2->next;
+  }
+  
+  /* put on end */
+  v->next = NULL;
+  *vp = v;
+  proc->localsize += v->size;
+  
+  return v;
+}
+
+static void addexport( char *name ) {
+  struct export *e, **ep;
+
+  if( glob.pass == 2 ) return;
+
+  e = glob.exports;
+  while( e ) {
+    if( strcasecmp( e->name, name ) == 0 ) usage( "Export %s already exists", name );;
+    e = e->next;    
+  }
+
+  printf( ";; Adding export %s\n", name );
+    
+  ep = NULL;
+  if( glob.exports ) {
+    e = glob.exports;
+    while( e ) {
+      if( !e->next ) {
+	ep = &e->next;
+	break;
+      }
+      e = e->next;
+    }
+  } else {
+    ep = &glob.exports;
+  }
+  if( !ep ) usage( "cannot happen" );
+  
+  e = malloc( sizeof(*e) );
+  memset( e, 0, sizeof(*e) );
+  strncpy( e->name, name, sizeof(e->name) - 1 );
+  *ep = e;
+}
+
+static struct constvar *getconst( char *name ) {
+  struct constvar *v;
+  v = glob.consts;
+  while( v ) {
+    if( strcasecmp( v->name, name ) == 0 ) return v;
+    v = v->next;
+  }
+  return NULL;
+}
+
+static struct constvar *addconst( char *name, var_t type, char *val, int len ) {
+  struct constvar *v;
+
+  if( glob.pass == 2 ) {
+    emitdata( val, len );
+    return getconst( name );
+  }
+  
+  v = getconst( name );
+  if( v ) usage( "Const name %s already exists", name );
+
+  printf( ";; Adding const %s\n", name );
+  v = malloc( sizeof(*v) );
+  strncpy( v->name, name, FVM_MAXNAME - 1 );
+  v->type = type;
+  v->val = val;
+  v->len = len;
+  v->address = glob.pc;
+  v->next = glob.consts;
+  glob.consts = v;
+
+  glob.pc += len;
+  
+  return v;
+}
+
+static struct constval *getconstval( char *name ) {
+  struct constval *v;
+  v = glob.constvals;
+  while( v ) {
+    if( strcasecmp( v->name, name ) == 0 ) return v;
+    v = v->next;
+  }
+  return NULL;
+}
+
+static struct constval *addconstval( char *name, var_t type, char *val, int len ) {
+  struct constval *v;
+
+  if( glob.pass == 2 ) return getconstval( name );
+  
+  v = getconstval( name );
+  if( v ) usage( "Const name %s already exists", name );
+
+  v = malloc( sizeof(*v) );
+  strncpy( v->name, name, FVM_MAXNAME - 1 );
+  v->type = type;
+  v->val = val;
+  v->len = len;
+  v->next = glob.constvals;
+  glob.constvals = v;
+
+  return v;
 }
 
 
-static struct {
-  char *inst;
-  uint32_t opcode;
-  uint32_t args;
-#define ARG0_REG 0x00
-#define ARG0_CONST 0x01
-#define ARG1_REG 0x00
-#define ARG1_CONST 0x02
-} opcodes[] = {
-	{ "NOP",  0x00, 0x00000000 },
-	{ "LD",   0x01, 0x00020000 },   /* LD RX RY load from memory address ry into rx*/
-	{ "LD",   0x02, 0x00020002 },   /* LD RX constant load from memory address const into rx */
-	{ "ST",   0x03, 0x00020000 },   /* ST RX RY store ry into memory address rx */
-	{ "ST",   0x04, 0x00020002 },   /* ST RX const store const into memory address rx */
-	{ "LDI",  0x05, 0x00020002 },   /* LDI RX constant load const into rx*/
-	{ "LEA",  0x06, 0x00020002 },   /* LEA RX constant */
-	{ "PUSH", 0x07, 0x00010000 },   /* PUSH RX */
-	{ "PUSH", 0x08, 0x00010001 },   /* PUSH const */
-	{ "POP",  0x09, 0x00010000 },   /* POP RX */
-	{ "RET",  0x0a, 0x00000000 },   /* RET */
-	{ "CALL", 0x0b, 0x00010000 },   /* CALL RX */
-	{ "CALL", 0x0c, 0x00010001 },   /* CALL const */
-	{ "JMP",  0x0d, 0x00010000 },   /* JMP RX */
-	{ "JMP",  0x0e, 0x00010001 },   /* JMP const */
-	{ "JZ",   0x0f, 0x00010000 },   /* JZ RX */
-	{ "JZ",   0x10, 0x00010001 },   /* JZ const */
-	{ "JP",   0x11, 0x00010000 },   /* JP RX */
-	{ "JP",   0x12, 0x00010001 },   /* JP const */
-	{ "JN",   0x13, 0x00010000 },   /* JN RX */
-	{ "JN",   0x14, 0x00010001 },   /* JN const */
-	{ "JPZ",  0x15, 0x00010000 },   /* JPZ RX */
-	{ "JPZ",  0x16, 0x00010001 },   /* JPZ const */
-	{ "JPN",  0x17, 0x00010000 },   /* JPN RX */
-	{ "JPN",  0x18, 0x00010001 },   /* JPN const */
-	{ "JNZ",  0x19, 0x00010000 },   /* JNZ RX */
-	{ "JNZ",  0x1a, 0x00010001 },   /* JNZ const */
-	{ "ADD",  0x1b, 0x00020000 },   /* ADD RX RY */
-	{ "ADD",  0x1c, 0x00020002 },   /* ADD RX const */
-	{ "SUB",  0x1d, 0x00020000 },   /* SUB RX RY */
-	{ "SUB",  0x1e, 0x00020002 },   /* SUB RX const */
-	{ "MUL",  0x1f, 0x00020000 },   /* MUL RX RY */
-	{ "MUL",  0x20, 0x00020002 },   /* MUL RX const */
-	{ "DIV",  0x21, 0x00020000 },   /* DIV RX RY */
-	{ "DIV",  0x22, 0x00020002 },   /* DIV RX const */
-	{ "MOD",  0x23, 0x00020000 },   /* MOD RX RY */
-	{ "MOD",  0x24, 0x00020002 },   /* MOD RX const */
-	{ "AND",  0x25, 0x00020000 },   /* AND RX RY */
-	{ "AND",  0x26, 0x00020002 },   /* AND RX const */
-	{ "OR",   0x27, 0x00020000 },   /* OR RX RY */
-	{ "OR",   0x28, 0x00020002 },   /* OR RX const */
-	{ "XOR",  0x29, 0x00020000 },   /* XOR RX RY */
-	{ "XOR",  0x2a, 0x00020002 },   /* XOR RX const */
-	{ "NOT",  0x2b, 0x00010000 },   /* NOT RX */
-	{ "SHL",  0x2c, 0x00020000 },   /* SHL RX RY */
-	{ "SHL",  0x2d, 0x00020002 },   /* SHL RX const */
-	{ "SHR",  0x2e, 0x00020000 },   /* SHR RX RY */
-	{ "SHR",  0x2f, 0x00020002 },   /* SHR RX const */
-	{ "ROL",  0x30, 0x00020000 },   /* ROL RX RY */
-	{ "ROL",  0x31, 0x00020002 },   /* ROL RX const */
-	{ "ROR",  0x32, 0x00020000 },   /* ROR RX RY */
-	{ "ROR",  0x33, 0x00020002 },   /* ROR RX const */
-	{ "RESV3", 0x34, 0x00000000 },   /* Reserved. Unused instruction */
-	{ "RESV1", 0x35, 0x00000000 },   /* Reserved. Unused instruction */
-	{ "RESV2", 0x36, 0x00000000 },   /* Reserved, UNused instruction */
-	{ "LEASP", 0x37, 0x00020002 },   /* LEASP RX const. load address from stack pointer with offset */
-	{ "ADDSP", 0x38, 0x00010000 },  /* ADDSP RX */
-	{ "ADDSP", 0x39, 0x00010001 },  /* ADDSP const. adjust on stack. +ve allocate, -ve frees. */
-	{ "MOV", 0x3a, 0x00020000 }, /* MOV RX RY. copy register */
-	{ "CMP", 0x3b, 0x00020000 }, /* CMP RX RY. compare register */
-	{ "CMP", 0x3c, 0x00020002 }, /* CMP RX const. compare with const */
-	{ "LDINC", 0x3d, 0x00020000 }, /* LDINC RX RY. load from memory address ry into rx, then increment ry */
-	{ "STINC", 0x3e, 0x00020000 }, /* STINC RX RY. store ry into memory address rx, then incremenet rx */
-	{ "LDSP", 0x3f, 0x00020000 }, /* LDSP RX RY. load from stack pointer offset by ry into rx */
-	{ "LDSP", 0x40, 0x00020002 }, /* LDSP RX const. load from stack pointer offset by const into rx */
-	{ "SUBSP", 0x41, 0x00010000 },  /* SUB RX */
-	{ "SUBSP", 0x42, 0x00010001 },  /* SUB const. adjust on stack. +ve frees, -ve allocates. */
-	{ "LEASP", 0x43, 0x00020000 },   /* LEASP RX RY. load address from stack pointer with offset */
-	{ "CALLNAT", 0x44, 0x00010000 }, /* CALLVNAT RX. call native function */
-	{ "CALLNAT", 0x45, 0x00010001 }, /* CALLVNAT const. call native function */
-	{ "HALT", 0x46, 0x00000000 }, /* HALT stop execution immediatly */
-	{ "CALLZ", 0x47, 0x00010000 }, /* CALLZ RX call if zero flag set */
-	{ "CALLZ", 0x48, 0x00010001 }, /* CALLZ const call if zero flag set */
-	{ "STSP", 0x49, 0x00020000 }, /* STSP RX RY. store into stack pointer offset by ry into rx */
-	{ "STSP", 0x4a, 0x00020002 }, /* STSP RX const. store into stack pointer offset by const into rx */
-	{ "INC", 0x4b, 0x00020000 }, /* INC RX RY. increment at memory address RX by RY */	
-	{ "INC", 0x4c, 0x00020002 }, /* INC RX const. increment at memory address RX by const */
-	{ "STSPINC", 0x4d, 0x00020001 }, /* STSPINC RX const: increment value at stack offset const by rx */
-	{ "STSPDEC", 0x4e, 0x00020001 }, /* STSPDEC RX const: decrement value at stack offset const by rx */
+
+static void addincludepath( char *path ) {
+  struct includepath *p;
+  p = malloc( sizeof(*p) );
+  p->next = glob.includepaths;
+  p->path = path;
+  glob.includepaths = p;
+}
+
+static struct token *nexttok( FILE *f ) {
+  int sts;
+  
+  if( glob.tok.val ) free( glob.tok.val );
+
+  memset( &glob.tok, 0, sizeof(glob.tok) );
+  sts = getnexttok( f, &glob.tok );
+  if( sts ) return NULL;
+  return &glob.tok;
+}
+
+static int accepttok( FILE *f, tok_t type ) {
+  struct token *tok;
+  if( glob.tok.type == type ) {
+    tok = nexttok( f );
+    if( !tok ) {
+      glob.tok.type = TOK_PERIOD;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+static void expecttok( FILE *f, tok_t type ) {
+  if( accepttok( f, type ) ) return;
+  usage( "Unexpected symbol %s (%s) - expected %s", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "", gettokname( type ) );
+}
+
+static int acceptkeyword( FILE *f, char *name ) {
+  struct token *tok;
+  if( glob.tok.type == TOK_NAME && (strcasecmp( glob.tok.val, name ) == 0) ) {
+    tok = nexttok( f );
+    if( !tok ) printf( ";; Unexpected end of file\n" );
+    return 1;
+  }
+  return 0;
+}
+
+static void expectkeyword( FILE *f, char *name ) {
+  if( !acceptkeyword( f, name ) ) usage( "Unexpected symbol %s - expected %s", glob.tok.val ? glob.tok.val : gettokname( glob.tok.type ), name );
+}
+
+/* ---------------- */
+
+struct opinfo {  
+  op_t op;
+  char *name;
+  uint32_t pcdata;
+  int32_t stackadjust;
+};
+
+static struct opinfo opcodeinfo[] =
+  {
+   { OP_NOP, "NOP", 0, 0 },
+   { OP_LDI32, "LDI32", 4, 4 },
+   { OP_LEA, "LEA", 2, 4 },
+   { OP_ADDSP, "ADDSP", 2, 0 }, /* opcode adjusts sp directly */
+   { OP_SUBSP, "SUBSP", 2, 0 }, /* ditto */
+   { OP_CALL, "CALL", 2, 0 }, /* ( -- retaddr ) */
+   { OP_RET, "RET", 0, 0 }, /* ( retaddr -- ) */
+   { OP_LEASP, "LEASP", 2, 4 }, /* ( -- address ) */
+   { OP_LDSP, "LDSP", 2, 4 }, /* ( -- value ) */
+   { OP_STSP, "STSP", 2, -4 }, /* (value -- )*/
+   { OP_BR, "BR", 2, -4 },  /* (test --) */
+   { OP_EQ, "EQ", 0, -4 }, /* (a b -- test) */
+   { OP_NEQ, "NEQ", 0, -4 },
+   { OP_GT, "GT", 0, -4 },
+   { OP_GTE, "GTE", 0, -4 },
+   { OP_LT, "LT", 0, -4 },
+   { OP_LTE, "LTE", 0, -4 },
+   { OP_JMP, "JMP", 2, 0 },
+   { OP_ADD, "ADD", 0, -4 },
+   { OP_SUB, "SUB", 0, -4 },
+   { OP_MUL, "MUL", 0, -4 },
+   { OP_DIV, "DIV", 0, -4 },      
+   { OP_MOD, "MOD", 0, -4 },      
+   { OP_AND, "AND", 0, -4 },
+   { OP_OR, "OR", 0, -4 },
+   { OP_XOR, "XOR", 0, -4 }, /* (a b -- a^b )*/
+   { OP_NOT, "NOT", 0, 0 },
+   { OP_SHL, "SHL", 0, -4 }, /* (value shift -- value) */
+   { OP_SHR, "SHR", 0, -4 }, /* (value shift -- value) */
+   { OP_LD, "LD", 0, 0 },  /* ( address -- value ) */
+   { OP_ST, "ST", 0, -8 },  /* (address value -- ) */
+   { OP_SYSCALL, "SYSCALL", 2, 0 },
+   { 0, NULL, 0, 0 }
+  };
+static struct opinfo *getopinfo( op_t op ) {
+  int i;
+  for( i = 0; opcodeinfo[i].name; i++ ) {
+    if( opcodeinfo[i].op == op ) return &opcodeinfo[i];
+  }
+  return NULL;
+}
+
+static void emitopcode( op_t op, void *data, int len ) {
+  uint8_t u8;
+  struct opinfo *info;
+
+  info = getopinfo( op );
+  if( !info ) usage( "Unknown opcode" );
+  if( len != info->pcdata ) usage( "opcode %s data mismatch %u != %u", info->name, len, info->pcdata );
+  
+  if( glob.pass == 2 ) {
+    if( len == 0 ) printf( ";; PC=%04x SP=%04u Emitopcode: %s\n", glob.pc, glob.stackoffset, info->name );  
+    else if( len == 2 ) {
+      uint16_t u16 = *((uint16_t *)data);
+      printf( ";; PC=%04x SP=%04u Emitopcode: %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, (uint32_t)u16, (int32_t)(int16_t)u16, (uint32_t)u16 );
+    } else if( len == 4 ) {
+      uint32_t u32 = *((uint32_t *)data);
+      printf( ";; PC=%04x SP=%04u Emitopcode: %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, u32, u32, u32 );
+    }
+  }
+  
+  u8 = op;
+  if( glob.pass == 2 ) fwrite( &u8, 1, 1, glob.outfile );
+  glob.pc += 1 + info->pcdata;
+  glob.stackoffset += info->stackadjust;
+  if( glob.pass == 2 ) fwrite( data, 1, info->pcdata, glob.outfile );
+}
+
+
+static void emit_ldi32( uint32_t val ) {
+  emitopcode( OP_LDI32, &val, 4 );
+}
+static void emit_lea( int16_t offset ) {
+  emitopcode( OP_LEA, &offset, 2 );
+}
+static void emit_addsp( int16_t offset ) {
+  emitopcode( OP_ADDSP, &offset, 2 );
+}
+static void emit_subsp( int16_t offset ) {
+  emitopcode( OP_SUBSP, &offset, 2 );
+}
+static void emit_call( uint16_t addr ) {
+  emitopcode( OP_CALL, &addr, 2 );
+}
+static void emit_ret( void ) {
+  emitopcode( OP_RET, NULL, 0 );
+}
+static void emit_leasp( uint16_t u ) {
+  emitopcode( OP_LEASP, &u, 2 );
+}
+static void emit_ldsp( uint16_t u ) {
+  emitopcode( OP_LDSP, &u, 2 );
+}
+static void emit_stsp( uint16_t u ) {
+  emitopcode( OP_STSP, &u, 2 );
+}
+static void emit_br( uint16_t u ) {
+  emitopcode( OP_BR, &u, 2 );
+}
+static void emit_eq( void ) {
+  emitopcode( OP_EQ, NULL, 0 );
+}
+static void emit_neq( void ) {
+  emitopcode( OP_NEQ, NULL, 0 );
+}
+static void emit_gt( void ) {
+  emitopcode( OP_GT, NULL, 0 );
+}
+static void emit_gte( void ) {
+  emitopcode( OP_GTE, NULL, 0 );
+}
+static void emit_lt( void ) {
+  emitopcode( OP_LT, NULL, 0 );
+}
+static void emit_lte( void ) {
+  emitopcode( OP_LTE, NULL, 0 );
+}
+static void emit_jmp( uint16_t addr ) {
+  emitopcode( OP_JMP, &addr, 2 );
+}
+static void emit_add( void ) {
+  emitopcode( OP_ADD, NULL, 0 );
+}
+static void emit_sub( void ) {
+  emitopcode( OP_SUB, NULL, 0 );
+}
+static void emit_mul( void ) {
+  emitopcode( OP_MUL, NULL, 0 );
+}
+static void emit_div( void ) {
+  emitopcode( OP_DIV, NULL, 0 );
+}
+static void emit_mod( void ) {
+  emitopcode( OP_MOD, NULL, 0 );
+}
+static void emit_and( void ) {
+  emitopcode( OP_AND, NULL, 0 );
+}
+static void emit_or( void ) {
+  emitopcode( OP_OR, NULL, 0 );
+}
+static void emit_xor( void ) {
+  emitopcode( OP_XOR, NULL, 0 );
+}
+static void emit_not( void ) {
+  emitopcode( OP_NOT, NULL, 0 );
+}
+static void emit_shl( void ) {
+  emitopcode( OP_SHL, NULL, 0 );
+}
+static void emit_shr( void ) {
+  emitopcode( OP_SHR, NULL, 0 );
+}
+static void emit_ld( void ) {
+  emitopcode( OP_LD, NULL, 0 );
+}
+static void emit_st( void ) {
+  emitopcode( OP_ST, NULL, 0 );
+}
+static void emit_syscall( uint16_t u ) {
+  emitopcode( OP_SYSCALL, &u, 2 );
+}
+
+
+static void emitdata( void *data, int len ) {
+  if( glob.pass == 2 ) {
+    printf( ";; PC=%04x SP=%04u Const data len %x\n", glob.pc, glob.stackoffset, len );
+    fwrite( data, 1, len, glob.outfile );
+  }
+  glob.pc += len;
+}
+
+/*
+ * encode param info into a uint32: bits 0-23: 3 bits per param encoding type and isvar flag
+ * bits 24-27: param count
+ * bits 28-31: unused 
+ */
+
+#if 0
+(defun encode-params (&rest params)
+	   (let ((p 0))
+	     (do ((i 0 (1+ i))
+		  (pars params (cdr pars)))
+		 ((or (= i 8) (null pars)))
+	       (destructuring-bind (type &optional isvar) (car pars)
+		 (setf p (logior p
+				 (ash (logior (ecase type
+						(:u32 0) (:string 1) (:opaque 2))
+					      (if isvar 4 0))
+				      (* 3 i))))))
+	     (setf p (logior p (ash (length params) 24)))
+	     p))
+#endif
+
+struct syscall {
+  char *name;
+  uint16_t id;
+  uint32_t siginfo;
+};
+
+static struct syscall syscalls[] =
+  {
+   { "Log", 1, 0x02000010 }, /* Log(flags : u32, str : string); */ 
+   { NULL, 0, 0 }
+  };
+
+static struct syscall *getsyscall( char *name ) {
+  int i;
+  for( i = 0; syscalls[i].name; i++ ) {
+    if( strcasecmp( syscalls[i].name, name ) == 0 ) return &syscalls[i];
+  }
+  return NULL;
+}
+  
+  
+
+/* --------------- */
+
+static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen ) {
+  if( glob.tok.type != TOK_NAME ) usage( "Unexpect symbol type %s - expected u32|string|opaque", gettokname( glob.tok.type ) );
+  if( strcasecmp( glob.tok.val, "u32" ) == 0 ) *type = VAR_TYPE_U32;
+  else if( strcasecmp( glob.tok.val, "string" ) == 0 ) *type = VAR_TYPE_STRING;
+  else if( strcasecmp( glob.tok.val, "opaque" ) == 0 ) *type = VAR_TYPE_OPAQUE;
+  expecttok( f, TOK_NAME );
+  if( accepttok( f, TOK_OARRAY ) ) {
+    if( glob.tok.type == TOK_U32 ) {
+      *arraylen = glob.tok.u32;
+      expecttok( f, TOK_U32 );
+    } else if( glob.tok.type == TOK_NAME ) {
+      struct constval *cl = getconstval( glob.tok.val );
+      if( !cl ) usage( "array len %s does not name a constant value", glob.tok.val );
+      if( cl->type != VAR_TYPE_U32 ) usage( "Array len %s does not name a u32", glob.tok.val );
+      *arraylen = *((uint32_t *)cl->val);
+      expecttok( f, TOK_NAME );
+    } else usage( "Array length specifier" );
+    expecttok( f, TOK_CARRAY );
+  } else {
+    *arraylen = 0;
+  }
+}
+
+static void parseexpr( FILE *f ) {
+  uint16_t addr;
+  tok_t optype;
+  
+  /*
+   * exprs: 
+   * varname : load value of varname 
+   * u32 : constant 
+   * string : constant 
+   * (expr)
+   * ~expr
+   * !expr
+   * expr [+ - * / % & ^ | >> <<] expr
+   */
+  if( accepttok( f, TOK_OPAREN ) ) {
+    parseexpr( f );
+    expecttok( f, TOK_CPAREN );
+  } else if( accepttok( f, TOK_TILDE ) || accepttok( f, TOK_NOT ) ) {
+    parseexpr( f );
+    emit_not();
+  } else if( glob.tok.type == TOK_U32 ) {
+    emit_ldi32( glob.tok.u32 );
+    expecttok( f, TOK_U32 );
+  } else if( glob.tok.type == TOK_STRING ) {
+    char lname[FVM_MAXNAME];
+    struct label *l;
+    uint16_t startaddr;
+
+    getlabelname( "STRING", lname );
+    if( glob.pass == 1 ) l = NULL;
+    else {
+      l = getlabel( lname );
+      if( !l ) usage( "Failed to get label" );
+    }
+    addr = l ? l->address : 0;
+    emit_jmp( addr );
+    startaddr = glob.pc;
+    emitdata( glob.tok.val, strlen( glob.tok.val ) + 1 );
+    addlabel( lname );
+
+    emit_lea( startaddr - glob.pc );
+
+    expecttok( f, TOK_STRING );
+  } else if( glob.tok.type == TOK_NAME ) {
+    struct var *v;
+    struct param *p;
+    
+    v = getlocal( glob.currentproc, glob.tok.val );
+    if( v ) {
+      if( v->arraylen ) emit_leasp( v->offset + glob.stackoffset );
+      else emit_ldsp( v->offset + glob.stackoffset );
+    } else {
+      v = getglobal( glob.tok.val );
+      if( v ) {
+	if( v->arraylen ) emit_ldi32( v->address );
+	else {
+	  emit_ldi32( v->address );
+	  emit_ld();
+	}
+      } else {
+	p = getparam( glob.currentproc, glob.tok.val );
+	if( p ) {
+	  emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	  if( p->isvar ) {
+	    emit_ld();
+	  }
+	} else {
+	  struct constvar *cv;
+	  cv = getconst( glob.tok.val );
+	  if( cv ) {
+	    if( cv->type == VAR_TYPE_U32 ) {
+	      emit_ldi32( cv->address );
+	      emit_ld();
+	    } else if( cv->type == VAR_TYPE_STRING ) {
+	      emit_ldi32( cv->address );
+	    } else usage( "Bad const type" );
+						      
+	  } else {
+	    struct constval *cl = getconstval( glob.tok.val );
+	    if( !cl ) usage( "Variable %s does not name a known local, global, param, const or contsval", glob.tok.val );
+	    
+	    if( cl->type == VAR_TYPE_U32 ) {
+	      emit_ldi32( *((uint32_t *)cl->val) );
+	    } else if( cl->type == VAR_TYPE_STRING ) {
+	      char lname[FVM_MAXNAME];
+	      struct label *l;
+	      uint16_t startaddr;
+	      
+	      getlabelname( "STRING", lname );
+	      if( glob.pass == 1 ) l = NULL;
+	      else {
+		l = getlabel( lname );
+		if( !l ) usage( "Failed to get label" );
+	      }
+	      addr = l ? l->address : 0;
+	      emit_jmp( addr );
+	      startaddr = glob.pc;
+	      emitdata( glob.tok.val, strlen( cl->val ) + 1 );
+	      addlabel( lname );
+	      
+	      emit_lea( startaddr - glob.pc );
+	    }
+	  }
+	}	  
+      }
+    }
+    
+    expecttok( f, TOK_NAME );
+  } else usage( "Bad expr %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
+  
+  optype = glob.tok.type;
+  if( glob.tok.type == TOK_SEMICOLON ) {
+    /* done */ 
+  } else {
+    /* binary operator */
+    switch( optype ) {
+    case TOK_PLUS:
+      expecttok( f, optype );
+      parseexpr( f );      
+      emit_add();
+      break;
+    case TOK_MINUS:
+      expecttok( f, optype );
+      parseexpr( f );      
+      emit_sub();
+      break;
+    case TOK_MUL:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_mul();
+      break;
+    case TOK_DIV:
+      expecttok( f, optype );
+      parseexpr( f );         
+      emit_div();
+      break;
+    case TOK_MOD:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_mod();
+      break;
+    case TOK_AND:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_and();
+      break;
+    case TOK_OR:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_or();
+      break;
+    case TOK_XOR:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_xor();
+      break;
+    case TOK_SHL:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_shl();
+      break;
+    case TOK_SHR:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_shr();
+      break;
+    case TOK_EQ:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_eq();
+      break;
+    case TOK_NEQ:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_neq();
+      break;            
+    case TOK_GT:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_gt();
+      break;            
+    case TOK_GTE:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_gte();
+      break;            
+    case TOK_LT:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_lt();
+      break;            
+    case TOK_LTE:
+      expecttok( f, optype );
+      parseexpr( f );            
+      emit_lte();
+      break;                  
+    default:
+      break;
+    }
+
+  }
+  
+}
+      
+
+static int parsestatement( FILE *f ) {
+  int kw;
+  kw = 0;
+  if( acceptkeyword( f, "call" ) ) kw = 1;
+  else if( acceptkeyword( f, "syscall" ) ) kw = 2;
+  
+  if( kw ) {
+    uint16_t addr;
+    int ipar;
+    struct var *v;
+    uint32_t siginfo;
+    char procname[FVM_MAXNAME];
+    
+    /* call|syscall procname(args...) */
+    if( glob.tok.type != TOK_NAME ) usage( "Expected procname" );
+    strcpy( procname, glob.tok.val );
+    
+    if( kw == 1 ) {
+      /* call - lookup proc */
+      struct proc *proc;      
+      proc = getproc( glob.tok.val );
+      if( !proc ) usage( "Unknown proc %s", glob.tok.val );
+      siginfo = proc->siginfo;
+      addr = proc->address;
+    } else {
+      /* syscall - lookup syscall */
+      struct syscall *sc;      
+      sc = getsyscall( glob.tok.val );
+      if( !sc ) usage( "Unknown syscall %s", glob.tok.val );
+      siginfo = sc->siginfo;
+      addr = sc->id;
+    }
+    expecttok( f, TOK_NAME );
+    
+    expecttok( f, TOK_OPAREN );
+    ipar = 0;
+    while( glob.tok.type != TOK_CPAREN ) {
+      if( ipar > ((siginfo >> 24) & 0x1f) ) usage( "Too many params supplied to proc %s", procname );
+
+      if( (siginfo >> (3*ipar)) & 0x4 ) {
+	/* var type param requires a variable name */
+	if( glob.tok.type != TOK_NAME ) usage( "Param %u expected a var name", ipar );
+	v = getlocal( glob.currentproc, glob.tok.val );
+	if( v ) {
+	  /* local var - push address */
+	  emit_leasp( v->offset );
+	} else {
+	  v = getglobal( glob.tok.val );
+	  if( v ) {
+	    /* global var - push address */
+	    emit_ldi32( v->address );	    
+	  } else {
+	    struct param *p = getparam( glob.currentproc, glob.tok.val );
+	    if( !p ) usage( "Unknown variable or parameter %s", glob.tok.val );
+	    if( p->isvar ) {
+	      /* var type parameter - value on stack is already an address */
+	      emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	    } else {
+	      /* get address of parameter */
+	      emit_leasp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	    }
+	  }
+
+	}
 	
-	{ NULL, 0, 0 }
-	  
-};
+	expecttok( f, TOK_NAME );
+      } else {
+	parseexpr( f );
+      }
+      
+      ipar++;
+      if( !accepttok( f, TOK_COMMA ) ) break;
+    }
+    expecttok( f, TOK_CPAREN );      
 
-static struct {
-  char *reg;
-  uint32_t regid;
-} registers[] = {
-       { "R0", 0 },
-       { "R1", 1 },
-       { "R2", 2 },
-       { "R3", 3 },
-       { "R4", 4 },
-       { "R5", 5 },
-       { "R6", 6 },
-       { "R7", 7 },
-       { "%R0", 0 },
-       { "%R1", 1 },
-       { "%R2", 2 },
-       { "%R3", 3 },
-       { "%R4", 4 },
-       { "%R5", 5 },
-       { "%R6", 6 },
-       { "%R7", 7 },       
-       { NULL, 0 }
-};
+    if( glob.pass == 2 && (ipar < ((siginfo >> 24) & 0x1f)) ) usage( "Insufficient params supplied to proc %s", procname );
+    
+    if( kw == 1 ) emit_call( addr );
+    else emit_syscall( addr );
 
+    /* remove args from stack */
+    emit_subsp( ((siginfo >> 24) & 0x1f) * 4 );
+    glob.stackoffset -= ((siginfo >> 24) & 0x1f) * 4;
 
-static int encode_inst( char *str, uint32_t *opcode, uint32_t addr, int firstpass ) {
-  char *p, *q, *startargs;
-  char inst[64], arg[64];
-  int i, nargs, j, k;
-  
-  p = str;
-  p = skipwhitespace ( p );
-  if( *p == ';' ) {
-    //printf( ";; comment\n" );
-    return -1;
-  }
-  if( *p == '\0' || *p == '\n' ) {
-    //printf( ";; empty line 1 \"%s\"\n", str );
-    return -1;
-  }
-  
-  memset( inst, 0, sizeof(inst) );
-  p = copytoken( p, inst );
-  q = inst + strlen( inst ) - 1;
-  if( *q == ':' ) {
+  } else if( acceptkeyword( f, "begin" ) ) {
+    /* begin statement statement ... end */
+    while( !acceptkeyword( f, "end") ) {
+      if( !parsestatement( f ) ) usage( "Expected statement" );
+      expecttok( f, TOK_SEMICOLON );
+    }
+  } else if( acceptkeyword( f, "if" ) ) {
+    /* if expr then statement [ else statement ] */
+    uint16_t elseaddr, endaddr;
+    struct label *l;
+    char lnameelse[FVM_MAXNAME], lnameend[FVM_MAXNAME];
+
+    getlabelname( "ELSE", lnameelse );
+    getlabelname( "END", lnameend );
+
+    if( glob.pass == 1 ) {
+      elseaddr = 0;
+      endaddr = 0;
+    } else {
+      l = getlabel( lnameelse );
+      if( !l ) usage( "Failed to get label" );
+      elseaddr = l->address;
+
+      l = getlabel( lnameend );
+      if( !l ) usage( "Failed to label" );
+      endaddr = l->address;
+    }
+    
+    parseexpr( f );
+    emit_not();
+    emit_br( elseaddr );
+    expectkeyword( f, "then" );
+    parsestatement( f );
+    emit_jmp( endaddr );
+    addlabel( lnameelse ); // else address 
+    if( acceptkeyword( f, "else" ) ) {
+      parsestatement( f );
+    }
+    addlabel( lnameend ); // end address
+    
+  } else if( acceptkeyword( f, "do" ) ) {
+    /* do statement while expr */
+    char lnamestart[FVM_MAXNAME];
     struct label *l;
     
-    if( !firstpass ) return -1;
+    getlabelname( "DO", lnamestart );
+    l = addlabel( lnamestart );
+
+    parsestatement( f );
+
+    expectkeyword( f, "while" );
+    parseexpr( f );
+    emit_br( l->address );
     
-    /* last character is a : means this is a label identifier */
-    *q = '\0';
+  } else if( acceptkeyword( f, "while" ) ) {
+    /* while expr do statement */
+    struct label *l;
+    uint16_t addr1, addr2;
+    char lnamew[FVM_MAXNAME], lnamedo[FVM_MAXNAME];
 
-    l = addlabel( inst, addr );
-    if( l ) l->symflags = FVM_SYMBOL_PROC;
-    return -1;
-  }
-        
-  i = 0;
-  startargs = p;
-  while( opcodes[i].inst != NULL ) {
-    if( strcasecmp( opcodes[i].inst, inst ) == 0 ) {
-      p = startargs;
-      *opcode = opcodes[i].opcode << 24;
-      
-      nargs = (opcodes[i].args & 0x000f0000) >> 16;
-      for( k = 0; k < nargs; k++ ) {
-	p = skipwhitespace( p );
-	if( *p == '\0' || *p == '\n' ) {
-	  //printf( ";; empty line 3\n" );
-	  goto cont;
-	}
+    getlabelname( "WHILE", lnamew );
+    getlabelname( "DO", lnamedo );
 
-	memset( arg, 0, sizeof(arg) );
-	p = copytoken( p, arg );
-
-	//printf( ";; arg %d = %d\n", k, (opcodes[i].args >> k) & 0x1 );
-	switch( (opcodes[i].args >> k) & 0x1 ) {
-	case 0:
-	  /* register */
-	  j = 0;
-	  while( registers[j].reg != NULL ) {
-	    if( strcasecmp( registers[j].reg, arg ) == 0 ) {
-	      if( k == 0 ) *opcode |= registers[j].regid << 20;
-	      else {
-		//*opcode |= (0x0001000 << (k - 1)); // flag indicating 2nd arg is a register
-		*opcode |= (registers[j].regid << ((k - 1) * 4));
-	      }
-	      break;
-	    }
-	    j++;
-	  }
-	  if( registers[j].reg == NULL ) {
-	    fvmc_printf( 2, ";; bad register reg=\"%s\" k=%d\n" , arg, k );
-	    goto cont;
-	  }
-	  
-	  break;
-	case 1:
-	  /* constant */
-	  j = strtoul( arg, &q, 0 );
-	  if( *q ) {
-	    /* bad constant, maybe a label? */
-	    if( firstpass ) j = 0;
-	    else {
-	      struct label *l = getlabel( arg );
-	      if( l ) fvmc_printf( 2, "Got label %s addr=%x\n", arg, l->addr );
-	      else fvmc_printf( 2, "Failed to get label %s\n", arg );
-	      
-	      if( l ) {
-		j = l->addr;
-	      } else {
-		if( arg[0] == '$' ) {
-		  j = strtoul( arg + 2, &q, 0 );
-		  if( *q ) j = getlabeladdr( arg + 2 );
-		  
-		  if( arg[1] == '-' ) j = (addr - j) % 0x10000;
-		  else if( arg[1] == '+' ) j = (addr + j) + 0x10000;
-		  else usage( "Bad operator %c", arg[1] );
-		} else {
-		  struct constdef *c = getconst( arg );
-		  if( !c ) {
-		    fvmc_printf( 2, "Bad constant or unknown label \"%s\"\n", arg );
-		    goto cont;
-		  } else {
-		    j = c->val;
-		  }
-		}
-	      }
-	    }
-	  }
-	  fvmc_printf( 2, ";; constant = %x str=%s\n", j, arg );
-	  *opcode |= j & 0xffff;
-	  break;
-	}
-      }
-
-      //      printf( ";; success\n" );
-      return 0;
-    }
-
-  cont:
-    i++;
-  }
-
-  usage( "Unknown opcode \"%s\"", inst ); 
-  return -1;
-}
-
-static void emit_header( FILE *f, uint32_t addr ) {
-  struct fvm_header header;
-  int nsyms, idx;
-  struct label *l;
-
-  l = glob.labels;
-  nsyms = 0;
-  while( l ) {
-    if( l->flags & LABEL_EXPORT ) nsyms++;
-    l = l->next;
-  }
-  if( nsyms != glob.exportidx ) usage( "bad export number?" );
-  
-  if( !glob.progid ) {
-    uint32_t val;
-    if( glob.modulename[0] ) {
-      val = sec_crc32( 0, glob.modulename, strlen( glob.modulename ) );
+    if( glob.pass == 1 ) {
+      addr1 = 0;
+      addr2 = 0;
     } else {
-      val = time( NULL );
+      l = getlabel( lnamew );
+      if( !l ) usage( "Failed to get label" );
+      addr1 = l->address;
+      l = getlabel( lnamedo );
+      if( !l ) usage( "Failed to get label" );
+      addr2 = l->address;
     }
     
-    glob.progid = 0x20000000 + (val % 0x20000000);
-  }
-  if( !glob.modulename[0] ) sprintf( glob.modulename, "%08x", glob.progid );
-  
-  memset( &header, 0, sizeof(header) );
-  header.magic = FVM_MAGIC;
-  header.version = FVM_VERSION;
-  header.datasize = glob.datasize;
-  header.textsize = addr;
-  header.symcount = nsyms;
-  strcpy( header.name, glob.modulename );
-  header.progid = glob.progid;
-  header.versid = glob.versid;
-  header.flags = glob.headerflags;
-  fwrite( &header, 1, sizeof(header), f );
+    addlabel( lnamew );
+    parseexpr( f );
+    emit_not();
+    emit_br( addr2 );
+    expectkeyword( f, "Do" );
+    parsestatement( f );
+    emit_jmp( addr1 );
+    addlabel( lnamedo );
 
-  for( idx = 0; idx < glob.exportidx; idx++ ) {
-    l = glob.labels;
-    while( l ) {
-      if( (l->flags & LABEL_EXPORT) && (l->exportidx == idx) ) {
-	struct fvm_symbol symbol;
-	memset( &symbol, 0, sizeof(symbol) );
-	strcpy( symbol.name, l->name );
-	symbol.addr = l->addr;
-	symbol.flags = l->symflags;
-	fwrite( &symbol, 1, sizeof(symbol), f );
-	break;
-      }
-      l = l->next;
+  } else if( acceptkeyword( f, "goto" ) ) {
+    /* goto label */
+    struct label *l;
+    uint16_t addr;
+    
+    if( glob.tok.type != TOK_NAME ) usage( "Expected label identifier" );
+    if( glob.pass == 1 ) {
+      addr = 0;
+    } else {
+      l = getlabel( glob.tok.val );
+      if( !l ) usage( "Unknown label %s", glob.tok.val );
+      addr = l->address;
     }
-    if( !l ) usage( "failed to find exported symbol index %u", idx );
-  }
-  
+    
+    emit_jmp( addr );
+    expecttok( f, TOK_NAME );
+  } else if( glob.tok.type == TOK_NAME ) {
+    /* varname = expr */
+    struct var *v;
+    struct param *p;
+
+    if( glob.tok.val[strlen( glob.tok.val ) - 1] == ':' ) {
+      glob.tok.val[strlen( glob.tok.val ) - 1] = '\0';
+      addlabel( glob.tok.val );
+      free( glob.tok.val );
+      memset( &glob.tok, 0, sizeof(glob.tok) );
+      glob.tok.type = TOK_SEMICOLON;
+      
+      return 1;
+    }
+    
+    v = getlocal( glob.currentproc, glob.tok.val );
+    if( v ) {
+      expecttok( f, TOK_NAME );
+      expecttok( f, TOK_EQ );
+      parseexpr( f );
+      
+      emit_stsp( v->offset + glob.stackoffset );
+    } else {
+      v = getglobal( glob.tok.val );
+      if( v ) {
+	emit_ldi32( v->address );
+	
+	expecttok( f, TOK_NAME );
+	expecttok( f, TOK_EQ );
+	parseexpr( f );
+	
+	emit_st();
+      } else {
+	p = getparam( glob.currentproc, glob.tok.val );
+	if( !p ) return 0;
+
+	if( p->isvar ) {
+	  emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset ); /* var param so value on stack is address, just load it */
+	} else {
+	  emit_leasp( p->offset + glob.currentproc->localsize +  glob.stackoffset ); /* get address of param */
+	}
+	
+	expecttok( f, TOK_NAME );
+	expecttok( f, TOK_EQ );
+	parseexpr( f );
+
+	emit_st(); /* store value */
+      }
+    }
+
+  } else return 0;
+
+  return 1;
 }
 
-/* ------------------------ Disassembly routine ------------------------------- */
-
-static void disassemble( char *filename ) {
-  FILE *f;
-  struct fvm_header header;
-  struct fvm_symbol *sym;
-  uint8_t u[4];
-  uint32_t opcode;
-  int i, j, k, n;
+static void parseproceduresig( FILE *f, char *procname, struct param *params, int *nparams, uint32_t *siginfop ) {
+  /* parse procedure */
+  int nparam, i;
+  uint32_t siginfo, arraylen;
   
-  f = fopen( filename, "rb" );
-  if( !f ) usage( "Failed to open file \"%s\"", filename );
+  if( glob.tok.type != TOK_NAME ) usage( "Expected procname not %s", gettokname( glob.tok.type ) );
+  strcpy( procname, glob.tok.val );
+  expecttok( f, TOK_NAME );
 
-  n = fread( &header, 1, sizeof(header), f );
-  if( n != sizeof(header) ) usage( "Bad header" );
-  if( header.magic != FVM_MAGIC ) usage( "Bad magic" );
-  if( header.version != FVM_VERSION ) usage( "Bad version %d", header.version );
-  printf( ";; -------------- HEADER ------------ \n" );
-  printf( "NAME        \t%-32s\n", header.name );
-  printf( "PROGID      \t%08x (%u) %u\n", header.progid, header.progid, header.versid );
-  printf( "DATASIZE    \t%u\n", header.datasize );
-  printf( "TEXTSIZE    \t%u\n", header.textsize );
-  printf( "FLAGS       \t0x%x\t%s\n", header.flags,
-	  header.flags & FVM_MODULE_PERSISTENT ? "PERSISTENT " : "" );
-  printf( ";; ------------- SYMBOLS ------------ \n" );
-  sym = malloc( sizeof(*sym) * header.symcount );
-  fread( sym, 1, sizeof(*sym) * header.symcount, f );
-
-  printf( "%-4s\t%-16s\t%-4s\t%-4s\n", "PROCID", "NAME", "ADDR", "FLAGS" );
-  for( i = 0; i < header.symcount; i++ ) {
-    printf( "%-4u\t%-16s\t%04x\t%08x\n", i, sym[i].name, sym[i].addr, sym[i].flags );
-  }
-
-  printf( ";; ------------- DATA -------------- \n" );
-  for( i = 0; i < header.datasize; i += 4 ) {
-    n = fread( u, 1, sizeof(u), f );
-
-    for( j = 0; j < header.symcount; j++ ) {
-      if( sym[j].addr == (FVM_ADDR_DATA + i) ) {
-	printf( "%04x\t%s:\n", FVM_ADDR_DATA + i, sym[j].name );
-	break;
-      }
-    }    
-    printf( "%04x\t\t%02x %02x %02x %02x\n", FVM_ADDR_DATA + i, u[0], u[1], u[2], u[3] );
-  }
-
-  printf( ";; ------------- TEXT -------------- \n" );
-  for( i = 0; i < header.textsize; i += 4 ) {
-    for( j = 0; j < header.symcount; j++ ) {
-      if( sym[j].addr == (FVM_ADDR_TEXT + i) ) {
-	printf( "%04x\t%s:\n", FVM_ADDR_TEXT + i, sym[j].name );
-	break;
-      }
-    }
-
-    n = fread( &opcode, 1, sizeof(opcode), f );
-    if( n != 4 ) usage( "Failed to read opcode i=%u size=%u offset=%u", i, header.textsize, (int)ftell( f ) - sizeof(header) - header.symcount * sizeof(*sym) );
+  nparam = 0;
+  siginfo = 0;
+  memset( params, 0, sizeof(*params) * FVM_MAXPARAM );
+  
+  expecttok( f, TOK_OPAREN );
+  /* parse params */
+  while( glob.tok.type != TOK_CPAREN ) {
+    if( nparam >= FVM_MAXPARAM ) usage( "Max params exceeded" );
     
-    opcode = ntohl( opcode );
-    j = 0;
-    while( opcodes[j].inst ) {
-      if( (opcode >> 24) == opcodes[j].opcode ) {
-	printf( "%04x\t\t%-8s\t", FVM_ADDR_TEXT + i, opcodes[j].inst );
-	for( k = 0; k < (opcodes[j].args >> 16); k++ ) {
-	  if( opcodes[j].args & (0x1 << k) ) printf( "%04x (%d)\t", opcode & 0xffff, (opcode & 0x8000) ? (opcode & 0xffff) | 0xffff0000 : opcode & 0xffff );
-	  else printf( "R%u\t", k == 0 ? (opcode >> 20) & 0x7 : (opcode >> (4*(k-1))) & 0x7 );
-	}
-	printf( "\t;; 0x%08x\n", opcode );
+    /* [var] name : type */
+    if( acceptkeyword( f, "var" ) ) {
+      params[nparam].isvar = 1;
+    }
+
+    if( glob.tok.type != TOK_NAME ) usage( "Expected parameter name not %s", gettokname( glob.tok.type ) );
+    /* check for name clash */
+    for( i = 0; i < nparam; i++ ) {
+      if( strcasecmp( params[i].name, glob.tok.val ) == 0 ) usage( "Param name %s already exists", glob.tok.val );
+    }
+    if( getglobal( glob.tok.val ) ) usage( "Param %s name clash with global", glob.tok.val );
+    
+    strncpy( params[nparam].name, glob.tok.val, FVM_MAXNAME - 1 );
+    expecttok( f, TOK_NAME );
+    expecttok( f, TOK_COLON );
+    parsevartype( f, &params[nparam].type, &arraylen );
+    if( arraylen ) usage( "array vars not allowed in proc params" );
+    if( params[nparam].type == VAR_TYPE_OPAQUE ) {
+      if( nparam == 0 || (params[nparam - 1].type != VAR_TYPE_U32) ) usage( "Opaque parameters MUST follow a u32 implicit length parameter" );
+
+      if( params[nparam].isvar && !params[nparam - 1].isvar ) usage( "Var type opaque parameters MUST follow a var type u32 parameter" );
+      if( params[nparam - 1].isvar && !params[nparam].isvar ) usage( "Non-var opaque parameters MUST follow a non-var u32 parameter" );
+    }
+    
+    siginfo |= ((params[nparam].type | (params[nparam].isvar ? 4 : 0)) << (nparam * 3));
+    nparam++;
+    
+    if( !accepttok( f, TOK_COMMA ) ) break;
+  }
+  expecttok( f, TOK_CPAREN );
+  siginfo |= (nparam << 24);
+
+  for( i = 0; i < nparam; i++ ) {
+    params[(nparam - 1) - i].offset = 8 + 4*i;
+  }
+  
+  *nparams = nparam;
+  *siginfop = siginfo;
+  return; 
+}
+
+static void parsefile( FILE *f ) {
+  struct token *tok;
+
+  tok = nexttok( f );
+  if( !tok ) {
+    printf( ";; Empty file\n" );
+    return;
+  }
+  
+  expectkeyword( f, "program" );
+  if( glob.tok.type != TOK_NAME ) usage( "Unexpected symbol %s - expected program name", gettokname( glob.tok.type ) );
+  strncpy( glob.progname, glob.tok.val, sizeof(glob.progname) - 1 );  
+  expecttok( f, TOK_NAME );
+  expecttok( f, TOK_OPAREN );
+  if( glob.tok.type != TOK_U32 ) usage( "Expected progid" );
+  glob.progid = glob.tok.u32;
+  expecttok( f, TOK_U32 );
+  expecttok( f, TOK_COMMA );
+  if( glob.tok.type != TOK_U32 ) usage( "Expected versid" );
+  glob.versid = glob.tok.u32;
+  expecttok( f, TOK_U32 );
+
+  while( accepttok( f, TOK_COMMA ) ) {
+    if( glob.tok.type != TOK_NAME ) usage( "Expected exported proc name" );
+    addexport( glob.tok.val );
+    expecttok( f, TOK_NAME );
+  }
+
+  expecttok( f, TOK_CPAREN );
+  expecttok( f, TOK_SEMICOLON );
+
+  expectkeyword( f, "begin" );
+
+  /* constants, declarations etc */
+  while( 1 ) {
+    if( acceptkeyword( f, "const" ) ) {
+      /* const name = value */
+      char cname[FVM_MAXNAME];
+      
+      if( glob.tok.type != TOK_NAME ) usage( "const expects name not %s", gettokname( glob.tok.type ) );
+      strncpy( cname, glob.tok.val, FVM_MAXNAME - 1 );
+      expecttok( f, TOK_NAME );
+      expecttok( f, TOK_EQ );
+      switch( glob.tok.type ) {
+      case TOK_U32:
+	addconstval( cname, VAR_TYPE_U32, (char *)&glob.tok.u32, 4 );
+	expecttok( f, TOK_U32 );
+	break;
+      case TOK_STRING:
+	addconstval( cname, VAR_TYPE_STRING, strdup( glob.tok.val ), strlen( glob.tok.val ) + 1 );
+	expecttok( f, TOK_STRING );      
+	break;
+      default:
+	usage( "Bad constant type" );
 	break;
       }
-      j++;
-    }
-    if( !opcodes[j].inst ) {
-      printf( "%04x\t\tUNKNOWN\t\t\t;; 0x%08x | %c%c%c%c\n", FVM_ADDR_TEXT + i, opcode,
-	      (char)((opcode >> 24) & 0xff), (char)((opcode >> 16) & 0xff), (char)((opcode >> 8) & 0xff), (char)(opcode & 0xff) );
-    }
+      expecttok( f, TOK_SEMICOLON );
+    } else if( acceptkeyword( f, "declare" ) ) {
+      /* declare procedure name(...) */
+      char procname[FVM_MAXNAME];
+      struct param params[FVM_MAXPARAM];
+      int nparams;
+      uint32_t siginfo;
+      struct proc *proc;
+
+      if( acceptkeyword( f, "procedure" ) ) {
+	/* declare procedure name(...) */
+	parseproceduresig( f, procname, params, &nparams, &siginfo );
+	if( glob.pass == 1 ) {
+	  proc = getproc( procname );
+	  if( proc ) {
+	    if( proc->siginfo != siginfo ) usage( "Declaration does not match definition for %s", procname );
+	  } else {
+	    proc = addproc( procname, params, nparams, siginfo );
+	    proc->address = 0;
+	  }
+	}
+      } else if( acceptkeyword( f, "const" ) ) {
+	/* declare const var name : type */
+	var_t type;
+	char name[FVM_MAXNAME];
+
+	expectkeyword( f, "var" );
+	if( glob.tok.type != TOK_NAME ) usage( "Expected constant name" );
+	strncpy( name, glob.tok.val, FVM_MAXNAME - 1 );
+	expecttok( f, TOK_NAME );
+	
+	expecttok( f, TOK_COLON );
+	if( acceptkeyword( f, "u32" ) ) {
+	  type = VAR_TYPE_U32;
+	} else if( acceptkeyword( f, "string" ) ) {
+	  type = VAR_TYPE_STRING;
+	} else usage( "Invalid constant type" );
+
+	if( glob.pass == 1 ) {
+	  struct constvar *cv = getconst( name );
+	  if( cv ) {
+	    if( cv->type != type ) usage( "Constant type mismatch for %s", name );
+	  } else {
+	    cv = addconst( name, type, NULL, 0 );
+	    cv->address = 0;
+	  }
+	}
+      } else usage( "Invalid declaration" );
+      
+      expecttok( f, TOK_SEMICOLON );
+    } else break;
   }
+  
+  /* parse data segment - i.e. global variables */
+  while( acceptkeyword( f, "var" ) ) {
+    char varname[FVM_MAXNAME];
+    var_t vartype;
+    uint32_t arraylen;
+    struct var *v;
+    
+    /* var name : type; */
+    if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
+    strncpy( varname, glob.tok.val, FVM_MAXNAME - 1 );
+    expecttok( f, TOK_NAME );
+    expecttok( f, TOK_COLON );
+    parsevartype( f, &vartype, &arraylen );
+    expecttok( f, TOK_SEMICOLON );
+
+    v = addglobal( varname, vartype, arraylen );
+  }
+
+  /* everything else following this is in the text segment */
+  while( glob.tok.type == TOK_NAME ) {
+    if( acceptkeyword( f, "procedure" ) ) {
+      /* parse procedure */
+      char name[FVM_MAXNAME];
+      struct param params[FVM_MAXPARAM];
+      int nparams;
+      uint32_t siginfo;
+      struct proc *proc;
+      var_t vartype;
+      uint32_t arraylen;
+      
+      /* reset stackoffset at start of new procedure */
+      if( glob.stackoffset != 0 ) printf( "Invalid stack offset %04x?\n", glob.stackoffset );
+      glob.stackoffset = 0;
+
+      parseproceduresig( f, name, params, &nparams, &siginfo );
+      if( glob.pass == 1 ) {
+	proc = getproc( name );
+	if( proc ) {
+	  if( proc->address ) usage( "Duplicate procedure definition for %s", name  );
+	  if( proc->siginfo != siginfo ) usage( "Declaration signature does not match definition for %s", name );
+	  proc->address = glob.pc;
+	} else {
+	  proc = addproc( name, params, nparams, siginfo );
+	}
+      } else {
+	proc = getproc( name );
+      }
+      glob.currentproc = proc;
+      
+      expectkeyword( f, "Begin" );
+      /* parse body: var definitions followed by statements */
+      while( acceptkeyword( f, "var" ) ) {
+	/* var name : type; */
+	if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
+	strncpy( name, glob.tok.val, FVM_MAXNAME - 1 );	
+	expecttok( f, TOK_NAME );
+	expecttok( f, TOK_COLON );
+	parsevartype( f, &vartype, &arraylen );
+
+	addlocal( proc, name, vartype, arraylen );
+	expecttok( f, TOK_SEMICOLON );
+      }
+
+      /* allocate space for local variables */
+      if( proc->localsize ) {
+	emit_addsp( proc->localsize );
+      }
+      
+      while( parsestatement( f ) ) {
+	expecttok( f, TOK_SEMICOLON );
+      }
+
+      /* free local vars */
+      if( proc->localsize ) {
+	emit_subsp( proc->localsize );
+      }
+      
+      emit_ret();
+      expectkeyword( f, "End" );
+      expecttok( f, TOK_SEMICOLON );
+      printf( ";; ------------------------\n\n" );
+      
+    } else if( acceptkeyword( f, "const" ) ) {
+      /* parse constant data: const var name = value (type infered from value) */
+      char varname[FVM_MAXNAME];
+      var_t vartype;
+      char *val;
+      int len;
+      
+      val = NULL;
+      len = 0;
+      vartype = 0;
+      
+      expectkeyword( f, "var" );
+      if( glob.tok.type != TOK_NAME ) usage( "Expected const var name" );
+      strncpy( varname, glob.tok.val, FVM_MAXNAME - 1 );
+      expecttok( f, TOK_NAME );
+      expecttok( f, TOK_EQ );
+      switch( glob.tok.type ) {
+      case TOK_U32:
+	vartype = VAR_TYPE_U32;
+	val = malloc( 4 );
+	memcpy( val, &glob.tok.u32, 4 );
+	len = 4;
+	expecttok( f, TOK_U32 );
+	break;
+      case TOK_STRING:
+	vartype = VAR_TYPE_STRING;
+	len = strlen( glob.tok.val ) + 1;
+	if( len % 4 ) len += 4 - (len % 4);
+	val = malloc( len );
+	strncpy( val, glob.tok.val, len );
+	expecttok( f, TOK_STRING );      
+	break;
+      default:
+	usage( "Invalid const type, must be u32 or string" );
+	break;
+      }
+
+      if( glob.pass == 1 ) {
+	struct constvar *cv;
+	cv = getconst( varname );
+	if( cv ) {
+	  if( cv->address ) usage( "Duplicate definition of const var %s", varname );
+	  if( cv->type != vartype ) usage( "Declaration type does not match definition type for const %s", varname );
+	  cv->val = val;
+	  cv->len = len;
+	  cv->address = glob.pc;
+	  glob.pc += len;
+	} else {
+	  addconst( varname, vartype, val, len );
+	}
+      } else {
+	struct constvar *cv = getconst( varname );
+	if( !cv ) usage( "Unknown const %s", varname );
+	emitdata( cv->val, cv->len );
+      }
+      
+      expecttok( f, TOK_SEMICOLON );
+    } else expectkeyword( f, "end" );
+  }
+
+  //expectkeyword( f, "end" );
+  expecttok( f, TOK_PERIOD );
+
+  printf( ";; Done\n" );
+}
+
+static void processfile( char *path ) {
+  FILE *f;
+  struct includepath *p;
+  char ppath[256];
+  
+  f = fopen( path, "r" );
+  if( !f ) {
+    p = glob.includepaths;
+    while( p ) {
+#ifdef WIN32
+      sprintf( ppath, "%s\\%s", p->path, path );
+#else
+      sprintf( ppath, "%s/%s", p->path, path );
+#endif
+      f = fopen( ppath, "r" );
+      if( f ) break;
+      p = p->next;
+    }
+    if( !f ) usage( "No file \"%s\"", path );
+  }
+
+  switch( glob.pass ) {
+  case 0:
+    /* print lexing info if first pass */
+    while( 1 ) {
+      struct token *tok;
+      tok = nexttok( f );
+      if( !tok ) break;
+      
+      switch( tok->type ) {
+      case TOK_U32:
+	printf( "U32: %u\n", tok->u32 );
+	break;
+      case TOK_STRING:
+	printf( "STRING: %s\n", tok->val );
+	break;
+      case TOK_NAME:
+	printf( "NAME: %s\n", tok->val );
+	break;
+      default:
+	printf( "%s\n", gettokname( tok->type ) );
+	break;
+      }
+
+    }
+    break;
+  case 1:
+    /* first pass - collect info on data variables, procs etc */
+    glob.pc = 0x8000;
+    parsefile( f );
+    glob.datasize = glob.globals ? glob.globals->address + glob.globals->size : 0;
+    glob.textsize = glob.pc - 0x8000;
+    break;
+  case 2:
+    /* second pass - generate code */
+    glob.pc = 0x8000;
+    glob.stackoffset = 0;
+    parsefile( f );
+    break;    
+  }
+  
   
   fclose( f );
 }
 
+  
+static void compile_file( char *path, char *outpath ) {
+  struct fvm_headerinfo header;
+  struct export *e;
+  struct proc *proc;
+  
+  glob.outfile = fopen( outpath, "wb" );
+  if( !glob.outfile ) usage( "Unable to open output file" );
+  
+  //glob.pass = 0;  
+  //processfile( path );
+
+  printf( "--------------------- Pass 1 -------------------- \n" );
+  glob.pass = 1;  
+  processfile( path );
+  
+  printf( "--------------------- Pass 2 -------------------- \n" );
+  glob.pass = 2;
+
+  /* emit header section */
+  memset( &header, 0, sizeof(header) );
+  header.magic = 123;
+  header.version = 1;
+  strcpy( header.name, glob.progname );
+  header.progid = glob.progid;
+  header.versid = glob.versid;
+  header.datasize = glob.datasize;
+  header.textsize = glob.textsize;
+  e = glob.exports;
+  while( e ) {
+    if( header.nprocs >= FVM_MAXPROC ) usage( "Max procs exceeded" );
+    
+    proc = getproc( e->name );
+    if( !proc ) usage( "Cannot export %s - no proc found", e->name );
+    strcpy( header.procs[header.nprocs].name, proc->name );
+    header.procs[header.nprocs].address = proc->address;
+    header.procs[header.nprocs].siginfo = proc->siginfo;
+    header.nprocs++;
+    e = e->next;
+  }
+  fwrite( &header, 1, sizeof(header), glob.outfile );
+
+  /* reset label counter */
+  glob.labelidx = 0;
+
+  /* process 2nd pass */
+  processfile( path );
+
+  fclose( glob.outfile );
+
+
+  printf( "--------------\n" );
+  printf( "Module: %s\n", header.name );
+  printf( "Progid: %u:%u\n", header.progid, header.versid );
+  printf( "DataSize: %u\n", header.datasize );
+  printf( "TextSize: %u\n", header.textsize );
+  
+  {
+    struct label *l;
+    l = glob.labels;
+    while( l ) {
+      printf( "Label: %s 0x%x\n", l->name, l->address );
+      l = l->next;
+    }
+  }
+  {
+    struct var *v;
+    v = glob.globals;
+    while( v ) {
+      printf( "Global: %s 0x%0x\n", v->name, v->address );
+      v = v->next;
+    }
+  }
+  {
+    struct proc *p;
+    int i;
+    
+    p = glob.procs;
+    while( p ) {
+      printf( "Proc: %s 0x%0x siginfo 0x%08x\n", p->name, p->address, p->siginfo );
+      for( i = 0; i < p->nparams; i++ ) {
+	printf( "  Param %u: %s%s : %s\n",
+		i, p->params[i].isvar ? "var " : "",
+		p->params[i].name,
+		p->params[i].type == VAR_TYPE_U32 ? "U32" :
+		p->params[i].type == VAR_TYPE_STRING ? "String" :
+		p->params[i].type == VAR_TYPE_OPAQUE ? "Opaque" :
+		"Other" );
+      }
+      p = p->next;
+    }
+  }
+  {
+    struct export *e;
+    e = glob.exports;
+    while( e ) {
+      printf( "Export: %s\n", e->name );
+      e = e->next;
+    }
+  }
+  {
+    struct constvar *v;
+    v = glob.consts;
+    while( v ) {
+      printf( "Const: %s 0x%0x\n", v->name, v->address );
+      v = v->next;
+    }
+  }
+  {
+    struct constval *v;
+    v = glob.constvals;
+    while( v ) {
+      printf( "Const val: %s\n", v->name );
+      v = v->next;
+    }
+  }
+      
+}

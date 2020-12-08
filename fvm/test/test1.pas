@@ -50,8 +50,11 @@ End;
 Procedure TestProc2(var a :  u32)
 Begin
    var str :  string[64];
-      
+
+   
+      Syscall LogWrite(LogBinary,14,"hello, world!");
    a = 123;
+      a = 312;
 End;	   
 
 const var fred = 123;

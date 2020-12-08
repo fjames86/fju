@@ -18,6 +18,7 @@ struct fvm_state {
   uint32_t timeout;
   uint32_t pc;
   uint32_t sp;
+  uint32_t frame;
   char stack[FVM_MAX_STACK];
 };
 
@@ -38,7 +39,7 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   hdr = (struct fvm_headerinfo *)buf;
   if( hdr->magic != FVM_MAGIC ) return -1;
   if( hdr->version != FVM_VERSION ) return -1;  
-  if( size != sizeof(*hdr) + hdr->datasize + hdr->textsize ) return -1;
+  if( size != sizeof(*hdr) + hdr->textsize ) return -1;
   if( hdr->nprocs > FVM_MAX_PROC ) return -1;
   for( i = 0; i < hdr->nprocs; i++ ) {
     if( (hdr->procs[i].address < FVM_ADDR_TEXT) ||
@@ -68,8 +69,8 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   module->datasize = hdr->datasize;
   module->data = (char *)module + sizeof(*module);
   module->text = (char *)module + sizeof(*module) + hdr->datasize;
-  memcpy( module->data, (char *)hdr + sizeof(*hdr), hdr->datasize );
-  memcpy( module->text, (char *)hdr + sizeof(*hdr) + hdr->datasize, hdr->textsize );
+  memset( module->data, 0, hdr->datasize );
+  memcpy( module->text, (char *)hdr + sizeof(*hdr), hdr->textsize );
 
   module->next = glob.modules;
   glob.modules = module;
@@ -217,9 +218,12 @@ static int fvm_step( struct fvm_state *state ) {
   int16_t i16;
   uint32_t u32, addr;  
 
-  if( (state->pc < FVM_ADDR_TEXT) || (state->pc >= (FVM_ADDR_TEXT + state->module->textsize)) ) return -1;
+  if( (state->pc < FVM_ADDR_TEXT) || (state->pc >= (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    printf( "bad pc %04x\n", state->pc );
+    return -1;
+  }
 
-  u8 = state->module->text[state->pc];
+  u8 = state->module->text[state->pc - FVM_ADDR_TEXT];
   op = u8;
   state->pc++;
   switch( op ) {
@@ -246,11 +250,13 @@ static int fvm_step( struct fvm_state *state ) {
     u16 = fvm_read_pcu16( state );
     fvm_push( state, state->pc );
     state->pc = u16;
+    state->frame++;
     break;
   case OP_RET:
     u32 = fvm_pop( state );
     if( u32 < FVM_ADDR_TEXT || (u32 >= (FVM_ADDR_TEXT + state->module->textsize)) ) return -1;
     state->pc = u32;
+    state->frame--;
     break;
   case OP_LEASP:
     u16 = fvm_read_pcu16( state );
@@ -474,13 +480,14 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
   fvm_push( &state, 0 ); /* push dummy return address */
     
   start = rpc_now();
-  while( state.nsteps < glob.max_steps ) {
+  state.frame = 1;
+  while( state.frame && (state.nsteps < glob.max_steps) ) {
     sts = fvm_step( &state );
-    if( sts ) return -1;
+    if( sts ) { printf( "step failed\n"); return -1; }
 
     if( (state.nsteps % 1000) == 0 ) {
       if( (rpc_now() - start) > glob.max_runtime ) {
-	return -1;
+	//return -1;
       }
     }
   }

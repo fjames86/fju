@@ -21,7 +21,7 @@ static void usage( char *fmt, ... ) {
     va_end( args );
     printf( "\n" );
   } else {
-    printf( "Usage: fvmc [-o output] [-I includepath] filename\n");
+    printf( "Usage: fvmc [-o output] [-I includepath] [-v] filename\n");
   }
    
   exit( 1 );  
@@ -29,6 +29,17 @@ static void usage( char *fmt, ... ) {
 
 static void compile_file( char *path, char *outpath );
 static void addincludepath( char *path );
+
+static int fvmc_debug = 0;
+static void fvmc_printf( char *fmt, ... ) {
+  va_list args;
+  
+  if( fvmc_debug ) {
+    va_start( args, fmt );
+    vprintf( fmt, args );
+    va_end( args );
+  }
+}
 
 int main( int argc, char **argv ) {
   int i;
@@ -46,6 +57,8 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       addincludepath( argv[i] );
+    } else if( strcmp( argv[i], "-v" ) == 0 ) {
+      fvmc_debug = 1;
     } else {
       compile_file( argv[i], outpath ? outpath : "out.fvm" );
       break;
@@ -599,7 +612,7 @@ static struct label *addlabel( char *lname ) {
 
   if( glob.pass == 2 ) {
     l = getlabel( lname );
-    printf( ";; PC=%04x SP=%04u %s:\n", l ? l->address : 0, glob.stackoffset, lname );
+    fvmc_printf( ";; PC=%04x SP=%04u %s:\n", l ? l->address : 0, glob.stackoffset, lname );
     return l;
   }
 
@@ -648,7 +661,7 @@ static struct var *addglobal( char *name, var_t type, uint32_t arraylen ) {
   v->next = glob.globals;
   glob.globals = v;
 
-  printf( ";; Adding global %s type=%u arraylen=%u address=%u\n", name, type, arraylen, v->address );
+  fvmc_printf( ";; Adding global %s type=%u arraylen=%u address=%u\n", name, type, arraylen, v->address );
   
   return v;
 }
@@ -666,7 +679,7 @@ static struct proc *addproc( char *name, struct param *params, int nparams, uint
   
   if( glob.pass == 2 ) usage( "assert" );
 
-  printf( ";; Add procedure %s\n", name );
+  fvmc_printf( ";; Add procedure %s\n", name );
   
   p = getproc( name );
   if( p ) usage( "Proc %s already exists", name );
@@ -707,12 +720,12 @@ static struct var *addlocal( struct proc *proc, char *name, var_t type, uint32_t
   if( glob.pass == 2 ) return getlocal( proc, name );
   
   v = getglobal( name );
-  if( v ) printf( ";; Warning: local variable %s shadows existing global\n", name );
+  if( v ) fvmc_printf( ";; Warning: local variable %s shadows existing global\n", name );
   
   v = getlocal( proc, name );
   if( v ) usage( "Local variable with name %s already exists", name );
 
-  printf( ";; add local %s type=%u arraylen=%u\n", name, type, arraylen );
+  fvmc_printf( ";; add local %s type=%u arraylen=%u\n", name, type, arraylen );
   
   vp = NULL;
   if( proc->locals ) {
@@ -779,7 +792,7 @@ static void addexport( char *name ) {
     e = e->next;    
   }
 
-  printf( ";; Adding export %s\n", name );
+  fvmc_printf( ";; Adding export %s\n", name );
     
   ep = NULL;
   if( glob.exports ) {
@@ -823,7 +836,7 @@ static struct constvar *addconst( char *name, var_t type, char *val, int len ) {
   v = getconst( name );
   if( v ) usage( "Const name %s already exists", name );
 
-  printf( ";; Adding const %s\n", name );
+  fvmc_printf( ";; Adding const %s\n", name );
   v = malloc( sizeof(*v) );
   strncpy( v->name, name, FVM_MAX_NAME - 1 );
   v->type = type;
@@ -909,7 +922,7 @@ static int acceptkeyword( FILE *f, char *name ) {
   struct token *tok;
   if( glob.tok.type == TOK_NAME && (strcasecmp( glob.tok.val, name ) == 0) ) {
     tok = nexttok( f );
-    if( !tok ) printf( ";; Unexpected end of file\n" );
+    if( !tok ) fvmc_printf( ";; Unexpected end of file\n" );
     return 1;
   }
   return 0;
@@ -1010,13 +1023,13 @@ static void emitopcode( op_t op, void *data, int len ) {
   if( len != info->pcdata ) usage( "opcode %s data mismatch %u != %u", info->name, len, info->pcdata );
   
   if( glob.pass == 2 ) {
-    if( len == 0 ) printf( ";; PC=%04x SP=%04u Emitopcode: %s\n", glob.pc, glob.stackoffset, info->name );  
+    if( len == 0 ) fvmc_printf( ";; PC=%04x SP=%04u Emitopcode: %s\n", glob.pc, glob.stackoffset, info->name );  
     else if( len == 2 ) {
       uint16_t u16 = *((uint16_t *)data);
-      printf( ";; PC=%04x SP=%04u Emitopcode: %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, (uint32_t)u16, (int32_t)(int16_t)u16, (uint32_t)u16 );
+      fvmc_printf( ";; PC=%04x SP=%04u Emitopcode: %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, (uint32_t)u16, (int32_t)(int16_t)u16, (uint32_t)u16 );
     } else if( len == 4 ) {
       uint32_t u32 = *((uint32_t *)data);
-      printf( ";; PC=%04x SP=%04u Emitopcode: %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, u32, u32, u32 );
+      fvmc_printf( ";; PC=%04x SP=%04u Emitopcode: %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, u32, u32, u32 );
     }
   }
   
@@ -1125,7 +1138,7 @@ static void emit_syscall( uint16_t u ) {
 
 static void emitdata( void *data, int len ) {
   if( glob.pass == 2 ) {
-    printf( ";; PC=%04x SP=%04u Const data len %x\n", glob.pc, glob.stackoffset, len );
+    fvmc_printf( ";; PC=%04x SP=%04u Const data len %x\n", glob.pc, glob.stackoffset, len );
     fwrite( data, 1, len, glob.outfile );
   }
   glob.pc += len;
@@ -1768,7 +1781,7 @@ static void parsefile( FILE *f ) {
 
   tok = nexttok( f );
   if( !tok ) {
-    printf( ";; Empty file\n" );
+    fvmc_printf( ";; Empty file\n" );
     return;
   }
 
@@ -1892,7 +1905,7 @@ static void parsefile( FILE *f ) {
       emit_ret();
       expectkeyword( f, "End" );
       expecttok( f, TOK_SEMICOLON );
-      printf( ";; ------------------------\n\n" );
+      fvmc_printf( ";; ------------------------\n\n" );
       
     } else if( acceptkeyword( f, "const" ) ) {
       /* parse constant data: const var name = value (type infered from value) */
@@ -1957,7 +1970,7 @@ static void parsefile( FILE *f ) {
   //expectkeyword( f, "end" );
   expecttok( f, TOK_PERIOD );
 
-  printf( ";; Done\n" );
+  fvmc_printf( ";; Done\n" );
 }
 
 static void processincludefile( char *path ) {
@@ -2075,11 +2088,11 @@ static void compile_file( char *path, char *outpath ) {
   //glob.pass = 0;  
   //processfile( path );
 
-  printf( "--------------------- Pass 1 -------------------- \n" );
+  fvmc_printf( "--------------------- Pass 1 -------------------- \n" );
   glob.pass = 1;  
   processfile( path );
   
-  printf( "--------------------- Pass 2 -------------------- \n" );
+  fvmc_printf( "--------------------- Pass 2 -------------------- \n" );
   glob.pass = 2;
 
   /* emit header section */
@@ -2114,17 +2127,17 @@ static void compile_file( char *path, char *outpath ) {
   fclose( glob.outfile );
 
 
-  printf( "--------------\n" );
-  printf( "Module: %s\n", header.name );
-  printf( "Progid: %u:%u\n", header.progid, header.versid );
-  printf( "DataSize: %u\n", header.datasize );
-  printf( "TextSize: %u\n", header.textsize );
+  fvmc_printf( "--------------\n" );
+  fvmc_printf( "Module: %s\n", header.name );
+  fvmc_printf( "Progid: %u:%u\n", header.progid, header.versid );
+  fvmc_printf( "DataSize: %u\n", header.datasize );
+  fvmc_printf( "TextSize: %u\n", header.textsize );
   
   {
     struct label *l;
     l = glob.labels;
     while( l ) {
-      printf( "Label: %s 0x%x\n", l->name, l->address );
+      fvmc_printf( "Label: %s 0x%x\n", l->name, l->address );
       l = l->next;
     }
   }
@@ -2132,7 +2145,7 @@ static void compile_file( char *path, char *outpath ) {
     struct var *v;
     v = glob.globals;
     while( v ) {
-      printf( "Global: %s 0x%0x\n", v->name, v->address );
+      fvmc_printf( "Global: %s 0x%0x\n", v->name, v->address );
       v = v->next;
     }
   }
@@ -2142,9 +2155,9 @@ static void compile_file( char *path, char *outpath ) {
     
     p = glob.procs;
     while( p ) {
-      printf( "Proc: %s 0x%0x siginfo 0x%08x\n", p->name, p->address, p->siginfo );
+      fvmc_printf( "Proc: %s 0x%0x siginfo 0x%08x\n", p->name, p->address, p->siginfo );
       for( i = 0; i < p->nparams; i++ ) {
-	printf( "  Param %u: %s%s : %s\n",
+	fvmc_printf( "  Param %u: %s%s : %s\n",
 		i, p->params[i].isvar ? "var " : "",
 		p->params[i].name,
 		p->params[i].type == VAR_TYPE_U32 ? "U32" :
@@ -2159,7 +2172,7 @@ static void compile_file( char *path, char *outpath ) {
     struct export *e;
     e = glob.exports;
     while( e ) {
-      printf( "Export: %s\n", e->name );
+      fvmc_printf( "Export: %s\n", e->name );
       e = e->next;
     }
   }
@@ -2167,7 +2180,7 @@ static void compile_file( char *path, char *outpath ) {
     struct constvar *v;
     v = glob.consts;
     while( v ) {
-      printf( "Const: %s 0x%0x\n", v->name, v->address );
+      fvmc_printf( "Const: %s 0x%0x\n", v->name, v->address );
       v = v->next;
     }
   }
@@ -2175,7 +2188,7 @@ static void compile_file( char *path, char *outpath ) {
     struct constval *v;
     v = glob.constvals;
     while( v ) {
-      printf( "Const val: %s\n", v->name );
+      fvmc_printf( "Const val: %s\n", v->name );
       v = v->next;
     }
   }

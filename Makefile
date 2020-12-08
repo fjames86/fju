@@ -48,12 +48,6 @@ install: all #strip
 	cd bin && cp ${PROGRAMS} /usr/local/bin
 	cp ${LIBFJU} /usr/local/lib
 	mkdir -p /opt/fju/fvm
-	cp fvm/programs/test-rpc.fvm /opt/fju/fvm
-	cp ${BINDIR}/fju.fvm /opt/fju/fvm/fju.fvm
-	cp ${BINDIR}/nls.fvm /opt/fju/fvm/nls.fvm
-	sh scripts/regfvm.sh -p /opt/fju/fvm/test-rpc.fvm -r 
-	sh scripts/regfvm.sh -p /opt/fju/fvm/fju.fvm 
-	sh scripts/regfvm.sh -p /opt/fju/fvm/nls.fvm -i NlsInit -s NlsService -r 
 
 uninstall:
 	cd /usr/local/bin && rm ${PROGRAMS}

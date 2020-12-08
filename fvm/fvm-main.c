@@ -13,6 +13,9 @@
 #include <fju/fvm.h>
 #include <fju/rpc.h>
 #include <fju/freg.h>
+#include <fju/sec.h>
+
+#include "fvmc.h"
 
 static void usage( char *fmt, ... ) {
   va_list args;
@@ -22,10 +25,9 @@ static void usage( char *fmt, ... ) {
 	    "\n"
 	    "\n OPTIONS:\n"
 	    "   -m      module\n"
-	    "   -s      start symbol\n"
-	    "   -n      max steps\n"
+	    "   -p      proc name\n"
 	    "   -v      Verbose\n"
-	    "   --u32 u32 | --u64 u64 | --str str  Set arg values\n" 
+	    "   --u32 u32 | --str str | --opaque b64 Set arg values\n" 
 	    "\n" );
   }
   
@@ -44,17 +46,15 @@ static uint8_t argbuf[FVM_MAX_STACK];
 
 int main( int argc, char **argv ) {
   int i, sts;
-  char mname[64], sname[64];
-  int nsteps = -1;
-  uint32_t progid = 0, procid = 0;
-  struct xdr_s argxdr;
-  char *resbuf;
+  char mname[64], pname[64];
+  int procid;
+  struct xdr_s argxdr, resxdr;
   struct fvm_module *module;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
   memset( mname, 0, sizeof(mname) );
-  memset( sname, 0, sizeof(sname) );
+  memset( pname, 0, sizeof(pname) );
   
   i = 1;
   if( i >= argc ) usage( NULL );
@@ -68,27 +68,26 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       strncpy( mname, argv[i], 63 );
-    } else if( strcmp( argv[i], "-s" ) == 0 ) {
+    } else if( strcmp( argv[i], "-p" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      strncpy( sname, argv[i], 63 );
-    } else if( strcmp( argv[i], "-n" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      nsteps = strtoul( argv[i], NULL, 10 );
-    } else if( strcmp( argv[i], "-v" ) == 0 ) {
+      strncpy( pname, argv[i], 63 );
     } else if( strcmp( argv[i], "--u32" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
       xdr_encode_uint32( &argxdr, strtoul( argv[i], NULL, 0 ) );
-    } else if( strcmp( argv[i], "--u64" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      xdr_encode_uint64( &argxdr, strtoull( argv[i], NULL, 0 ) );
     } else if( strcmp( argv[i], "--str" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
       xdr_encode_string( &argxdr, argv[i] );
+    } else if( strcmp( argv[i], "--opaque" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      sts = base64_decode( (char *)argxdr.buf + argxdr.offset + 4, argxdr.count - argxdr.offset - 4, argv[i] );
+      if( sts < 0 ) usage( "Failed to decode base64" );
+      xdr_encode_uint32( &argxdr, sts );
+      argxdr.offset += sts;
+      if( sts % 4 ) argxdr.offset += 4;
     } else break;
     
     i++;
@@ -96,16 +95,70 @@ int main( int argc, char **argv ) {
   
   while( i < argc ) {
 
-    sts = fvm_module_load_file( argv[i], NULL );
+    sts = fvm_module_load_file( argv[i], &module );
     if( sts ) usage( "Failed to load module \"%s\"", argv[i] );
+    if( strcmp( mname, "" ) == 0 ) {
+      strcpy( mname, module->name );
+    }
+    if( strcmp( pname, "" ) == 0 ) {
+      strcpy( pname, module->procs[0].name );
+    }
     i++;
   }
 
   freg_open( NULL, NULL );
-  
-  sts = fvm_run( module, 0, NULL, NULL );
+
+  module = fvm_module_by_name( mname );
+  if( !module ) usage( "Unknown module %s", mname );
+  procid = fvm_procid_by_name( module, pname );
+  if( procid < 0 ) usage( "Unknown proc %s", pname );
+
+  xdr_init( &resxdr, argbuf, sizeof(argbuf) );
+  argxdr.count = argxdr.offset;
+  argxdr.offset = 0;
+  sts = fvm_run( module, procid, &argxdr, &resxdr );
   if( sts ) usage( "Failed to run" );
 
+  {
+    int nargs;
+    uint32_t siginfo;
+    uint32_t u32;
+    char str[4096];
+    char opaque[2048];
+
+    siginfo = module->procs[procid].siginfo;
+
+    nargs = (siginfo >> 24) & 0x1f;
+    for( i = 0; i < nargs; i++ ) {
+      if( (siginfo >> (3*i)) & 0x4 ) {
+	/* var type */
+	switch( (siginfo >> (3*i)) & 0x3 ) {
+	case VAR_TYPE_U32:
+	  if( (i < (nargs - 1)) && ((siginfo >> (3*(i + 1)) & 0x3) == VAR_TYPE_OPAQUE) ) {
+	  } else {
+	    sts = xdr_decode_uint32( &resxdr, &u32 );
+	    if( sts ) usage( "XDR error decoding u32" );
+	    printf( "[%d] %u 0x%08x\n", i, u32, u32 );
+	  }
+	  break;
+	case VAR_TYPE_STRING:
+	  sts = xdr_decode_string( &resxdr, str, sizeof(str) );
+	  if( sts ) usage( "XDR error decoding string" );
+	  printf( "[%d] %s\n", i, str );
+	  break;
+	case VAR_TYPE_OPAQUE:
+	  u32 = sizeof(opaque);
+	  sts = xdr_decode_opaque( &resxdr, (uint8_t *)opaque, (int *)&u32 );
+	  if( sts ) usage( "XDR error decoding opaque" );
+	  base64_encode( opaque, u32, str );
+	  printf( "[%d] %s\n", i, str );
+	  break;
+	}
+      }
+    }
+  }
+
+  
   return 0;
 }
 

@@ -7,12 +7,16 @@
 
 #include <fju/fvm.h>
 #include <fju/mmf.h>
+#include <fju/rpc.h>
+
+#include "fvmc.h"
 
 static struct {
   struct fvm_module *modules;
 } glob;
 
 int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
+  /* parse header, load data and text segments */
   return -1;
 }
 
@@ -71,6 +75,8 @@ int fvm_procid_by_name( struct fvm_module *module, char *procname ) {
   return -1;
 }
 
+/* --------------- runtime ------------------- */
+
 int fvm_init( struct fvm_state *state, struct fvm_module *m, uint32_t procid ) {
   return -1;
 }
@@ -82,6 +88,8 @@ int fvm_run( struct fvm_state *state, char *argbuf, int arglen ) {
 int fvm_results( struct fvm_state *state, char *argbuf, int *arglen ) {
   return -1;
 }
+
+/* ------------------- rpc interface ---------------- */
 
 void fvm_rpc_register( void ) {
 }

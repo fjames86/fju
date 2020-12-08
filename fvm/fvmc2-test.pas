@@ -14,8 +14,13 @@ Begin
    b = a;
 
    if b = 12 then
+      begin
       b = b + 1;
-      
+	 b = 123;
+      end
+   else
+      b = -123;
+   
 End;
 
 Procedure TestProc2(var a :  u32)

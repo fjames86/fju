@@ -322,7 +322,7 @@ static int getnexttok( FILE *f, struct token *tok ) {
 
       do {
 	c2 = fgetc( f );
-	if( c2 >= '0' && c <= '9' ) {
+	if( c2 >= '0' && c2 <= '9' ) {
 	  *p = c2;
 	  p++;
 	} else {
@@ -332,6 +332,7 @@ static int getnexttok( FILE *f, struct token *tok ) {
 	}
       } while( 1 );
 
+      printf( "nstr: %s\n", nstr );
       tok->u32 = strtol( nstr, NULL, 0 );
       tok->type = TOK_U32;
     } else {
@@ -1449,7 +1450,13 @@ static int parsestatement( FILE *f ) {
     /* remove args from stack */
     emit_subsp( ((siginfo >> 24) & 0x1f) * 4 );
     glob.stackoffset -= ((siginfo >> 24) & 0x1f) * 4;
-    
+
+  } else if( acceptkeyword( f, "begin" ) ) {
+    /* begin statement statement ... end */
+    while( !acceptkeyword( f, "end") ) {
+      if( !parsestatement( f ) ) usage( "Expected statement" );
+      expecttok( f, TOK_SEMICOLON );
+    }
   } else if( acceptkeyword( f, "if" ) ) {
     /* if expr then statement [ else statement ] */
     uint16_t elseaddr, endaddr;
@@ -1480,12 +1487,27 @@ static int parsestatement( FILE *f ) {
     emit_jmp( endaddr );
     addlabel( lnameelse ); // else address 
     if( acceptkeyword( f, "else" ) ) {
+      printf( "1 end if/then/else current tok: %s\n", glob.tok.val );      
       parsestatement( f );
+      printf( "2 end if/then/else current tok: %s\n", glob.tok.val );
     }
     addlabel( lnameend ); // end address
+    printf( "3 end if/then/else current tok: %s\n", glob.tok.val );
     
   } else if( acceptkeyword( f, "do" ) ) {
     /* do statement while expr */
+    char lnamestart[MAXNAME];
+    struct label *l;
+    
+    getlabelname( "DO", lnamestart );
+    l = addlabel( lnamestart );
+
+    parsestatement( f );
+
+    expectkeyword( f, "while" );
+    parseexpr( f );
+    emit_br( l->address );
+    
   } else if( acceptkeyword( f, "while" ) ) {
     /* while expr do statement */
     struct label *l;
@@ -1948,8 +1970,8 @@ static void compile_file( char *path, char *outpath ) {
   glob.outfile = fopen( outpath, "wb" );
   if( !glob.outfile ) usage( "Unable to open output file" );
   
-  //glob.pass = 0;  
-  //processfile( path );
+  glob.pass = 0;  
+  processfile( path );
 
   printf( "--------------------- Pass 1 -------------------- \n" );
   glob.pass = 1;  

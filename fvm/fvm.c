@@ -11,13 +11,71 @@
 
 #include "fvmc.h"
 
+struct fvm_state {
+  struct fvm_module *module;
+  uint32_t nsteps;
+  uint32_t timeout;
+  uint32_t pc;
+  uint32_t sp;
+  char stack[FVM_MAX_STACK];
+};
+
 static struct {
   struct fvm_module *modules;
-} glob;
+  uint32_t max_steps;
+  uint32_t max_runtime;
+} glob = { NULL, 1000000, 5000 };
 
 int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   /* parse header, load data and text segments */
-  return -1;
+  struct fvm_headerinfo *hdr;
+  struct fvm_module *module;
+  int i;
+  
+  if( size < sizeof(*hdr) ) return -1;
+  
+  hdr = (struct fvm_headerinfo *)buf;
+  if( hdr->magic != FVM_MAGIC ) return -1;
+  if( hdr->version != FVM_VERSION ) return -1;  
+  if( size != sizeof(*hdr) + hdr->datasize + hdr->textsize ) return -1;
+  if( hdr->nprocs > FVM_MAX_PROC ) return -1;
+  for( i = 0; i < hdr->nprocs; i++ ) {
+    if( (hdr->procs[i].address < FVM_ADDR_TEXT) ||
+	(hdr->procs[i].address >= (FVM_ADDR_TEXT + hdr->textsize)) ) return -1;
+
+    /* opaque params must be preceeded by a u32 param that receives the length */
+    if( ((hdr->procs[i].siginfo >> (3*i)) & 0x3) == VAR_TYPE_OPAQUE ) {
+      if( i == 0 ) return -1;
+      if( ((hdr->procs[i].siginfo >> (3*(i - 1))) & 0x3) != VAR_TYPE_U32 ) return -1;
+      if( ((hdr->procs[i].siginfo >> (3*i)) & 0x4) && !(hdr->procs[i].siginfo >> (3*(i - 1)) & 0x4) ) return -1;
+      if( !((hdr->procs[i].siginfo >> (3*i)) & 0x4) && (hdr->procs[i].siginfo >> (3*(i - 1)) & 0x4) ) return -1;
+    }
+  }
+  
+  module = malloc( sizeof(*module) + hdr->datasize + hdr->textsize );
+  memset( module, 0, sizeof(*module) );
+  strcpy( module->name, hdr->name );
+  module->progid = hdr->progid;
+  module->versid = hdr->versid;
+  module->nprocs = hdr->nprocs;
+  for( i = 0; i < module->nprocs; i++ ) {
+    strcpy( module->procs[i].name, hdr->procs[i].name );
+    module->procs[i].address = hdr->procs[i].address;
+    module->procs[i].siginfo = hdr->procs[i].siginfo;
+  }
+  module->textsize = hdr->textsize;
+  module->datasize = hdr->datasize;
+  module->data = (char *)module + sizeof(*module);
+  module->text = (char *)module + sizeof(*module) + hdr->datasize;
+  memcpy( module->data, (char *)hdr + sizeof(*hdr), hdr->datasize );
+  memcpy( module->text, (char *)hdr + sizeof(*hdr) + hdr->datasize, hdr->textsize );
+
+  module->next = glob.modules;
+  glob.modules = module;
+
+  if( modulep ) *modulep = module;
+  
+  return 0;
 }
 
 int fvm_module_load_file( char *filename, struct fvm_module **modulep ) {
@@ -77,16 +135,366 @@ int fvm_procid_by_name( struct fvm_module *module, char *procname ) {
 
 /* --------------- runtime ------------------- */
 
-int fvm_init( struct fvm_state *state, struct fvm_module *m, uint32_t procid ) {
-  return -1;
+static int fvm_push( struct fvm_state *state, uint32_t u32 ) {
+  if( state->sp >= FVM_MAX_STACK ) return -1;
+  memcpy( &state->stack[state->sp], &u32, 4 );
+  state->sp += 4;
+  return 0;
 }
 
-int fvm_run( struct fvm_state *state, char *argbuf, int arglen ) {
-  return -1;
+static uint32_t fvm_pop( struct fvm_state *state ) {
+  uint32_t u32;
+  if( state->sp <= 3 ) return -1;
+  memcpy( &u32, &state->stack[state->sp], 4 );
+  state->sp -= 4;
+  return u32;
 }
 
-int fvm_results( struct fvm_state *state, char *argbuf, int *arglen ) {
-  return -1;
+static char *fvm_getptr( struct fvm_state *state, uint32_t addr ) {
+  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize)) ) {
+    return &state->module->data[addr - FVM_ADDR_DATA];
+  }
+  if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    return &state->module->text[addr - FVM_ADDR_TEXT];
+  }
+  if( (addr >= FVM_ADDR_STACK) && (addr < (FVM_ADDR_STACK + FVM_MAX_STACK)) ) {
+    return &state->stack[addr - FVM_ADDR_STACK];
+  }
+  return NULL;  
+}
+
+static uint32_t fvm_read_u32( struct fvm_state *state, uint32_t addr ) {
+  uint32_t u;
+  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize)) ) {
+    memcpy( &u, &state->module->data[addr - FVM_ADDR_DATA], 4 );
+    return u;
+  }
+  if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    memcpy( &u, &state->module->text[addr - FVM_ADDR_TEXT], 4 );
+    return u;
+  }
+  if( (addr >= FVM_ADDR_STACK) && (addr < (FVM_ADDR_STACK + FVM_MAX_STACK)) ) {
+    memcpy( &u, &state->stack[addr - FVM_ADDR_STACK], 4 );
+    return u;
+  }
+  
+  return 0;  
+}
+static uint16_t fvm_read_pcu16( struct fvm_state *state ) {
+  uint16_t u;
+  uint32_t addr = state->pc;
+  if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    memcpy( &u, &state->module->text[addr - FVM_ADDR_TEXT], 2 );
+    state->pc += 2;
+    return u;
+  }
+  
+  return 0;  
+}
+
+static int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
+
+  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize - 4)) ) {
+    memcpy( &state->module->data[addr - FVM_ADDR_DATA], &u, 4 );
+    return 0;
+  }
+  if( (addr >= FVM_ADDR_STACK) && (addr < (FVM_ADDR_STACK + FVM_MAX_STACK - 4)) ) {
+    memcpy( &state->stack[addr - FVM_ADDR_STACK], &u, 4 );
+    return 0;
+  }
+  
+  return -1;  
+}
+
+
+static int fvm_step( struct fvm_state *state ) {
+  op_t op;  
+  uint8_t u8;
+  uint16_t u16;
+  int16_t i16;
+  uint32_t u32, addr;  
+
+  if( (state->pc < FVM_ADDR_TEXT) || (state->pc >= (FVM_ADDR_TEXT + state->module->textsize)) ) return -1;
+
+  u8 = state->module->text[state->pc];
+  op = u8;
+  state->pc++;
+  switch( op ) {
+  case OP_NOP:
+    break;
+  case OP_LDI32:
+    u32 = fvm_read_u32( state, state->pc );
+    state->pc += 4;
+    fvm_push( state, u32 );
+    break;
+  case OP_LEA:
+    i16 = (int16_t)fvm_read_pcu16( state );
+    fvm_push( state, ((int)state->pc) + i16 );
+    break;
+  case OP_ADDSP:
+    u16 = fvm_read_pcu16( state );
+    state->sp += u16;
+    break;
+  case OP_SUBSP:
+    u16 = fvm_read_pcu16( state );
+    state->sp -= u16;
+    break;
+  case OP_CALL:
+    u16 = fvm_read_pcu16( state );
+    fvm_push( state, state->pc );
+    state->pc = u16;
+    break;
+  case OP_RET:
+    u32 = fvm_pop( state );
+    if( u32 < FVM_ADDR_TEXT || (u32 >= (FVM_ADDR_TEXT + state->module->textsize)) ) return -1;
+    state->pc = u32;
+    break;
+  case OP_LEASP:
+    u16 = fvm_read_pcu16( state );
+    fvm_push( state, FVM_ADDR_STACK + state->sp - u16 );    
+    break;
+  case OP_LDSP:
+    u16 = fvm_read_pcu16( state );
+    u32 = fvm_read_u32( state, FVM_ADDR_STACK + state->sp - u16 );
+    fvm_push( state, u32 );
+    break;
+  case OP_STSP:
+    u16 = fvm_read_pcu16( state );
+    addr = FVM_ADDR_STACK + state->sp - u16;
+    u32 = fvm_pop( state );
+    fvm_write_u32( state, addr, u32 );
+    break;
+  case OP_BR:
+    u16 = fvm_read_pcu16( state );
+    u32 = fvm_pop( state );
+    if( u32 ) {
+      state->pc = u16;
+    }
+    break;
+  case OP_EQ:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 == addr ? 1 : 0 );
+    break;
+  case OP_GT:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr > u32 ? 1 : 0 );
+    break;
+  case OP_GTE:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr >= u32 ? 1 : 0 );
+    break;    
+  case OP_LT:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr < u32 ? 1 : 0 );
+    break;    
+  case OP_LTE:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr <= u32 ? 1 : 0 );
+    break;
+  case OP_JMP:
+    u16 = fvm_read_pcu16( state );
+    state->pc = u16;
+    break;
+  case OP_ADD:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 + addr );
+    break;
+  case OP_SUB:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr - u32 );
+    break;
+  case OP_MUL:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 * addr );
+    break;
+  case OP_DIV:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 ? addr / u32 : 0 );
+    break;
+  case OP_MOD:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 ? addr % u32 : 0 );
+    break;
+  case OP_AND:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr & u32 );
+    break;
+  case OP_OR:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr | u32 );
+    break;
+  case OP_XOR:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr ^ u32 );
+    break;
+  case OP_NOT:
+    u32 = fvm_pop( state );
+    fvm_push( state, ~u32 );
+    break;
+  case OP_SHL:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr << u32 );
+    break;
+  case OP_SHR:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr >> u32 );
+    break;
+  case OP_LD:
+    u32 = fvm_pop( state );
+    u32 = fvm_read_u32( state, u32 );
+    fvm_push( state, u32 );
+    break;
+  case OP_ST:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_write_u32( state, addr, u32 );
+    break;
+  case OP_SYSCALL:
+    u16 = fvm_read_pcu16( state );
+    /* TODO: iplement syscalls */
+    break;
+  default:
+    return -1;
+  }
+
+  return 0;
+}
+
+
+int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf ) {
+  struct fvm_state state;
+  uint64_t start;
+  int sts;
+  uint32_t isvar[FVM_MAX_PARAM], vartype[FVM_MAX_PARAM], u32[FVM_MAX_PARAM];
+  uint32_t siginfo, u;
+  int i, nargs, len;
+  char *str, *buf;
+  
+  if( procid > module->nprocs ) return -1;
+  
+  memset( &state, 0, sizeof(state) );
+  state.module = module;
+  state.sp = 0;
+  state.pc = module->procs[procid].address;
+
+  /* 
+   * prepare args on stack:
+   * <string/opaque buffers><u32 args and pointers to the string/opaque args><dummy return address> 
+   */
+
+  siginfo = module->procs[procid].siginfo;
+  nargs = (siginfo >> 24) & 0x1f;
+  
+  for( i = 0; i < nargs; i++ ) {
+    isvar[i] = (siginfo >> (i*3)) & 0x4 ? 1 : 0;
+    vartype[i] = (siginfo >> (i*3)) & 0x3;
+
+    if( !isvar[i] ) {
+      /* input arg */
+      switch( vartype[i] ) {
+      case VAR_TYPE_U32:
+	if( (i < (nargs - 1)) && (vartype[i + 1] == VAR_TYPE_OPAQUE) ) {
+	  /* don't decode the u32 if the next param is opaque. that's because this will receive the length */
+	} else {
+	  sts = xdr_decode_uint32( argbuf, &u32[i] );
+	  if( sts ) return sts;
+	}
+	break;
+      case VAR_TYPE_STRING:
+	sts = xdr_decode_string( argbuf, state.stack + state.sp, FVM_MAX_STACK - state.sp );
+	if( sts ) return sts;
+	u32[i] = state.sp;
+	len = strlen( state.stack + state.sp ) + 1;
+	if( len % 4 ) len += 4 - (len % 4);
+	state.sp += len;
+	break;
+      case VAR_TYPE_OPAQUE:
+	len = FVM_MAX_STACK - state.sp;
+	sts = xdr_decode_opaque( argbuf, (uint8_t *)state.stack + state.sp, &len );
+	if( sts ) return sts;
+	u32[i - 1] = len;
+	u32[i] = state.sp;
+	if( len % 4 ) len += 4 - (len % 4);
+	state.sp += len;
+	break;
+      }      
+    }
+  }
+  
+  for( i = 0; i < nargs; i++ ) {
+    if( isvar[i] ) {
+      u32[i] = state.sp;
+      fvm_push( &state, 0 ); /* push variable to receive result */
+    } else {
+      fvm_push( &state, u32[i] ); /* push arg received */
+    }
+  }
+  fvm_push( &state, 0 ); /* push dummy return address */
+    
+  start = rpc_now();
+  while( state.nsteps < glob.max_steps ) {
+    sts = fvm_step( &state );
+    if( sts ) return -1;
+
+    if( (state.nsteps % 1000) == 0 ) {
+      if( (rpc_now() - start) > glob.max_runtime ) {
+	return -1;
+      }
+    }
+  }
+  
+  /* decode results */
+  if( !resbuf ) return 0;
+
+  for( i = 0; i < nargs; i++ ) {
+    if( isvar[i] ) {
+      switch( vartype[i] ) {
+      case VAR_TYPE_U32:
+	if( (i < (nargs - 1)) && (vartype[i + 1] == VAR_TYPE_OPAQUE) ) {
+	  u = u32[i];
+	  u32[i] = fvm_read_u32( &state, u );
+	} else {
+	  /* get result */
+	  u = fvm_read_u32( &state, u32[i] );
+	  sts = xdr_encode_uint32( resbuf, u );
+	  if( sts ) return sts;
+	}
+	break;
+      case VAR_TYPE_STRING:
+	u = fvm_read_u32( &state, u32[i] );
+	str = fvm_getptr( &state, u );
+	sts = xdr_encode_string( resbuf, str ? str : "" );
+	if( sts ) return sts;
+	break;
+      case VAR_TYPE_OPAQUE:
+	u = fvm_read_u32( &state, u32[i] );
+	buf = fvm_getptr( &state, u );
+	len = u32[i - 1];
+	sts = xdr_encode_opaque( resbuf, (uint8_t *)(buf ? buf : NULL), buf ? len : 0 );
+	if( sts ) return sts;
+	break;
+      }
+    }
+  }
+
+  
+  return 0;
+  
 }
 
 /* ------------------- rpc interface ---------------- */

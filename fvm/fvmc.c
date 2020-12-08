@@ -496,7 +496,7 @@ struct proc {
   struct proc *next;
   char name[FVM_MAX_NAME];
   uint32_t address;
-  struct param params[FVM_MAXPARAM];
+  struct param params[FVM_MAX_PARAM];
   int nparams;
   struct var *locals;
   uint32_t localsize; /* total size of all locals */
@@ -1616,12 +1616,12 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
 
   nparam = 0;
   siginfo = 0;
-  memset( params, 0, sizeof(*params) * FVM_MAXPARAM );
+  memset( params, 0, sizeof(*params) * FVM_MAX_PARAM );
   
   expecttok( f, TOK_OPAREN );
   /* parse params */
   while( glob.tok.type != TOK_CPAREN ) {
-    if( nparam >= FVM_MAXPARAM ) usage( "Max params exceeded" );
+    if( nparam >= FVM_MAX_PARAM ) usage( "Max params exceeded" );
     
     /* [var] name : type */
     if( acceptkeyword( f, "var" ) ) {
@@ -1724,7 +1724,7 @@ static void parsefile( FILE *f ) {
     } else if( acceptkeyword( f, "declare" ) ) {
       /* declare procedure name(...) */
       char procname[FVM_MAX_NAME];
-      struct param params[FVM_MAXPARAM];
+      struct param params[FVM_MAX_PARAM];
       int nparams;
       uint32_t siginfo;
       struct proc *proc;
@@ -1796,7 +1796,7 @@ static void parsefile( FILE *f ) {
     if( acceptkeyword( f, "procedure" ) ) {
       /* parse procedure */
       char name[FVM_MAX_NAME];
-      struct param params[FVM_MAXPARAM];
+      struct param params[FVM_MAX_PARAM];
       int nparams;
       uint32_t siginfo;
       struct proc *proc;
@@ -2007,8 +2007,8 @@ static void compile_file( char *path, char *outpath ) {
 
   /* emit header section */
   memset( &header, 0, sizeof(header) );
-  header.magic = 123;
-  header.version = 1;
+  header.magic = FVM_MAGIC;
+  header.version = FVM_VERSION;
   strcpy( header.name, glob.progname );
   header.progid = glob.progid;
   header.versid = glob.versid;

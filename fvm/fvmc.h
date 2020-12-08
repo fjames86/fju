@@ -48,11 +48,13 @@ typedef enum {
     VAR_TYPE_SPARE = 3,
 } var_t;
 
-#define FVM_MAXPARAM 8
+#define FVM_MAX_PARAM 8
 
 struct fvm_headerinfo {
   uint32_t magic;
+#define FVM_MAGIC 0x13fd54ec
   uint32_t version;
+#define FVM_VERSION 1
   char name[FVM_MAX_NAME];
   uint32_t progid;
   uint32_t versid;

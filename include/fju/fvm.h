@@ -25,7 +25,6 @@ struct fvm_module {
   uint32_t nprocs;
   struct {
     char name[FVM_MAX_NAME];
-    uint32_t procid;
     uint32_t address;
     uint32_t siginfo;
   } procs[FVM_MAX_PROC];
@@ -36,12 +35,6 @@ struct fvm_module {
   int textsize;
 };
 
-struct fvm_state {
-  struct fvm_module *module;
-  uint32_t nsteps;
-  uint32_t timeout;
-  char stack[FVM_MAX_STACK];
-};
 
 int fvm_module_load( char *buf, int size, struct fvm_module **modulep );
 int fvm_module_load_file( char *filename, struct fvm_module **modulep );
@@ -51,9 +44,7 @@ struct fvm_module *fvm_module_by_name( char *name );
 struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid );
 int fvm_procid_by_name( struct fvm_module *module, char *procname );
 
-int fvm_init( struct fvm_state *state, struct fvm_module *m, uint32_t procid );
-int fvm_run( struct fvm_state *state, char *argbuf, int arglen );
-int fvm_results( struct fvm_state *state, char *argbuf, int *arglen );
+int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf );
 
 /* register rpc interface */
 void fvm_rpc_register( void );

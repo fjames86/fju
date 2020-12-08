@@ -43,14 +43,13 @@ static void usage( char *fmt, ... ) {
 static uint8_t argbuf[FVM_MAX_STACK];
 
 int main( int argc, char **argv ) {
-  static struct fvm_state state;
-    
   int i, sts;
   char mname[64], sname[64];
   int nsteps = -1;
   uint32_t progid = 0, procid = 0;
   struct xdr_s argxdr;
   char *resbuf;
+  struct fvm_module *module;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
@@ -104,7 +103,7 @@ int main( int argc, char **argv ) {
 
   freg_open( NULL, NULL );
   
-  sts = fvm_run( &state, NULL, 0 );
+  sts = fvm_run( module, 0, NULL, NULL );
   if( sts ) usage( "Failed to run" );
 
   return 0;

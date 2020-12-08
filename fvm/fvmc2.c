@@ -742,9 +742,11 @@ static struct var *addlocal( struct proc *proc, char *name, var_t type, uint32_t
   v->offset = v->size;
 
   /* push all other params + locals further back in the stack */
+#if 0
   for( i = 0; i < proc->nparams; i++ ) {
     proc->params[i].offset += v->size;
   }
+#endif
   v2 = proc->locals;
   while( v2 ) {
     v2->offset += v->size;
@@ -1250,18 +1252,19 @@ static void parseexpr( FILE *f ) {
     
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {
-      addr = v->offset;
-      emit_ldsp( addr );
+      emit_ldsp( v->offset + glob.stackoffset );
     } else {
       v = getglobal( glob.tok.val );
-      if( !v ) {
+      if( v ) {
+	emit_ldi32( v->address );
+	emit_ld(); 	
+      } else {
 	p = getparam( glob.currentproc, glob.tok.val );
 	if( !p ) return;
 	emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
-      } else {
-	addr = v->address;
-	emit_ldi32( addr );
-	emit_ld(); /* xxx */
+	if( p->isvar ) {
+	  emit_ld();
+	}
       }
     }
     
@@ -1419,10 +1422,10 @@ static int parsestatement( FILE *f ) {
 	    if( !p ) usage( "Unknown variable or parameter %s", glob.tok.val );
 	    if( p->isvar ) {
 	      /* var type parameter - value on stack is already an address */
-	      emit_ldsp( p->offset );
+	      emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
 	    } else {
 	      /* get address of parameter */
-	      emit_leasp( p->offset );
+	      emit_leasp( p->offset + glob.currentproc->localsize + glob.stackoffset );
 	    }
 	  }
 
@@ -1635,7 +1638,7 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
   siginfo |= (nparam << 24);
 
   for( i = 0; i < nparam; i++ ) {
-    params[(nparam - 1) - i].offset = 4 + 4*i;
+    params[(nparam - 1) - i].offset = 8 + 4*i;
   }
   
   *nparams = nparam;

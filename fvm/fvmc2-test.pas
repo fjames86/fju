@@ -20,8 +20,10 @@ End;
 
 Procedure TestProc2(var a :  u32)
 Begin
+   var str :  string[64];
+      
    a = 123;
-End;
+End;	   
 
 End.		      
 

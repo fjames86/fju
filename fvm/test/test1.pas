@@ -12,7 +12,7 @@ Begin
 
    { globals }
    var mystr : string[64];
-
+      
    { procedures }
       
 Procedure TestProc(init		     : u32,  var b : u32 )

@@ -1739,6 +1739,30 @@ static void parsedeclaration( FILE *f ) {
   expecttok( f, TOK_SEMICOLON );  
 }
 
+static void parseconstdef( FILE *f ) {
+  /* const name = value */
+  char cname[FVM_MAX_NAME];
+      
+  if( glob.tok.type != TOK_NAME ) usage( "const expects name not %s", gettokname( glob.tok.type ) );
+  strncpy( cname, glob.tok.val, FVM_MAX_NAME - 1 );
+  expecttok( f, TOK_NAME );
+  expecttok( f, TOK_EQ );
+  switch( glob.tok.type ) {
+  case TOK_U32:
+    addconstval( cname, VAR_TYPE_U32, (char *)&glob.tok.u32, 4 );
+    expecttok( f, TOK_U32 );
+    break;
+  case TOK_STRING:
+    addconstval( cname, VAR_TYPE_STRING, strdup( glob.tok.val ), strlen( glob.tok.val ) + 1 );
+    expecttok( f, TOK_STRING );      
+    break;
+  default:
+    usage( "Bad constant type" );
+    break;
+  }
+  expecttok( f, TOK_SEMICOLON );  
+}
+
 static void parsefile( FILE *f ) {
   struct token *tok;
 
@@ -1775,27 +1799,7 @@ static void parsefile( FILE *f ) {
   /* constants, declarations etc */
   while( 1 ) {
     if( acceptkeyword( f, "const" ) ) {
-      /* const name = value */
-      char cname[FVM_MAX_NAME];
-      
-      if( glob.tok.type != TOK_NAME ) usage( "const expects name not %s", gettokname( glob.tok.type ) );
-      strncpy( cname, glob.tok.val, FVM_MAX_NAME - 1 );
-      expecttok( f, TOK_NAME );
-      expecttok( f, TOK_EQ );
-      switch( glob.tok.type ) {
-      case TOK_U32:
-	addconstval( cname, VAR_TYPE_U32, (char *)&glob.tok.u32, 4 );
-	expecttok( f, TOK_U32 );
-	break;
-      case TOK_STRING:
-	addconstval( cname, VAR_TYPE_STRING, strdup( glob.tok.val ), strlen( glob.tok.val ) + 1 );
-	expecttok( f, TOK_STRING );      
-	break;
-      default:
-	usage( "Bad constant type" );
-	break;
-      }
-      expecttok( f, TOK_SEMICOLON );
+      parseconstdef( f );
     } else if( acceptkeyword( f, "declare" ) ) {
       parsedeclaration( f );
     } else if( acceptkeyword( f, "include" ) ) {
@@ -1983,6 +1987,8 @@ static void processincludefile( char *path ) {
     while( 1 ) {
       if( acceptkeyword( f, "declare" ) ) {
 	parsedeclaration( f );
+      } else if( acceptkeyword( f, "const" ) ) {
+	parseconstdef( f );
       } else usage( "Only declarations allowed in include files" );
       if( glob.tok.type == TOK_PERIOD ) break;
     }

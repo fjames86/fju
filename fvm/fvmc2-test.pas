@@ -12,6 +12,8 @@ Begin
    a = init;
    Call TestProc2(a);
    b = a;
+
+   
 End;
 
 Procedure TestProc2(var a :  u32)

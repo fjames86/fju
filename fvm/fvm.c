@@ -311,6 +311,35 @@ static struct opinfo *getopinfo( op_t op ) {
   return NULL;
 }
 
+static int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
+  switch( syscallid ) {
+  case 1:
+    /* LogWrite(flags,len,buf) */
+    {
+      char *buf;
+      uint32_t len, flags;
+      struct log_entry entry;
+      struct log_iov iov[1];
+      
+      addr = fvm_stack_read( state, 4 ); /* bufadd */
+      buf = fvm_getptr( state, addr );
+      len = fvm_stack_read( state, 8 ); /* buflen */
+      flags = fvm_stack_read( state, 12 ); 
+      memset( &entry, 0, sizeof(entry) );
+      iov[0].buf = buf;
+      iov[0].len = buf ? len : 0;
+      entry.iov = iov;
+      entry.niov = 1;
+      entry.flags = flags;
+      log_write( NULL, &entry );
+    }
+    break;
+  default:
+    return -1;
+  }
+  return 0;
+}
+
 static int fvm_step( struct fvm_state *state ) {
   op_t op;  
   uint8_t u8;
@@ -318,7 +347,7 @@ static int fvm_step( struct fvm_state *state ) {
   int16_t i16;
   uint32_t u32, addr;  
   struct opinfo *oinfo;
-  int i;
+  int i, sts;
   
   if( (state->pc < FVM_ADDR_TEXT) || (state->pc >= (FVM_ADDR_TEXT + state->module->textsize)) ) {
     printf( "bad pc %04x\n", state->pc );
@@ -496,32 +525,8 @@ static int fvm_step( struct fvm_state *state ) {
     break;
   case OP_SYSCALL:
     u16 = fvm_read_pcu16( state );
-    switch( u16 ) {
-    case 1:
-      /* LogWrite(flags,len,buf) */
-      {
-	char *buf;
-	uint32_t len, flags;
-	struct log_entry entry;
-	struct log_iov iov[1];
-	
-	addr = fvm_stack_read( state, 4 ); /* bufadd */
-	buf = fvm_getptr( state, addr );
-	len = fvm_stack_read( state, 8 ); /* buflen */
-	flags = fvm_stack_read( state, 12 ); 
-	memset( &entry, 0, sizeof(entry) );
-	iov[0].buf = buf;
-	iov[0].len = buf ? len : 0;
-	entry.iov = iov;
-	entry.niov = 1;
-	entry.flags = flags;
-	log_write( NULL, &entry );
-      }
-      break;
-    default:
-      printf( "INvalid syscall %u\n", (uint32_t)u16 );
-      return -1;
-    }
+    sts = fvm_syscall( state, u16 );
+    if( sts ) return -1;
     break;
   default:
     printf( "INvalid opcode %u\n", op );

@@ -30,7 +30,7 @@ End;
 
 Procedure NlsProcList(var lognames : string)
 Begin
-   logname = "";
+   lognames = "";
 End;
 
 Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)

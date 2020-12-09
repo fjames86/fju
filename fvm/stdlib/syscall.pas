@@ -10,7 +10,7 @@ Const LogLvlFatal = 0x05;
 Const LogBinary = 0x10;
 Declare Syscall LogWrite(flags : u32, len : u32, buf : opaque) : 1;
 
-Declare Syscall LogReadNext(idHigh : u32, idLow : u32, var len : u32, var buf : opaque, var idHigh : u32, var IdLow : u32) : 2;
+Declare Syscall LogReadNext(previdHigh : u32, previdLow : u32, var len : u32, var buf : opaque, var idHigh : u32, var IdLow : u32) : 2;
 Declare Syscall LogRead(idHigh : u32, idLow : u32, var len : u32, var buf : opaque ) : 3;
 
 Const FregTypeOpaque = 0;

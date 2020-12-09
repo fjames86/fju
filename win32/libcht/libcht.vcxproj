@@ -152,7 +152,6 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\cht\cht-rsync.c" />
     <ClCompile Include="..\..\cht\cht.c" />
   </ItemGroup>
   <ItemGroup>

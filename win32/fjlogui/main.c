@@ -34,7 +34,7 @@
 #include <fju/log.h>
 #include <fju/hostreg.h>
 #include <fju/hrauth.h>
-#include <fju/nls.h>
+//#include <fju/nls.h>
 #include <fju/rpcd.h>
 
 

@@ -1,4 +1,11 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <Winsock2.h>
+#include <Windows.h>
+#define strcasecmp _stricmp
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -320,7 +327,8 @@ static int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t len, flags;
       struct log_entry entry;
       struct log_iov iov[1];
-      
+      uint32_t addr;
+
       addr = fvm_stack_read( state, 4 ); /* bufadd */
       buf = fvm_getptr( state, addr );
       len = fvm_stack_read( state, 8 ); /* buflen */

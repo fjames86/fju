@@ -136,15 +136,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\fvm\fvm-cluster.c" />
-    <ClCompile Include="..\..\fvm\fvm-module.c" />
-    <ClCompile Include="..\..\fvm\fvm-native.c" />
-    <ClCompile Include="..\..\fvm\fvm-opcodes.c" />
-    <ClCompile Include="..\..\fvm\fvm-rpc.c" />
-    <ClCompile Include="..\..\fvm\fvm-state.c" />
+    <ClInclude Include="..\..\include\fju\fvm.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\fju\fvm.h" />
+    <ClCompile Include="..\..\fvm\fvm.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

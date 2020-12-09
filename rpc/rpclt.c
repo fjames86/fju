@@ -1224,7 +1224,8 @@ static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   modname = NULL;
   buf = NULL;
   len = 0;
-  
+  procname = NULL;
+
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "modname" ) == 0 ) {
@@ -1270,7 +1271,8 @@ static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   buf = NULL;
   len = 0;
   clid = 0;
-  
+  procname = NULL;
+
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "modname" ) == 0 ) {

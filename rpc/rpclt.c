@@ -1118,7 +1118,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
 	isvar = (siginfo >> (j*3)) & 0x4;
 	vartype = (siginfo >> (j*3)) & 0x3;
 	printf( "%s%s%s", j ? ", " : "", isvar ? "var " : "",
-		vartype == 0 ? "U32" :
+		vartype == 0 ? "Int" :
 		vartype == 1 ? "String" :
 		vartype == 2 ? "Opaque" : 
 		"Other" );

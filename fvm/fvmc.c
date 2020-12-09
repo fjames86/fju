@@ -1186,6 +1186,8 @@ static void emitdata( void *data, int len ) {
 static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen ) {
   if( glob.tok.type != TOK_NAME ) usage( "Unexpect symbol type %s - expected u32|string|opaque", gettokname( glob.tok.type ) );
   if( strcasecmp( glob.tok.val, "u32" ) == 0 ) *type = VAR_TYPE_U32;
+  else if( strcasecmp( glob.tok.val, "int" ) == 0 ) *type = VAR_TYPE_U32;
+  else if( strcasecmp( glob.tok.val, "integer" ) == 0 ) *type = VAR_TYPE_U32;    
   else if( strcasecmp( glob.tok.val, "string" ) == 0 ) *type = VAR_TYPE_STRING;
   else if( strcasecmp( glob.tok.val, "opaque" ) == 0 ) *type = VAR_TYPE_OPAQUE;
   expecttok( f, TOK_NAME );
@@ -1877,6 +1879,10 @@ static void parsedeclaration( FILE *f ) {
     expecttok( f, TOK_COLON );
     if( acceptkeyword( f, "u32" ) ) {
       type = VAR_TYPE_U32;
+    } else if( acceptkeyword( f, "int" ) ) {
+      type = VAR_TYPE_U32;
+    } else if( acceptkeyword( f, "integer" ) ) {
+      type = VAR_TYPE_U32;      
     } else if( acceptkeyword( f, "string" ) ) {
       type = VAR_TYPE_STRING;
     } else usage( "Invalid constant type" );
@@ -1980,7 +1986,6 @@ static void parsefile( FILE *f ) {
     char varname[FVM_MAX_NAME];
     var_t vartype;
     uint32_t arraylen;
-    struct var *v;
     
     /* var name : type; */
     if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
@@ -1990,7 +1995,7 @@ static void parsefile( FILE *f ) {
     parsevartype( f, &vartype, &arraylen );
     expecttok( f, TOK_SEMICOLON );
 
-    v = addglobal( varname, vartype, arraylen );
+    addglobal( varname, vartype, arraylen );
   }
 
   /* everything else following this is in the text segment */
@@ -2310,7 +2315,7 @@ static void compile_file( char *path, char *outpath ) {
 	fvmc_printf( "  Param %u: %s%s : %s\n",
 		i, p->params[i].isvar ? "var " : "",
 		p->params[i].name,
-		p->params[i].type == VAR_TYPE_U32 ? "U32" :
+		p->params[i].type == VAR_TYPE_U32 ? "Int" :
 		p->params[i].type == VAR_TYPE_STRING ? "String" :
 		p->params[i].type == VAR_TYPE_OPAQUE ? "Opaque" :
 		"Other" );

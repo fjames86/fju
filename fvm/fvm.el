@@ -10,7 +10,7 @@
 			   "While" "while" "Do" "do" "Then" "then" "Else" "else"
 			   "Goto" "GoTo" "goto" "Call" "call" "Syscall" "syscall"
 			   "Begin" "begin" "Declare" "declare" "Include" "include"))
-	     (x-types '("u32" "U32" "opaque" "Opaque" "string" "String"))
+	     (x-types '("u32" "U32" "int" "Int" "Integer" "opaque" "Opaque" "string" "String"))
 	     (x-keywords-regexp (regexp-opt x-keywords 'words))
 	     (x-types-regexp (regexp-opt x-types 'words)))
 	`((,x-types-regexp . font-lock-type-face)

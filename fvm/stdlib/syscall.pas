@@ -8,10 +8,10 @@ Const LogLvlWarn = 0x03;
 Const LogLvlError = 0x04;
 Const LogLvlFatal = 0x05;
 Const LogBinary = 0x10;
-Declare Syscall LogWrite(flags : u32, len : u32, buf : opaque) : 1;
+   Declare Syscall LogWrite(logname : string, flags : u32, len : u32, buf : opaque) : 1;
 
-Declare Syscall LogReadNext(previdHigh : u32, previdLow : u32, var len : u32, var buf : opaque, var idHigh : u32, var IdLow : u32) : 2;
-Declare Syscall LogRead(idHigh : u32, idLow : u32, var len : u32, var buf : opaque ) : 3;
+Declare Syscall LogNext(logname : string, previdHigh : u32, previdLow : u32, var idHigh : u32, var IdLow : u32) : 2;
+Declare Syscall LogRead(logname : string, idHigh : u32, idLow : u32, len : u32, buf : opaque, var lenp : u32 ) : 3;
 
 Const FregTypeOpaque = 0;
 Const FregTypeU32 = 1;

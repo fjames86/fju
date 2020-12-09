@@ -1,3 +1,4 @@
+{ -*- mode:fvm -*- }
 
 
 { 
@@ -22,15 +23,36 @@ Begin
    { declarations }
    
    { globals }
-
+   var nlogs : u32;
+   var lognames : string[256]; # 32 byte name, 8 names max = 256
+   var logids : u32[16];
+   
 { procedures }
 Procedure NlsProcNull()
 Begin
 End;
 
-Procedure NlsProcList(var lognames : string)
+Procedure Memcpy(dlen : u32, dest : opaque, slen : u32, src : opaque)
 Begin
-   lognames = "";
+	var i : u32;
+	var len : u32;
+
+	len = dlen;
+	if slen < dlen then len = slen;
+	
+	i = 0;
+	While i < len Do Begin
+	      dest[i] = src[i];
+	      i = i + 4;
+	End;
+End;
+
+Procedure NlsProcList(var lognames2 : string)
+Begin
+	var p : opaque;
+  	lognames2 = "";
+   	p = lognames + 32;
+	Call Memcpy(32, p, "hello", 6);
 End;
 
 Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)

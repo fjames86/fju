@@ -1315,6 +1315,14 @@ static void parseexpr( FILE *f ) {
     }
     
     expecttok( f, TOK_NAME );
+
+    if( accepttok( f, TOK_OARRAY ) ) {
+      /* name[expr] */
+      parseexpr( f );
+      emit_add();
+      emit_ld();
+      expecttok( f, TOK_CARRAY );
+    }
   } else usage( "Bad expr %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
   
   optype = glob.tok.type;
@@ -1686,6 +1694,17 @@ static int parsestatement( FILE *f ) {
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {
       expecttok( f, TOK_NAME );
+      if( accepttok( f, TOK_OARRAY ) ) {
+	/* name[expr] = expr */
+	parseexpr( f );
+	if( v->type == VAR_TYPE_U32 ) {
+	  emit_ldi32( 4 );
+	  emit_mul();
+	}
+	emit_add();
+	expecttok( f, TOK_CARRAY );
+      }
+      
       expecttok( f, TOK_EQ );
       parseexpr( f );
       
@@ -1696,6 +1715,17 @@ static int parsestatement( FILE *f ) {
 	emit_ldi32( v->address );
 	
 	expecttok( f, TOK_NAME );
+	if( accepttok( f, TOK_OARRAY ) ) {
+	  /* name[expr] = expr */
+	  parseexpr( f );
+	  if( v->type == VAR_TYPE_U32 ) {
+	    emit_ldi32( 4 );
+	    emit_mul();
+	  }
+	  emit_add();
+	  expecttok( f, TOK_CARRAY );
+	}
+	
 	expecttok( f, TOK_EQ );
 	parseexpr( f );
 	
@@ -1711,6 +1741,16 @@ static int parsestatement( FILE *f ) {
 	}
 	
 	expecttok( f, TOK_NAME );
+	if( accepttok( f, TOK_OARRAY ) ) {
+	  /* name[expr] = expr */
+	  parseexpr( f );
+	  if( p->type == VAR_TYPE_U32 ) {
+	    emit_ldi32( 4 );
+	    emit_mul();
+	  }
+	  emit_add();
+	  expecttok( f, TOK_CARRAY );
+	}	
 	expecttok( f, TOK_EQ );
 	parseexpr( f );
 

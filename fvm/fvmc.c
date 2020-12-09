@@ -1416,6 +1416,8 @@ static void parseexpr( FILE *f ) {
 	char lname1[64], lname2[64];
 	uint32_t addr1, addr2;
 	struct label *l;
+
+	expecttok( f, TOK_ANDAND );
 	
 	/* expr && expr */
 	/* if the value on stack is true then evaluate second expression. otherwise 0 */
@@ -1430,6 +1432,12 @@ static void parseexpr( FILE *f ) {
 	emit_ldi32( 0 ); /* not true - push false */
 	emit_jmp( addr2 ); /* go to end */
 	addlabel( lname1 );
+
+	/* both parseexpr() functions have adjusted the stack, but only one of them 
+	 * will be executed by the runtime. so we end up with an incorrect stack adjustment here.
+	 * to work around this we modify it by hand */
+	glob.stackoffset -= 4;
+	
 	parseexpr( f );
 	addlabel( lname2 );
       }
@@ -1439,7 +1447,9 @@ static void parseexpr( FILE *f ) {
 	char lname1[64], lname2[64];
 	uint32_t addr1, addr2;
 	struct label *l;
-       
+
+	expecttok( f, TOK_OROR );
+	
 	/* expr1 || expr */
 	/* if expr1 is true jump to end, otherwise evaluate expr */
 	getlabelname( "OROR", lname1 );
@@ -1453,6 +1463,12 @@ static void parseexpr( FILE *f ) {
 	parseexpr( f ); /* first expr was false so evaluate 2nd */
 	emit_jmp( addr2 );
 	addlabel( lname1 );
+
+	/* both parseexpr() functions have adjusted the stack, but only one of them 
+	 * will be executed by the runtime. so we end up with an incorrect stack adjustment here.
+	 * to work around this we modify it by hand */
+	glob.stackoffset -= 4;
+
 	emit_ldi32( 1 ); /* push true */
 	addlabel( lname2 );
       }
@@ -1479,8 +1495,15 @@ static void parseexpr( FILE *f ) {
 	expecttok( f, TOK_COLON );
 	emit_jmp( addr2 );
 	addlabel( lname1 );
+
+	/* both parseexpr() functions have adjusted the stack, but only one of them 
+	 * will be executed by the runtime. so we end up with an incorrect stack adjustment here.
+	 * to work around this we modify it by hand */
+	glob.stackoffset -= 4;
+	
 	parseexpr( f );
 	addlabel( lname2 );
+
       }
       break;
     default:

@@ -37,8 +37,7 @@ Begin
 	var i : u32;
 	var len : u32;
 
-	len = dlen;
-	if slen < dlen then len = slen;
+	len = (slen < dlen) ? (slen || 123) : dlen;
 	
 	i = 0;
 	While i < len Do Begin

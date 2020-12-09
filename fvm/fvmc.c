@@ -1455,6 +1455,8 @@ static void parseexpr( FILE *f ) {
 	char lname1[64], lname2[64];
 	struct label *l;
 	uint32_t addr1, addr2;
+
+	expecttok( f, TOK_QUESTION );
 	
 	getlabelname( "Q", lname1 );
 	getlabelname( "Q", lname2 );

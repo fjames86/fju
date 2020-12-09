@@ -15,7 +15,7 @@ End;
 Procedure TestProc2(var a :  u32)
 Begin
    Syscall LogWrite(LogBinary,14,"hello, world!");
-   a = a + 1;
+   a = a ? a + 1 : a - 1;
 End;	   
    
 End.		      

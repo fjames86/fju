@@ -26,6 +26,7 @@ static struct {
   struct fvm_module *modules;
   uint32_t max_steps;
   uint32_t max_runtime;
+  uint32_t debug;
 } glob = { NULL, 1000000, 5000 };
 
 int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
@@ -280,14 +281,16 @@ static int fvm_step( struct fvm_state *state ) {
   u8 = state->module->text[state->pc - FVM_ADDR_TEXT];
   op = u8;
 
-  oinfo = getopinfo( op );
-  printf( "PC=%04x SP=%04x %s Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown" );
-  u32 = (state->sp > 64) ? state->sp - 64 : 0;
-  printf( "%04x: ", u32 );
-  for( i = u32; i < state->sp; i += 4 ) {
-    printf( "%x ", *((uint32_t *)&state->stack[i]) );
+  if( glob.debug ) {
+    oinfo = getopinfo( op );
+    printf( "PC=%04x SP=%04x %s Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown" );
+    u32 = (state->sp > 64) ? state->sp - 64 : 0;
+    printf( "%04x: ", u32 );
+    for( i = u32; i < state->sp; i += 4 ) {
+      printf( "%x ", *((uint32_t *)&state->stack[i]) );
+    }
+    printf( "\n" );
   }
-  printf( "\n" );
   
   state->pc++;
   switch( op ) {
@@ -320,7 +323,7 @@ static int fvm_step( struct fvm_state *state ) {
     u32 = fvm_pop( state );
     if( u32 < FVM_ADDR_TEXT || (u32 >= (FVM_ADDR_TEXT + state->module->textsize)) ) {
       if( (u32 == 0) && (state->frame == 1) ) {
-	printf( "Returning from entry point routine\n" );
+	//printf( "Returning from entry point routine\n" );
       } else {
 	printf( "Attempt to return to invalid address %04x\n", u32 );
 	return -1;
@@ -578,6 +581,7 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	} else {
 	  /* get result */
 	  u = fvm_read_u32( &state, u32[i] );
+	  printf( "Extracted %u\n", u );
 	  sts = xdr_encode_uint32( resbuf, u );
 	  if( sts ) return sts;
 	}
@@ -599,6 +603,8 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
     }
   }
 
+  resbuf->count = resbuf->offset;
+  resbuf->offset = 0;
   
   return 0;
   

@@ -1,5 +1,4 @@
 
-{ -*- text -*- }
 
 { 
   * This defines a module which does the following:
@@ -15,26 +14,23 @@
 Program NLS(10001,1,NlsProcNull,NlsProcList,NlsInit,NlsService,NlsCommand);
 Begin
 
-{ constants }
-const MaxLog = 8;
-const MaxLogId = 64; { 8 * MaxLog }
-const MaxLogName = 512; { MaxLog * 64 }
+   { includes }
+   Include "syscall.pas";
+   
+   { constants }
 
-{ globals }
-var nlogs : u32;
-var msgids : opaque[MaxLog];
-var lognames : opaque[MaxLogName];
+   { declarations }
+   
+   { globals }
 
 { procedures }
-Procedure NlsProcNull(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
+Procedure NlsProcNull()
 Begin
-	rescount = 0;
-	resbuf = 0;
 End;
 
-Procedure NlsProcList(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
+Procedure NlsProcList(var lognames : string)
 Begin
-
+   logname = "";
 End;
 
 Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)

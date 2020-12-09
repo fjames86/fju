@@ -49,13 +49,8 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 /* register rpc interface */
 void fvm_rpc_register( void );
 
-
-/* 
- * Issue a clustered command which runs the specified procedure 
- * clid ::= cluster id or 0 for default first cluster with appid=FVM_RPC_PROG
- * progid,procid,args,len ::= procedure and args to run 
- */
-//int fvm_cluster_run( uint64_t clid, uint32_t progid, uint32_t procid, char *args, int len );
+int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, int len );
+int fvm_cluster_updatestate( uint64_t clid, char *modname );
 
 #endif
 

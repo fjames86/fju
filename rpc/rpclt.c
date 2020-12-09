@@ -83,7 +83,15 @@ static void raft_snapshot_results( struct xdr_s *xdr );
 static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void raft_change_results( struct xdr_s *xdr );
 static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr );
-
+static void fvm_list_results( struct xdr_s *xdr );
+static void fvm_load_results( struct xdr_s *xdr );
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_unload_results( struct xdr_s *xdr );
+static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_run_results( struct xdr_s *xdr );
+static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_clrun_results( struct xdr_s *xdr );
+static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
@@ -102,6 +110,11 @@ static struct clt_info clt_procs[] = {
     { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
     { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
     { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*]" },
+    { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
+    { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* register=*" },
+    { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
+    { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname=* procname=* args=*" },
+    { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1077,4 +1090,213 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   xdr_encode_boolean( xdr, bappid );
   if( bappid ) xdr_encode_uint32( xdr, appid );
 }
+
+
+static void fvm_list_results( struct xdr_s *xdr ) {
+  int sts, b, i;
+  char name[64];
+  uint32_t progid, versid, datasize, textsize, nprocs, address, siginfo;
+  int vartype, isvar, nargs, j;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  while( b ) {
+    xdr_decode_string( xdr, name, sizeof(name) );
+    xdr_decode_uint32( xdr, &progid );
+    xdr_decode_uint32( xdr, &versid );
+    xdr_decode_uint32( xdr, &datasize );
+    xdr_decode_uint32( xdr, &textsize );    
+    xdr_decode_uint32( xdr, &nprocs );
+    printf( "%s %u:%u Data=%u Text=%u\n", name, progid, versid, datasize, textsize );    
+    for( i = 0; i < nprocs; i++ ) {
+      xdr_decode_string( xdr, name, sizeof(name) ); 
+      xdr_decode_uint32( xdr, &address );     
+      xdr_decode_uint32( xdr, &siginfo );
+      printf( "    [%d] %s(", i, name );
+      nargs = (siginfo >> 24) & 0x1f;
+      for( j = 0; j < nargs; j++ ) {
+	isvar = (siginfo >> (j*3)) & 0x4;
+	vartype = (siginfo >> (j*3)) & 0x3;
+	printf( "%s%s%s", j ? ", " : "", isvar ? "var " : "",
+		vartype == 0 ? "U32" :
+		vartype == 1 ? "String" :
+		vartype == 2 ? "Opaque" : 
+		"Other" );
+      }
+      printf( ")\n" );
+    }
+    printf( "\n" );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "XDR error" );
+  }
+}
+
+static void fvm_load_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *filename;
+  int sts;
+  int registerp;
+  struct mmf_s mmf;
+  
+  filename = NULL;
+  registerp = 0;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "filename" ) == 0 ) {
+      filename = argval;
+    } else if( strcmp( argname, "register" ) == 0 ) {
+      registerp = 1;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !filename ) usage( "Need filename" );
+
+  sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) usage( "Failed to open file" );
+
+  mmf_remap( &mmf, mmf.fsize );
+  xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
+  xdr_encode_boolean( xdr, registerp );
+  mmf_close( &mmf );
+}
+
+static void fvm_unload_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *modname;
+
+  modname = NULL;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "name" ) == 0 ) {
+      modname = argval;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !modname ) usage( "Need module name" );
+
+  xdr_encode_string( xdr, modname );
+}
+
+static void fvm_run_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint8_t *bufp;
+  int lenp;
+  char *str;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );
+  sts = xdr_decode_opaque_ref( xdr, &bufp, &lenp );
+  if( sts ) usage( "XDR error" );
+
+  if( b ) {
+    str = malloc( lenp * 2 );
+    base64_encode( (char *)bufp, lenp, str );
+    printf( "%s\n", str );
+  }
+}
+
+static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *modname, *procname;
+  char *buf;
+  int len, sts;
+  
+  modname = NULL;
+  buf = NULL;
+  len = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "modname" ) == 0 ) {
+      modname = argval;
+    } else if( strcmp( argname, "procname" ) == 0 ) {
+      procname = argval;
+    } else if( strcmp( argname, "args" ) == 0 ) {
+      buf = malloc( 32*1024 );
+      len = 32*1024;
+      sts = base64_decode( buf, len, argval );
+      if( sts < 0 ) usage( "Base64 decode error" );
+      len = sts;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !modname ) usage( "Need module name" );
+  if( !procname ) usage( "Need proc name" );
+  
+  xdr_encode_string( xdr, modname );
+  xdr_encode_string( xdr, procname );
+  xdr_encode_opaque( xdr, (uint8_t *)buf, len );
+}
+
+
+static void fvm_clrun_results( struct xdr_s *xdr ) {
+  int sts, b;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *modname, *procname;
+  char *buf;
+  int len, sts;
+  uint64_t clid;
+  
+  modname = NULL;
+  buf = NULL;
+  len = 0;
+  clid = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "modname" ) == 0 ) {
+      modname = argval;
+    } else if( strcmp( argname, "procname" ) == 0 ) {
+      procname = argval;
+    } else if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "args" ) == 0 ) {
+      buf = malloc( 32*1024 );
+      len = 32*1024;
+      sts = base64_decode( buf, len, argval );
+      if( sts < 0 ) usage( "Base64 decode error" );
+      len = sts;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !modname ) usage( "Need module name" );
+  if( !procname ) usage( "Need proc name" );
+
+  xdr_encode_uint64( xdr, clid );
+  xdr_encode_string( xdr, modname );
+  xdr_encode_string( xdr, procname );
+  xdr_encode_opaque( xdr, (uint8_t *)buf, len );
+}
+
 

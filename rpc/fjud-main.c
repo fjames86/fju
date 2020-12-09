@@ -80,7 +80,7 @@ static void init_cb( void ) {
    * they are included in libfju so can be called directly from here.
    */     
   freg_register();
-  //fvm_rpc_register();
+  fvm_rpc_register();
   cmdprog_register();
   raft_register();
   rex_register();

@@ -3,9 +3,9 @@ Program TestProgram(123,1,TestProc);
 
 Begin
 
-   Include "syscall.pas";
+Include "syscall.pas";
 
-   Declare Procedure TestProc2(var a :  u32);
+Declare Procedure TestProc2(var a :  u32);
 
 Procedure TestProc(a : u32, var out : string )
 Begin

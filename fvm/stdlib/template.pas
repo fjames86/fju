@@ -1,4 +1,6 @@
 
+{ -*- mode: fvm -*- }
+
 Program Template(0,0,TestProc);
 Begin
    { Includes }

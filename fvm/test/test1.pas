@@ -1,4 +1,6 @@
 
+{ -*- mode:fvm -*- }
+
 Program TestProgram(123,1,TestProc);
 
 Begin

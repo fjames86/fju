@@ -1232,7 +1232,7 @@ static void parseexpr( FILE *f ) {
     emitdata( glob.tok.val, strlen( glob.tok.val ) + 1 );
     addlabel( lname );
 
-    emit_lea( startaddr - glob.pc );
+    emit_lea( startaddr - glob.pc - 3 ); /* the emit_lea opcode takes 3 bytes */
 
     expecttok( f, TOK_STRING );
   } else if( glob.tok.type == TOK_NAME ) {
@@ -1292,7 +1292,7 @@ static void parseexpr( FILE *f ) {
 	      emitdata( glob.tok.val, strlen( cl->val ) + 1 );
 	      addlabel( lname );
 	      
-	      emit_lea( startaddr - glob.pc );
+	      emit_lea( startaddr - glob.pc - 3 ); /* LEA opcode uses 3 bytes */
 	    }
 	  }
 	}	  

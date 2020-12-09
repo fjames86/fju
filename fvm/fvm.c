@@ -146,9 +146,9 @@ static int fvm_push( struct fvm_state *state, uint32_t u32 ) {
 
 static uint32_t fvm_pop( struct fvm_state *state ) {
   uint32_t u32;
-  if( state->sp <= 3 ) return -1;
+  if( state->sp < 4 ) return -1;
+  state->sp -= 4;  
   memcpy( &u32, &state->stack[state->sp], 4 );
-  state->sp -= 4;
   return u32;
 }
 
@@ -211,13 +211,67 @@ static uint32_t fvm_stack_read( struct fvm_state *state, uint32_t depth ) {
   return fvm_read_u32( state, FVM_ADDR_STACK + state->sp - depth );
 }
 
+
+struct opinfo {  
+  op_t op;
+  char *name;
+  uint32_t pcdata;
+  int32_t stackadjust;
+};
+
+static struct opinfo opcodeinfo[] =
+  {
+   { OP_NOP, "NOP", 0, 0 },
+   { OP_LDI32, "LDI32", 4, 4 },
+   { OP_LEA, "LEA", 2, 4 },
+   { OP_ADDSP, "ADDSP", 2, 0 }, /* opcode adjusts sp directly */
+   { OP_SUBSP, "SUBSP", 2, 0 }, /* ditto */
+   { OP_CALL, "CALL", 2, 0 }, /* ( -- retaddr ) */
+   { OP_RET, "RET", 0, 0 }, /* ( retaddr -- ) */
+   { OP_LEASP, "LEASP", 2, 4 }, /* ( -- address ) */
+   { OP_LDSP, "LDSP", 2, 4 }, /* ( -- value ) */
+   { OP_STSP, "STSP", 2, -4 }, /* (value -- )*/
+   { OP_BR, "BR", 2, -4 },  /* (test --) */
+   { OP_EQ, "EQ", 0, -4 }, /* (a b -- test) */
+   { OP_NEQ, "NEQ", 0, -4 },
+   { OP_GT, "GT", 0, -4 },
+   { OP_GTE, "GTE", 0, -4 },
+   { OP_LT, "LT", 0, -4 },
+   { OP_LTE, "LTE", 0, -4 },
+   { OP_JMP, "JMP", 2, 0 },
+   { OP_ADD, "ADD", 0, -4 },
+   { OP_SUB, "SUB", 0, -4 },
+   { OP_MUL, "MUL", 0, -4 },
+   { OP_DIV, "DIV", 0, -4 },      
+   { OP_MOD, "MOD", 0, -4 },      
+   { OP_AND, "AND", 0, -4 },
+   { OP_OR, "OR", 0, -4 },
+   { OP_XOR, "XOR", 0, -4 }, /* (a b -- a^b )*/
+   { OP_NOT, "NOT", 0, 0 },
+   { OP_SHL, "SHL", 0, -4 }, /* (value shift -- value) */
+   { OP_SHR, "SHR", 0, -4 }, /* (value shift -- value) */
+   { OP_LD, "LD", 0, 0 },  /* ( address -- value ) */
+   { OP_ST, "ST", 0, -8 },  /* (address value -- ) */
+   { OP_SYSCALL, "SYSCALL", 2, 0 },
+   { 0, NULL, 0, 0 }
+  };
+static struct opinfo *getopinfo( op_t op ) {
+  int i;
+  for( i = 0; opcodeinfo[i].name; i++ ) {
+    if( opcodeinfo[i].op == op ) return &opcodeinfo[i];
+  }
+  return NULL;
+}
+
 static int fvm_step( struct fvm_state *state ) {
   op_t op;  
   uint8_t u8;
   uint16_t u16;
   int16_t i16;
   uint32_t u32, addr;  
-
+  struct opinfo *oinfo;
+  int i;
+  
   if( (state->pc < FVM_ADDR_TEXT) || (state->pc >= (FVM_ADDR_TEXT + state->module->textsize)) ) {
     printf( "bad pc %04x\n", state->pc );
     return -1;
@@ -225,6 +279,16 @@ static int fvm_step( struct fvm_state *state ) {
 
   u8 = state->module->text[state->pc - FVM_ADDR_TEXT];
   op = u8;
+
+  oinfo = getopinfo( op );
+  printf( "PC=%04x SP=%04x %s Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown" );
+  u32 = (state->sp > 64) ? state->sp - 64 : 0;
+  printf( "%04x: ", u32 );
+  for( i = u32; i < state->sp; i += 4 ) {
+    printf( "%x ", *((uint32_t *)&state->stack[i]) );
+  }
+  printf( "\n" );
+  
   state->pc++;
   switch( op ) {
   case OP_NOP:
@@ -254,7 +318,14 @@ static int fvm_step( struct fvm_state *state ) {
     break;
   case OP_RET:
     u32 = fvm_pop( state );
-    if( u32 < FVM_ADDR_TEXT || (u32 >= (FVM_ADDR_TEXT + state->module->textsize)) ) return -1;
+    if( u32 < FVM_ADDR_TEXT || (u32 >= (FVM_ADDR_TEXT + state->module->textsize)) ) {
+      if( (u32 == 0) && (state->frame == 1) ) {
+	printf( "Returning from entry point routine\n" );
+      } else {
+	printf( "Attempt to return to invalid address %04x\n", u32 );
+	return -1;
+      }
+    }
     state->pc = u32;
     state->frame--;
     break;
@@ -398,10 +469,12 @@ static int fvm_step( struct fvm_state *state ) {
       }
       break;
     default:
+      printf( "INvalid syscall %u\n", (uint32_t)u16 );
       return -1;
     }
     break;
   default:
+    printf( "INvalid opcode %u\n", op );
     return -1;
   }
 
@@ -437,7 +510,11 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
     isvar[i] = (siginfo >> (i*3)) & 0x4 ? 1 : 0;
     vartype[i] = (siginfo >> (i*3)) & 0x3;
 
-    if( !isvar[i] ) {
+    if( isvar[i] ) {
+      /* output arg: reserve space for result pointer */
+      u32[i] = FVM_ADDR_STACK + state.sp; /* address of result value */
+      state.sp += 4;
+    } else {
       /* input arg */
       switch( vartype[i] ) {
       case VAR_TYPE_U32:
@@ -451,7 +528,7 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
       case VAR_TYPE_STRING:
 	sts = xdr_decode_string( argbuf, state.stack + state.sp, FVM_MAX_STACK - state.sp );
 	if( sts ) return sts;
-	u32[i] = state.sp;
+	u32[i] = FVM_ADDR_STACK + state.sp;
 	len = strlen( state.stack + state.sp ) + 1;
 	if( len % 4 ) len += 4 - (len % 4);
 	state.sp += len;
@@ -461,21 +538,17 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	sts = xdr_decode_opaque( argbuf, (uint8_t *)state.stack + state.sp, &len );
 	if( sts ) return sts;
 	u32[i - 1] = len;
-	u32[i] = state.sp;
+	u32[i] = FVM_ADDR_STACK + state.sp;
 	if( len % 4 ) len += 4 - (len % 4);
 	state.sp += len;
 	break;
       }      
     }
   }
-  
+
+  /* push args values */
   for( i = 0; i < nargs; i++ ) {
-    if( isvar[i] ) {
-      u32[i] = state.sp;
-      fvm_push( &state, 0 ); /* push variable to receive result */
-    } else {
-      fvm_push( &state, u32[i] ); /* push arg received */
-    }
+    fvm_push( &state, u32[i] ); 
   }
   fvm_push( &state, 0 ); /* push dummy return address */
     

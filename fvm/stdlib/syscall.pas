@@ -18,7 +18,7 @@ Const FregTypeU32 = 1;
 Const FregTypeU64 = 2;
 Const FregTypeString = 3;
 Const FregTypeKey = 4;
-Declare Syscall FregNext(path : string, name : string, var entryname : string, var entryType : u32, var entryIdHigh : u32, var entryIdLow : u32) : 4;
+Declare Syscall FregNext(path : string, name : string, var entryname : string, var entryType : u32, var result : u32) : 4;
 Declare Syscall FregReadU32(path : string, var result : u32) : 5;
 Declare Syscall FregReadString(path : string, var result : string) : 6;
 Declare Syscall FregReadOpaque(path : string, var len : u32, var result : opaque) : 7;
@@ -37,4 +37,14 @@ Declare Syscall RpcNow(var nowHigh : u32, var nowLow : u32) : 17;
 
 Declare Syscall SecRandU32(var r : u32) : 18;
 
-Declare Syscall Sprintf(fmt : string, arg1 : u32, arg2 : u32, arg3 : u32, arg4 : u32, var result : string) : 19;
+Declare Syscall Sprintf(fmt : string, arg1 : u32, arg2 : u32, arg3 : u32, arg4 : u32, result : string, resultlen : u32) : 19;
+
+Declare Syscall XdrDecodeU32(var len : u32, var buf : opaque, var val : u32) : 20;
+Declare Syscall XdrDecodeU64(var len : u32, var buf : opaque, var valHigh : u32, var valLow : u32) : 21;
+Declare Syscall XdrDecodeString(var len : u32, var buf : opaque, val : string, strlen : u32) : 22;
+Declare Syscall XdrDecodeOpaque(var len : u32, var buf : opaque, var lenp : u32, var bufp : opaque) : 23;
+Declare Syscall XdrEncodeU32(var len : u32, var buf : opaque, val : u32) : 24;
+Declare Syscall XdrEncodeU64(var len : u32, var buf : opaque, valHigh : u32, valLow : u32) : 25;
+Declare Syscall XdrEncodeString(var len : u32, var buf : opaque, val : string) : 26;
+Declare Syscall XdrEncodeOpaque(var len : u32, var buf : opaque, lenp : u32, bufp : opaque) : 27;
+

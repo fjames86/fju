@@ -343,6 +343,7 @@ static int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       log_write( NULL, &entry );
     }
     break;
+    /* TODO: lots of syscalls required to be implemented */
   default:
     return -1;
   }

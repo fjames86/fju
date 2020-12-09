@@ -112,6 +112,7 @@ typedef enum {
     TOK_OROR,      /* || */
     TOK_SHR,       /* >> */
     TOK_SHL,       /* << */
+    TOK_QUESTION,  /* ? */
 } tok_t;
 
 static struct {
@@ -122,7 +123,7 @@ static struct {
 		 { TOK_OARRAY, "oarray" }, { TOK_CARRAY, "carray" }, { TOK_PLUS, "plus" }, { TOK_MINUS, "minus" }, { TOK_MUL, "mul" },
 		 { TOK_DIV, "div" }, { TOK_MOD, "mod" }, { TOK_EQ, "eq" }, { TOK_NEQ, "neq" }, { TOK_GT, "gt" }, { TOK_GTE, "gte" },
 		 { TOK_LT, "lt" }, { TOK_LTE, "lte" }, { TOK_AND, "and" }, { TOK_OR, "or" }, { TOK_NOT, "not" }, { TOK_TILDE, "tilde" }, { TOK_ANDAND, "andand" },
-		 { TOK_OROR, "oror" }, { 0, NULL } };
+		 { TOK_OROR, "oror" }, { TOK_QUESTION, "?" }, { 0, NULL } };
 static char *gettokname( tok_t type ) {
   int i;
   for( i = 0; toknames[i].name; i++ ) {
@@ -293,7 +294,7 @@ static int getnexttok( FILE *f, struct token *tok ) {
     } else {
       ungetc( c2, f );
       tok->type = TOK_AND;
-    }
+    }   
   } else if( c == '|' ) {
     /* check for || */
     c2 = fgetc( f );
@@ -331,6 +332,8 @@ static int getnexttok( FILE *f, struct token *tok ) {
     }
   } else if( c == '+' ) {
     tok->type = TOK_PLUS;
+  } else if( c == '?' ) {
+    tok->type = TOK_QUESTION;
   } else if( c == '-' ) {
     c2 = fgetc( f );
     if( c2 >= '0' && c2 <= '9' ) {
@@ -954,11 +957,14 @@ static struct syscall *addsyscall( char *name, uint32_t siginfo, uint32_t id ) {
   struct syscall *sc;
   sc = getsyscall( name );
   if( sc ) {
-    if( sc->siginfo != siginfo ) usage( "Syscall %s already define with different signature" );
+    if( sc->siginfo != siginfo ) usage( "Syscall \"%s\" already defined with different signature", name );
+    if( sc->id != id ) usage( "Syscall \"%s\" already defined with different id", name );    
     return sc;
   }
 
   sc = malloc( sizeof(*sc) );
+  memset( sc, 0, sizeof(*sc) );
+  
   strcpy( sc->name, name );
   sc->id = id;
   sc->siginfo = siginfo;
@@ -1218,7 +1224,7 @@ static void parseexpr( FILE *f ) {
     parseexpr( f );
     expecttok( f, TOK_CPAREN );
   } else if( accepttok( f, TOK_TILDE ) || accepttok( f, TOK_NOT ) ) {
-    /* XXX: should ~expr tbe he same as !expr ? */
+    /* XXX: should ~expr be the same as !expr ? */
     parseexpr( f );
     emit_not();
   } else if( glob.tok.type == TOK_U32 ) {
@@ -1440,6 +1446,30 @@ static void parseexpr( FILE *f ) {
 	emit_jmp( addr2 );
 	addlabel( lname1 );
 	emit_ldi32( 1 ); /* push true */
+	addlabel( lname2 );
+      }
+      break;
+    case TOK_QUESTION:
+      {
+      /* expr1 ? expr2 : expr3 */
+	char lname1[64], lname2[64];
+	struct label *l;
+	uint32_t addr1, addr2;
+	
+	getlabelname( "Q", lname1 );
+	getlabelname( "Q", lname2 );
+	l = getlabel( lname1 );
+	addr1 = l ? l->address : 0;
+	l = getlabel( lname2 );	
+	addr2 = l ? l->address : 0;
+
+	emit_not();
+	emit_br( addr1 ); /* if expr evaluates to false jump */
+	parseexpr( f );
+	expecttok( f, TOK_COLON );
+	emit_jmp( addr2 );
+	addlabel( lname1 );
+	parseexpr( f );
 	addlabel( lname2 );
       }
       break;

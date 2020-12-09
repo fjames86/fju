@@ -899,6 +899,8 @@ static int fvm_register_program( char *modname ) {
   m = fvm_module_by_name( modname );
   if( !m ) return -1;
 
+  if( !m->progid || !m->versid ) return -1;
+  
   pg = alloc_program( m->progid, m->versid, m->nprocs, fvm_rpc_proc );
   rpc_program_register( pg );
   return 0;
@@ -1091,19 +1093,19 @@ static struct rpc_program fvm_prog = {
 };
 
 struct fvm_iterator {
-	struct rpc_iterator iter;
-	char modname[FVM_MAX_NAME];
-	uint32_t procid;
+  struct rpc_iterator iter;
+  char modname[FVM_MAX_NAME];
+  uint32_t procid;
 };
 
 static void fvm_module_iter( struct rpc_iterator *iter ) {
-	struct fvm_iterator *fiter;
-	struct fvm_module *m;
+  struct fvm_iterator *fiter;
+  struct fvm_module *m;
 
-	fiter = (struct fvm_iterator *)iter;
-	m = fvm_module_by_name( fiter->modname );
-	if( !m ) return;
-	fvm_run( m, fiter->procid, NULL, NULL );
+  fiter = (struct fvm_iterator *)iter;
+  m = fvm_module_by_name( fiter->modname );
+  if( !m ) return;
+  fvm_run( m, fiter->procid, NULL, NULL );
 }
 
 void fvm_rpc_register( void ) {
@@ -1118,50 +1120,49 @@ void fvm_rpc_register( void ) {
   raft_app_register( &fvm_app );  
 
   /* 
-   * TODO: 
    * load modules registered in /fju/fvm/modules/MODNAME/path str 
    * Run initialization routine /fju/fvm/modules/MODNAME/initproc str 
    * Setup service routines /fju/fvm/modules/MODNAME/service str procname 
    * Register rpc programs /fju/fvm/modules/MODNAME/register u32 
    */
 
-   sts = freg_subkey( NULL, 0, "/fju/fvm/modules", FREG_CREATE, &id );
-   if( sts ) return;
-   key = 0;
-   while( !freg_next( NULL, id, key, &entry ) ) {
-     if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
-       sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path), NULL );
-	   if( sts ) goto cont;
-       sts = fvm_module_load_file( path, &m );
-       if( sts ) goto cont;
+  sts = freg_subkey( NULL, 0, "/fju/fvm/modules", FREG_CREATE, &key );
+  if( sts ) return;
+  id = 0;
+  while( !freg_next( NULL, key, id, &entry ) ) {
+    if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+      sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path), NULL );
+      if( sts ) goto cont;
+      sts = fvm_module_load_file( path, &m );
+      if( sts ) goto cont;
 
-	   sts = freg_get_by_name( NULL, entry.id, "initproc", FREG_TYPE_STRING, path, sizeof(path), NULL );
-       if( !sts ) {
-         int procid;
-		 procid = fvm_procid_by_name( m, path );
-		 if( procid >= 0 ) {
-		   fvm_run( m, procid, NULL, NULL );
-		 }
-       }
-
-	   sts = freg_get_by_name( NULL, entry.id, "service", FREG_TYPE_STRING, path, sizeof(path), NULL );
-       if( !sts ) {
-		 struct fvm_iterator *iter = malloc( sizeof(*iter) );
-		 memset( iter, 0, sizeof(*iter) );
-		 iter->iter.cb = fvm_module_iter;
-		 strcpy( iter->modname, m->name );
-		 iter->procid = fvm_procid_by_name( m, path );
-		 rpc_iterator_register( &iter->iter );
-       }
-
-	   sts = freg_get_by_name( NULL, entry.id, "register", FREG_TYPE_UINT32, &registerp, sizeof(registerp), NULL );
-       if( !sts ) {
-         fvm_register_program( m->name );
-       }
-
-   }
-   cont:
-	key = entry.id;
+      sts = freg_get_by_name( NULL, entry.id, "initproc", FREG_TYPE_STRING, path, sizeof(path), NULL );
+      if( !sts ) {
+	int procid;
+	procid = fvm_procid_by_name( m, path );
+	if( procid >= 0 ) {
+	  fvm_run( m, procid, NULL, NULL );
 	}
+      }
+
+      sts = freg_get_by_name( NULL, entry.id, "service", FREG_TYPE_STRING, path, sizeof(path), NULL );
+      if( !sts ) {
+	struct fvm_iterator *iter = malloc( sizeof(*iter) );
+	memset( iter, 0, sizeof(*iter) );
+	iter->iter.cb = fvm_module_iter;
+	strcpy( iter->modname, m->name );
+	iter->procid = fvm_procid_by_name( m, path );
+	rpc_iterator_register( &iter->iter );
+      }
+
+      sts = freg_get_by_name( NULL, entry.id, "register", FREG_TYPE_UINT32, (char *)&registerp, sizeof(registerp), NULL );
+      if( !sts ) {
+	fvm_register_program( m->name );
+      }
+
+    }
+  cont:
+    id = entry.id;
+  }
 
 }

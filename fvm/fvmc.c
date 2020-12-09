@@ -1218,6 +1218,7 @@ static void parseexpr( FILE *f ) {
     parseexpr( f );
     expecttok( f, TOK_CPAREN );
   } else if( accepttok( f, TOK_TILDE ) || accepttok( f, TOK_NOT ) ) {
+    /* XXX: should ~expr tbe he same as !expr ? */
     parseexpr( f );
     emit_not();
   } else if( glob.tok.type == TOK_U32 ) {
@@ -1395,7 +1396,53 @@ static void parseexpr( FILE *f ) {
       expecttok( f, optype );
       parseexpr( f );            
       emit_lte();
-      break;                  
+      break;
+    case TOK_ANDAND:
+      {
+	char lname1[64], lname2[64];
+	uint32_t addr1, addr2;
+	struct label *l;
+	
+	/* expr && expr */
+	/* if the value on stack is true then evaluate second expression. otherwise 0 */
+	getlabelname( "ANDAND", lname1 );
+	l = getlabel( lname1 );
+	addr1 = l ? l->address : 0;
+	getlabelname( "ANDAND2", lname2 );
+	l = getlabel( lname2 );
+	addr2 = l ? l->address : 0;
+	
+	emit_br( addr1 ); /* if true then evaluate other expression */
+	emit_ldi32( 0 ); /* not true - push false */
+	emit_jmp( addr2 ); /* go to end */
+	addlabel( lname1 );
+	parseexpr( f );
+	addlabel( lname2 );
+      }
+      break;
+    case TOK_OROR:
+      {
+	char lname1[64], lname2[64];
+	uint32_t addr1, addr2;
+	struct label *l;
+       
+	/* expr1 || expr */
+	/* if expr1 is true jump to end, otherwise evaluate expr */
+	getlabelname( "OROR", lname1 );
+	l = getlabel( lname1 );
+	addr1 = l ? l->address : 0;
+	getlabelname( "OROR", lname2 );
+	l = getlabel( lname2 );
+	addr2 = l ? l->address : 0;
+
+	emit_br( addr1 ); /* if true, push 1 */
+	parseexpr( f ); /* first expr was false so evaluate 2nd */
+	emit_jmp( addr2 );
+	addlabel( lname1 );
+	emit_ldi32( 1 ); /* push true */
+	addlabel( lname2 );
+      }
+      break;
     default:
       break;
     }

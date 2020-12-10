@@ -3,8 +3,13 @@
 
 Program HelloWorld(0,0,Hello);
 Begin
-   Procedure Hello(var hello : string)
-   Begin
-      hello = "Hello, World!";
+
+	Include "syscall.pas";
+
+
+   Procedure Hello()
+   Begin	
+      Syscall Puts("Hello, World!\n");
    End;
+   
 End.

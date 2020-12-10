@@ -29,6 +29,6 @@ Code sharing is done by static linking (i.e. Including another file).
 There is a hard coded set of system calls which are routines provided by the runtime.
 These provide the mechanism for fvm programs to call out to other fju apis.
 
-The images generated should be fairly compact (a hello world program comes in at 89 bytes).
+The images generated should be fairly compact (a hello world program comes in at around 30 bytes, 90 bytes including header).
 So the 24kb limit on text space should be enough for reasonably large programs.
 

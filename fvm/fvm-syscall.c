@@ -421,6 +421,16 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
     /* TODO: lots of syscalls required to be implemented */
+  case 32:
+    /* Puts(str) */
+    {
+      uint32_t pars[1];
+      char *str;
+      read_pars( state, pars, 1 );
+      str = fvm_getptr( state, pars[0], 0 );
+      if( str ) puts( str );	
+    }
+    break;
   default:
     return -1;
   }

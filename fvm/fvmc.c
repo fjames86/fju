@@ -2155,7 +2155,7 @@ static void parsefile( FILE *f ) {
       case TOK_STRING:
 	vartype = VAR_TYPE_STRING;
 	len = strlen( glob.tok.val ) + 1;
-	if( len % 4 ) len += 4 - (len % 4);
+	//if( len % 4 ) len += 4 - (len % 4); /* XXX: do we need this? What value does it add? */
 	val = malloc( len );
 	strncpy( val, glob.tok.val, len );
 	expecttok( f, TOK_STRING );      

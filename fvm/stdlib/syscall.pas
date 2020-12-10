@@ -54,3 +54,4 @@ Declare Syscall ChtRead(keylen : int, keybuf : opaque, datalen : int, databuf : 
 Declare Syscall ChtWrite(keylen : int, keybuf : opaque, datalen : int, databuf : opaque) : 30;
 Declare Syscall ChtDelete(keylen : int, keybuf : opaque) : 31;
 
+Declare Syscall Puts(str : string) : 32;

@@ -135,7 +135,7 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
     }
   }
   if( fvm_module_by_name( hdr.name ) ) {
-    fvm_log( LOG_LVL_ERROR, "Module alreadt registered" );
+    fvm_log( LOG_LVL_ERROR, "Module already registered" );
     return -1;
   }
   

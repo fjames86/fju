@@ -25,6 +25,7 @@ static void usage( char *fmt, ... );
 
 static void compile_file( char *path, char *outpath );
 static void addincludepath( char *path );
+static void disassemblefile( char *path );
 
 static int fvmc_debug = 0;
 static void fvmc_printf( char *fmt, ... ) {
@@ -40,6 +41,9 @@ static void fvmc_printf( char *fmt, ... ) {
 int main( int argc, char **argv ) {
   int i;
   char *outpath = NULL;
+  int disass;
+
+  disass = 0;
   
   i = 1;
   while( i < argc ) {
@@ -55,8 +59,11 @@ int main( int argc, char **argv ) {
       addincludepath( argv[i] );
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
       fvmc_debug = 1;
+    } else if( strcmp( argv[i], "-d" ) == 0 ) {
+      disass = 1;
     } else {
-      compile_file( argv[i], outpath ? outpath : "out.fvm" );
+      if( disass ) disassemblefile( argv[i] );
+      else compile_file( argv[i], outpath ? outpath : "out.fvm" );
       break;
     }
     i++;
@@ -2326,6 +2333,35 @@ static void fvmc_encode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
     xdr_encode_uint32( xdr, x->procs[i].siginfo );
   }
 }
+static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
+  int i, sts;
+  sts = xdr_decode_uint32( xdr, &x->magic );
+  if( sts ) return sts;
+  sts = xdr_decode_uint32( xdr, &x->version );
+  if( sts ) return sts;  
+  sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->progid );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->versid );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->datasize );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->textsize );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->nprocs );
+  if( sts ) return sts;
+  if( x->nprocs > FVM_MAX_PROC ) return -1;
+  for( i = 0; i < x->nprocs; i++ ) {
+    sts = xdr_decode_string( xdr, x->procs[i].name, sizeof(x->procs[i].name) );
+    if( sts ) return sts;    
+    sts = xdr_decode_uint32( xdr, &x->procs[i].address );
+    if( sts ) return sts;    
+    sts = xdr_decode_uint32( xdr, &x->procs[i].siginfo );
+    if( sts ) return sts;    
+  }
+  return 0;
+}
 
 static void compile_file( char *path, char *outpath ) {
   struct fvm_headerinfo header;
@@ -2451,6 +2487,120 @@ static void compile_file( char *path, char *outpath ) {
       
 }
 
+static void disassemblefile( char *path ) {
+  struct mmf_s mmf;
+  int sts, i, j, k, isvar, vartype, nargs;
+  struct xdr_s xdr;
+  struct fvm_headerinfo hdr;
+  uint8_t *ptr;
+  op_t op;
+  struct opinfo *opinfo;
+  uint16_t u16;
+  uint32_t u32;
+  
+  sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) usage( "Failed to open file %s", path );
+
+  mmf_remap( &mmf, mmf.fsize );
+  xdr_init( &xdr, mmf.file, mmf.fsize );
+  sts = fvmc_decode_header( &xdr, &hdr );
+  if( sts ) usage( "Failed to parse header" );
+
+  if( hdr.magic != FVM_MAGIC ) {
+    usage( "Bad magic" );
+  }
+  
+  if( hdr.version != FVM_VERSION ) {
+    usage( "Bad version" );
+  }
+  
+  if( xdr.count != (xdr.offset + hdr.textsize) ) {
+    usage( "Bad size buffer size" );
+  }
+  
+  for( i = 0; i < hdr.nprocs; i++ ) {
+    if( (hdr.procs[i].address < FVM_ADDR_TEXT) ||
+	(hdr.procs[i].address >= (FVM_ADDR_TEXT + hdr.textsize)) ) {
+      usage( "Proc address outsize text" );
+    }
+
+    /* opaque params must be preceeded by a u32 param that receives the length */
+    if( ((hdr.procs[i].siginfo >> (3*i)) & 0x3) == VAR_TYPE_OPAQUE ) {
+      if( i == 0 ) {
+	usage( "Bad parameter" );
+      }
+      
+      if( ((hdr.procs[i].siginfo >> (3*(i - 1))) & 0x3) != VAR_TYPE_U32 ) {
+	usage( "Bad parameter" );
+      }
+      
+      if( ((hdr.procs[i].siginfo >> (3*i)) & 0x4) && !(hdr.procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
+	usage( "Bad parameter" );	
+      }
+      
+      if( !((hdr.procs[i].siginfo >> (3*i)) & 0x4) && (hdr.procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
+	usage( "Bad parameter" );	
+      }
+    }
+  }
+
+  /* read opcodes and print */
+  i = xdr.offset;
+  ptr = (uint8_t *)mmf.file;
+  while( i < mmf.fsize ) {
+    for( j = 0; j < hdr.nprocs; j++ ) {
+      if( hdr.procs[j].address == (FVM_ADDR_TEXT + i - xdr.offset) ) {
+	printf( "%04x Procedure %s(", FVM_ADDR_TEXT + i - xdr.offset, hdr.procs[j].name );
+	nargs = (hdr.procs[j].siginfo >> 24) & 0x1f;
+	for( k = 0; k < nargs; k++ ) {
+	  vartype = ((hdr.procs[j].siginfo >> (3*k)) & 0x3);
+	  isvar = ((hdr.procs[j].siginfo >> (3*k)) & 0x4);
+	  printf( "%s%s%s", k ? ", " : "", isvar ? "var " : "",
+		  vartype == VAR_TYPE_U32 ? "Int" :
+		  vartype == VAR_TYPE_STRING ? "String" :
+		  vartype == VAR_TYPE_OPAQUE ? "Opaque" :
+		  "Other" );
+	}
+	printf( ")\n" );
+	break;
+      }
+    }
+      
+    op = ptr[i];
+    opinfo = getopinfo( op );
+    if( !opinfo ) {
+      printf( "%04x %-8s %-8u | %-8d | 0x%04x %c\n",
+	     FVM_ADDR_TEXT + i - xdr.offset, "Unknown", op, op, op, op );
+      i++;
+    } else {
+      switch( opinfo->pcdata ) {
+      case 0:
+	printf( "%04x %-8s\n", FVM_ADDR_TEXT + i - xdr.offset, opinfo->name );
+	i += 1;
+	break;
+      case 2:
+	memcpy( &u16, &ptr[i + 1], 2 );
+	printf( "%04x %-8s %-8u | %-8d | 0x%04x\n",
+		FVM_ADDR_TEXT + i - xdr.offset,
+		opinfo->name, (uint32_t)u16, (int32_t)(int16_t)u16, (uint32_t)u16 );
+	i += 3;
+	break;
+      case 4:
+	memcpy( &u32, &ptr[i + 1], 4 );
+	printf( "%04x %-8s %-8u | %-8d | 0x%04x\n",
+		FVM_ADDR_TEXT + i - xdr.offset, opinfo->name, u32, (int32_t)u32, u32 );
+	i += 5;
+	break;
+      default:
+	break;
+      }
+    }
+  }
+
+  
+  mmf_close( &mmf );
+}
+
 static void usage( char *fmt, ... ) {
   va_list args;
   
@@ -2463,7 +2613,12 @@ static void usage( char *fmt, ... ) {
     va_end( args );
     printf( "\n" );
   } else {
-    printf( "Usage: fvmc [-o output] [-I includepath] [-v] filename\n");
+    printf( "Usage: fvmc [-o output] [-I includepath] [-v] [-d] filename\n"
+	    "  -o            Set output path\n"
+	    "  -I            Add include path\n"
+	    "  -v            Verbose mode\n"
+	    "  -d            Disassemble file\n"
+	    );
   }
 
   /* delete the output file if we are exiting */

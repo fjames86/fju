@@ -1201,23 +1201,6 @@ static void emitdata( void *data, int len ) {
  * bits 28-31: unused 
  */
 
-#if 0
-(defun encode-params (&rest params)
-	   (let ((p 0))
-	     (do ((i 0 (1+ i))
-		  (pars params (cdr pars)))
-		 ((or (= i 8) (null pars)))
-	       (destructuring-bind (type &optional isvar) (car pars)
-		 (setf p (logior p
-				 (ash (logior (ecase type
-						(:u32 0) (:string 1) (:opaque 2))
-					      (if isvar 4 0))
-				      (* 3 i))))))
-	     (setf p (logior p (ash (length params) 24)))
-	     p))
-#endif
-
-
 /* --------------- */
 
 static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen ) {

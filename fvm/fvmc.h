@@ -66,7 +66,6 @@ struct fvm_headerinfo {
     uint32_t address;
     uint32_t siginfo;
   } procs[FVM_MAX_PROC];
-  uint32_t spare[32];
 };
 
 #endif

@@ -44,90 +44,118 @@ static struct {
   uint32_t debug;
 } glob = { NULL, 1000000, 5000 };
 
+static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
+  int i, sts;
+  sts = xdr_decode_uint32( xdr, &x->magic );
+  if( sts ) return sts;
+  sts = xdr_decode_uint32( xdr, &x->version );
+  if( sts ) return sts;  
+  sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->progid );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->versid );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->datasize );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->textsize );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->nprocs );
+  if( sts ) return sts;
+  if( x->nprocs > FVM_MAX_PROC ) return -1;
+  for( i = 0; i < x->nprocs; i++ ) {
+    sts = xdr_decode_string( xdr, x->procs[i].name, sizeof(x->procs[i].name) );
+    if( sts ) return sts;    
+    sts = xdr_decode_uint32( xdr, &x->procs[i].address );
+    if( sts ) return sts;    
+    sts = xdr_decode_uint32( xdr, &x->procs[i].siginfo );
+    if( sts ) return sts;    
+  }
+  return 0;
+}
+
 int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   /* parse header, load data and text segments */
-  struct fvm_headerinfo *hdr;
+  struct fvm_headerinfo hdr;
   struct fvm_module *module;
-  int i;
-  
-  if( size < sizeof(*hdr) ) {
-    fvm_log( LOG_LVL_ERROR, "Module smaller than header" );
+  int i, sts;
+  struct xdr_s xdr;
+
+  xdr_init( &xdr, (uint8_t *)buf, size );
+  sts = fvmc_decode_header( &xdr, &hdr );
+	      
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "Failed to decode header" );
     return -1;
   }
   
-  hdr = (struct fvm_headerinfo *)buf;
-  if( hdr->magic != FVM_MAGIC ) {
+  if( hdr.magic != FVM_MAGIC ) {
     fvm_log( LOG_LVL_ERROR, "Bad magic" );
     return -1;
   }
   
-  if( hdr->version != FVM_VERSION ) {
+  if( hdr.version != FVM_VERSION ) {
     fvm_log( LOG_LVL_ERROR, "Bad version" );
     return -1;
   }
   
-  if( size != sizeof(*hdr) + hdr->textsize ) {
-    fvm_log( LOG_LVL_ERROR, "Bad size" );
+  if( xdr.count != (xdr.offset + hdr.textsize) ) {
+    fvm_log( LOG_LVL_ERROR, "Bad size buffer size" );
     return -1;
   }
   
-  if( hdr->nprocs > FVM_MAX_PROC ) {
-    fvm_log( LOG_LVL_ERROR, "Too many procs" );
-    return -1;
-  }
-  
-  for( i = 0; i < hdr->nprocs; i++ ) {
-    if( (hdr->procs[i].address < FVM_ADDR_TEXT) ||
-	(hdr->procs[i].address >= (FVM_ADDR_TEXT + hdr->textsize)) ) {
+  for( i = 0; i < hdr.nprocs; i++ ) {
+    if( (hdr.procs[i].address < FVM_ADDR_TEXT) ||
+	(hdr.procs[i].address >= (FVM_ADDR_TEXT + hdr.textsize)) ) {
       fvm_log( LOG_LVL_ERROR, "Proc address outsize text" );
       return -1;
     }
 
     /* opaque params must be preceeded by a u32 param that receives the length */
-    if( ((hdr->procs[i].siginfo >> (3*i)) & 0x3) == VAR_TYPE_OPAQUE ) {
+    if( ((hdr.procs[i].siginfo >> (3*i)) & 0x3) == VAR_TYPE_OPAQUE ) {
       if( i == 0 ) {
 	fvm_log( LOG_LVL_ERROR, "Bad parameter" );
 	return -1;
       }
       
-      if( ((hdr->procs[i].siginfo >> (3*(i - 1))) & 0x3) != VAR_TYPE_U32 ) {
+      if( ((hdr.procs[i].siginfo >> (3*(i - 1))) & 0x3) != VAR_TYPE_U32 ) {
 	fvm_log( LOG_LVL_ERROR, "Bad parameter" );
 	return -1;
       }
       
-      if( ((hdr->procs[i].siginfo >> (3*i)) & 0x4) && !(hdr->procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
+      if( ((hdr.procs[i].siginfo >> (3*i)) & 0x4) && !(hdr.procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
 	fvm_log( LOG_LVL_ERROR, "Bad parameter" );	
 	return -1;
       }
       
-      if( !((hdr->procs[i].siginfo >> (3*i)) & 0x4) && (hdr->procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
+      if( !((hdr.procs[i].siginfo >> (3*i)) & 0x4) && (hdr.procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
 	fvm_log( LOG_LVL_ERROR, "Bad parameter" );	
 	return -1;
       }
     }
   }
-  if( fvm_module_by_name( hdr->name ) ) {
+  if( fvm_module_by_name( hdr.name ) ) {
     fvm_log( LOG_LVL_ERROR, "Module alreadt registered" );
     return -1;
   }
   
-  module = malloc( sizeof(*module) + hdr->datasize + hdr->textsize );
+  module = malloc( sizeof(*module) + hdr.datasize + hdr.textsize );
   memset( module, 0, sizeof(*module) );
-  strcpy( module->name, hdr->name );
-  module->progid = hdr->progid;
-  module->versid = hdr->versid;
-  module->nprocs = hdr->nprocs;
+  strcpy( module->name, hdr.name );
+  module->progid = hdr.progid;
+  module->versid = hdr.versid;
+  module->nprocs = hdr.nprocs;
   for( i = 0; i < module->nprocs; i++ ) {
-    strcpy( module->procs[i].name, hdr->procs[i].name );
-    module->procs[i].address = hdr->procs[i].address;
-    module->procs[i].siginfo = hdr->procs[i].siginfo;
+    strcpy( module->procs[i].name, hdr.procs[i].name );
+    module->procs[i].address = hdr.procs[i].address;
+    module->procs[i].siginfo = hdr.procs[i].siginfo;
   }
-  module->textsize = hdr->textsize;
-  module->datasize = hdr->datasize;
+  module->textsize = hdr.textsize;
+  module->datasize = hdr.datasize;
   module->data = (char *)module + sizeof(*module);
-  module->text = (char *)module + sizeof(*module) + hdr->datasize;
-  memset( module->data, 0, hdr->datasize );
-  memcpy( module->text, (char *)hdr + sizeof(*hdr), hdr->textsize );
+  module->text = (char *)module + sizeof(*module) + hdr.datasize;
+  memset( module->data, 0, hdr.datasize );
+  memcpy( module->text, xdr.buf + xdr.offset, hdr.textsize );
 
   module->next = glob.modules;
   glob.modules = module;
@@ -554,6 +582,39 @@ static int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       }
       
     }
+    break;
+  case 28:
+    /* LogLastId(logname,var idHigh,var idLow) */
+    {
+      struct log_s log, *logp;
+      uint32_t idlowaddr, idhighaddr, nameaddr;
+      char logname[64], *strp;
+      int sts;
+      struct log_prop prop;
+      
+      idlowaddr = fvm_stack_read( state, 4 );
+      idhighaddr = fvm_stack_read( state, 8 );
+      nameaddr = fvm_stack_read( state, 12 );
+
+      logp = NULL;
+      memset( logname, 0, sizeof(logname) );
+      if( nameaddr ) {
+	strp = fvm_getptr( state, nameaddr, 0 );
+	if( strp ) {
+	  strncpy( logname, strp, sizeof(logname) - 8 );
+	  strcat( logname, ".log" );
+	  sts = log_open( mmf_default_path( logname, NULL ), NULL, &log );
+	  if( !sts ) logp = &log;
+	}
+      }
+
+      log_prop( logp, &prop );
+      fvm_write_u32( state, idlowaddr, prop.last_id & 0xffffffff );
+      fvm_write_u32( state, idhighaddr, prop.last_id >> 32 );
+      
+      if( logp ) log_close( logp );      
+    }
+    
     break;
     /* TODO: lots of syscalls required to be implemented */
   default:

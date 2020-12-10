@@ -8,7 +8,7 @@ Const LogLvlWarn = 0x03;
 Const LogLvlError = 0x04;
 Const LogLvlFatal = 0x05;
 Const LogBinary = 0x10;
-   Declare Syscall LogWrite(logname : string, flags : u32, len : u32, buf : opaque) : 1;
+Declare Syscall LogWrite(logname : string, flags : u32, len : u32, buf : opaque) : 1;
 
 Declare Syscall LogNext(logname : string, previdHigh : u32, previdLow : u32, var idHigh : u32, var IdLow : u32) : 2;
 Declare Syscall LogRead(logname : string, idHigh : u32, idLow : u32, len : u32, buf : opaque, var lenp : u32 ) : 3;
@@ -48,3 +48,4 @@ Declare Syscall XdrEncodeU64(var len : u32, var buf : opaque, valHigh : u32, val
 Declare Syscall XdrEncodeString(var len : u32, var buf : opaque, val : string) : 26;
 Declare Syscall XdrEncodeOpaque(var len : u32, var buf : opaque, lenp : u32, bufp : opaque) : 27;
 
+Declare Syscall LogLastId(logname : string, var idHigh : int, var idLow : int) : 28;

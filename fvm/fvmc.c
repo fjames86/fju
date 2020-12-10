@@ -2309,12 +2309,31 @@ static void processfile( char *path ) {
   fclose( f );
 }
 
-  
+
+static void fvmc_encode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
+  int i;
+  xdr_encode_uint32( xdr, x->magic );
+  xdr_encode_uint32( xdr, x->version );
+  xdr_encode_string( xdr, x->name );
+  xdr_encode_uint32( xdr, x->progid );
+  xdr_encode_uint32( xdr, x->versid );
+  xdr_encode_uint32( xdr, x->datasize );
+  xdr_encode_uint32( xdr, x->textsize );
+  xdr_encode_uint32( xdr, x->nprocs );
+  for( i = 0; i < x->nprocs; i++ ) {
+    xdr_encode_string( xdr, x->procs[i].name );
+    xdr_encode_uint32( xdr, x->procs[i].address );
+    xdr_encode_uint32( xdr, x->procs[i].siginfo );
+  }
+}
+
 static void compile_file( char *path, char *outpath ) {
   struct fvm_headerinfo header;
   struct export *e;
   struct proc *proc;
-
+  char hdrbuf[2048];
+  struct xdr_s xdr;
+  
   strcpy( glob.curfile, path );
   strcpy( glob.outpath, outpath );
   glob.outfile = fopen( outpath, "wb" );
@@ -2351,7 +2370,9 @@ static void compile_file( char *path, char *outpath ) {
     header.nprocs++;
     e = e->next;
   }
-  fwrite( &header, 1, sizeof(header), glob.outfile );
+  xdr_init( &xdr, (uint8_t *)hdrbuf, sizeof(hdrbuf) );
+  fvmc_encode_header( &xdr, &header );
+  fwrite( xdr.buf, 1, xdr.offset, glob.outfile );
 
   /* reset label counter */
   glob.labelidx = 0;

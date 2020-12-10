@@ -1,6 +1,9 @@
 
 
-fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/test/test1.fvm
+fvmprogs += ${BINDIR}/cht.fvm
+fvmprogs += fvm/test/test1.fvm
+
+fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/test/test1.fvm ${fvmprogs}
 
 ${LIBDIR}/libfvm.a: fvm/fvm.c
 	${CC} -c fvm/fvm.c ${CFLAGS} 
@@ -14,6 +17,9 @@ ${BINDIR}/fvm: fvm/fvm-main.c
 
 fvm/test/test1.fvm: fvm/test/test1.pas ${BINDIR}/fvmc
 	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/test/test1.pas
+
+${BINDIR}/cht.fvm: fvm/stdlib/cht.pas ${BINDIR}/fvmc
+	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/stdlib/cht.pas
 
 LIBRARIES+=fvm
 PROGRAMS+=fvm

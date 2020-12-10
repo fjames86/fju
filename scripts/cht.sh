@@ -9,16 +9,12 @@ clid=$(raft | grep 805271413 | awk '{print $1}')
 key=$1 
 databuf=$2
 
-xdru decode $key u32 u32 u32 u32 > /dev/null
-if [ ! $? -eq 0 ]; then
-    echo "Bad key length - must be 16 "
-    exit 1
-fi
+$keyparts = $(xdru decode $key u32 u32 u32 u32)
+$keyb64 = $(xdru encod u32=$(echo $keyparts | awk '{print $1}') u32=$(echo $keyparts | awk '{print $2}') u32=$(echo $keyparts | awk '{print $3}') u32=$(echo $keyparts | awk '{print $4}'))
 
-# encode command to run the fju module (progid=10000) ChtWrite procedure (procid=3)
-# encode: progid=10000 mode=1 hostid=0 procid=3 args=opaque
-procargs=$(xdru encode fixed=$key opaque=$databuf)
-command=$(xdru encode u32=10000 u32=1 u64=0 u32=3 opaque=$procargs)
+# encode command to run the fju module ChtWrite procedure 
+procargs=$(xdru encode opaque=$keyb64 opaque=$databuf)
+command=$(xdru encode str="FJU" u32=1 u64=0 str="ChtWrite" opaque=$procargs)
 
 #echo "rpclt raft.command clid=$clid command=$command"
 rpclt raft.command clid=$clid command=$command

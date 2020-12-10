@@ -49,3 +49,8 @@ Declare Syscall XdrEncodeString(var len : u32, var buf : opaque, val : string) :
 Declare Syscall XdrEncodeOpaque(var len : u32, var buf : opaque, lenp : u32, bufp : opaque) : 27;
 
 Declare Syscall LogLastId(logname : string, var idHigh : int, var idLow : int) : 28;
+
+Declare Syscall ChtRead(keylen : int, keybuf : opaque, datalen : int, databuf : opaque, var datalenp : int) : 29;
+Declare Syscall ChtWrite(keylen : int, keybuf : opaque, datalen : int, databuf : opaque) : 30;
+Declare Syscall ChtDelete(keylen : int, keybuf : opaque) : 31;
+

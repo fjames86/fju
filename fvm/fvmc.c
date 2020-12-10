@@ -67,7 +67,8 @@ int main( int argc, char **argv ) {
 
 /* ----------- lexing ------------------- */
 
-  
+static void incrementlinecount( void );
+
 typedef enum {
     TOK_U32,       /* [-][0-9] | 0x[0-9A-Fa-f] */
     TOK_STRING,    /* "..." */
@@ -141,12 +142,18 @@ static void skipwhitespace( FILE *f ) {
       /* skip single line comment */
       do {
 	c = fgetc( f );
-	if( c == '\n' ) break;
+	if( c == '\n' ) {
+	  incrementlinecount();
+	  break;
+	}
       } while( 1 );	  
     } else {    
       found = 0;
       for( w = whitespacechars; *w; w++ ) {
 	if( c == *w ) {
+	  if( c == '\n' ) {
+	    incrementlinecount();
+	  }
 	  found = 1;
 	  break;
 	}
@@ -619,7 +626,13 @@ static struct {
   FILE *outfile;
   struct proc *currentproc;
   uint32_t stackoffset;  /* offset relative to last local var. */
+  uint32_t linecount;
+  char curfile[256];
 } glob;
+
+static void incrementlinecount( void ) {
+  glob.linecount++;
+}
 
 static void getlabelname( char *prefix, char *lname ) {
   sprintf( lname, "%s-%u", prefix ? prefix : "L", glob.labelidx );
@@ -1990,13 +2003,35 @@ static void parseprocedure( FILE *f ) {
   /* parse body: var definitions followed by statements */
   while( acceptkeyword( f, "var" ) ) {
     /* var name : type; */
+    struct label *namelist, *nl, *nextnl;
+
+    namelist = NULL;
     if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
-    strncpy( name, glob.tok.val, FVM_MAX_NAME - 1 );	
+    nl = malloc( sizeof(*nl) );
+    strncpy( nl->name, glob.tok.val, FVM_MAX_NAME - 1 );
+    nl->next = namelist;
+    namelist = nl;
     expecttok( f, TOK_NAME );
+    while( accepttok( f, TOK_COMMA ) ) {
+      if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
+      nl = malloc( sizeof(*nl) );
+      strncpy( nl->name, glob.tok.val, FVM_MAX_NAME - 1 );
+      nl->next = namelist;
+      namelist = nl;
+      expecttok( f, TOK_NAME );
+    }
+    
     expecttok( f, TOK_COLON );
     parsevartype( f, &vartype, &arraylen );
 
-    addlocal( proc, name, vartype, arraylen );
+    nl = namelist;
+    while( nl ) {
+      nextnl = nl->next;
+      addlocal( proc, nl->name, vartype, arraylen );
+      free( nl );
+      nl = nextnl;
+    }
+    
     expecttok( f, TOK_SEMICOLON );
   }
 
@@ -2024,6 +2059,7 @@ static void parseprocedure( FILE *f ) {
 static void parsefile( FILE *f ) {
   struct token *tok;
 
+  glob.linecount = 1;
   tok = nexttok( f );
   if( !tok ) {
     fvmc_printf( ";; Empty file\n" );
@@ -2062,8 +2098,19 @@ static void parsefile( FILE *f ) {
       parsedeclaration( f );
     } else if( acceptkeyword( f, "include" ) ) {
       /* include string */
+      uint32_t linecount;
+      char curfile[256];
+      
       if( glob.tok.type != TOK_STRING ) usage( "expected include string" );
-      processincludefile( glob.tok.val );      
+
+      linecount = glob.linecount;
+      strcpy( curfile, glob.curfile );
+      glob.linecount = 1;
+      strcpy( glob.curfile, glob.tok.val );
+      processincludefile( glob.tok.val );
+      glob.linecount = linecount;
+      strcpy( glob.curfile, curfile );
+      
       glob.tok.type = TOK_STRING;
       expecttok( f, TOK_STRING );
       expecttok( f, TOK_SEMICOLON );
@@ -2268,6 +2315,7 @@ static void compile_file( char *path, char *outpath ) {
   struct export *e;
   struct proc *proc;
 
+  strcpy( glob.curfile, path );
   strcpy( glob.outpath, outpath );
   glob.outfile = fopen( outpath, "wb" );
   if( !glob.outfile ) usage( "Unable to open output file" );
@@ -2386,6 +2434,8 @@ static void usage( char *fmt, ... ) {
   va_list args;
   
   if( fmt ) {
+    if( glob.linecount ) printf( "%s:%u ", glob.curfile, glob.linecount );
+    
     va_start( args, fmt );
     printf( "Error: " );
     vprintf( fmt, args );

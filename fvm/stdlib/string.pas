@@ -17,13 +17,9 @@ End;
 
 Procedure Strcpy(dest : string, src : string)
 Begin
-	var c : int;
-	var p : opaque;
-	var q : opaque;
-	var i : int;
-	var j : int;
-	var cc : int;
-	
+	var c, cc, i, j : int;
+	var p, q : opaque;
+
 	i = 0;
 	While 1 Do Begin
 	      c = src[i];

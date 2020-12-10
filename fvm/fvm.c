@@ -23,7 +23,7 @@
 #include <fju/freg.h>
 #include <fju/sec.h>
 
-#include "fvmc.h"
+#include "fvm-private.h"
 
 log_deflogger(fvm_log,FVM_RPC_PROG)
   

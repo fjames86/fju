@@ -18,7 +18,7 @@
 #include <fju/fvm.h>
 #include <fju/mmf.h>
 
-#include "fvmc.h"
+#include "fvm-private.h"
 
 static void usage( char *fmt, ... );
 

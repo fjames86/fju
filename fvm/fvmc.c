@@ -2544,6 +2544,12 @@ static void disassemblefile( char *path ) {
     }
   }
 
+  printf( "Name %s\n", hdr.name );
+  printf( "ProgID %u %u\n", hdr.progid, hdr.versid );
+  printf( "DataSize %u TextSize %u\n", hdr.datasize, hdr.textsize );
+  printf( "\n" );
+
+  
   /* read opcodes and print */
   i = xdr.offset;
   ptr = (uint8_t *)mmf.file;

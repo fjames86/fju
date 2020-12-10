@@ -21,7 +21,7 @@ if [ ! $modpath ]; then
     exit 1
 fi
 
-progname=$(fvmc -d $modpath | head -n 2 | grep NAME | awk '{print $2}')
+progname=$(fvmc -d $modpath | head -n 2 | grep -i NAME | awk '{print $2}')
 if [ ! $progname ]; then
     echo "Need progname"
     exit 1

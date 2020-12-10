@@ -16,24 +16,12 @@
 #include <inttypes.h>
 
 #include <fju/fvm.h>
+#include <fju/mmf.h>
 
 #include "fvmc.h"
 
-static void usage( char *fmt, ... ) {
-  va_list args;
-  
-  if( fmt ) {
-    va_start( args, fmt );
-    printf( "Error: " );
-    vprintf( fmt, args );
-    va_end( args );
-    printf( "\n" );
-  } else {
-    printf( "Usage: fvmc [-o output] [-I includepath] [-v] filename\n");
-  }
-   
-  exit( 1 );  
-}
+static void usage( char *fmt, ... );
+
 
 static void compile_file( char *path, char *outpath );
 static void addincludepath( char *path );
@@ -390,6 +378,34 @@ static int getnexttok( FILE *f, struct token *tok ) {
     tok->type = TOK_CARRAY;
   } else if( c == '!' ) {
     tok->type = TOK_NOT;
+  } else if( c == '\'' ) {
+    c2 = fgetc( f );
+    if( c2 == '\\' ) {
+      c2 = fgetc( f );
+      switch( c2 ) {
+      case '\\':
+	c2 = '\\';
+	break;
+      case 'n':
+	c2 = '\n';
+	break;
+      case 't':
+	c2 = '\t';
+	break;
+      case 'r':
+	c2 = '\r';
+	break;
+      case '\'':
+	c2 = '\'';
+	break;
+      default:
+	break;
+      }
+    }
+    tok->type = TOK_U32;
+    tok->u32 = c2;
+    c2 = fgetc( f );
+    if( c2 != '\'' ) usage( "Unmatched Character quote" );    
   } else if( c >= '0' && c <= '9' ) {
     /* parse as integer */
     c2 = fgetc( f );
@@ -599,6 +615,7 @@ static struct {
   uint32_t datasize;
   uint32_t textsize;
 
+  char outpath[256];
   FILE *outfile;
   struct proc *currentproc;
   uint32_t stackoffset;  /* offset relative to last local var. */
@@ -1604,7 +1621,7 @@ static int parsestatement( FILE *f ) {
   } else if( acceptkeyword( f, "begin" ) ) {
     /* begin statement statement ... end */
     while( !acceptkeyword( f, "end") ) {
-      if( !parsestatement( f ) ) usage( "Expected statement" );
+      if( !parsestatement( f ) ) usage( "Expected statement not %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
       expecttok( f, TOK_SEMICOLON );
     }
   } else if( acceptkeyword( f, "if" ) ) {
@@ -1694,7 +1711,10 @@ static int parsestatement( FILE *f ) {
     if( glob.pass == 1 ) {
       addr = 0;
     } else {
-      l = getlabel( glob.tok.val );
+      char lname[64];
+      /* prefix the label name with current procname to enforce jumping only within current proc */      
+      sprintf( lname, "%s-%s", glob.currentproc->name, glob.tok.val );
+      l = getlabel( lname );
       if( !l ) usage( "Unknown label %s", glob.tok.val );
       addr = l->address;
     }
@@ -1707,8 +1727,13 @@ static int parsestatement( FILE *f ) {
     struct param *p;
 
     if( glob.tok.val[strlen( glob.tok.val ) - 1] == ':' ) {
+      char lname[64];
+      
       glob.tok.val[strlen( glob.tok.val ) - 1] = '\0';
-      addlabel( glob.tok.val );
+
+      /* prefix the label name with current procname to enforce jumping only within current proc */
+      sprintf( lname, "%s-%s", glob.currentproc->name, glob.tok.val );
+      addlabel( lname );
       free( glob.tok.val );
       memset( &glob.tok, 0, sizeof(glob.tok) );
       glob.tok.type = TOK_SEMICOLON;
@@ -1932,6 +1957,70 @@ static void parseconstdef( FILE *f ) {
   expecttok( f, TOK_SEMICOLON );  
 }
 
+static void parseprocedure( FILE *f ) {
+  /* parse procedure */
+  char name[FVM_MAX_NAME];
+  struct param params[FVM_MAX_PARAM];
+  int nparams;
+  uint32_t siginfo;
+  struct proc *proc;
+  var_t vartype;
+  uint32_t arraylen;
+      
+  /* reset stackoffset at start of new procedure */
+  if( glob.stackoffset != 0 ) printf( "Invalid stack offset %04x?\n", glob.stackoffset );
+  glob.stackoffset = 0;
+
+  parseproceduresig( f, name, params, &nparams, &siginfo );
+  if( glob.pass == 1 ) {
+    proc = getproc( name );
+    if( proc ) {
+      if( proc->address ) usage( "Duplicate procedure definition for %s", name  );
+      if( proc->siginfo != siginfo ) usage( "Declaration signature does not match definition for %s", name );
+      proc->address = glob.pc;
+    } else {
+      proc = addproc( name, params, nparams, siginfo );
+    }
+  } else {
+    proc = getproc( name );
+  }
+  glob.currentproc = proc;
+      
+  expectkeyword( f, "Begin" );
+  /* parse body: var definitions followed by statements */
+  while( acceptkeyword( f, "var" ) ) {
+    /* var name : type; */
+    if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
+    strncpy( name, glob.tok.val, FVM_MAX_NAME - 1 );	
+    expecttok( f, TOK_NAME );
+    expecttok( f, TOK_COLON );
+    parsevartype( f, &vartype, &arraylen );
+
+    addlocal( proc, name, vartype, arraylen );
+    expecttok( f, TOK_SEMICOLON );
+  }
+
+  /* allocate space for local variables */
+  if( proc->localsize ) {
+    emit_addsp( proc->localsize );
+  }
+      
+  while( parsestatement( f ) ) {
+    expecttok( f, TOK_SEMICOLON );
+  }
+
+  /* free local vars */
+  if( proc->localsize ) {
+    emit_subsp( proc->localsize );
+  }
+      
+  emit_ret();
+  expectkeyword( f, "End" );
+  expecttok( f, TOK_SEMICOLON );
+  fvmc_printf( ";; ------------------------\n\n" );
+        
+}
+
 static void parsefile( FILE *f ) {
   struct token *tok;
 
@@ -2001,67 +2090,7 @@ static void parsefile( FILE *f ) {
   /* everything else following this is in the text segment */
   while( glob.tok.type == TOK_NAME ) {
     if( acceptkeyword( f, "procedure" ) ) {
-      /* parse procedure */
-      char name[FVM_MAX_NAME];
-      struct param params[FVM_MAX_PARAM];
-      int nparams;
-      uint32_t siginfo;
-      struct proc *proc;
-      var_t vartype;
-      uint32_t arraylen;
-      
-      /* reset stackoffset at start of new procedure */
-      if( glob.stackoffset != 0 ) printf( "Invalid stack offset %04x?\n", glob.stackoffset );
-      glob.stackoffset = 0;
-
-      parseproceduresig( f, name, params, &nparams, &siginfo );
-      if( glob.pass == 1 ) {
-	proc = getproc( name );
-	if( proc ) {
-	  if( proc->address ) usage( "Duplicate procedure definition for %s", name  );
-	  if( proc->siginfo != siginfo ) usage( "Declaration signature does not match definition for %s", name );
-	  proc->address = glob.pc;
-	} else {
-	  proc = addproc( name, params, nparams, siginfo );
-	}
-      } else {
-	proc = getproc( name );
-      }
-      glob.currentproc = proc;
-      
-      expectkeyword( f, "Begin" );
-      /* parse body: var definitions followed by statements */
-      while( acceptkeyword( f, "var" ) ) {
-	/* var name : type; */
-	if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
-	strncpy( name, glob.tok.val, FVM_MAX_NAME - 1 );	
-	expecttok( f, TOK_NAME );
-	expecttok( f, TOK_COLON );
-	parsevartype( f, &vartype, &arraylen );
-
-	addlocal( proc, name, vartype, arraylen );
-	expecttok( f, TOK_SEMICOLON );
-      }
-
-      /* allocate space for local variables */
-      if( proc->localsize ) {
-	emit_addsp( proc->localsize );
-      }
-      
-      while( parsestatement( f ) ) {
-	expecttok( f, TOK_SEMICOLON );
-      }
-
-      /* free local vars */
-      if( proc->localsize ) {
-	emit_subsp( proc->localsize );
-      }
-      
-      emit_ret();
-      expectkeyword( f, "End" );
-      expecttok( f, TOK_SEMICOLON );
-      fvmc_printf( ";; ------------------------\n\n" );
-      
+      parseprocedure( f );
     } else if( acceptkeyword( f, "const" ) ) {
       /* parse constant data: const var name = value (type infered from value) */
       char varname[FVM_MAX_NAME];
@@ -2157,7 +2186,9 @@ static void processincludefile( char *path ) {
 	parsedeclaration( f );
       } else if( acceptkeyword( f, "const" ) ) {
 	parseconstdef( f );
-      } else usage( "Only declarations allowed in include files" );
+      } else if( acceptkeyword( f, "procedure" ) ) {
+	parseprocedure( f );
+      } else usage( "Invalid form % (%s) in include file", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
       if( glob.tok.type == TOK_PERIOD ) break;
     }
   }
@@ -2236,7 +2267,8 @@ static void compile_file( char *path, char *outpath ) {
   struct fvm_headerinfo header;
   struct export *e;
   struct proc *proc;
-  
+
+  strcpy( glob.outpath, outpath );
   glob.outfile = fopen( outpath, "wb" );
   if( !glob.outfile ) usage( "Unable to open output file" );
   
@@ -2348,4 +2380,26 @@ static void compile_file( char *path, char *outpath ) {
     }
   }
       
+}
+
+static void usage( char *fmt, ... ) {
+  va_list args;
+  
+  if( fmt ) {
+    va_start( args, fmt );
+    printf( "Error: " );
+    vprintf( fmt, args );
+    va_end( args );
+    printf( "\n" );
+  } else {
+    printf( "Usage: fvmc [-o output] [-I includepath] [-v] filename\n");
+  }
+
+  /* delete the output file if we are exiting */
+  if( glob.outfile ) {    
+    fclose( glob.outfile );
+    mmf_delete_file( glob.outpath );
+  }
+  
+  exit( 1 );  
 }

@@ -17,6 +17,7 @@ Begin
 
    { includes }
    Include "syscall.pas";
+   Include "string.pas";
    
    { constants }
 
@@ -30,20 +31,6 @@ Begin
 { procedures }
 Procedure NlsProcNull()
 Begin
-End;
-
-Procedure Memcpy(dlen : u32, dest : opaque, slen : u32, src : opaque)
-Begin
-	var i : u32;
-	var len : u32;
-
-	len = (slen < dlen) ? (slen || 123) : dlen;
-	
-	i = 0;
-	While i < len Do Begin
-	      dest[i] = src[i];
-	      i = i + 4;
-	End;
 End;
 
 Procedure NlsProcList(var lognames2 : string)

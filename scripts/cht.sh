@@ -12,9 +12,9 @@ databuf=$2
 $keyparts = $(xdru decode $key u32 u32 u32 u32)
 $keyb64 = $(xdru encod u32=$(echo $keyparts | awk '{print $1}') u32=$(echo $keyparts | awk '{print $2}') u32=$(echo $keyparts | awk '{print $3}') u32=$(echo $keyparts | awk '{print $4}'))
 
-# encode command to run the fju module ChtWrite procedure 
+# encode command to run the cht module ChtWrite procedure 
 procargs=$(xdru encode opaque=$keyb64 opaque=$databuf)
-command=$(xdru encode str="FJU" u32=1 u64=0 str="ChtWrite" opaque=$procargs)
+command=$(xdru encode str="CHT" u32=1 u64=0 str="ChtWrite" opaque=$procargs)
 
 #echo "rpclt raft.command clid=$clid command=$command"
 rpclt raft.command clid=$clid command=$command

@@ -1,0 +1,34 @@
+
+# Notes on frank's virtual machine fvm
+
+This implements a (very) simple virtual machine i.e. a bytecode interpreter.
+It is not designed or intended to be used for general purpose programming or scripting.
+Instead its aim is to facilitate the following:
+ - Implementing RPC interfaces i.e. a set of procedures which can be called with some
+ arguments and return some results.
+ - Providing a simple way of linking together other fju APIs
+ - Service routines i.e. procedures which get invoked periodically.
+
+Implementation overview:
+Fvm is implemented as a stack machine. 64kb of virtual memory divided up into the following regions:
+ - 0x0000-0x0fff : reserved (8kb)
+ - 0x1000-0x3fff : data segment (global variables) (16kb)
+ - 0x4000-0xbfff : text segment (read only data, i.e. executable code and constant data) (24kb)
+ - 0xc000-0xffff : stack (16kb)
+
+Opcodes are variable length of 8 bit opcode followed by 0,2 or 4 bytes of payload.
+
+## Compiler
+Generating fvm programs is done by writing a language similar to Pascal.
+It defines a module name, RPC program and version numbers (optional, only needed if implementing
+and RPC interface) and a list of exported procedures (max 32 exported procedures).
+
+There is no limit on number of private procedures.
+Code sharing is done by static linking (i.e. Including another file).
+
+There is a hard coded set of system calls which are routines provided by the runtime.
+These provide the mechanism for fvm programs to call out to other fju apis.
+
+The images generated should be fairly compact (a hello world program comes in at 89 bytes).
+So the 24kb limit on text space should be enough for reasonably large programs.
+

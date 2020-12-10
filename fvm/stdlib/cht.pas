@@ -6,11 +6,21 @@
  * invoked from e.g. raft commands.
 }
 
-Program Cht(0,0,ChtWrite,ChtDelete);
+Program Cht(0,0,ChtRead,ChtWrite,ChtDelete);
 Begin
 
 Include "syscall.pas";
-	
+
+Procedure ChtRead(keylen : int, keybuf : opaque, var datalen : int, var databuf : opaque)
+Begin
+	var l : int;
+	var buf : opaque[2048];
+
+	Syscall ChtRead(keylen,keybuf,2048,buf,l);
+	datalen = l;
+	databuf = buf;
+End;
+
 Procedure ChtWrite(keylen : int, keybuf : opaque, datalen : int, databuf : opaque)
 Begin
 	Syscall ChtWrite(keylen,keybuf,datalen,databuf);

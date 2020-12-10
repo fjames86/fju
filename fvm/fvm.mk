@@ -5,9 +5,9 @@ fvmprogs += fvm/test/test1.fvm
 
 fvm: ${BINDIR}/fvmc ${LIBDIR}/libfvm.a ${BINDIR}/fvm fvm/test/test1.fvm ${fvmprogs}
 
-${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-private.h
-	${CC} -c fvm/fvm.c ${CFLAGS} 
-	${AR} rcs $@ fvm.o
+${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-private.h fvm/fvm-syscall.c 
+	${CC} -c fvm/fvm.c fvm/fvm-syscall.c ${CFLAGS} 
+	${AR} rcs $@ fvm.o fvm-syscall.o
 
 ${BINDIR}/fvmc: fvm/fvmc.c fvm/fvm-private.h
 	${CC} -o $@ fvm/fvmc.c ${CFLAGS} ${LFLAGS} 

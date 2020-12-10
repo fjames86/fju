@@ -26,7 +26,9 @@
 #include "fvm-private.h"
 
 log_deflogger(fvm_log,FVM_RPC_PROG)
-  
+
+static int fvm_unregister_program( char *modname );
+
 struct fvm_state {
   struct fvm_module *module;
   uint32_t nsteps;
@@ -182,6 +184,9 @@ int fvm_module_unload( char *modname ) {
   prev = NULL;
   while( m ) {
     if( strcasecmp( m->name, modname ) == 0 ) {
+      /* unload any rpc program, if any */
+      fvm_unregister_program( modname );
+      
       if( prev ) prev->next = m->next;
       else glob.modules = m->next;
       free( m );
@@ -237,7 +242,7 @@ static uint32_t fvm_pop( struct fvm_state *state ) {
   return u32;
 }
 
-static char *fvm_getptr( struct fvm_state *state, uint32_t addr, int writeable ) {
+char *fvm_getptr( struct fvm_state *state, uint32_t addr, int writeable ) {
   if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize)) ) {
     return &state->module->data[addr - FVM_ADDR_DATA];
   }
@@ -254,7 +259,7 @@ static char *fvm_getptr( struct fvm_state *state, uint32_t addr, int writeable )
   return NULL;  
 }
 
-static uint32_t fvm_read_u32( struct fvm_state *state, uint32_t addr ) {
+uint32_t fvm_read_u32( struct fvm_state *state, uint32_t addr ) {
   uint32_t u;
   if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize)) ) {
     memcpy( &u, &state->module->data[addr - FVM_ADDR_DATA], 4 );
@@ -282,7 +287,7 @@ static uint16_t fvm_read_pcu16( struct fvm_state *state ) {
   return u;
 }
 
-static int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
+int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
 
   if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize - 4)) ) {
     memcpy( &state->module->data[addr - FVM_ADDR_DATA], &u, 4 );
@@ -296,7 +301,7 @@ static int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
   return -1;  
 }
 
-static uint32_t fvm_stack_read( struct fvm_state *state, uint32_t depth ) {
+uint32_t fvm_stack_read( struct fvm_state *state, uint32_t depth ) {
   return fvm_read_u32( state, FVM_ADDR_STACK + state->sp - depth );
 }
 
@@ -352,276 +357,6 @@ static struct opinfo *getopinfo( op_t op ) {
   return NULL;
 }
 
-static int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
-  switch( syscallid ) {
-  case 1:
-    /* LogWrite(name,flags,len,buf) */
-    {
-      char *buf;
-      uint32_t len, flags;
-      struct log_s log, *logp;
-      struct log_entry entry;
-      struct log_iov iov[1];
-      uint32_t addr;
-      char logname[64], *strp;
-      int sts;
-      
-      addr = fvm_stack_read( state, 4 ); /* bufaddr */
-      buf = fvm_getptr( state, addr, 0 );
-      len = fvm_stack_read( state, 8 ); /* buflen */
-      flags = fvm_stack_read( state, 12 );
-      addr = fvm_stack_read( state, 16 ); /* name address */
-      logp = NULL;
-      memset( logname, 0, sizeof(logname) );
-      if( addr ) {
-	strp = fvm_getptr( state, addr, 0 );
-	if( strp ) {
-	  strncpy( logname, strp, sizeof(logname) - 8 );
-	  strcat( logname, ".log" );
-	  sts = log_open( mmf_default_path( logname, NULL ), NULL, &log );
-	  if( !sts ) logp = &log;
-	}
-      }
-      
-      memset( &entry, 0, sizeof(entry) );
-      iov[0].buf = buf;
-      iov[0].len = buf ? len : 0;
-      entry.iov = iov;
-      entry.niov = 1;
-      entry.flags = flags;
-      log_write( logp, &entry );
-
-      if( logp ) log_close( logp );
-    }
-    break;
-  case 2:
-    /* LogNext(name,prevHigh,prevLow,var high,var low); */
-    {
-      struct log_s log, *logp;
-      struct log_entry entry;
-      uint32_t addr, idlow, idhigh, addrlow, addrhigh;
-      char logname[64], *strp;
-      uint64_t id;
-      int ne, sts;
-      
-      addrlow = fvm_stack_read( state, 4 );
-      addrhigh = fvm_stack_read( state, 8 );
-
-      idlow = fvm_stack_read( state, 12 );
-      idhigh = fvm_stack_read( state, 16 );
-      id = (((uint64_t)idhigh) << 32) | (uint64_t)idlow;
-    
-      addr = fvm_stack_read( state, 20 );
-      logp = NULL;
-      memset( logname, 0, sizeof(logname) );
-      if( addr ) {
-	strp = fvm_getptr( state, addr, 0 );
-	if( strp ) {
-	  strncpy( logname, strp, sizeof(logname) - 8 );
-	  strcat( logname, ".log" );
-	  sts = log_open( mmf_default_path( logname, NULL ), NULL, &log );
-	  if( !sts ) logp = &log;
-	}
-      }
-      
-      memset( &entry, 0, sizeof(entry) );
-      sts = log_read( logp, id, &entry, 1, &ne );
-      if( sts || !ne ) {
-	fvm_write_u32( state, addrlow, 0 );
-	fvm_write_u32( state, addrhigh, 0 );
-      } else {
-	fvm_write_u32( state, addrlow, entry.id & 0xffffffff );
-	fvm_write_u32( state, addrhigh, (entry.id >> 32) & 0xffffffff );
-      }
-
-      if( logp ) log_close( logp );
-    }
-    break;
-  case 3:
-    /* LogRead(logname,idhigh,idlow,len,buf, var lenp) */
-    {
-      struct log_s log, *logp;
-      uint32_t idlow, idhigh, lenpaddr, nameaddr, bufaddr;
-      char logname[64], *strp;
-      uint64_t id;
-      int sts, len, lenp;
-      char *bufp;
-	
-      lenpaddr = fvm_stack_read( state, 4 );
-      bufaddr = fvm_stack_read( state, 8 );
-      bufp = fvm_getptr( state, bufaddr, 1 );
-      len = fvm_stack_read( state, 12 );
-      idlow = fvm_stack_read( state, 16 );
-      idhigh = fvm_stack_read( state, 20 );
-      nameaddr = fvm_stack_read( state, 24 );
-
-      id = (((uint64_t)idhigh) << 32) | (uint64_t)idlow;
-    
-      logp = NULL;
-      memset( logname, 0, sizeof(logname) );
-      if( nameaddr ) {
-	strp = fvm_getptr( state, nameaddr, 0 );
-	if( strp ) {
-	  strncpy( logname, strp, sizeof(logname) - 8 );
-	  strcat( logname, ".log" );
-	  sts = log_open( mmf_default_path( logname, NULL ), NULL, &log );
-	  if( !sts ) logp = &log;
-	}
-      }
-
-      sts = log_read_buf( logp, id, bufp, len, &lenp );
-      fvm_write_u32( state, lenpaddr, sts ? 0 : lenp );
-
-      if( logp ) log_close( logp );
-    }
-    break;
-  case 14:
-    {
-      /* HostRegLocalId(var h : u32, var l : u32) */
-      uint64_t id;
-      uint32_t haddr, laddr;
-
-      laddr = fvm_stack_read( state, 4 );
-      haddr = fvm_stack_read( state, 8 );      
-      id = hostreg_localid();
-      fvm_write_u32( state, laddr, id & 0xffffffff );
-      fvm_write_u32( state, haddr, id >> 32 );
-    }
-    break;        
-  case 17:
-    {
-      /* RpcNow(var high:int,var low :int ) */
-      uint64_t now;
-      uint32_t haddr, laddr;
-
-      laddr = fvm_stack_read( state, 4 );
-      haddr = fvm_stack_read( state, 8 );      
-      now = rpc_now();
-      fvm_write_u32( state, laddr, now & 0xffffffff );
-      fvm_write_u32( state, haddr, now >> 32 );
-    }
-    break;    
-  case 18:    
-    {
-      /* SecRandU32(var r : int); */
-      uint32_t raddr, r;
-
-      raddr = fvm_stack_read( state, 4 );
-      r = sec_rand_uint32();
-      fvm_write_u32( state, raddr, r );
-    }
-    break;
-  case 19:
-    {
-      /* Sprintf(fmt:string,arg1:int,arg2:int,arg3:int,arg4:int,result:string,resultlen:int) */
-      uint32_t reslen, resaddr, argaddr[4];
-      uint32_t fmtaddr;
-      char *p, *q, *fmt, *result, *strp;
-      int iarg;
-      
-      reslen = fvm_stack_read( state, 4 );
-      resaddr = fvm_stack_read( state, 8 );
-      argaddr[3] = fvm_stack_read( state, 12 );
-      argaddr[2] = fvm_stack_read( state, 16 );
-      argaddr[1] = fvm_stack_read( state, 20 );
-      argaddr[0] = fvm_stack_read( state, 24 );
-      fmtaddr = fvm_stack_read( state, 28 );
-
-      fmt = fvm_getptr( state, fmtaddr, 0 );
-      result = fvm_getptr( state, resaddr, 1 );
-      if( !result ) reslen = 0;
-      p = fmt;
-      q = result;
-      iarg = 0;
-      while( reslen > 0 ) {
-	if( !*p ) break;
-	if( *p == '%' ) {
-	  p++;
-	  switch( *p ) {
-	  case 's':
-	    strp = fvm_getptr( state, argaddr[iarg], 0 );
-	    sprintf( q, "%s", strp ? strp : "" );
-	    iarg++;
-	    reslen -= strlen( q );
-	    q += strlen( q );
-	    p++;
-	    break;
-	  case 'u':
-	    sprintf( q, "%u", argaddr[iarg] );
-	    iarg++;
-	    reslen -= strlen( q );
-	    q += strlen( q );
-	    p++;	    
-	    break;
-	  case 'd':
-	    sprintf( q, "%d", argaddr[iarg] );
-	    iarg++;
-	    reslen -= strlen( q );
-	    q += strlen( q );
-	    p++;	    
-	    break;
-	  case 'x':
-	    sprintf( q, "%x", argaddr[iarg] );
-	    iarg++;
-	    reslen -= strlen( q );
-	    q += strlen( q );
-	    p++;	    
-	    break;
-	  case '%':
-	    *q = '%';
-	    q++;
-	    p++;
-	    break;
-	  }
-	} else {
-	  *q = *p;
-	  p++;
-	  q++;
-	  reslen--;
-	}
-      }
-      
-    }
-    break;
-  case 28:
-    /* LogLastId(logname,var idHigh,var idLow) */
-    {
-      struct log_s log, *logp;
-      uint32_t idlowaddr, idhighaddr, nameaddr;
-      char logname[64], *strp;
-      int sts;
-      struct log_prop prop;
-      
-      idlowaddr = fvm_stack_read( state, 4 );
-      idhighaddr = fvm_stack_read( state, 8 );
-      nameaddr = fvm_stack_read( state, 12 );
-
-      logp = NULL;
-      memset( logname, 0, sizeof(logname) );
-      if( nameaddr ) {
-	strp = fvm_getptr( state, nameaddr, 0 );
-	if( strp ) {
-	  strncpy( logname, strp, sizeof(logname) - 8 );
-	  strcat( logname, ".log" );
-	  sts = log_open( mmf_default_path( logname, NULL ), NULL, &log );
-	  if( !sts ) logp = &log;
-	}
-      }
-
-      log_prop( logp, &prop );
-      fvm_write_u32( state, idlowaddr, prop.last_id & 0xffffffff );
-      fvm_write_u32( state, idhighaddr, prop.last_id >> 32 );
-      
-      if( logp ) log_close( logp );      
-    }
-    
-    break;
-    /* TODO: lots of syscalls required to be implemented */
-  default:
-    return -1;
-  }
-  return 0;
-}
 
 static int fvm_step( struct fvm_state *state ) {
   op_t op;  

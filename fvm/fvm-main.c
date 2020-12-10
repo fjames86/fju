@@ -15,7 +15,7 @@
 #include <fju/freg.h>
 #include <fju/sec.h>
 
-#include "fvmc.h"
+#include "fvm-private.h"
 
 static void usage( char *fmt, ... ) {
   va_list args;

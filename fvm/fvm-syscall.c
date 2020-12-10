@@ -47,6 +47,13 @@ static struct log_s *openlogfile( struct fvm_state *state, uint32_t addr, struct
   return logp;  
 }
 
+static void read_pars( struct fvm_state *state, uint32_t *pars, int n ) {
+  int i;
+  for( i = 0; i < n; i++ ) {
+    pars[n - i - 1] = fvm_stack_read( state, 4 + 4*i );
+  }
+}
+
 int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   switch( syscallid ) {
   case 1:
@@ -137,6 +144,40 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     break;
   case 4:
     /*  FregNext(path,name,entryname,entrytype,result) */
+    {
+      int sts;
+      struct freg_entry entry;
+      uint64_t parentid;
+      char *name, *path, *ename;      
+      uint32_t pars[5];
+      uint64_t id;
+      
+      read_pars( state, pars, 5 );
+      path = fvm_getptr( state, pars[0], 0 );
+      name = fvm_getptr( state, pars[1], 0 );
+      ename = fvm_getptr( state, pars[2], 1 );
+
+      id = 0;
+      sts = -1;
+      parentid = freg_id_by_name( NULL, path, NULL );
+      if( !parentid || !name || !path || !ename || (strcmp( name, "" ) == 0) ) {
+	id = 0;
+      } else {
+	sts = freg_entry_by_name( NULL, parentid, name, &entry, NULL );
+      }
+
+      if( !sts ) sts = freg_next( NULL, parentid, id, &entry );
+      if( sts ) {
+	strcpy( ename, "" );
+	fvm_write_u32( state, pars[3], 0 );
+	fvm_write_u32( state, pars[4], 0 );
+      } else {
+	strcpy( ename, entry.name );
+	fvm_write_u32( state, pars[3], entry.flags );
+	fvm_write_u32( state, pars[4], 1 );
+      }
+       
+    }
     break;
   case 5:
     /* FregReadInt(path,var int) */

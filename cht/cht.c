@@ -41,6 +41,16 @@ struct cht_file {
   struct cht_entry entry[1];
 };
 
+static struct cht_s *getdefaulthandle( void ) {
+  static int initialized = 0;
+  static struct cht_s cht;
+  if( !initialized ) {
+    cht_open( NULL, &cht, NULL );
+    initialized = 1;
+  }
+  return &cht;
+}
+
 int cht_open( char *path, struct cht_s *cht, struct cht_opts *opts ) {
   int sts;
   uint32_t count;
@@ -107,7 +117,8 @@ int cht_close( struct cht_s *cht ) {
 }
 
 int cht_prop( struct cht_s *cht, struct cht_prop *prop ) {
-
+  if( !cht ) cht = getdefaulthandle();
+  
   mmf_lock( &cht->mmf );
   *prop = cht->file->header;
   mmf_unlock( &cht->mmf );
@@ -118,7 +129,7 @@ int cht_prop( struct cht_s *cht, struct cht_prop *prop ) {
 static int cht_read_block( struct cht_s *cht, int idx, struct sec_buf *iov, int niov ) {
   int sts, i, size, toread;
   uint64_t offset;
-  
+
   offset = sizeof(struct cht_prop) + (sizeof(struct cht_entry) * cht->count) + (CHT_BLOCK_SIZE * idx);
   size = 0;
   for( i = 0; i < niov; i++ ) {
@@ -146,6 +157,7 @@ static int zerokey( char *key ) {
 
 int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entry *entry ) {
   struct sec_buf iov[1];
+
   iov[0].buf = buf;
   iov[0].len = size;
   return cht_read2( cht, key, iov, 1, entry );
@@ -154,6 +166,8 @@ int cht_read( struct cht_s *cht, char *key, char *buf, int size, struct cht_entr
 int cht_read2( struct cht_s *cht, char *key, struct sec_buf *iov, int niov, struct cht_entry *entry ) {
   int sts, i;
   uint32_t idx;
+
+  if( !cht ) cht = getdefaulthandle();
   
   mmf_lock( &cht->mmf );
 
@@ -274,6 +288,8 @@ int cht_write2( struct cht_s *cht, struct cht_entry *entry, struct sec_buf *iov,
   int sts, i, size;
   uint32_t idx;
 
+  if( !cht ) cht = getdefaulthandle();
+  
   size = 0;
   for( i = 0; i < niov; i++ ) {
     size += iov[i].len;
@@ -350,7 +366,9 @@ int cht_write2( struct cht_s *cht, struct cht_entry *entry, struct sec_buf *iov,
 
 int cht_delete( struct cht_s *cht, char *key ) {
   int sts, i, idx;
-  
+
+  if( !cht ) cht = getdefaulthandle();
+    
   mmf_lock( &cht->mmf );
 
   sts = -1;
@@ -375,6 +393,8 @@ int cht_delete( struct cht_s *cht, char *key ) {
 
 int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags ) {
   int sts, i;
+
+  if( !cht ) cht = getdefaulthandle();
   
   mmf_lock( &cht->mmf );
 
@@ -421,6 +441,8 @@ int cht_entry_by_index( struct cht_s *cht, int idx, uint32_t seq, struct cht_ent
 int cht_set_flags( struct cht_s *cht, char *key, uint32_t mask, uint32_t flags ) {
   int sts, i;
   uint32_t idx, f;
+
+  if( !cht ) cht = getdefaulthandle();
   
   mmf_lock( &cht->mmf );
 

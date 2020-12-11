@@ -347,6 +347,7 @@ static struct opinfo opcodeinfo[] =
    { OP_LD, "LD", 0, 0 },  /* ( address -- value ) */
    { OP_ST, "ST", 0, -8 },  /* (address value -- ) */
    { OP_SYSCALL, "SYSCALL", 2, 0 },
+   { OP_BRZ, "BRZ", 2, 0 }, /* branch if zero */
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -377,7 +378,16 @@ static int fvm_step( struct fvm_state *state ) {
 
   if( glob.debug ) {
     oinfo = getopinfo( op );
-    printf( "PC=%04x SP=%04x %s Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown" );
+    if( oinfo->pcdata == 0 ) {
+      printf( "PC=%04x SP=%04x %s Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown" );
+    } else if( oinfo->pcdata == 2 ) {
+      memcpy( &u16, &state->module->text[state->pc - FVM_ADDR_TEXT + 1], 2 );
+      printf( "PC=%04x SP=%04x %s %d|%x Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown", (int32_t)(int16_t)u16, (uint32_t)u16 );
+    } else if( oinfo->pcdata == 4 ) {
+      memcpy( &u32, &state->module->text[state->pc - FVM_ADDR_TEXT + 1], 4 );      
+      printf( "PC=%04x SP=%04x %s %d|%x Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown", u32, u32 );
+    }
+    
     u32 = (state->sp > 64) ? state->sp - 64 : 0;
     printf( "%04x: ", u32 );
     for( i = u32; i < state->sp; i += 4 ) {
@@ -448,10 +458,22 @@ static int fvm_step( struct fvm_state *state ) {
       state->pc = u16;
     }
     break;
+  case OP_BRZ:
+    u16 = fvm_read_pcu16( state );
+    u32 = fvm_pop( state );
+    if( !u32 ) {
+      state->pc = u16;
+    }
+    break;
   case OP_EQ:
     u32 = fvm_pop( state );
     addr = fvm_pop( state );
     fvm_push( state, u32 == addr ? 1 : 0 );
+    break;
+  case OP_NEQ:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 != addr ? 1 : 0 );
     break;
   case OP_GT:
     u32 = fvm_pop( state );
@@ -547,7 +569,7 @@ static int fvm_step( struct fvm_state *state ) {
     if( sts ) return -1;
     break;
   default:
-    printf( "INvalid opcode %u\n", op );
+    printf( "Invalid opcode %u\n", op );
     return -1;
   }
 
@@ -557,7 +579,7 @@ static int fvm_step( struct fvm_state *state ) {
 
 int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf ) {
   struct fvm_state state;
-  uint64_t start;
+  uint64_t start, now;
   int sts;
   uint32_t isvar[FVM_MAX_PARAM], vartype[FVM_MAX_PARAM], u32[FVM_MAX_PARAM];
   uint32_t siginfo, u;
@@ -627,13 +649,20 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
     
   start = rpc_now();
   state.frame = 1;
-  while( state.frame && (state.nsteps < glob.max_steps) ) {
+  while( state.frame ) {
     sts = fvm_step( &state );
     if( sts ) { printf( "step failed\n"); return -1; }
 
     if( (state.nsteps % 1000) == 0 ) {
-      if( (rpc_now() - start) > glob.max_runtime ) {
-	//return -1;
+      if( state.nsteps > glob.max_steps ) {
+	fvm_log( LOG_LVL_WARN, "fvm_run exited due to max steps %u", state.nsteps, glob.max_steps );
+	return -1;
+      }
+      
+      now = rpc_now();
+      if( (now - start) > glob.max_runtime ) {
+	fvm_log( LOG_LVL_WARN, "fvm_run exited due to timeout %u", (now - start), glob.max_runtime );
+	return -1;
       }
     }
   }
@@ -1174,4 +1203,8 @@ void fvm_rpc_register( void ) {
     id = entry.id;
   }
 
+}
+
+void fvm_setdebug( int debugmode ) {
+  glob.debug = debugmode;
 }

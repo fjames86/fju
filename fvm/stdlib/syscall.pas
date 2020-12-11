@@ -22,11 +22,11 @@ Const FregMaxName = 64;
 Declare Syscall FregNext(path : string, name : string, var entryname : string, var entryType : u32, var result : u32) : 4;
 Declare Syscall FregReadInt(path : string, var val : u32, var result : int) : 5;
 Declare Syscall FregReadString(path : string, val : string, len : int, var result : int) : 6;
-Declare Syscall FregReadOpaque(path : string, len : u32, buf : opaque, var lenp : opaque) : 7;
-Declare Syscall FregWriteU32(path : string, val : u32) : 8;
+Declare Syscall FregReadOpaque(path : string, len : u32, buf : opaque, var lenp : int) : 7;
+Declare Syscall FregWriteInt(path : string, val : u32) : 8;
 Declare Syscall FregWriteString(path : string, val : string) : 9;
 Declare Syscall FregWriteOpaque(path : string, len : u32, val : opaque) : 10;
-Declare Syscall FregSubkey(path : string, name : string) : 11;
+Declare Syscall FregSubkey(path : string) : 11;
 Declare Syscall FregReadU64(path : string, var resultHigh : u32, var resultLow : u32) : 12;
 Declare Syscall FregWriteU64(path : string, valHigh : u32, valLow : u32) : 13;
 
@@ -38,7 +38,7 @@ Declare Syscall RpcNow(var nowHigh : u32, var nowLow : u32) : 17;
 
 Declare Syscall SecRandU32(var r : u32) : 18;
 
-Declare Syscall Sprintf(fmt : string, arg1 : u32, arg2 : u32, arg3 : u32, arg4 : u32, result : string, resultlen : u32) : 19;
+Declare Syscall Sprintf(dest : string, fmt : string, arg1 : u32, arg2 : u32, arg3 : u32, arg4 : u32) : 19;
 
 Declare Syscall XdrDecodeU32(var len : u32, var buf : opaque, var val : u32) : 20;
 Declare Syscall XdrDecodeU64(var len : u32, var buf : opaque, var valHigh : u32, var valLow : u32) : 21;

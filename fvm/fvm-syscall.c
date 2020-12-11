@@ -350,56 +350,47 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   case 19:
     {
       /* Sprintf(fmt:string,arg1:int,arg2:int,arg3:int,arg4:int,result:string,resultlen:int) */
-      uint32_t reslen, resaddr, argaddr[4];
-      uint32_t fmtaddr;
-      char *p, *q, *fmt, *result, *strp;
+      uint32_t pars[6];
+      char *str, *fmt;
+      char *p, *q, *strp;
       int iarg;
-      
-      reslen = fvm_stack_read( state, 4 );
-      resaddr = fvm_stack_read( state, 8 );
-      argaddr[3] = fvm_stack_read( state, 12 );
-      argaddr[2] = fvm_stack_read( state, 16 );
-      argaddr[1] = fvm_stack_read( state, 20 );
-      argaddr[0] = fvm_stack_read( state, 24 );
-      fmtaddr = fvm_stack_read( state, 28 );
 
-      fmt = fvm_getptr( state, fmtaddr, 0, 0 );
-      result = fvm_getptr( state, resaddr, 0, 1 );
-      if( !result ) reslen = 0;
+      read_pars( state, pars, 6 );
+      str = fvm_getptr( state, pars[0], 0, 0 );
+      fmt = fvm_getptr( state, pars[1], 0, 0 );
+
+      if( !str ) break;
+      
       p = fmt;
-      q = result;
+      q = str;
       iarg = 0;
-      while( reslen > 0 ) {
+      while( 1 ) {
 	if( !*p ) break;
 	if( *p == '%' ) {
 	  p++;
 	  switch( *p ) {
 	  case 's':
-	    strp = fvm_getptr( state, argaddr[iarg], 0, 0 );
+	    strp = fvm_getptr( state, pars[2 + iarg], 0, 0 );
 	    sprintf( q, "%s", strp ? strp : "" );
 	    iarg++;
-	    reslen -= strlen( q );
 	    q += strlen( q );
 	    p++;
 	    break;
 	  case 'u':
-	    sprintf( q, "%u", argaddr[iarg] );
+	    sprintf( q, "%u", pars[2 + iarg] );
 	    iarg++;
-	    reslen -= strlen( q );
 	    q += strlen( q );
 	    p++;	    
 	    break;
 	  case 'd':
-	    sprintf( q, "%d", argaddr[iarg] );
+	    sprintf( q, "%d", pars[2 + iarg] );
 	    iarg++;
-	    reslen -= strlen( q );
 	    q += strlen( q );
 	    p++;	    
 	    break;
 	  case 'x':
-	    sprintf( q, "%x", argaddr[iarg] );
+	    sprintf( q, "%x", pars[2 + iarg] );
 	    iarg++;
-	    reslen -= strlen( q );
 	    q += strlen( q );
 	    p++;	    
 	    break;
@@ -413,10 +404,9 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	  *q = *p;
 	  p++;
 	  q++;
-	  reslen--;
 	}
       }
-      
+      *q = '\0';
     }
     break;
   case 20:

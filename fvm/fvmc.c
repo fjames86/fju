@@ -371,7 +371,7 @@ static int getnexttok( FILE *f, struct token *tok ) {
   } else if( c == '/' ) {
     tok->type = TOK_DIV;
   } else if( c == '%' ) {
-    tok->type = TOK_MUL;
+    tok->type = TOK_MOD;
   } else if( c == '~' ) {
     tok->type = TOK_TILDE;
   } else if( c == '.' ) {
@@ -1055,6 +1055,7 @@ static struct opinfo opcodeinfo[] =
    { OP_LD, "LD", 0, 0 },  /* ( address -- value ) */
    { OP_ST, "ST", 0, -8 },  /* (address value -- ) */
    { OP_SYSCALL, "SYSCALL", 2, 0 },
+   { OP_BRZ, "BRZ", 2, -4 },
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -1121,6 +1122,9 @@ static void emit_stsp( uint16_t u ) {
 }
 static void emit_br( uint16_t u ) {
   emitopcode( OP_BR, &u, 2 );
+}
+static void emit_brz( uint16_t u ) {
+  emitopcode( OP_BRZ, &u, 2 );
 }
 static void emit_eq( void ) {
   emitopcode( OP_EQ, NULL, 0 );
@@ -1246,9 +1250,29 @@ static void parseexpr( FILE *f ) {
     parseexpr( f );
     expecttok( f, TOK_CPAREN );
   } else if( accepttok( f, TOK_TILDE ) || accepttok( f, TOK_NOT ) ) {
-    /* XXX: should ~expr be the same as !expr ? */
+    /* ~expr */
     parseexpr( f );
     emit_not();
+  } else if( accepttok( f, TOK_NOT ) ) {
+    /* ! expr evaluates as expr ? 1 : 0 */
+    char lname1[64], lname2[64];
+    struct label *l;
+    uint32_t addr1, addr2;
+    
+    getlabelname( NULL, lname1 );
+    getlabelname( NULL, lname2 );
+    l = getlabel( lname1 );
+    addr1 = l ? l->address : 0;
+    l = getlabel( lname2 );
+    addr2 = l ? l->address : 0;
+
+    parseexpr( f );
+    emit_br( addr1 );
+    emit_ldi32( 1 );
+    emit_jmp( addr2 );
+    addlabel( lname1 );
+    emit_ldi32( 0 );
+    addlabel( lname2 );
   } else if( glob.tok.type == TOK_U32 ) {
     emit_ldi32( glob.tok.u32 );
     expecttok( f, TOK_U32 );
@@ -1547,8 +1571,7 @@ static void parseexpr( FILE *f ) {
 	l = getlabel( lname2 );	
 	addr2 = l ? l->address : 0;
 
-	emit_not();
-	emit_br( addr1 ); /* if expr evaluates to false jump */
+	emit_brz( addr1 ); /* if expr evaluates to false jump */
 	parseexpr( f );
 	expecttok( f, TOK_COLON );
 	emit_jmp( addr2 );
@@ -1618,7 +1641,7 @@ static int parsestatement( FILE *f ) {
 	v = getlocal( glob.currentproc, glob.tok.val );
 	if( v ) {
 	  /* local var - push address */
-	  emit_leasp( v->offset );
+	  emit_leasp( v->offset + glob.stackoffset );
 	} else {
 	  v = getglobal( glob.tok.val );
 	  if( v ) {
@@ -1686,8 +1709,7 @@ static int parsestatement( FILE *f ) {
     }
     
     parseexpr( f );
-    emit_not();
-    emit_br( elseaddr );
+    emit_brz( elseaddr );
     expectkeyword( f, "then" );
     parsestatement( f );
     emit_jmp( endaddr );
@@ -1734,13 +1756,16 @@ static int parsestatement( FILE *f ) {
     
     addlabel( lnamew );
     parseexpr( f );
-    emit_not();
-    emit_br( addr2 );
+    emit_brz( addr2 );
     expectkeyword( f, "Do" );
     parsestatement( f );
     emit_jmp( addr1 );
     addlabel( lnamedo );
-
+  } else if( acceptkeyword( f, "return" ) ) {
+    if( glob.currentproc->localsize ) {
+      emit_subsp( glob.currentproc->localsize );
+    }
+    emit_ret();
   } else if( acceptkeyword( f, "goto" ) ) {
     /* goto label */
     struct label *l;

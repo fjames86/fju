@@ -50,6 +50,8 @@ int main( int argc, char **argv ) {
   int procid;
   struct xdr_s argxdr, resxdr;
   struct fvm_module *module;
+  int verbose = 0;
+  uint64_t start, end;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
@@ -72,6 +74,9 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       strncpy( pname, argv[i], 63 );
+    } else if( strcmp( argv[i], "-v" ) == 0 ) {
+      verbose = 1;
+      fvm_setdebug( 1 );
     } else if( strcmp( argv[i], "--u32" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -116,9 +121,12 @@ int main( int argc, char **argv ) {
   xdr_init( &resxdr, argbuf, sizeof(argbuf) );
   argxdr.count = argxdr.offset;
   argxdr.offset = 0;
+  start = rpc_now();
   sts = fvm_run( module, procid, &argxdr, &resxdr );
   if( sts ) usage( "Failed to run" );
-
+  end = rpc_now();
+  if( verbose ) printf( "Runtime: %ums\n", (uint32_t)(end - start) );
+  
   {
     int nargs;
     uint32_t siginfo;

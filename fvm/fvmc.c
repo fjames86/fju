@@ -539,6 +539,8 @@ struct var {
 
 /* procedure parameter */
 struct param {
+  struct param *next;
+  
   char name[FVM_MAX_NAME];
   var_t type;
   int isvar;
@@ -550,7 +552,7 @@ struct proc {
   struct proc *next;
   char name[FVM_MAX_NAME];
   uint32_t address;
-  struct param params[FVM_MAX_PARAM];
+  struct param params[FVM_MAX_PARAM]; /* TODO: make this a list */
   int nparams;
   struct var *locals;
   uint32_t localsize; /* total size of all locals */
@@ -589,6 +591,8 @@ struct syscall {
   struct syscall *next;
   
   char name[FVM_MAX_NAME];
+  struct param params[FVM_MAX_PARAM];
+  int nparams;
   uint16_t id;
   uint32_t siginfo;
 };
@@ -990,7 +994,7 @@ static struct syscall *getsyscall( char *name ) {
   return NULL;
 }
 
-static struct syscall *addsyscall( char *name, uint32_t siginfo, uint32_t id ) {
+static struct syscall *addsyscall( char *name, struct param *params, int nparams, uint32_t siginfo, uint32_t id ) {
   struct syscall *sc;
   sc = getsyscall( name );
   if( sc ) {
@@ -1004,6 +1008,8 @@ static struct syscall *addsyscall( char *name, uint32_t siginfo, uint32_t id ) {
   
   strcpy( sc->name, name );
   sc->id = id;
+  memcpy( sc->params, params, sizeof(sc->params[0]) * nparams);
+  sc->nparams = nparams;
   sc->siginfo = siginfo;
   sc->next = glob.syscalls;
   glob.syscalls = sc;
@@ -1975,16 +1981,6 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
     parsevartype( f, &params[nparam].type, &arraylen );
     if( arraylen ) usage( "array vars not allowed in proc params" );
 
-    /* XXX: Only need to enforce this on exported procs. not on private procs or syscalls */
-#if 0
-    if( params[nparam].type == VAR_TYPE_OPAQUE ) {
-      if( nparam == 0 || (params[nparam - 1].type != VAR_TYPE_U32) ) usage( "Opaque parameters MUST follow a u32 implicit length parameter" );
-
-      if( params[nparam].isvar && !params[nparam - 1].isvar ) usage( "Var type opaque parameters MUST follow a var type u32 parameter" );
-      if( params[nparam - 1].isvar && !params[nparam].isvar ) usage( "Non-var opaque parameters MUST follow a non-var u32 parameter" );
-    }
-#endif
-    
     siginfo |= ((params[nparam].type | (params[nparam].isvar ? 4 : 0)) << (nparam * 3));
     nparam++;
     
@@ -2056,7 +2052,7 @@ static void parsedeclaration( FILE *f ) {
     parseproceduresig( f, procname, params, &nparams, &siginfo );
     expecttok( f, TOK_COLON );
     if( glob.tok.type != TOK_U32 ) usage( "Expected syscall id" );
-    addsyscall( procname, siginfo, glob.tok.u32 );
+    addsyscall( procname, params, nparams, siginfo, glob.tok.u32 );
     expecttok( f, TOK_U32 );
   } else usage( "Invalid declaration %s", glob.tok.val );
       
@@ -2518,6 +2514,7 @@ static void compile_file( char *path, char *outpath ) {
     if( !proc ) usage( "Cannot export %s - no proc found", e->name );
 
     /* check export signatures are ok */
+    
     for( i = 0; i < proc->nparams; i++ ) {
       if( proc->params[i].type == VAR_TYPE_OPAQUE ) {
 	if( i == 0 || (proc->params[i - 1].type != VAR_TYPE_U32) ) usage( "Proc %s Opaque parameter %s MUST follow a u32 implicit length parameter", proc->name, proc->params[i].name );

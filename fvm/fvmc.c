@@ -1974,12 +1974,16 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
     expecttok( f, TOK_COLON );
     parsevartype( f, &params[nparam].type, &arraylen );
     if( arraylen ) usage( "array vars not allowed in proc params" );
+
+    /* XXX: Only need to enforce this on exported procs. not on private procs or syscalls */
+#if 0
     if( params[nparam].type == VAR_TYPE_OPAQUE ) {
       if( nparam == 0 || (params[nparam - 1].type != VAR_TYPE_U32) ) usage( "Opaque parameters MUST follow a u32 implicit length parameter" );
 
       if( params[nparam].isvar && !params[nparam - 1].isvar ) usage( "Var type opaque parameters MUST follow a var type u32 parameter" );
       if( params[nparam - 1].isvar && !params[nparam].isvar ) usage( "Non-var opaque parameters MUST follow a non-var u32 parameter" );
     }
+#endif
     
     siginfo |= ((params[nparam].type | (params[nparam].isvar ? 4 : 0)) << (nparam * 3));
     nparam++;
@@ -2480,6 +2484,7 @@ static void compile_file( char *path, char *outpath ) {
   struct proc *proc;
   char hdrbuf[2048];
   struct xdr_s xdr;
+  int i;
   
   strcpy( glob.curfile, path );
   strcpy( glob.outpath, outpath );
@@ -2511,6 +2516,18 @@ static void compile_file( char *path, char *outpath ) {
     
     proc = getproc( e->name );
     if( !proc ) usage( "Cannot export %s - no proc found", e->name );
+
+    /* check export signatures are ok */
+    for( i = 0; i < proc->nparams; i++ ) {
+      if( proc->params[i].type == VAR_TYPE_OPAQUE ) {
+	if( i == 0 || (proc->params[i - 1].type != VAR_TYPE_U32) ) usage( "Proc %s Opaque parameter %s MUST follow a u32 implicit length parameter", proc->name, proc->params[i].name );
+
+	if( proc->params[i].isvar && !proc->params[i - 1].isvar ) usage( "Proc %s Var type opaque parameter %s MUST follow a var type u32 parameter", proc, proc->params[i].name );
+	if( proc->params[i - 1].isvar && !proc->params[i].isvar ) usage( "Proc %s Non-var opaque parameter %s MUST follow a non-var u32 parameter", proc->name, proc->params[i].name );
+      }
+    }
+
+    
     strcpy( header.procs[header.nprocs].name, proc->name );
     header.procs[header.nprocs].address = proc->address;
     header.procs[header.nprocs].siginfo = proc->siginfo;

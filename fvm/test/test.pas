@@ -6,7 +6,7 @@
  * working as expected.
 }
 
-Program Test(0,0,Main);
+Program Test(0,0,Main); 
 Begin
    { Includes }
    Include "syscall.pas";

@@ -4,6 +4,15 @@
 ;; put this on first line:
 ;; { -*- mode: fvm -*-  }
 
+(defvar fvm-mode-syntax-table nil)
+(setq fvm-mode-syntax-table
+      (let ((st (make-syntax-table)))
+;	(modify-syntax-entry ?# "<" st) ;; how to do both single line comments?
+;	(modify-syntax-entry ?\n ">" st)
+	(modify-syntax-entry ?{ "<" st)
+	(modify-syntax-entry ?} ">" st)
+	st))
+
 (setq fvm-highlights
       (let* ((x-keywords '("Program" "program" "procedure" "Procedure"
 			   "Const" "const" "Var" "var" "End" "end" "If" "if"
@@ -15,7 +24,7 @@
 	     (x-keywords-regexp (regexp-opt x-keywords 'words))
 	     (x-types-regexp (regexp-opt x-types 'words)))
 	`((,x-types-regexp . font-lock-type-face)
-	  (,x-keywords-regexp . font-lock-builtin-face))))
+	  (,x-keywords-regexp . font-lock-keyword-face))))
 
 (define-derived-mode fvm-mode fundamental-mode "fvm"
   "major mode for fvm pascal"

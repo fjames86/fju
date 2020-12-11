@@ -187,47 +187,123 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 6:
-    /* FregReadString(path,str,var result) */
+    /* FregReadString(path,str,len,var result) */
     {
       int sts;
-      uint32_t pars[3];
+      uint32_t pars[4];
       char *path, *str;
       
-      read_pars( state, pars, 3 );
+      read_pars( state, pars, 4 );
       path = fvm_getptr( state, pars[0], 0, 0 );
-      str = fvm_getptr( state, pars[1], 0, 1 );
+      str = fvm_getptr( state, pars[1], pars[2], 1 );
       sts = -1;
       if( path && str ) {
-	sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, str, FREG_MAX_NAME, NULL );
+	sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, str, pars[2], NULL );
       }
       if( sts ) {
 	strcpy( str, "" );
-	fvm_write_u32( state, pars[2], 0 );
+	fvm_write_u32( state, pars[3], 0 );
       } else {
-	fvm_write_u32( state, pars[2], 1 );
+	fvm_write_u32( state, pars[3], 1 );
       }
     }
     break;
   case 7:
-    /* FregReadOpaque(path,res,reslen) */
+    /* FregReadOpaque(path,len,res,reslen) */
+    {
+      uint32_t pars[4];
+      int lenp;
+      char *path, *res;
+      
+      read_pars( state, pars, 4 );
+      path = fvm_getptr( state, pars[0], 0, 0 );
+      res = fvm_getptr( state, pars[2], pars[1], 1 );
+      lenp = 0;
+      if( path ) {
+	freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, res, pars[1], &lenp );
+      }
+      fvm_write_u32( state, pars[3], lenp );
+    }
     break;
   case 8:
     /* FregWriteInt(path,int) */
+    {
+      uint32_t pars[2];
+      char *path;
+      read_pars( state, pars, 2 );
+      path = fvm_getptr( state, pars[0], 0, 0 );
+      if( path ) freg_put( NULL, 0, path, FREG_TYPE_UINT32, (char *)&pars[1], 4, NULL );
+    }
     break;
   case 9:
-    /* FregWritString(path,string)*/
+    /* FregWriteString(path,string)*/
+    {
+      uint32_t pars[2];
+      char *path, *str;
+      read_pars( state, pars, 2 );
+      path = fvm_getptr( state, pars[0], 0, 0 );
+      str = fvm_getptr( state, pars[1], 0, 0 );
+      if( path ) freg_put( NULL, 0, path, FREG_TYPE_STRING, (char *)(str ? str : ""), str ? strlen( str ) + 1 : 1, NULL );
+    }    
     break;
   case 10:
-    /* FregWrwiteOpaque(path,len,vva)*/
+    /* FregWriteOpaque(path,len,buf)*/
+    {
+      uint32_t pars[3];
+      char *path, *buf;
+      read_pars( state, pars, 3 );
+      path = fvm_getptr( state, pars[0], 0, 0 );
+      buf = fvm_getptr( state, pars[2], 0, 0 );
+      if( path ) freg_put( NULL, 0, path, FREG_TYPE_OPAQUE, buf, buf ? pars[1] : 0, NULL );
+    }        
     break;
   case 11:
-    /* FregSubKey(path,name) */
+    /* FregSubKey(path) */
+    {
+      uint32_t pars[1];
+      char *path;
+      read_pars( state, pars, 1 );
+      path = fvm_getptr( state, pars[0], 0, 0 );
+      if( path ) freg_subkey( NULL, 0, path, FREG_CREATE, NULL );
+    }
     break;
   case 12:
-    /* FregReadU64 */
+    /* FregReadU64(path,var high, var low) */
+    {
+      uint32_t pars[3];
+      char *path;
+      int sts;
+      uint64_t val;
+      
+      read_pars( state, pars, 3 );
+      path = fvm_getptr( state, pars[0], 0, 0 );
+
+      sts = -1;
+      if( path ) {
+	sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_UINT64, (char *)&val, 8, NULL );
+      }
+      if( sts ) {
+	fvm_write_u32( state, pars[1], 0 );
+	fvm_write_u32( state, pars[2], 0 );
+      } else {
+	fvm_write_u32( state, pars[1], val >> 32 );
+	fvm_write_u32( state, pars[2], val & 0xffffffff );
+      }      
+      
+    }
     break;
   case 13:
-    /* FregWriteU64 */
+    /* FregWriteU64(path,high,low) */
+    {
+      uint32_t pars[3];
+      char *path;
+      uint64_t val;
+      
+      read_pars( state, pars, 3 );
+      path = fvm_getptr( state, pars[0], 0, 0 );
+      val = ((uint64_t)pars[1] << 32) | pars[2];
+      if( path ) freg_put( NULL, 0, path, FREG_TYPE_UINT64, (char *)&val, 8, NULL );
+    }
     break;
   case 14:
     {

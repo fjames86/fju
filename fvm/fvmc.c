@@ -1639,8 +1639,12 @@ static int parsestatement( FILE *f ) {
     uint16_t addr;
     int ipar;
     struct var *v;
-    uint32_t siginfo;
+    //    uint32_t siginfo;
     char procname[FVM_MAX_NAME];
+    struct proc *proc = NULL;
+    struct syscall *sc = NULL;
+    struct param *params;
+    int nparams;
     
     /* call|syscall procname(args...) */
     if( glob.tok.type != TOK_NAME ) usage( "Expected procname" );
@@ -1648,29 +1652,31 @@ static int parsestatement( FILE *f ) {
     
     if( kw == 1 ) {
       /* call - lookup proc */
-      struct proc *proc;      
       proc = getproc( glob.tok.val );
       if( !proc ) usage( "Unknown proc %s", glob.tok.val );
-      siginfo = proc->siginfo;
+      //siginfo = proc->siginfo;
       addr = proc->address;
+      nparams = proc->nparams;
+      params = proc->params;
     } else {
       /* syscall - lookup syscall */
-      struct syscall *sc;      
       sc = getsyscall( glob.tok.val );
       if( !sc ) usage( "Unknown syscall %s", glob.tok.val );
-      siginfo = sc->siginfo;
+      //siginfo = sc->siginfo;
       addr = sc->id;
+      nparams = sc->nparams;
+      params = sc->params;
     }
     expecttok( f, TOK_NAME );
     
     expecttok( f, TOK_OPAREN );
     ipar = 0;
     while( glob.tok.type != TOK_CPAREN ) {
-      if( ipar > ((siginfo >> 24) & 0x1f) ) usage( "Too many params supplied to proc %s", procname );
+      if( ipar > nparams ) usage( "Too many params supplied to proc %s", procname );
 
-      if( (siginfo >> (3*ipar)) & 0x4 ) {
+      if( params[ipar].isvar ) {
 	/* var type param requires a variable name */
-	if( glob.tok.type != TOK_NAME ) usage( "Param %u expected a var name", ipar );
+	if( glob.tok.type != TOK_NAME ) usage( "Param %s expected a var name", params[ipar].name );
 	v = getlocal( glob.currentproc, glob.tok.val );
 	if( v ) {
 	  /* local var - push address */
@@ -1704,14 +1710,14 @@ static int parsestatement( FILE *f ) {
     }
     expecttok( f, TOK_CPAREN );      
 
-    if( glob.pass == 2 && (ipar < ((siginfo >> 24) & 0x1f)) ) usage( "Insufficient params supplied to proc %s", procname );
+    if( glob.pass == 2 && (ipar < nparams) ) usage( "Insufficient params supplied to proc %s", procname );
     
     if( kw == 1 ) emit_call( addr );
     else emit_syscall( addr );
 
     /* remove args from stack */
-    emit_subsp( ((siginfo >> 24) & 0x1f) * 4 );
-    glob.stackoffset -= ((siginfo >> 24) & 0x1f) * 4;
+    emit_subsp( nparams * 4 );
+    glob.stackoffset -= nparams * 4;
 
   } else if( acceptkeyword( f, "begin" ) ) {
     /* begin statement statement ... end */

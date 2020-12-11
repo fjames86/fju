@@ -25,6 +25,7 @@ Begin
 	var a, b : int;
 	b = &a;
 	a = *b;
+	a = 123 * 321 & 321;
 End;
 
 End.		      

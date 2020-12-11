@@ -19,6 +19,13 @@ Begin
    Syscall LogWrite(0,LogBinary,14,"hello, world!");
    a = a ? a + 1 : a - 1;
 End;	   
-   
+
+Procedure Test3()
+Begin
+	var a, b : int;
+	b = &a;
+	a = *b;
+End;
+
 End.		      
 

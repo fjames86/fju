@@ -1272,6 +1272,42 @@ static void parseexpr( FILE *f ) {
     emit_lea( startaddr - glob.pc - 3 ); /* the emit_lea opcode takes 3 bytes */
 
     expecttok( f, TOK_STRING );
+  } else if( accepttok( f, TOK_AND ) ) {
+    /* address of operator */
+    struct var *v;
+    struct param *p;
+    struct constvar *cv;
+        
+    if( glob.tok.type != TOK_NAME )
+      usage( "Address operator (&) expects variable name not %s",
+	     gettokname( glob.tok.type ) );
+
+    v = getlocal( glob.currentproc, glob.tok.val );
+    if( v ) {
+      emit_leasp( v->offset + glob.stackoffset );
+    } else {
+      v = getglobal( glob.tok.val );
+      if( v ) {
+	emit_ldi32( v->address );
+      } else {
+	p = getparam( glob.currentproc, glob.tok.val );
+	if( p ) {
+	  emit_leasp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	} else {
+	  cv = getconst( glob.tok.val );
+	  if( cv ) {
+	    emit_ldi32( cv->address );
+	  } else {
+	    usage( "Unknown variable %s", glob.tok.val );
+	  }
+	}
+      }
+    }
+    expecttok( f, TOK_NAME );
+  } else if( accepttok( f, TOK_MUL ) ) {
+    /* dereference operator: *expr */
+    parseexpr( f );
+    emit_ld();
   } else if( glob.tok.type == TOK_NAME ) {
     struct var *v;
     struct param *p;
@@ -1993,7 +2029,7 @@ static void parseprocedure( FILE *f ) {
   /* parse body: var definitions followed by statements */
   while( acceptkeyword( f, "var" ) ) {
     /* var name : type; */
-    struct label *namelist, *nl, *nextnl;
+    struct label *namelist, *nl, *nextnl, *nlp;
 
     namelist = NULL;
     if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
@@ -2001,13 +2037,15 @@ static void parseprocedure( FILE *f ) {
     strncpy( nl->name, glob.tok.val, FVM_MAX_NAME - 1 );
     nl->next = namelist;
     namelist = nl;
+    nlp = nl;
     expecttok( f, TOK_NAME );
     while( accepttok( f, TOK_COMMA ) ) {
       if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
       nl = malloc( sizeof(*nl) );
+      memset( nl, 0, sizeof(*nl) );
       strncpy( nl->name, glob.tok.val, FVM_MAX_NAME - 1 );
-      nl->next = namelist;
-      namelist = nl;
+      nlp->next = nl;
+      nlp = nl;
       expecttok( f, TOK_NAME );
     }
     

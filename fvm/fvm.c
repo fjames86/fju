@@ -348,6 +348,8 @@ static struct opinfo opcodeinfo[] =
    { OP_ST, "ST", 0, -8 },  /* (address value -- ) */
    { OP_SYSCALL, "SYSCALL", 2, 0 },
    { OP_BRZ, "BRZ", 2, 0 }, /* branch if zero */
+   { OP_LD8, "LD8", 0, 0 },
+   { OP_ST8, "ST8", 0, -8 },
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -563,6 +565,24 @@ static int fvm_step( struct fvm_state *state ) {
     addr = fvm_pop( state );
     fvm_write_u32( state, addr, u32 );
     break;
+  case OP_LD8:
+    {
+      uint8_t *ptr;
+      addr = fvm_pop( state );
+      ptr = (uint8_t *)fvm_getptr( state, addr, 1, 0 );
+      u32 = *ptr;
+      fvm_push( state, u32 );
+    }
+    break;
+  case OP_ST8:
+    {
+      uint8_t *ptr;      
+      u32 = fvm_pop( state ) & 0xff;
+      addr = fvm_pop( state );
+      ptr = (uint8_t *)fvm_getptr( state, addr, 1, 1 );
+      if( ptr ) *ptr = u32;
+    }
+    break;    
   case OP_SYSCALL:
     u16 = fvm_read_pcu16( state );
     sts = fvm_syscall( state, u16 );

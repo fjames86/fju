@@ -1056,6 +1056,8 @@ static struct opinfo opcodeinfo[] =
    { OP_ST, "ST", 0, -8 },  /* (address value -- ) */
    { OP_SYSCALL, "SYSCALL", 2, 0 },
    { OP_BRZ, "BRZ", 2, -4 },
+   { OP_LD8, "LD8", 0, 0 },
+   { OP_ST8, "ST8", 0, -8 },
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -1075,13 +1077,13 @@ static void emitopcode( op_t op, void *data, int len ) {
   if( len != info->pcdata ) usage( "opcode %s data mismatch %u != %u", info->name, len, info->pcdata );
   
   if( glob.pass == 2 ) {
-    if( len == 0 ) fvmc_printf( ";; PC=%04x SP=%04u Emitopcode: %s\n", glob.pc, glob.stackoffset, info->name );  
+    if( len == 0 ) fvmc_printf( ";; PC=%04x SP=%04u %s\n", glob.pc, glob.stackoffset, info->name );  
     else if( len == 2 ) {
       uint16_t u16 = *((uint16_t *)data);
-      fvmc_printf( ";; PC=%04x SP=%04u Emitopcode: %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, (uint32_t)u16, (int32_t)(int16_t)u16, (uint32_t)u16 );
+      fvmc_printf( ";; PC=%04x SP=%04u %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, (uint32_t)u16, (int32_t)(int16_t)u16, (uint32_t)u16 );
     } else if( len == 4 ) {
       uint32_t u32 = *((uint32_t *)data);
-      fvmc_printf( ";; PC=%04x SP=%04u Emitopcode: %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, u32, u32, u32 );
+      fvmc_printf( ";; PC=%04x SP=%04u %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, u32, u32, u32 );
     }
   }
   
@@ -1186,6 +1188,12 @@ static void emit_ld( void ) {
 static void emit_st( void ) {
   emitopcode( OP_ST, NULL, 0 );
 }
+static void emit_ld8( void ) {
+  emitopcode( OP_LD8, NULL, 0 );
+}
+static void emit_st8( void ) {
+  emitopcode( OP_ST8, NULL, 0 );
+}
 static void emit_syscall( uint16_t u ) {
   emitopcode( OP_SYSCALL, &u, 2 );
 }
@@ -1193,7 +1201,7 @@ static void emit_syscall( uint16_t u ) {
 
 static void emitdata( void *data, int len ) {
   if( glob.pass == 2 ) {
-    fvmc_printf( ";; PC=%04x SP=%04u Const data len %x\n", glob.pc, glob.stackoffset, len );
+    fvmc_printf( ";; PC=%04x SP=%04u Const data len %u %.*s\n", glob.pc, glob.stackoffset, len, len, data );
     fwrite( data, 1, len, glob.outfile );
   }
   glob.pc += len;
@@ -1249,7 +1257,7 @@ static void parseexpr( FILE *f ) {
   if( accepttok( f, TOK_OPAREN ) ) {
     parseexpr( f );
     expecttok( f, TOK_CPAREN );
-  } else if( accepttok( f, TOK_TILDE ) || accepttok( f, TOK_NOT ) ) {
+  } else if( accepttok( f, TOK_TILDE ) ) {
     /* ~expr */
     parseexpr( f );
     emit_not();
@@ -1273,6 +1281,7 @@ static void parseexpr( FILE *f ) {
     addlabel( lname1 );
     emit_ldi32( 0 );
     addlabel( lname2 );
+    glob.stackoffset -= 4;    
   } else if( glob.tok.type == TOK_U32 ) {
     emit_ldi32( glob.tok.u32 );
     expecttok( f, TOK_U32 );
@@ -1335,14 +1344,19 @@ static void parseexpr( FILE *f ) {
   } else if( glob.tok.type == TOK_NAME ) {
     struct var *v;
     struct param *p;
+    var_t vartype = VAR_TYPE_U32;
     
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {
+      vartype = v->type;
+      
       if( v->arraylen ) emit_leasp( v->offset + glob.stackoffset );
       else emit_ldsp( v->offset + glob.stackoffset );
     } else {
       v = getglobal( glob.tok.val );
       if( v ) {
+	vartype = v->type;
+	
 	if( v->arraylen ) emit_ldi32( v->address );
 	else {
 	  emit_ldi32( v->address );
@@ -1351,6 +1365,8 @@ static void parseexpr( FILE *f ) {
       } else {
 	p = getparam( glob.currentproc, glob.tok.val );
 	if( p ) {
+	  vartype = p->type;
+
 	  emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
 	  if( p->isvar ) {
 	    emit_ld();
@@ -1359,6 +1375,8 @@ static void parseexpr( FILE *f ) {
 	  struct constvar *cv;
 	  cv = getconst( glob.tok.val );
 	  if( cv ) {
+	    vartype = cv->type;
+	    
 	    if( cv->type == VAR_TYPE_U32 ) {
 	      emit_ldi32( cv->address );
 	      emit_ld();
@@ -1369,6 +1387,8 @@ static void parseexpr( FILE *f ) {
 	  } else {
 	    struct constval *cl = getconstval( glob.tok.val );
 	    if( !cl ) usage( "Variable %s does not name a known local, global, param, const or contsval", glob.tok.val );
+
+	    vartype = cl->type;
 	    
 	    if( cl->type == VAR_TYPE_U32 ) {
 	      emit_ldi32( *((uint32_t *)cl->val) );
@@ -1401,8 +1421,15 @@ static void parseexpr( FILE *f ) {
     if( accepttok( f, TOK_OARRAY ) ) {
       /* name[expr] */
       parseexpr( f );
-      emit_add();
-      emit_ld();
+      if( vartype == VAR_TYPE_U32 ) {
+	emit_ldi32( 4 );
+	emit_mul();
+	emit_add();
+	emit_ld();
+      } else {
+	emit_add();
+	emit_ld8();
+      }
       expecttok( f, TOK_CARRAY );
     }
   } else usage( "Bad expr %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
@@ -1789,7 +1816,8 @@ static int parsestatement( FILE *f ) {
     /* varname = expr */
     struct var *v;
     struct param *p;
-
+    int setarray8 = 0;
+    
     if( glob.tok.val[strlen( glob.tok.val ) - 1] == ':' ) {
       char lname[64];
       
@@ -1810,19 +1838,34 @@ static int parsestatement( FILE *f ) {
       expecttok( f, TOK_NAME );
       if( accepttok( f, TOK_OARRAY ) ) {
 	/* name[expr] = expr */
+	setarray8 = 1;
 	parseexpr( f );
 	if( v->type == VAR_TYPE_U32 ) {
 	  emit_ldi32( 4 );
 	  emit_mul();
+	  emit_leasp( v->offset + glob.stackoffset );
+	  emit_add();
+	} else {
+	  emit_leasp( v->offset + glob.stackoffset );
+	  emit_add();
 	}
-	emit_add();
+	
 	expecttok( f, TOK_CARRAY );
       }
       
       expecttok( f, TOK_EQ );
       parseexpr( f );
-      
-      emit_stsp( v->offset + glob.stackoffset );
+
+      if( setarray8 ) {
+	if( v->type == VAR_TYPE_U32 ) {
+	  emit_st();
+	} else {
+	  emit_st8();
+	}
+      } else {
+	emit_stsp( v->offset + glob.stackoffset );
+      }
+            
     } else {
       v = getglobal( glob.tok.val );
       if( v ) {
@@ -1835,15 +1878,23 @@ static int parsestatement( FILE *f ) {
 	  if( v->type == VAR_TYPE_U32 ) {
 	    emit_ldi32( 4 );
 	    emit_mul();
+	    emit_add();
+	  } else {
+	    setarray8 = 1;	    
+	    emit_add();
 	  }
-	  emit_add();
 	  expecttok( f, TOK_CARRAY );
 	}
 	
 	expecttok( f, TOK_EQ );
 	parseexpr( f );
+
+	if( setarray8 ) {
+	  emit_st8();
+	} else {
+	  emit_st();
+	}
 	
-	emit_st();
       } else {
 	p = getparam( glob.currentproc, glob.tok.val );
 	if( !p ) return 0;
@@ -1857,18 +1908,29 @@ static int parsestatement( FILE *f ) {
 	expecttok( f, TOK_NAME );
 	if( accepttok( f, TOK_OARRAY ) ) {
 	  /* name[expr] = expr */
+	  emit_ld();
+	  
 	  parseexpr( f );
 	  if( p->type == VAR_TYPE_U32 ) {
 	    emit_ldi32( 4 );
 	    emit_mul();
+	    emit_add();
+	  } else {
+	    setarray8 = 1;
+	    emit_add();
 	  }
-	  emit_add();
+	  
 	  expecttok( f, TOK_CARRAY );
 	}	
 	expecttok( f, TOK_EQ );
 	parseexpr( f );
 
-	emit_st(); /* store value */
+	/* store value */
+	if( setarray8 ) {
+	  emit_st8();
+	} else {
+	  emit_st();
+	}
       }
     }
 
@@ -2000,14 +2062,17 @@ static void parsedeclaration( FILE *f ) {
 static void parseconstdef( FILE *f ) {
   /* const name = value */
   char cname[FVM_MAX_NAME];
-      
+  void *ptr;
+  
   if( glob.tok.type != TOK_NAME ) usage( "const expects name not %s", gettokname( glob.tok.type ) );
   strncpy( cname, glob.tok.val, FVM_MAX_NAME - 1 );
   expecttok( f, TOK_NAME );
   expecttok( f, TOK_EQ );
   switch( glob.tok.type ) {
   case TOK_U32:
-    addconstval( cname, VAR_TYPE_U32, (char *)&glob.tok.u32, 4 );
+    ptr = malloc( 4 );
+    memcpy( ptr, &glob.tok.u32, 4 );
+    addconstval( cname, VAR_TYPE_U32, ptr, 4 );
     expecttok( f, TOK_U32 );
     break;
   case TOK_STRING:
@@ -2526,7 +2591,8 @@ static void compile_file( char *path, char *outpath ) {
     struct constval *v;
     v = glob.constvals;
     while( v ) {
-      fvmc_printf( "Const val: %s\n", v->name );
+      if( v->type == VAR_TYPE_U32 ) fvmc_printf( "Const val: %s %u\n", v->name, *((uint32_t *)v->val) );
+      else fvmc_printf( "Const val: %s %s\n", v->name, v->val );
       v = v->next;
     }
   }
@@ -2625,6 +2691,8 @@ static void disassemblefile( char *path ) {
 	     FVM_ADDR_TEXT + i - xdr.offset, "Unknown", op, op, op, op );
       i++;
     } else {
+      if( op == OP_ADDSP ) printf( "\n" );
+      
       switch( opinfo->pcdata ) {
       case 0:
 	printf( "%04x %-8s\n", FVM_ADDR_TEXT + i - xdr.offset, opinfo->name );

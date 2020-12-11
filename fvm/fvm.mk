@@ -19,7 +19,7 @@ ${BINDIR}/fvm: fvm/fvm-main.c fvm/fvm-private.h
 fvm/test/test1.fvm: fvm/test/test1.pas ${BINDIR}/fvmc
 	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/test/test1.pas
 
-fvm/test/test.fvm: fvm/test/test.pas ${BINDIR}/fvmc
+fvm/test/test.fvm: fvm/test/test.pas ${BINDIR}/fvmc fvm/stdlib/string.pas
 	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/test/test.pas
 
 ${BINDIR}/cht.fvm: fvm/stdlib/cht.pas ${BINDIR}/fvmc

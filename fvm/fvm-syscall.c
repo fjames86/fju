@@ -128,7 +128,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 4:
-    /*  FregNext(path,name,entryname,entrytype,result) */
+    /*  FregNext(path,name,entryname,var entrytype,var result) */
     {
       int sts;
       struct freg_entry entry;
@@ -141,23 +141,25 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       path = fvm_getptr( state, pars[0], 0, 0 );
       name = fvm_getptr( state, pars[1], 0, 0 );
       ename = fvm_getptr( state, pars[2], 0, 1 );
-
+      
       id = 0;
       sts = -1;
       parentid = freg_id_by_name( NULL, path, NULL );
-      if( !parentid || !name || !path || !ename || (strcmp( name, "" ) == 0) ) {
+      if( !parentid || !name || !path || !ename || (strcmp( name, "" ) == 0) ) {	
 	id = 0;
-      } else {
+	sts = 0;
+      } else {	
 	sts = freg_entry_by_name( NULL, parentid, name, &entry, NULL );
+	if( !sts ) id = entry.id;
       }
 
       if( !sts ) sts = freg_next( NULL, parentid, id, &entry );
       if( sts ) {
-	strcpy( ename, "" );
+	if( ename ) strcpy( ename, "" );
 	fvm_write_u32( state, pars[3], 0 );
 	fvm_write_u32( state, pars[4], 0 );
       } else {
-	strcpy( ename, entry.name );
+	if( ename ) strcpy( ename, entry.name );
 	fvm_write_u32( state, pars[3], entry.flags );
 	fvm_write_u32( state, pars[4], 1 );
       }

@@ -11,45 +11,31 @@ Begin
 	i = 0;
 	While i < len Do Begin
 	      dest[i] = src[i];
-	      i = i + 4;
+	      i = i + 1;
 	End;
 End;
 
 Procedure Strcpy(dest : string, src : string)
 Begin
-	var c, cc, i, j : int;
-	var p, q : opaque;
+	var i : int;
 
 	i = 0;
-	While 1 Do Begin
-	      c = src[i];
+	While src[i] Do Begin
 	      dest[i] = src[i];
-	      j = 0;
-	      While j < 4 Do Begin
-	      	      cc = c >> (8 * j);
-		      if !cc Then Goto Done;
-	      End;
-	      i = i + 4;
+	      i = i + 1;	      
 	End;
-
-Done:
-
+	dest[i] = 0;
 End;
 
 Procedure Strlen(str : string, var len : int)
 Begin
 	var i : int;
-	var c : int;
-	
+
 	i = 0;
-	While 1 Do Begin
-	      c = str[i] & 0xff;
-	      If c Then
-	      	 i = i + 1
-	      Else
-		Goto Done;
+	While str[i] Do Begin
+	      i = i + 1;
 	End;
-Done:
+
 	len = i;
 End;
 

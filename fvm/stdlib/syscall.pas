@@ -19,7 +19,7 @@ Const FregTypeU64 = 2;
 Const FregTypeString = 3;
 Const FregTypeKey = 4;
 Const FregMaxName = 64;
-Declare Syscall FregNext(path : string, name : string, var entryname : string, var entryType : u32, var result : u32) : 4;
+Declare Syscall FregNext(path : string, name : string, entryname : string, var entryType : u32, var result : u32) : 4;
 Declare Syscall FregReadInt(path : string, var val : u32, var result : int) : 5;
 Declare Syscall FregReadString(path : string, val : string, len : int, var result : int) : 6;
 Declare Syscall FregReadOpaque(path : string, len : u32, buf : opaque, var lenp : int) : 7;

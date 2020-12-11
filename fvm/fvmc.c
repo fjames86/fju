@@ -552,7 +552,7 @@ struct proc {
   struct proc *next;
   char name[FVM_MAX_NAME];
   uint32_t address;
-  struct param params[FVM_MAX_PARAM]; /* TODO: make this a list */
+  struct param *params; /* TODO: make this a list */
   int nparams;
   struct var *locals;
   uint32_t localsize; /* total size of all locals */
@@ -591,7 +591,7 @@ struct syscall {
   struct syscall *next;
   
   char name[FVM_MAX_NAME];
-  struct param params[FVM_MAX_PARAM];
+  struct param *params;
   int nparams;
   uint16_t id;
   uint32_t siginfo;
@@ -740,7 +740,7 @@ static struct proc *addproc( char *name, struct param *params, int nparams, uint
   memset( p, 0, sizeof(*p) );
   strcpy( p->name, name );
   p->address = glob.pc;
-  memcpy( p->params, params, sizeof(*params) * nparams );
+  p->params = params;
   p->nparams = nparams;
   p->siginfo = siginfo;
   
@@ -749,9 +749,11 @@ static struct proc *addproc( char *name, struct param *params, int nparams, uint
   return p;
 }
 static struct param *getparam( struct proc *proc, char *name ) {
-  int i;
-  for( i = 0; i < proc->nparams; i++ ) {
-    if( strcasecmp( proc->params[i].name, name ) == 0 ) return &proc->params[i];
+  struct param *p;
+  p = proc->params;
+  while( p ) {
+    if( strcasecmp( p->name, name ) == 0 ) return p;
+    p = p->next;
   }
   return NULL;
 }
@@ -1008,7 +1010,7 @@ static struct syscall *addsyscall( char *name, struct param *params, int nparams
   
   strcpy( sc->name, name );
   sc->id = id;
-  memcpy( sc->params, params, sizeof(sc->params[0]) * nparams);
+  sc->params = params;
   sc->nparams = nparams;
   sc->siginfo = siginfo;
   sc->next = glob.syscalls;
@@ -1639,7 +1641,6 @@ static int parsestatement( FILE *f ) {
     uint16_t addr;
     int ipar;
     struct var *v;
-    //    uint32_t siginfo;
     char procname[FVM_MAX_NAME];
     struct proc *proc = NULL;
     struct syscall *sc = NULL;
@@ -1654,7 +1655,6 @@ static int parsestatement( FILE *f ) {
       /* call - lookup proc */
       proc = getproc( glob.tok.val );
       if( !proc ) usage( "Unknown proc %s", glob.tok.val );
-      //siginfo = proc->siginfo;
       addr = proc->address;
       nparams = proc->nparams;
       params = proc->params;
@@ -1662,7 +1662,6 @@ static int parsestatement( FILE *f ) {
       /* syscall - lookup syscall */
       sc = getsyscall( glob.tok.val );
       if( !sc ) usage( "Unknown syscall %s", glob.tok.val );
-      //siginfo = sc->siginfo;
       addr = sc->id;
       nparams = sc->nparams;
       params = sc->params;
@@ -1672,11 +1671,11 @@ static int parsestatement( FILE *f ) {
     expecttok( f, TOK_OPAREN );
     ipar = 0;
     while( glob.tok.type != TOK_CPAREN ) {
-      if( ipar > nparams ) usage( "Too many params supplied to proc %s", procname );
+      if( (!params) || (ipar > nparams) ) usage( "Too many params supplied to proc %s", procname );
 
-      if( params[ipar].isvar ) {
+      if( params->isvar ) {
 	/* var type param requires a variable name */
-	if( glob.tok.type != TOK_NAME ) usage( "Param %s expected a var name", params[ipar].name );
+	if( glob.tok.type != TOK_NAME ) usage( "Param %s expected a var name", params->name );
 	v = getlocal( glob.currentproc, glob.tok.val );
 	if( v ) {
 	  /* local var - push address */
@@ -1706,6 +1705,7 @@ static int parsestatement( FILE *f ) {
       }
       
       ipar++;
+      params = params->next;
       if( !accepttok( f, TOK_COMMA ) ) break;
     }
     expecttok( f, TOK_CPAREN );      
@@ -1951,10 +1951,11 @@ static int parsestatement( FILE *f ) {
   return 1;
 }
 
-static void parseproceduresig( FILE *f, char *procname, struct param *params, int *nparams, uint32_t *siginfop ) {
+static void parseproceduresig( FILE *f, char *procname, struct param **params, int *nparams, uint32_t *siginfop ) {
   /* parse procedure */
-  int nparam, i;
+  int nparam, isvar;
   uint32_t siginfo, arraylen;
+  struct param *p, *np;
   
   if( glob.tok.type != TOK_NAME ) usage( "Expected procname not %s", gettokname( glob.tok.type ) );
   strcpy( procname, glob.tok.val );
@@ -1962,32 +1963,45 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
 
   nparam = 0;
   siginfo = 0;
-  memset( params, 0, sizeof(*params) * FVM_MAX_PARAM );
+  np = NULL;
+  *params = NULL;
   
   expecttok( f, TOK_OPAREN );
   /* parse params */
   while( glob.tok.type != TOK_CPAREN ) {
-    if( nparam >= FVM_MAX_PARAM ) usage( "Max params exceeded" );
-    
     /* [var] name : type */
+    isvar = 0;
     if( acceptkeyword( f, "var" ) ) {
-      params[nparam].isvar = 1;
+      isvar = 1;
     }
 
     if( glob.tok.type != TOK_NAME ) usage( "Expected parameter name not %s", gettokname( glob.tok.type ) );
     /* check for name clash */
-    for( i = 0; i < nparam; i++ ) {
-      if( strcasecmp( params[i].name, glob.tok.val ) == 0 ) usage( "Param name %s already exists", glob.tok.val );
+    {
+      struct param *p2 = *params;
+      while( p2 ) {
+	if( strcasecmp( p2->name, glob.tok.val ) == 0 ) usage( "Param name %s already exists", glob.tok.val );
+	p2 = p2->next;
+      }
     }
     if( getglobal( glob.tok.val ) ) usage( "Param %s name clash with global", glob.tok.val );
+
+    p = malloc( sizeof(*p) );
+    memset( p, 0, sizeof(*p) );
     
-    strncpy( params[nparam].name, glob.tok.val, FVM_MAX_NAME - 1 );
+    strncpy( p->name, glob.tok.val, FVM_MAX_NAME - 1 );
+    p->isvar = isvar;
     expecttok( f, TOK_NAME );
     expecttok( f, TOK_COLON );
-    parsevartype( f, &params[nparam].type, &arraylen );
+    parsevartype( f, &p->type, &arraylen );
     if( arraylen ) usage( "array vars not allowed in proc params" );
-
-    siginfo |= ((params[nparam].type | (params[nparam].isvar ? 4 : 0)) << (nparam * 3));
+    if( nparam <= FVM_MAX_PARAM ) siginfo |= ((p->type | (p->isvar ? 4 : 0)) << (nparam * 3));
+    p->offset = 8 + 4*nparam;
+    
+    if( np ) np->next = p;
+    else *params = p;
+    np = p;
+    
     nparam++;
     
     if( !accepttok( f, TOK_COMMA ) ) break;
@@ -1995,10 +2009,6 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
   expecttok( f, TOK_CPAREN );
   siginfo |= (nparam << 24);
 
-  for( i = 0; i < nparam; i++ ) {
-    params[(nparam - 1) - i].offset = 8 + 4*i;
-  }
-  
   *nparams = nparam;
   *siginfop = siginfo;
   return; 
@@ -2006,14 +2016,14 @@ static void parseproceduresig( FILE *f, char *procname, struct param *params, in
 
 static void parsedeclaration( FILE *f ) {
   char procname[FVM_MAX_NAME];
-  struct param params[FVM_MAX_PARAM];
+  struct param *params;
   int nparams;
   uint32_t siginfo;
   struct proc *proc;
 
   if( acceptkeyword( f, "procedure" ) ) {
     /* declare procedure name(...) */
-    parseproceduresig( f, procname, params, &nparams, &siginfo );
+    parseproceduresig( f, procname, &params, &nparams, &siginfo );
     if( glob.pass == 1 ) {
       proc = getproc( procname );
       if( proc ) {
@@ -2055,7 +2065,7 @@ static void parsedeclaration( FILE *f ) {
     }
   } else if( acceptkeyword( f, "syscall" ) ) {
     /* declare syscall name(args) : id; */
-    parseproceduresig( f, procname, params, &nparams, &siginfo );
+    parseproceduresig( f, procname, &params, &nparams, &siginfo );
     expecttok( f, TOK_COLON );
     if( glob.tok.type != TOK_U32 ) usage( "Expected syscall id" );
     addsyscall( procname, params, nparams, siginfo, glob.tok.u32 );
@@ -2095,7 +2105,7 @@ static void parseconstdef( FILE *f ) {
 static void parseprocedure( FILE *f ) {
   /* parse procedure */
   char name[FVM_MAX_NAME];
-  struct param params[FVM_MAX_PARAM];
+  struct param *params;
   int nparams;
   uint32_t siginfo;
   struct proc *proc;
@@ -2106,7 +2116,7 @@ static void parseprocedure( FILE *f ) {
   if( glob.stackoffset != 0 ) printf( "Invalid stack offset %04x?\n", glob.stackoffset );
   glob.stackoffset = 0;
 
-  parseproceduresig( f, name, params, &nparams, &siginfo );
+  parseproceduresig( f, name, &params, &nparams, &siginfo );
   if( glob.pass == 1 ) {
     proc = getproc( name );
     if( proc ) {
@@ -2486,7 +2496,6 @@ static void compile_file( char *path, char *outpath ) {
   struct proc *proc;
   char hdrbuf[2048];
   struct xdr_s xdr;
-  int i;
   
   strcpy( glob.curfile, path );
   strcpy( glob.outpath, outpath );
@@ -2520,13 +2529,21 @@ static void compile_file( char *path, char *outpath ) {
     if( !proc ) usage( "Cannot export %s - no proc found", e->name );
 
     /* check export signatures are ok */
-    
-    for( i = 0; i < proc->nparams; i++ ) {
-      if( proc->params[i].type == VAR_TYPE_OPAQUE ) {
-	if( i == 0 || (proc->params[i - 1].type != VAR_TYPE_U32) ) usage( "Proc %s Opaque parameter %s MUST follow a u32 implicit length parameter", proc->name, proc->params[i].name );
+    {
+      struct param *p, *prev;
+      if( proc->nparams > FVM_MAX_PARAM ) usage( "Proc %s max params exceeded", proc->name );
+      
+      p = proc->params;
+      prev = NULL;
+      while( p ) {
+	if( p->type == VAR_TYPE_OPAQUE ) {
+	  if( prev == NULL || prev->type != VAR_TYPE_U32 ) usage( "Proc %s Opaque parameter %s MUST follow a u32 implicit length parameter", proc->name, p->name );
 
-	if( proc->params[i].isvar && !proc->params[i - 1].isvar ) usage( "Proc %s Var type opaque parameter %s MUST follow a var type u32 parameter", proc, proc->params[i].name );
-	if( proc->params[i - 1].isvar && !proc->params[i].isvar ) usage( "Proc %s Non-var opaque parameter %s MUST follow a non-var u32 parameter", proc->name, proc->params[i].name );
+	  if( p->isvar && !prev->isvar ) usage( "Proc %s Var type opaque parameter %s MUST follow a var type u32 parameter", proc, p->name );
+	  if( prev->isvar && !p->isvar ) usage( "Proc %s Non-var opaque parameter %s MUST follow a non-var u32 parameter", proc->name, p->name );
+	}
+	prev = p;
+	p = p->next;
       }
     }
 

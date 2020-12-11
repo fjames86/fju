@@ -242,18 +242,18 @@ static uint32_t fvm_pop( struct fvm_state *state ) {
   return u32;
 }
 
-char *fvm_getptr( struct fvm_state *state, uint32_t addr, int writeable ) {
-  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize)) ) {
+char *fvm_getptr( struct fvm_state *state, uint32_t addr, int len, int writeable ) {
+  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize - len)) ) {
     return &state->module->data[addr - FVM_ADDR_DATA];
   }
 
   if( !writeable ) {
-    if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize - len)) ) {
       return &state->module->text[addr - FVM_ADDR_TEXT];
     }
   }
   
-  if( (addr >= FVM_ADDR_STACK) && (addr < (FVM_ADDR_STACK + FVM_MAX_STACK)) ) {
+  if( (addr >= FVM_ADDR_STACK) && (addr < (FVM_ADDR_STACK + FVM_MAX_STACK - len)) ) {
     return &state->stack[addr - FVM_ADDR_STACK];
   }
   return NULL;  
@@ -658,13 +658,13 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	break;
       case VAR_TYPE_STRING:
 	u = fvm_read_u32( &state, u32[i] );
-	str = fvm_getptr( &state, u, 0 );
+	str = fvm_getptr( &state, u, 0, 0 );
 	sts = xdr_encode_string( resbuf, str ? str : "" );
 	if( sts ) return sts;
 	break;
       case VAR_TYPE_OPAQUE:
 	u = fvm_read_u32( &state, u32[i] );
-	buf = fvm_getptr( &state, u, 0 );
+	buf = fvm_getptr( &state, u, 0, 0 );
 	len = u32[i - 1];
 	sts = xdr_encode_opaque( resbuf, (uint8_t *)(buf ? buf : NULL), buf ? len : 0 );
 	if( sts ) return sts;

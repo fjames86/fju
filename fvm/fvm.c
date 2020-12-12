@@ -76,13 +76,27 @@ static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
   return 0;
 }
 
+static int get_init_proc( struct fvm_module *m, char *procname ) {
+  int sts;
+  char path[256];
+  sprintf( path, "/fju/fvm/modules/%s/init", m->name );
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, procname, FVM_MAX_NAME, NULL );
+  if( !sts ) return 0;
+  if( fvm_procid_by_name( m, "init" ) >= 0 ) {
+    strcpy( procname, "init" );
+    return 0;
+  }
+  return -1;
+}
+
 int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   /* parse header, load data and text segments */
   struct fvm_headerinfo hdr;
   struct fvm_module *module;
   int i, sts;
   struct xdr_s xdr;
-
+  char procname[FVM_MAX_NAME];
+  
   xdr_init( &xdr, (uint8_t *)buf, size );
   sts = fvmc_decode_header( &xdr, &hdr );
 	      
@@ -163,6 +177,11 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   glob.modules = module;
 
   if( modulep ) *modulep = module;
+
+  sts = get_init_proc( module, procname );
+  if( !sts ) {
+    fvm_run( module, fvm_procid_by_name( module, procname ), NULL, NULL );
+  }
   
   return 0;
 }
@@ -916,6 +935,24 @@ static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int npro
   return pg;    
 }
 
+
+static int get_rpc_procid( struct fvm_module *m, int rpcid ) {
+  int i, procid;
+  char name[8];
+  
+  procid = 0;
+  for( i = 0; i < m->nprocs; i++ ) {
+    memcpy( name, m->procs[i].name, 4 );
+    name[5] = '\0';
+    if( strcasecmp( name, "proc" ) == 0 ) {
+      if( procid == rpcid ) return i;
+      procid++;
+    }
+  }
+  
+  return -1;
+}
+
 static int fvm_rpc_proc( struct rpc_inc *inc ) {
   uint32_t procid;
   int sts, handle;
@@ -926,8 +963,8 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   m = fvm_module_by_progid( inc->msg.u.call.prog, inc->msg.u.call.vers );
   if( !m ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  procid = inc->msg.u.call.proc;
-  if( procid >= m->nprocs ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  procid = get_rpc_procid( m, inc->msg.u.call.proc );
+  if( (procid < 0) || (procid >= m->nprocs) ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   fvm_log( LOG_LVL_DEBUG, "fvm_rpc_proc %s %s", m->name, m->procs[procid].name );
 
@@ -1194,16 +1231,12 @@ void fvm_rpc_register( void ) {
       sts = fvm_module_load_file( path, &m );
       if( sts ) goto cont;
 
-      sts = freg_get_by_name( NULL, entry.id, "initproc", FREG_TYPE_STRING, path, sizeof(path), NULL );
-      if( !sts ) {
-	int procid;
-	procid = fvm_procid_by_name( m, path );
-	if( procid >= 0 ) {
-	  fvm_run( m, procid, NULL, NULL );
-	}
-      }
-
       sts = freg_get_by_name( NULL, entry.id, "service", FREG_TYPE_STRING, path, sizeof(path), NULL );
+      if( sts && (fvm_procid_by_name( m, "service" ) >= 0) ) {
+	strcpy( path, "service" );
+	sts = 0;
+      }
+      
       if( !sts ) {
 	struct fvm_iterator *iter = malloc( sizeof(*iter) );
 	memset( iter, 0, sizeof(*iter) );
@@ -1213,8 +1246,9 @@ void fvm_rpc_register( void ) {
 	rpc_iterator_register( &iter->iter );
       }
 
+      registerp = (m->progid ? 1 : 0);
       sts = freg_get_by_name( NULL, entry.id, "register", FREG_TYPE_UINT32, (char *)&registerp, sizeof(registerp), NULL );
-      if( !sts ) {
+      if( registerp ) {
 	fvm_register_program( m->name );
       }
 

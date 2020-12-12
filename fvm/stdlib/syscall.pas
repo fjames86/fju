@@ -56,3 +56,5 @@ Declare Syscall ChtWrite(keylen : int, keybuf : opaque, datalen : int, databuf :
 Declare Syscall ChtDelete(keylen : int, keybuf : opaque) : 31;
 
 Declare Syscall Puts(str : string) : 32;
+
+Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf : opaque, reslen : int, resbuf : opaque, var rlen : int) : 34;

@@ -625,7 +625,7 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
   int i, nargs, len;
   char *str, *buf;
   
-  if( procid > module->nprocs ) return -1;
+  if( (procid < 0) || (procid >= module->nprocs) ) return -1;
   
   memset( &state, 0, sizeof(state) );
   state.module = module;
@@ -936,6 +936,7 @@ static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int npro
 }
 
 
+/* only export the rpc procedures with names of format Procxxx */
 static int get_rpc_procid( struct fvm_module *m, int rpcid ) {
   int i, procid;
   char name[8];

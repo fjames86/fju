@@ -511,7 +511,6 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( keybuf ) cht_delete( NULL, keybuf );
     }
     break;
-    /* TODO: lots of syscalls required to be implemented */
   case 32:
     /* Puts(str) */
     {
@@ -520,6 +519,34 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       read_pars( state, pars, 1 );
       str = fvm_getptr( state, pars[0], 0, 0 );
       if( str ) puts( str );	
+    }
+    break;
+  case 33:
+    /* FvmRun(modname,procname,arglen,argbuf,reslen,resbuf,var rlen) */
+    {
+      struct xdr_s args, res;
+      int procid;
+      struct fvm_module *m;
+      uint32_t pars[7];
+      char *modname, *procname;
+      char *argbuf, *resbuf;
+      int sts;
+      
+      read_pars( state, pars, 7 );
+      modname = fvm_getptr( state, pars[0], 0, 0 );
+      m = NULL;
+      if( modname ) m = fvm_module_by_name( modname );
+      procname = fvm_getptr( state, pars[1], 0, 0 );
+
+      procid = -1;
+      if( m && procname ) procid = fvm_procid_by_name( m, procname );
+      
+      argbuf = fvm_getptr( state, pars[3], pars[2], 0 );
+      resbuf = fvm_getptr( state, pars[5], pars[4], 1 );
+      xdr_init( &args, (uint8_t *)argbuf, argbuf ? pars[2] : 0 );
+      xdr_init( &res, (uint8_t *)resbuf, resbuf ? pars[4] : 0 );
+      sts = fvm_run( m, procid, &args, &res );
+      fvm_write_u32( state, pars[6], sts ? 0 : res.count );
     }
     break;
   default:

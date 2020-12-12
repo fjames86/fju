@@ -729,6 +729,15 @@ static struct proc *getproc( char *name ) {
   }
   return NULL;
 }
+static struct proc *getxcall( char *modname, char *procname ) {
+  struct proc *p;
+  p = glob.procs;
+  while( p ) {
+    if( (strcasecmp( p->name, procname ) == 0) && (strcasecmp( p->modname, modname) == 0) ) return p;
+    p = p->next;
+  }
+  return NULL;
+}
 static struct proc *addproc( char *name, struct param *params, int nparams, uint32_t siginfo ) {
   struct proc *p;
   
@@ -1644,32 +1653,41 @@ static int parsestatement( FILE *f ) {
     uint16_t addr;
     int ipar;
     struct var *v;
-    char procname[FVM_MAX_NAME];
+    char procname[FVM_MAX_NAME], modname[FVM_MAX_NAME];
     struct proc *proc = NULL;
     struct syscall *sc = NULL;
     struct param *params;
-    int nparams;
-    
+    int nparams, xcall;
+
+    xcall = 0;
     /* call|syscall procname(args...) */
     if( glob.tok.type != TOK_NAME ) usage( "Expected procname" );
     strcpy( procname, glob.tok.val );
+    expecttok( f, TOK_NAME );
+    if( accepttok( f, TOK_DIV ) ) {
+      if( glob.tok.type != TOK_NAME ) usage( "Expected procname" );
+      strcpy( modname, procname );
+      strcpy( procname, glob.tok.val );
+      expecttok( f, TOK_NAME );
+      xcall = 1;
+    }
     
     if( kw == 1 ) {
       /* call - lookup proc */
-      proc = getproc( glob.tok.val );
-      if( !proc ) usage( "Unknown proc %s", glob.tok.val );
+      proc = xcall ? getxcall( modname, procname ) : getproc( procname );
+      if( !proc ) usage( "Unknown proc %s", procname );
       addr = proc->address;
       nparams = proc->nparams;
       params = proc->params;
     } else {
       /* syscall - lookup syscall */
-      sc = getsyscall( glob.tok.val );
-      if( !sc ) usage( "Unknown syscall %s", glob.tok.val );
+      sc = getsyscall( procname );
+      if( !sc ) usage( "Unknown syscall %s", procname );
       addr = sc->id;
       nparams = sc->nparams;
       params = sc->params;
     }
-    expecttok( f, TOK_NAME );
+
     
     expecttok( f, TOK_OPAREN );
     ipar = 0;
@@ -2039,6 +2057,7 @@ static void parsedeclaration( FILE *f ) {
     xcall = 0;
     if( glob.tok.type != TOK_NAME ) usage( "Expected procname not %s", gettokname( glob.tok.type ) );
     strcpy( procname, glob.tok.val );
+    expecttok( f, TOK_NAME );
     if( accepttok( f, TOK_DIV ) ) {
       strcpy( modname, procname );
       if( glob.tok.type != TOK_NAME ) usage( "Expected procname not %s", gettokname( glob.tok.type ) );
@@ -2047,8 +2066,8 @@ static void parsedeclaration( FILE *f ) {
 
       addconst( modname, VAR_TYPE_STRING, strdup( modname ), strlen( modname ) + 1 );
       addconst( procname, VAR_TYPE_STRING, strdup( procname ), strlen( procname ) + 1 );
+      expecttok( f, TOK_NAME );      
     }
-    expecttok( f, TOK_NAME );
     
     parseproceduresig( f, &params, &nparams, &siginfo );
     if( glob.pass == 1 ) {

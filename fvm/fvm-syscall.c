@@ -69,6 +69,7 @@ static void fvm_xcall( struct fvm_state *state ) {
   struct rpc_conn *conn;
   char *strp, *bufp;
   struct xdr_s args, res;
+  char *tmpbufp = NULL;
   
   read_pars( state, pars, 10 );
   modname = fvm_getptr( state, pars[8], 0, 0 );
@@ -80,11 +81,16 @@ static void fvm_xcall( struct fvm_state *state ) {
   procid = fvm_procid_by_name( m, procname );
   if( procid < 0 ) return;
 
-  conn = rpc_conn_acquire();
-  if( !conn ) return;
+  if( rpcdp() ) {
+    conn = rpc_conn_acquire();
+    if( !conn ) return;
+    tmpbufp = (char *)conn->buf;
+  } else {
+    tmpbufp = malloc( 32*1024 );
+  }
   
-  xdr_init( &args, (uint8_t *)conn->buf, 16*1024 );
-  xdr_init( &res, (uint8_t *)conn->buf + 16*1024, 16*1024 );
+  xdr_init( &args, (uint8_t *)tmpbufp, 16*1024 );
+  xdr_init( &res, (uint8_t *)tmpbufp + 16*1024, 16*1024 );
 
   siginfo = m->procs[procid].siginfo;
   nargs = (siginfo >> 24) & 0x1f;
@@ -124,19 +130,19 @@ static void fvm_xcall( struct fvm_state *state ) {
 	fvm_write_u32( state, pars[8 - nargs + i], u32 );
 	break;
       case VAR_TYPE_STRING:
-	strp = fvm_getptr( state, sp, 0, 1 );
+	strp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );
 	xdr_decode_string( &res, strp, 1024 );
-	fvm_write_u32( state, pars[8 - nargs + i], sp );
+	fvm_write_u32( state, pars[8 - nargs + i], FVM_ADDR_STACK + sp );
 	u32 = strlen( strp ) + 1;
 	if( u32 % 4 ) u32 += 4 - (u32 % 4);
 	sp += u32;
 	break;
       case VAR_TYPE_OPAQUE:
-	bufp = fvm_getptr( state, sp, 0, 1 );
+	bufp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );
 	u32 = 1024;
 	xdr_decode_opaque( &res, (uint8_t *)bufp, (int *)&u32 );
 	fvm_write_u32( state, pars[8 - nargs + i - 1], u32 );
-	fvm_write_u32( state, pars[8 - nargs + i], sp );
+	fvm_write_u32( state, pars[8 - nargs + i], FVM_ADDR_STACK + sp );
 	if( u32 % 4 ) u32 += 4 - (u32 % 4);
 	sp += u32;
 	break;
@@ -148,6 +154,7 @@ static void fvm_xcall( struct fvm_state *state ) {
 
  done:
   if( conn ) rpc_conn_release( conn );
+  if( !rpcdp() ) free( tmpbufp );
 }
 
 int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {

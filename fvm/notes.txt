@@ -11,9 +11,9 @@ Instead its aim is to facilitate the following:
 
 Implementation overview:
 Fvm is implemented as a stack machine. 64kb of virtual memory divided up into the following regions:
- - 0x0000-0x0fff : reserved (8kb)
+ - 0x0000-0x0fff : reserved (4kb)
  - 0x1000-0x3fff : data segment (global variables) (16kb)
- - 0x4000-0xbfff : text segment (read only data, i.e. executable code and constant data) (24kb)
+ - 0x4000-0xbfff : text segment (read only data, i.e. executable code and constant data) (28kb)
  - 0xc000-0xffff : stack (16kb)
 
 Opcodes are variable length of 8 bit opcode followed by 0,2 or 4 bytes of payload.

@@ -6,11 +6,13 @@
  * working as expected.
 }
 
-Program Test(0,0,Main,TestPars); 
+Program Test(0,0,Main,TestPars,Testxcall); 
 Begin
    { Includes }
    Include "syscall.pas";
    Include "string.pas";
+
+   Declare Procedure Test/Testxcall(var s : string);
    
    { procedures }
    Procedure TestAdd()
@@ -126,8 +128,16 @@ Begin
 	Syscall Puts("Done");
    End;
 
-Procedure TestPars(p1 : int, p2 : int, p3 : int, p4 : int, p5 : int, p6 : int, p7 : int, p8 : int)
-Begin
-End;
+   Procedure Testxcall(var s : string)
+   Begin
+	s = "Hello from xcall";
+   End;
+	
+   Procedure TestPars()
+   Begin
+	var s : string;
+	Call Test/Testxcall(s);
+	Syscall Puts(s);
+   End;
 
 End.

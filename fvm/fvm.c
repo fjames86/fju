@@ -29,16 +29,6 @@ log_deflogger(fvm_log,FVM_RPC_PROG)
 
 static int fvm_unregister_program( char *modname );
 
-struct fvm_state {
-  struct fvm_module *module;
-  uint32_t nsteps;
-  uint32_t timeout;
-  uint32_t pc;
-  uint32_t sp;
-  uint32_t frame;
-  char stack[FVM_MAX_STACK];
-};
-
 static struct {
   struct fvm_module *modules;
   uint32_t max_steps;

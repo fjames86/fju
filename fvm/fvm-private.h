@@ -71,7 +71,16 @@ struct fvm_headerinfo {
   } procs[FVM_MAX_PROC];
 };
 
-struct fvm_state;
+struct fvm_state {
+  struct fvm_module *module;
+  uint32_t nsteps;
+  uint32_t timeout;
+  uint32_t pc;
+  uint32_t sp;
+  uint32_t frame;
+  char stack[FVM_MAX_STACK];
+};
+
 
 int fvm_syscall( struct fvm_state *state, uint16_t syscallid );
 uint32_t fvm_stack_read( struct fvm_state *state, uint32_t depth );

@@ -128,21 +128,23 @@ int main( int argc, char **argv ) {
   if( verbose ) printf( "Runtime: %ums\n", (uint32_t)(end - start) );
   
   {
-    int nargs;
-    uint32_t siginfo;
+    int nargs, vartype, isvar;
+    uint64_t siginfo;
     uint32_t u32;
     char str[4096];
     char opaque[2048];
 
     siginfo = module->procs[procid].siginfo;
 
-    nargs = (siginfo >> 24) & 0x1f;
+    nargs = FVM_SIGINFO_NARGS(siginfo);
     for( i = 0; i < nargs; i++ ) {
-      if( (siginfo >> (3*i)) & 0x4 ) {
+      vartype = FVM_SIGINFO_VARTYPE(siginfo,i);
+      isvar = FVM_SIGINFO_ISVAR(siginfo,i);
+      if( isvar ) {
 	/* var type */
-	switch( (siginfo >> (3*i)) & 0x3 ) {
+	switch( vartype ) {
 	case VAR_TYPE_U32:
-	  if( (i < (nargs - 1)) && ((siginfo >> (3*(i + 1)) & 0x3) == VAR_TYPE_OPAQUE) ) {
+	  if( (i < (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo, i + 1) == VAR_TYPE_OPAQUE) ) {
 	  } else {
 	    sts = xdr_decode_uint32( &resxdr, &u32 );
 	    if( sts ) usage( "XDR error decoding u32" );

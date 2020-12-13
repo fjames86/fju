@@ -611,7 +611,8 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
   uint64_t start, now;
   int sts;
   uint32_t isvar[FVM_MAX_PARAM], vartype[FVM_MAX_PARAM], u32[FVM_MAX_PARAM];
-  uint64_t siginfo, u;
+  uint64_t siginfo;
+  uint32_t u;
   int i, nargs, len;
   char *str, *buf;
   

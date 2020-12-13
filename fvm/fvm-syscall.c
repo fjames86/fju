@@ -65,7 +65,8 @@ static void fvm_xcall( struct fvm_state *state ) {
   struct fvm_module *m;
   int sts, procid, nargs, i, isvar;
   var_t vartype;
-  uint32_t siginfo, u32, sp;
+  uint32_t u32, sp;
+  uint64_t siginfo;
   struct rpc_conn *conn;
   char *strp, *bufp;
   struct xdr_s args, res;
@@ -93,14 +94,17 @@ static void fvm_xcall( struct fvm_state *state ) {
   xdr_init( &res, (uint8_t *)tmpbufp + 16*1024, 16*1024 );
 
   siginfo = m->procs[procid].siginfo;
-  nargs = (siginfo >> 24) & 0x1f;
+  nargs = FVM_SIGINFO_NARGS(siginfo);
   for( i = 0; i < nargs; i++ ) {
-    vartype = (siginfo >> (3*i)) &0x3;
-    isvar = (siginfo >> (3*i)) & 0x4;
+    vartype = FVM_SIGINFO_VARTYPE(siginfo,i);
+    isvar = FVM_SIGINFO_ISVAR(siginfo,i);
     if( !isvar ) {
       switch( vartype ) {
       case VAR_TYPE_U32:
-	xdr_encode_uint32( &args, pars[8 - nargs + i] );
+	if( (i < (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,i + 1) == VAR_TYPE_OPAQUE) ) {
+	} else {
+	  xdr_encode_uint32( &args, pars[8 - nargs + i] );
+	}
 	break;
       case VAR_TYPE_STRING:
 	strp = fvm_getptr( state, pars[8 - nargs + i], 0, 0 );
@@ -121,13 +125,16 @@ static void fvm_xcall( struct fvm_state *state ) {
 
   sp = state->sp;
   for( i = 0; i < nargs; i++ ) {
-    vartype = (siginfo >> (3*i)) &0x3;
-    isvar = (siginfo >> (3*i)) & 0x4;
+    vartype = FVM_SIGINFO_VARTYPE(siginfo,i);
+    isvar = FVM_SIGINFO_ISVAR(siginfo,i);
     if( isvar ) {
       switch( vartype ) {
       case VAR_TYPE_U32:
-	xdr_decode_uint32( &res, &u32 );
-	fvm_write_u32( state, pars[8 - nargs + i], u32 );
+	if( (i < (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,i + 1) == VAR_TYPE_OPAQUE) ) {
+	} else {
+	  xdr_decode_uint32( &res, &u32 );
+	  fvm_write_u32( state, pars[8 - nargs + i], u32 );
+	}
 	break;
       case VAR_TYPE_STRING:
 	strp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );

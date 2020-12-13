@@ -60,7 +60,7 @@ static void fvm_xcall( struct fvm_state *state ) {
    * Effectively the same as FvmRun syscall but allows us to 
    * implement Call modname/procname(...) syntactic sugar 
    */
-  uint32_t pars[10];
+  uint32_t pars[FVM_MAX_PARAM + 2];
   char *modname, *procname;
   struct fvm_module *m;
   int sts, procid, nargs, i, isvar;
@@ -72,10 +72,10 @@ static void fvm_xcall( struct fvm_state *state ) {
   struct xdr_s args, res;
   char *tmpbufp = NULL;
   
-  read_pars( state, pars, 10 );
-  modname = fvm_getptr( state, pars[8], 0, 0 );
+  read_pars( state, pars, FVM_MAX_PARAM + 2 );
+  modname = fvm_getptr( state, pars[FVM_MAX_PARAM], 0, 0 );
   if( !modname ) return;
-  procname = fvm_getptr( state, pars[9], 0, 0 );
+  procname = fvm_getptr( state, pars[FVM_MAX_PARAM + 1], 0, 0 );
   if( !procname ) return;
   m = fvm_module_by_name( modname );
   if( !m ) return;
@@ -103,16 +103,16 @@ static void fvm_xcall( struct fvm_state *state ) {
       case VAR_TYPE_U32:
 	if( (i < (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,i + 1) == VAR_TYPE_OPAQUE) ) {
 	} else {
-	  xdr_encode_uint32( &args, pars[8 - nargs + i] );
+	  xdr_encode_uint32( &args, pars[FVM_MAX_PARAM - nargs + i] );
 	}
 	break;
       case VAR_TYPE_STRING:
-	strp = fvm_getptr( state, pars[8 - nargs + i], 0, 0 );
+	strp = fvm_getptr( state, pars[FVM_MAX_PARAM - nargs + i], 0, 0 );
 	xdr_encode_string( &args, strp ? strp : "" );
 	break;
       case VAR_TYPE_OPAQUE:
-	bufp = fvm_getptr( state, pars[8 - nargs + i], 0, 0 );
-	xdr_encode_opaque( &args, (uint8_t *)bufp, bufp ? pars[8 - nargs + i - 1] : 0 );
+	bufp = fvm_getptr( state, pars[FVM_MAX_PARAM - nargs + i], 0, 0 );
+	xdr_encode_opaque( &args, (uint8_t *)bufp, bufp ? pars[FVM_MAX_PARAM - nargs + i - 1] : 0 );
 	break;
       default:
 	break;
@@ -133,13 +133,13 @@ static void fvm_xcall( struct fvm_state *state ) {
 	if( (i < (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,i + 1) == VAR_TYPE_OPAQUE) ) {
 	} else {
 	  xdr_decode_uint32( &res, &u32 );
-	  fvm_write_u32( state, pars[8 - nargs + i], u32 );
+	  fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], u32 );
 	}
 	break;
       case VAR_TYPE_STRING:
 	strp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );
 	xdr_decode_string( &res, strp, 1024 );
-	fvm_write_u32( state, pars[8 - nargs + i], FVM_ADDR_STACK + sp );
+	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], FVM_ADDR_STACK + sp );
 	u32 = strlen( strp ) + 1;
 	if( u32 % 4 ) u32 += 4 - (u32 % 4);
 	sp += u32;
@@ -148,8 +148,8 @@ static void fvm_xcall( struct fvm_state *state ) {
 	bufp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );
 	u32 = 1024;
 	xdr_decode_opaque( &res, (uint8_t *)bufp, (int *)&u32 );
-	fvm_write_u32( state, pars[8 - nargs + i - 1], u32 );
-	fvm_write_u32( state, pars[8 - nargs + i], FVM_ADDR_STACK + sp );
+	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i - 1], u32 );
+	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], FVM_ADDR_STACK + sp );
 	if( u32 % 4 ) u32 += 4 - (u32 % 4);
 	sp += u32;
 	break;

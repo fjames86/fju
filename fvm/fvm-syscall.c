@@ -238,6 +238,26 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 4:
+    /* LogLastId(logname,var idHigh,var idLow) */
+    {
+      struct log_s log, *logp;
+      uint32_t idlowaddr, idhighaddr, nameaddr;
+      struct log_prop prop;
+      
+      idlowaddr = fvm_stack_read( state, 4 );
+      idhighaddr = fvm_stack_read( state, 8 );
+      nameaddr = fvm_stack_read( state, 12 );
+      logp = openlogfile( state, nameaddr, &log );
+
+      log_prop( logp, &prop );
+      fvm_write_u32( state, idlowaddr, prop.last_id & 0xffffffff );
+      fvm_write_u32( state, idhighaddr, prop.last_id >> 32 );
+      
+      if( logp ) log_close( logp );      
+    }
+    
+    break;    
+  case 5:
     /*  FregNext(path,name,entryname,var entrytype,var result) */
     {
       int sts;
@@ -276,7 +296,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
        
     }
     break;
-  case 5:
+  case 6:
     /* FregReadInt(path,var int, var result) */
     {
       int sts;
@@ -298,7 +318,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 					     
     }
     break;
-  case 6:
+  case 7:
     /* FregReadString(path,str,len,var result) */
     {
       int sts;
@@ -320,7 +340,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       }
     }
     break;
-  case 7:
+  case 8:
     /* FregReadOpaque(path,len,res,reslen) */
     {
       uint32_t pars[4];
@@ -337,7 +357,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, pars[3], lenp );
     }
     break;
-  case 8:
+  case 9:
     /* FregWriteInt(path,int) */
     {
       uint32_t pars[2];
@@ -347,7 +367,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( path ) freg_put( NULL, 0, path, FREG_TYPE_UINT32, (char *)&pars[1], 4, NULL );
     }
     break;
-  case 9:
+  case 10:
     /* FregWriteString(path,string)*/
     {
       uint32_t pars[2];
@@ -358,7 +378,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( path ) freg_put( NULL, 0, path, FREG_TYPE_STRING, (char *)(str ? str : ""), str ? strlen( str ) + 1 : 1, NULL );
     }    
     break;
-  case 10:
+  case 11:
     /* FregWriteOpaque(path,len,buf)*/
     {
       uint32_t pars[3];
@@ -369,7 +389,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( path ) freg_put( NULL, 0, path, FREG_TYPE_OPAQUE, buf, buf ? pars[1] : 0, NULL );
     }        
     break;
-  case 11:
+  case 12:
     /* FregSubKey(path) */
     {
       uint32_t pars[1];
@@ -379,7 +399,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( path ) freg_subkey( NULL, 0, path, FREG_CREATE, NULL );
     }
     break;
-  case 12:
+  case 13:
     /* FregReadU64(path,var high, var low) */
     {
       uint32_t pars[3];
@@ -404,7 +424,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       
     }
     break;
-  case 13:
+  case 14:
     /* FregWriteU64(path,high,low) */
     {
       uint32_t pars[3];
@@ -417,7 +437,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( path ) freg_put( NULL, 0, path, FREG_TYPE_UINT64, (char *)&val, 8, NULL );
     }
     break;
-  case 14:
+  case 15:
     {
       /* HostRegLocalId(var h : u32, var l : u32) */
       uint64_t id;
@@ -430,13 +450,15 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, haddr, id >> 32 );
     }
     break;
-  case 15:
-    /* HostRegNameById */
-    break;
   case 16:
-    /* HostregIdByName */
+    /* HostRegNameById */
+    /* TODO */
     break;
   case 17:
+    /* HostregIdByName */
+    /* TODO */
+    break;
+  case 18:
     {
       /* RpcNow(var high:int,var low :int ) */
       uint64_t now;
@@ -449,7 +471,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, haddr, now >> 32 );
     }
     break;    
-  case 18:    
+  case 19:    
     {
       /* SecRandU32(var r : int); */
       uint32_t raddr, r;
@@ -459,7 +481,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, raddr, r );
     }
     break;
-  case 19:
+  case 20:
     {
       /* Sprintf(fmt:string,arg1:int,arg2:int,arg3:int,arg4:int,result:string,resultlen:int) */
       uint32_t pars[6];
@@ -521,51 +543,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       *q = '\0';
     }
     break;
-  case 20:
-    /* XdrDecodeU32 */
-    break;
   case 21:
-    /* XdrDecodeU64 */
-    break;
-  case 22:
-    /* XdrDecodeString */
-    break;
-  case 23:
-    /* XdrDecodeOpaque */
-    break;
-  case 24:
-    /* XdrEncodeInt */
-    break;
-  case 25:
-    /* XdrEncodeU64 */
-    break;
-  case 26:
-    /* XdrEncodeString */
-    break;
-  case 27:
-    /* XdrEncodeOpaque */
-    break;    
-  case 28:
-    /* LogLastId(logname,var idHigh,var idLow) */
-    {
-      struct log_s log, *logp;
-      uint32_t idlowaddr, idhighaddr, nameaddr;
-      struct log_prop prop;
-      
-      idlowaddr = fvm_stack_read( state, 4 );
-      idhighaddr = fvm_stack_read( state, 8 );
-      nameaddr = fvm_stack_read( state, 12 );
-      logp = openlogfile( state, nameaddr, &log );
-
-      log_prop( logp, &prop );
-      fvm_write_u32( state, idlowaddr, prop.last_id & 0xffffffff );
-      fvm_write_u32( state, idhighaddr, prop.last_id >> 32 );
-      
-      if( logp ) log_close( logp );      
-    }
-    
-    break;
-  case 29:
     /* ChtRead(keylen,keybuf,reslen,resbuf,var len) */
     {
       uint32_t keylen,keyaddr,reslen,resaddr,rlenaddr;
@@ -588,7 +566,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, rlenaddr, entry.flags & CHT_SIZE_MASK );
     }      
     break;
-  case 30:
+  case 22:
     /* ChtWrite(keylen,keybuf,reslen,resbuf) */
     {
       uint32_t keylen,keyaddr,reslen,resaddr;
@@ -608,7 +586,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       cht_write( NULL, &entry, resbuf, resbuf ? reslen : 0 );
     }
     break;
-  case 31:
+  case 23:
     /* ChtDelete(keylen,keybuf) */
     {
       uint32_t keylen,keyaddr;
@@ -621,7 +599,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( keybuf ) cht_delete( NULL, keybuf );
     }
     break;
-  case 32:
+  case 24:
     /* Puts(str) */
     {
       uint32_t pars[1];
@@ -631,7 +609,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( str ) puts( str );	
     }
     break;
-  case 33:
+  case 25:
     /* FvmRun(modname,procname,arglen,argbuf,reslen,resbuf,var rlen) */
     {
       struct xdr_s args, res;
@@ -659,7 +637,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, pars[6], sts ? 0 : res.count );
     }
     break;
-  case 34:
+  case 26:
     /* RaftCommand(idhigh,idlow,len,buf) */
     {
       uint32_t pars[4];
@@ -672,7 +650,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       raft_cluster_command( id, buf, buf ? pars[5] : 0, NULL );
     }
     break;
-  case 35:
+  case 27:
     /* FvmClRun(idHigh,idLow,modname,procname,len,buf) */
     {
       uint32_t pars[6];

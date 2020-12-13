@@ -556,7 +556,7 @@ struct proc {
   int nparams;
   struct var *locals;
   uint32_t localsize; /* total size of all locals */
-  uint32_t siginfo; /* signature */
+  uint64_t siginfo; /* signature */
 
   int xcall;
   char modname[FVM_MAX_NAME];
@@ -597,7 +597,7 @@ struct syscall {
   struct param *params;
   int nparams;
   uint16_t id;
-  uint32_t siginfo;
+  uint64_t siginfo;
 };
 
 
@@ -738,7 +738,7 @@ static struct proc *getxcall( char *modname, char *procname ) {
   }
   return NULL;
 }
-static struct proc *addproc( char *name, struct param *params, int nparams, uint32_t siginfo ) {
+static struct proc *addproc( char *name, struct param *params, int nparams, uint64_t siginfo ) {
   struct proc *p;
   
   if( glob.pass == 2 ) usage( "assert" );
@@ -1008,7 +1008,7 @@ static struct syscall *getsyscall( char *name ) {
   return NULL;
 }
 
-static struct syscall *addsyscall( char *name, struct param *params, int nparams, uint32_t siginfo, uint32_t id ) {
+static struct syscall *addsyscall( char *name, struct param *params, int nparams, uint64_t siginfo, uint32_t id ) {
   struct syscall *sc;
   sc = getsyscall( name );
   if( sc ) {
@@ -1985,11 +1985,12 @@ static int parsestatement( FILE *f ) {
   return 1;
 }
 
-static void parseproceduresig( FILE *f, struct param **params, int *nparams, uint32_t *siginfop ) {
+static void parseproceduresig( FILE *f, struct param **params, int *nparams, uint64_t *siginfop ) {
   /* parse procedure */
   int nparam, isvar;
-  uint32_t siginfo, arraylen;
+  uint32_t arraylen;
   struct param *p, *np;
+  uint64_t siginfo;
   
   nparam = 0;
   siginfo = 0;
@@ -2037,7 +2038,7 @@ static void parseproceduresig( FILE *f, struct param **params, int *nparams, uin
     if( !accepttok( f, TOK_COMMA ) ) break;
   }
   expecttok( f, TOK_CPAREN );
-  siginfo |= (nparam << 24);
+  siginfo |= (nparam << 57);
 
   *nparams = nparam;
   *siginfop = siginfo;
@@ -2048,7 +2049,7 @@ static void parsedeclaration( FILE *f ) {
   char procname[FVM_MAX_NAME], modname[FVM_MAX_NAME];
   struct param *params;
   int nparams, xcall;
-  uint32_t siginfo;
+  uint64_t siginfo;
   struct proc *proc;
 
   if( acceptkeyword( f, "procedure" ) ) {
@@ -2161,7 +2162,7 @@ static void parseprocedure( FILE *f ) {
   char name[FVM_MAX_NAME];
   struct param *params;
   int nparams;
-  uint32_t siginfo;
+  uint64_t siginfo;
   struct proc *proc;
   var_t vartype;
   uint32_t arraylen;
@@ -2515,7 +2516,7 @@ static void fvmc_encode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
   for( i = 0; i < x->nprocs; i++ ) {
     xdr_encode_string( xdr, x->procs[i].name );
     xdr_encode_uint32( xdr, x->procs[i].address );
-    xdr_encode_uint32( xdr, x->procs[i].siginfo );
+    xdr_encode_uint64( xdr, x->procs[i].siginfo );
   }
 }
 static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
@@ -2542,7 +2543,7 @@ static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
     if( sts ) return sts;    
     sts = xdr_decode_uint32( xdr, &x->procs[i].address );
     if( sts ) return sts;    
-    sts = xdr_decode_uint32( xdr, &x->procs[i].siginfo );
+    sts = xdr_decode_uint64( xdr, &x->procs[i].siginfo );
     if( sts ) return sts;    
   }
   return 0;
@@ -2653,7 +2654,7 @@ static void compile_file( char *path, char *outpath ) {
     
     p = glob.procs;
     while( p ) {
-      fvmc_printf( "Proc: %s 0x%0x siginfo 0x%08x\n", p->name, p->address, p->siginfo );
+      fvmc_printf( "Proc: %s 0x%0x siginfo 0x%"PRIx64"\n", p->name, p->address, p->siginfo );
       for( i = 0; i < p->nparams; i++ ) {
 	fvmc_printf( "  Param %u: %s%s : %s\n",
 		i, p->params[i].isvar ? "var " : "",
@@ -2732,20 +2733,20 @@ static void disassemblefile( char *path ) {
     }
 
     /* opaque params must be preceeded by a u32 param that receives the length */
-    if( ((hdr.procs[i].siginfo >> (3*i)) & 0x3) == VAR_TYPE_OPAQUE ) {
+    if( FVM_SIGINFO_VARTYPE(hdr.procs[i].siginfo,i) == VAR_TYPE_OPAQUE ) {
       if( i == 0 ) {
 	usage( "Bad parameter" );
       }
       
-      if( ((hdr.procs[i].siginfo >> (3*(i - 1))) & 0x3) != VAR_TYPE_U32 ) {
+      if( FVM_SIGINFO_VARTYPE(hdr.procs[i].siginfo, i - 1) != VAR_TYPE_U32 ) {
 	usage( "Bad parameter" );
       }
       
-      if( ((hdr.procs[i].siginfo >> (3*i)) & 0x4) && !(hdr.procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
+      if( FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i) && !FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i - 1 ) ) {
 	usage( "Bad parameter" );	
       }
       
-      if( !((hdr.procs[i].siginfo >> (3*i)) & 0x4) && (hdr.procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
+      if( !FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i) && FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i - 1) ) {
 	usage( "Bad parameter" );	
       }
     }
@@ -2764,10 +2765,10 @@ static void disassemblefile( char *path ) {
     for( j = 0; j < hdr.nprocs; j++ ) {
       if( hdr.procs[j].address == (FVM_ADDR_TEXT + i - xdr.offset) ) {
 	printf( "%04x Procedure %s(", FVM_ADDR_TEXT + i - xdr.offset, hdr.procs[j].name );
-	nargs = (hdr.procs[j].siginfo >> 24) & 0x1f;
+	nargs = FVM_SIGINFO_NARGS(hdr.procs[j].siginfo);
 	for( k = 0; k < nargs; k++ ) {
-	  vartype = ((hdr.procs[j].siginfo >> (3*k)) & 0x3);
-	  isvar = ((hdr.procs[j].siginfo >> (3*k)) & 0x4);
+	  vartype = FVM_SIGINFO_VARTYPE(hdr.procs[j].siginfo, k);
+	  isvar = FVM_SIGINFO_ISVAR(hdr.procs[j].siginfo, k);
 	  printf( "%s%s%s", k ? ", " : "", isvar ? "var " : "",
 		  vartype == VAR_TYPE_U32 ? "Int" :
 		  vartype == VAR_TYPE_STRING ? "String" :

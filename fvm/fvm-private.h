@@ -51,8 +51,6 @@ typedef enum {
     VAR_TYPE_SPARE = 3,
 } var_t;
 
-#define FVM_MAX_PARAM 8
-
 struct fvm_headerinfo {
   uint32_t magic;
 #define FVM_MAGIC 0x13fd54ec
@@ -67,7 +65,7 @@ struct fvm_headerinfo {
   struct {
     char name[FVM_MAX_NAME];
     uint32_t address;
-    uint32_t siginfo;
+    uint64_t siginfo;    /* 3 bits per param, 3*19=57 bits of param info, 5 bits of length info and 2 bits spare */
   } procs[FVM_MAX_PROC];
 };
 

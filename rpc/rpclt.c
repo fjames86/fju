@@ -48,6 +48,7 @@
 #include <fju/sec.h>
 #include <fju/programs.h>
 #include <fju/raft.h>
+#include <fju/fvm.h>
 
 struct clt_info {
     uint32_t prog;
@@ -1095,7 +1096,8 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
 static void fvm_list_results( struct xdr_s *xdr ) {
   int sts, b, i;
   char name[64];
-  uint32_t progid, versid, datasize, textsize, nprocs, address, siginfo;
+  uint32_t progid, versid, datasize, textsize, nprocs, address;
+  uint64_t siginfo;
   int vartype, isvar, nargs, j;
   
   sts = xdr_decode_boolean( xdr, &b );
@@ -1111,12 +1113,12 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     for( i = 0; i < nprocs; i++ ) {
       xdr_decode_string( xdr, name, sizeof(name) ); 
       xdr_decode_uint32( xdr, &address );     
-      xdr_decode_uint32( xdr, &siginfo );
+      xdr_decode_uint64( xdr, &siginfo );
       printf( "    [%d] %s(", i, name );
-      nargs = (siginfo >> 24) & 0x1f;
+      nargs = FVM_SIGINFO_NARGS(siginfo);
       for( j = 0; j < nargs; j++ ) {
-	isvar = (siginfo >> (j*3)) & 0x4;
-	vartype = (siginfo >> (j*3)) & 0x3;
+	isvar = FVM_SIGINFO_ISVAR(siginfo,j);
+	vartype = FVM_SIGINFO_VARTYPE(siginfo,j);
 	printf( "%s%s%s", j ? ", " : "", isvar ? "var " : "",
 		vartype == 0 ? "Int" :
 		vartype == 1 ? "String" :

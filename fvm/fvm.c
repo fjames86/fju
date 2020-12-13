@@ -60,7 +60,7 @@ static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
     if( sts ) return sts;    
     sts = xdr_decode_uint32( xdr, &x->procs[i].address );
     if( sts ) return sts;    
-    sts = xdr_decode_uint32( xdr, &x->procs[i].siginfo );
+    sts = xdr_decode_uint64( xdr, &x->procs[i].siginfo );
     if( sts ) return sts;    
   }
   return 0;
@@ -118,23 +118,23 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
     }
 
     /* opaque params must be preceeded by a u32 param that receives the length */
-    if( ((hdr.procs[i].siginfo >> (3*i)) & 0x3) == VAR_TYPE_OPAQUE ) {
+    if( FVM_SIGINFO_VARTYPE(hdr.procs[i].siginfo, i) == VAR_TYPE_OPAQUE ) {
       if( i == 0 ) {
 	fvm_log( LOG_LVL_ERROR, "Bad parameter" );
 	return -1;
       }
       
-      if( ((hdr.procs[i].siginfo >> (3*(i - 1))) & 0x3) != VAR_TYPE_U32 ) {
+      if( FVM_SIGINFO_VARTYPE(hdr.procs[i].siginfo, i - 1) != VAR_TYPE_U32 ) {
 	fvm_log( LOG_LVL_ERROR, "Bad parameter" );
 	return -1;
       }
       
-      if( ((hdr.procs[i].siginfo >> (3*i)) & 0x4) && !(hdr.procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
+      if( FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i) && !FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i - 1) ) {
 	fvm_log( LOG_LVL_ERROR, "Bad parameter" );	
 	return -1;
       }
       
-      if( !((hdr.procs[i].siginfo >> (3*i)) & 0x4) && (hdr.procs[i].siginfo >> (3*(i - 1)) & 0x4) ) {
+      if( !FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i) && FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i - 1) ) {
 	fvm_log( LOG_LVL_ERROR, "Bad parameter" );	
 	return -1;
       }
@@ -611,7 +611,7 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
   uint64_t start, now;
   int sts;
   uint32_t isvar[FVM_MAX_PARAM], vartype[FVM_MAX_PARAM], u32[FVM_MAX_PARAM];
-  uint32_t siginfo, u;
+  uint64_t siginfo, u;
   int i, nargs, len;
   char *str, *buf;
   
@@ -628,11 +628,11 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
    */
 
   siginfo = module->procs[procid].siginfo;
-  nargs = (siginfo >> 24) & 0x1f;
+  nargs = FVM_SIGINFO_NARGS(siginfo);
   
   for( i = 0; i < nargs; i++ ) {
-    isvar[i] = (siginfo >> (i*3)) & 0x4 ? 1 : 0;
-    vartype[i] = (siginfo >> (i*3)) & 0x3;
+    isvar[i] = FVM_SIGINFO_ISVAR(siginfo,i);
+    vartype[i] = FVM_SIGINFO_VARTYPE(siginfo,i);
 
     if( isvar[i] ) {
       /* output arg: reserve space for result pointer */
@@ -1035,7 +1035,7 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     for( i = 0; i < m->nprocs; i++ ) {
       xdr_encode_string( &inc->xdr, m->procs[i].name ); 
       xdr_encode_uint32( &inc->xdr, m->procs[i].address );     
-      xdr_encode_uint32( &inc->xdr, m->procs[i].siginfo );
+      xdr_encode_uint64( &inc->xdr, m->procs[i].siginfo );
     }
     
     m = m->next;

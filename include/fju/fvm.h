@@ -7,6 +7,10 @@
 
 #define FVM_MAX_NAME 64
 #define FVM_MAX_PROC 32
+#define FVM_MAX_PARAM 19
+#define FVM_SIGINFO_NARGS(siginfo) ((uint32_t)(((siginfo) >> 57) & 0x1f))
+#define FVM_SIGINFO_VARTYPE(siginfo,i) ((uint32_t)((siginfo >> (3*(i))) & 0x3))
+#define FVM_SIGINFO_ISVAR(siginfo,i) ((uint32_t)((siginfo >> (3*(i))) & 0x4))
 
 #define FVM_ADDR_DATA   0x1000
 #define FVM_ADDR_TEXT   0x5000
@@ -26,7 +30,7 @@ struct fvm_module {
   struct {
     char name[FVM_MAX_NAME];
     uint32_t address;
-    uint32_t siginfo;
+    uint64_t siginfo;
   } procs[FVM_MAX_PROC];
 
   char *data;

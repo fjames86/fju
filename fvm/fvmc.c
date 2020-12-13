@@ -1850,7 +1850,7 @@ static int parsestatement( FILE *f ) {
     } else {
       char lname[64];
       /* prefix the label name with current procname to enforce jumping only within current proc */      
-      sprintf( lname, "%s-%s", glob.currentproc->name, glob.tok.val );
+      snprintf( lname, 63, "%.*s%.*s", 30, glob.currentproc->name, 30, glob.tok.val );
       l = getlabel( lname );
       if( !l ) usage( "Unknown label %s", glob.tok.val );
       addr = l->address;
@@ -1870,7 +1870,7 @@ static int parsestatement( FILE *f ) {
       glob.tok.val[strlen( glob.tok.val ) - 1] = '\0';
 
       /* prefix the label name with current procname to enforce jumping only within current proc */
-      sprintf( lname, "%s-%s", glob.currentproc->name, glob.tok.val );
+      snprintf( lname, 63, "%.*s%.*s", 30, glob.currentproc->name, 30, glob.tok.val );
       addlabel( lname );
       free( glob.tok.val );
       memset( &glob.tok, 0, sizeof(glob.tok) );

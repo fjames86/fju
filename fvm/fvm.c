@@ -630,7 +630,7 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 
   siginfo = module->procs[procid].siginfo;
   nargs = FVM_SIGINFO_NARGS(siginfo);
-  
+
   for( i = 0; i < nargs; i++ ) {
     isvar[i] = FVM_SIGINFO_ISVAR(siginfo,i);
     vartype[i] = FVM_SIGINFO_VARTYPE(siginfo,i);
@@ -640,6 +640,8 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
       u32[i] = FVM_ADDR_STACK + state.sp; /* address of result value */
       state.sp += 4;
     } else {
+      if( !argbuf ) return -1;
+      
       /* input arg */
       switch( vartype[i] ) {
       case VAR_TYPE_U32:

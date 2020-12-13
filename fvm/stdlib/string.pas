@@ -1,13 +1,10 @@
 
 { -*- mode:fvm -*- }
 
-Procedure Memcpy(dlen : u32, dest : opaque, slen : u32, src : opaque)
+Procedure Memcpy(dest : opaque, src : opaque, len : int)
 Begin
 	var i : u32;
-	var len : u32;
 
-	len = (slen < dlen) ? slen : dlen;
-	
 	i = 0;
 	While i < len Do Begin
 	      dest[i] = src[i];
@@ -45,5 +42,15 @@ Begin
 	
 	Call Strlen(dest, i);
 	Call Strcpy(dest + i, src);
+End;
+
+Procedure Strcmp(str1 : string, str2 : string, var result : int)
+Begin
+	var i : int;
+	While ((str1[i] = str2[i]) && str1[i] && str2[i]) Do
+	Begin
+		i = i + 1;
+	End;
+	If str1[i] || str2[i] Then result = 0 Else result = 1;
 End;
 

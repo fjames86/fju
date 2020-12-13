@@ -6,13 +6,13 @@
  * working as expected.
 }
 
-Program Test(0,0,Main,TestPars,Testxcall); 
+Program Test(0,0,Main,TestXCallCB); 
 Begin
    { Includes }
    Include "syscall.pas";
    Include "string.pas";
 
-   Declare Procedure Test/Testxcall(var s : string);
+   Declare Procedure Test/TestXCallCB(var s : string);
    
    { procedures }
    Procedure TestAdd()
@@ -116,7 +116,24 @@ Begin
 		
 	End While cont;
    End;
+
+   Procedure TestXCallCB(var s : string)
+   Begin
+	s = "Hello from xcall";
+   End;
 	
+   Procedure TestXCall()
+   Begin
+	var s : string;
+	Call Test/TestXCallCB(s);
+	Syscall Puts(s);
+   End;
+
+   Procedure TestFvmClRun()
+   Begin
+	Syscall FvmClRun(0,0,"Test","TestXCallCB",0,0);
+   End;
+   
    Procedure Main()
    Begin
 	var i : int;
@@ -124,20 +141,11 @@ Begin
 	Call TestStr();
         Call TestAdd();
 	Call TestFreg();
-
+	Call TestXCall();
+	Call TestFvmClRun();
+	
 	Syscall Puts("Done");
    End;
 
-   Procedure Testxcall(var s : string)
-   Begin
-	s = "Hello from xcall";
-   End;
-	
-   Procedure TestPars()
-   Begin
-	var s : string;
-	Call Test/Testxcall(s);
-	Syscall Puts(s);
-   End;
 
 End.

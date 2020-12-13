@@ -659,6 +659,34 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, pars[6], sts ? 0 : res.count );
     }
     break;
+  case 34:
+    /* RaftCommand(idhigh,idlow,len,buf) */
+    {
+      uint32_t pars[4];
+      uint64_t id;
+      char *buf;
+
+      read_pars( state, pars, 4 );
+      id = (((uint64_t)(pars[0])) << 32) | pars[1];
+      buf = fvm_getptr( state, pars[3], 0, 0 );
+      raft_cluster_command( id, buf, buf ? pars[5] : 0, NULL );
+    }
+    break;
+  case 35:
+    /* FvmClRun(idHigh,idLow,modname,procname,len,buf) */
+    {
+      uint32_t pars[6];
+      uint64_t id;
+      char *modname, *procname, *buf;
+      read_pars( state, pars, 6 );
+      id = (((uint64_t)(pars[0])) << 32) | pars[1];
+      modname = fvm_getptr( state, pars[2], 0, 0 );
+      procname = fvm_getptr( state, pars[3], 0, 0 );
+      buf = fvm_getptr( state, pars[4], 0, 0 );
+      if( modname && procname ) {
+	fvm_cluster_run( id, modname, procname, buf, buf ? pars[5] : 0 );
+      }
+    }
   case 0xffff:
     fvm_xcall( state );
     break;

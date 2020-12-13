@@ -30,5 +30,36 @@ There is a hard coded set of system calls which are routines provided by the run
 These provide the mechanism for fvm programs to call out to other fju apis.
 
 The images generated should be fairly compact (a hello world program comes in at around 30 bytes, 90 bytes including header).
-So the 24kb limit on text space should be enough for reasonably large programs.
+So the 28kb limit on text space should be enough for reasonably large programs.
+
+## Exported procedures
+There are restrictions on exported procedures.
+ - Max number of parameters limited to FVM_MAX_PARAM (19). This is because the procedure signature
+ is encoded into a uint64 (3 bits per parameter, 5 bits of length, 2 bits spare).
+ - This information is required so that the runtime can correctly encoded/decode args/results
+ - var type parameters are output parameters and must be set once the procedure returns. They can
+ be set to either local or global variables e.g. a procedure like
+ Procedure Hello(var h : string)
+ Begin
+    h = "Hello world";
+ End;
+ Would be valid and indicate returning "Hello world".
+ - opaque parameters MUST be preceded by an int paramter which is interpreted as a length parameter.
+ var opaque parameters must have a var in and similarly for non-var opaques must have a non-var int.
+ 
+## Cross calling
+There is a facility for cross-module calling (so called x-calls). The runtime automatically marshalls args across the
+module boundary.
+
+{ define the procedire as normal, except prefix the procedure name with modulename/ like so:  }
+Declare Procedure Modulename/Procedurename(params...);
+
+{ call it like any other procedure }
+Call Modulename/procedurename(args...);
+
+Works the same as any other procedure call with the following exceptions:
+ - var parameters are output only.
+ - string/opaque output parameters are allocated into temporary space on the stack.
+ This means they must be copied away immediately.
+
 

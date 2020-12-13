@@ -12,7 +12,7 @@
   * 
 }
 
-Program NLS(10001,1,NlsProcNull,NlsProcList,NlsInit,NlsService,NlsCommand);
+Program NLS(10001,1,ProcNull,ProcList,Init,Service,Command);
 Begin
 
    { includes }
@@ -25,52 +25,138 @@ Begin
    
    { globals }
    var nlogs : u32;
-   var lognames : string[256]; # 32 byte name, 8 names max = 256
+   var lognames : string[256]; { 32 byte name, 8 names max = 256 }
    var logids : u32[16];
    
 { procedures }
-Procedure NlsProcNull()
+Procedure ProcNull()
 Begin
 End;
 
-Procedure NlsProcList(var lognames2 : string)
+Procedure ProcList(var lognames2 : string)
 Begin
 	var p : opaque;
   	lognames2 = "";
    	p = lognames + 32;
-	Call Memcpy(32, p, "hello", 6);
+	Call Memcpy(p, "hello", 6);
 End;
 
 Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)
 Begin
-	
+	var i, result : int;
+	i = 0;
+	While i < nlogs Do
+	Begin
+		Call Strcmp(lognames + (i*32), logname, result);
+		If result = 0 Then Begin
+		   logidhigh = logids[2*i];
+		   logidlow = logids[(2*i) + 1];
+		   Return;
+		End;
+		i = i + 1;
+	End;	
 End;
 
 Procedure SetLogId(logname : string, logidHigh : u32, logidLow : u32)
 Begin
+	var i, result : int;
+	i = 0;
+	While i < nlogs Do
+	Begin
+		Call Strcmp(lognames + (i*32), logname, result);
+		If result = 0 Then Begin
+		   logids[2*i] = logidHigh;
+		   logids[(2*i) + 1] = logidLow;
+		   Return;
+		End;
+		i = i + 1;
+	End;
 End;
 
-Procedure PublishCommand(logname : string, idh : u32, idl : u32)
+Procedure PublishCommand(logname : string, flags : int, len : int, buf : opaque)
 Begin
+	var argbuf : opaque[1024];
+	var offset : int;
+	var hosth, hostl : int;
+
+	Syscall HostregLocalid(hosth,hostl);
+
+	offset = 0;
+	{
+	Call XdrEncodeString(argbuf,offset,logname);
+	Call XdrEncodeU64(argbuf,offset,hosth,hostl);
+	Call XdrEncodeFlags(argbuf,offset,flags);
+	Call XdrEncodeOpaque(argbuf,offset,len,buf);
+}
+	Syscall FvmClRun(0,0,"Nls","Command",argbuf,offset);
 End;
 
 Procedure CheckLogId(logname : string)
 Begin
+	var idhigh, idlow : int;
+	var high, low : int;
+	var len : int;
+	var buf : opaque[1024];
+	
+	Syscall LogLastId(logname,idhigh,idlow);
+	Call GetLogId(logname,high,low);
+	
+	{ if new message appeneded then issue command }
+	If (idhigh <> high) || (idlow <> low) Then
+	Begin
+		Syscall LogRead(logname,idhigh,idlow,1024,buf,len);
+		Call PublishCommand(logname,0,len,buf);
+	End;
+	
+
 End;
 
 { initialization routine - load log names from registry and set log ids }
-Procedure NlsInit(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
+Procedure Init(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
 Begin
+	var ename : string[32];
+	var i, etype, result : int;
+	var idhigh, idlow : int;
+	
+	Syscall FregNext("/fju/nls/logs","",ename,etype,result);
+	i = 0;
+	While ename[0] Do Begin
+	    If etype = FregTypeString Then
+	    Begin
+  	        Call Memcpy(lognames + (i*32), ename, 32);
+		Call GetLogId(lognames + (i*32), idhigh, idlow);
+		logids[2*i] = idhigh;
+		logids[(2*i) + 1] = idlow;
+	        i = i + 1;
+            End;
+	    Syscall FregNext("/fju/nls/logs",ename,ename,etype,result);	
+	End;
+	nlogs = i;
 End;
 
-Procedure NlsService(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
+Procedure Service(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
 Begin
-
+	var i : int;
+	i = 0;
+	While i < nlogs Do
+	Begin
+		Call CheckLogId(lognames + (i*32));
+		i = i + 1;
+	End;
 End;
 
 { Command procedure - invoked to replicate log entries }
-Procedure NlsCommand(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
+Procedure Command(logname : string, hosth : int, hostl : int, flags : int, len : int, buf : opaque)
 Begin
+	var high, low : int;
+	var hostidh, hostidl : int;
+	
+	Syscall HostregLocalId(hostidh, hostidl);
+	If (hostidh = hosth) && (hostidl = hostl) Then Return;
+	
+	Syscall LogWrite(logname,flags,len,buf);
+	Syscall LogLastId(logname,high,low);
+	Call SetLogId(logname,high,low);
 End;
 
 

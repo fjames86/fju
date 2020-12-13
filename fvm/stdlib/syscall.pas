@@ -57,4 +57,7 @@ Declare Syscall ChtDelete(keylen : int, keybuf : opaque) : 31;
 
 Declare Syscall Puts(str : string) : 32;
 
-Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf : opaque, reslen : int, resbuf : opaque, var rlen : int) : 34;
+Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf : opaque, reslen : int, resbuf : opaque, var rlen : int) : 33;
+
+Declare Syscall RaftCommand(idHigh : int, idLow : int, len : int, buf : opaque) : 34;
+Declare Syscall FvmClRun(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 35;

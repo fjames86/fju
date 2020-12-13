@@ -143,8 +143,10 @@ static void skipwhitespace( FILE *f ) {
 	c = fgetc( f );
 	if( c == EOF ) break;
 	if( c == '}' ) break;
+	if( c == '\n' ) incrementlinecount();
       } while( 1 );
       found = 1;
+#if 0
     } else if( c == '#' ) {
       /* skip single line comment */
       do {
@@ -153,7 +155,8 @@ static void skipwhitespace( FILE *f ) {
 	  incrementlinecount();
 	  break;
 	}
-      } while( 1 );	  
+      } while( 1 );
+#endif
     } else {    
       found = 0;
       for( w = whitespacechars; *w; w++ ) {
@@ -2038,7 +2041,7 @@ static void parseproceduresig( FILE *f, struct param **params, int *nparams, uin
     if( !accepttok( f, TOK_COMMA ) ) break;
   }
   expecttok( f, TOK_CPAREN );
-  siginfo |= (nparam << 57);
+  siginfo |= ((uint64_t)nparam) << 57;
 
   *nparams = nparam;
   *siginfop = siginfo;

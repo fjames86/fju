@@ -18,6 +18,7 @@ Begin
    { includes }
    Include "syscall.pas";
    Include "string.pas";
+   Include "xdr.pas";
    
    { constants }
 
@@ -82,12 +83,11 @@ Begin
 	Syscall HostregLocalid(hosth,hostl);
 
 	offset = 0;
-	{
 	Call XdrEncodeString(argbuf,offset,logname);
 	Call XdrEncodeU64(argbuf,offset,hosth,hostl);
-	Call XdrEncodeFlags(argbuf,offset,flags);
+	Call XdrEncodeU32(argbuf,offset,flags);
 	Call XdrEncodeOpaque(argbuf,offset,len,buf);
-}
+
 	Syscall FvmClRun(0,0,"Nls","Command",argbuf,offset);
 End;
 

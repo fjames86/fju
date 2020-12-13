@@ -48,6 +48,9 @@ install: all #strip
 	cd bin && cp ${PROGRAMS} /usr/local/bin
 	cp ${LIBFJU} /usr/local/lib
 	mkdir -p /opt/fju/fvm
+	cp ${BINDIR}/nls.fvm ${BINDIR}/cht.fvm /opt/fju/fvm
+	sh scripts/regfvm.sh -p /opt/fju/fvm/nls.fvm
+	sh scripts/regfvm.sh -p /opt/fju/fvm/cht.fvm
 
 uninstall:
 	cd /usr/local/bin && rm ${PROGRAMS}

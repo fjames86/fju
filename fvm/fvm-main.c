@@ -52,11 +52,16 @@ int main( int argc, char **argv ) {
   struct fvm_module *module;
   int verbose = 0;
   uint64_t start, end;
+  uint64_t siginfo;
+  int nargs;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
   memset( mname, 0, sizeof(mname) );
   memset( pname, 0, sizeof(pname) );
+
+  siginfo = 0;
+  nargs = 0;
   
   i = 1;
   if( i >= argc ) usage( NULL );
@@ -81,10 +86,13 @@ int main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       xdr_encode_uint32( &argxdr, strtoul( argv[i], NULL, 0 ) );
+      nargs++;
     } else if( strcmp( argv[i], "--str" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
       xdr_encode_string( &argxdr, argv[i] );
+      nargs++;
+      siginfo |= (1 << (3*nargs));
     } else if( strcmp( argv[i], "--opaque" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -93,6 +101,9 @@ int main( int argc, char **argv ) {
       xdr_encode_uint32( &argxdr, sts );
       argxdr.offset += sts;
       if( sts % 4 ) argxdr.offset += 4;
+
+      nargs++;
+      siginfo |= (2 << (3*nargs));
     } else break;
     
     i++;
@@ -118,6 +129,14 @@ int main( int argc, char **argv ) {
   procid = fvm_procid_by_name( module, pname );
   if( procid < 0 ) usage( "Unknown proc %s", pname );
 
+  if( FVM_SIGINFO_NARGS(module->procs[procid].siginfo) != nargs ) usage( "Needed %u args", FVM_SIGINFO_NARGS(module->procs[procid].siginfo) );
+  for( i = 0; i < nargs; i++ ) {
+    if( !FVM_SIGINFO_ISVAR(module->procs[procid].siginfo,i) ) {
+      if( FVM_SIGINFO_VARTYPE(module->procs[procid].siginfo,i) != FVM_SIGINFO_VARTYPE(siginfo,i) )
+	usage( "Expected param %u type %u not %u", i, FVM_SIGINFO_VARTYPE(module->procs[procid].siginfo,i), FVM_SIGINFO_VARTYPE(siginfo,i) );
+    }
+  }
+  
   xdr_init( &resxdr, argbuf, sizeof(argbuf) );
   argxdr.count = argxdr.offset;
   argxdr.offset = 0;

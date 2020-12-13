@@ -2758,6 +2758,20 @@ static void disassemblefile( char *path ) {
   printf( "Name %s\n", hdr.name );
   printf( "ProgID %u %u\n", hdr.progid, hdr.versid );
   printf( "DataSize %u TextSize %u\n", hdr.datasize, hdr.textsize );
+  for( i = 0; i < hdr.nprocs; i++ ) {
+    printf( "[%u] %04x Procedure %s(", i, hdr.procs[i].address, hdr.procs[i].name );
+    nargs = FVM_SIGINFO_NARGS(hdr.procs[i].siginfo);
+    for( k = 0; k < nargs; k++ ) {
+      vartype = FVM_SIGINFO_VARTYPE(hdr.procs[i].siginfo, k);
+      isvar = FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, k);
+      printf( "%s%s%s", k ? ", " : "", isvar ? "var " : "",
+	      vartype == VAR_TYPE_U32 ? "Int" :
+	      vartype == VAR_TYPE_STRING ? "String" :
+	      vartype == VAR_TYPE_OPAQUE ? "Opaque" :
+	      "Other" );
+    }
+    printf( ")\n" );    
+  }
   printf( "\n" );
 
   

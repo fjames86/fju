@@ -580,7 +580,7 @@ static int fvm_step( struct fvm_state *state ) {
       uint8_t *ptr;
       addr = fvm_pop( state );
       ptr = (uint8_t *)fvm_getptr( state, addr, 1, 0 );
-      u32 = *ptr;
+      u32 = ptr ? *ptr : 0;
       fvm_push( state, u32 );
     }
     break;

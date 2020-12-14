@@ -6,7 +6,7 @@
  * working as expected.
 }
 
-Program Test(0,0,Main,TestXCallCB,TestStrcpy); 
+Program Test(0,0,Main,TestXCallCB); 
 Begin
    { Includes }
    Include "syscall.pas";
@@ -157,6 +157,20 @@ Begin
 
 	Syscall Puts("TestLoop Done");
    End;
+
+   Procedure TestStrcpy()
+   Begin
+	var s : string[64];
+	var result : int;
+	
+	Call Strcpy(s,"Hello");
+	Call Strcmp(s,"Hello",result);
+	If result Then
+	   Syscall Puts("String compare success")
+	Else
+	   Syscall Puts("String compare failure");
+	   
+   End;
    
    Procedure Main()
    Begin
@@ -168,14 +182,10 @@ Begin
 	Call TestXCall();
 	Call TestFvmClRun();
 	Call TestLoop();
+	Call TestStrcpy();
 	
 	Syscall Puts("Done");
    End;
 
-   Procedure TestStrcpy()
-   Begin
-	var s : string[64];
-	Call Strcpy(s,"Hello");
-   End;
 
 End.

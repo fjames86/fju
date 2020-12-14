@@ -47,6 +47,7 @@ End;
 Procedure Strcmp(str1 : string, str2 : string, var result : int)
 Begin
 	var i : int;
+	i = 0;
 	While ((str1[i] = str2[i]) && str1[i] && str2[i]) Do
 	Begin
 		i = i + 1;

@@ -268,6 +268,24 @@ char *fvm_getptr( struct fvm_state *state, uint32_t addr, int len, int writeable
   return NULL;  
 }
 
+char *fvm_getstr( struct fvm_state *state, uint32_t addr ) {
+  char *ptr, *p;
+  ptr = fvm_getptr( state, addr, 1, 0 );
+  if( !ptr ) return NULL;
+
+  /* check string is null terminated within memory bounds */
+  p = ptr;
+  while( 1 ) {
+    if( !p ) break;
+    
+    addr++;
+    if( !fvm_getptr( state, addr, 1, 0 ) ) return NULL;    
+    p++;
+  }
+  
+  return ptr;
+}
+
 uint32_t fvm_read_u32( struct fvm_state *state, uint32_t addr ) {
   uint32_t u;
   if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize)) ) {
@@ -721,15 +739,15 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	break;
       case VAR_TYPE_STRING:
 	u = fvm_read_u32( &state, u32[i] );
-	str = fvm_getptr( &state, u, 0, 0 );
+	str = fvm_getstr( &state, u );
 	sts = xdr_encode_string( resbuf, str ? str : "" );
 	if( sts ) return sts;
 	break;
       case VAR_TYPE_OPAQUE:
 	u = fvm_read_u32( &state, u32[i] );
-	buf = fvm_getptr( &state, u, 0, 0 );
-	len = u32[i - 1];
-	sts = xdr_encode_opaque( resbuf, (uint8_t *)(buf ? buf : NULL), buf ? len : 0 );
+	len = u32[i - 1];	
+	buf = fvm_getptr( &state, u, len, 0 );
+	sts = xdr_encode_opaque( resbuf, (uint8_t *)buf, buf ? len : 0 );
 	if( sts ) return sts;
 	break;
       }

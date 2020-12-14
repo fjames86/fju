@@ -150,8 +150,6 @@ Begin
 	      End;
 	      
 	      If i = 8 Then Break;
-	      Syscall Sprintf(str,"I = %u", i,0,0,0);
-	      Syscall Puts(str);
 	      i = i + 1;
 	End;
 

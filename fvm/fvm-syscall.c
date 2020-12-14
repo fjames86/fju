@@ -36,7 +36,7 @@ static struct log_s *openlogfile( struct fvm_state *state, uint32_t addr, struct
   logp = NULL;
   memset( logname, 0, sizeof(logname) );
   if( addr ) {
-    strp = fvm_getptr( state, addr, 0, 0 );
+    strp = fvm_getstr( state, addr );
     if( strp ) {
       strncpy( logname, strp, sizeof(logname) - 8 );
       strcat( logname, ".log" );
@@ -73,9 +73,9 @@ static void fvm_xcall( struct fvm_state *state ) {
   char *tmpbufp = NULL;
   
   read_pars( state, pars, FVM_MAX_PARAM + 2 );
-  modname = fvm_getptr( state, pars[FVM_MAX_PARAM], 0, 0 );
+  modname = fvm_getstr( state, pars[FVM_MAX_PARAM] );
   if( !modname ) return;
-  procname = fvm_getptr( state, pars[FVM_MAX_PARAM + 1], 0, 0 );
+  procname = fvm_getstr( state, pars[FVM_MAX_PARAM + 1] );
   if( !procname ) return;
   m = fvm_module_by_name( modname );
   if( !m ) return;
@@ -107,11 +107,11 @@ static void fvm_xcall( struct fvm_state *state ) {
 	}
 	break;
       case VAR_TYPE_STRING:
-	strp = fvm_getptr( state, pars[FVM_MAX_PARAM - nargs + i], 0, 0 );
+	strp = fvm_getstr( state, pars[FVM_MAX_PARAM - nargs + i] );
 	xdr_encode_string( &args, strp ? strp : "" );
 	break;
       case VAR_TYPE_OPAQUE:
-	bufp = fvm_getptr( state, pars[FVM_MAX_PARAM - nargs + i], 0, 0 );
+	bufp = fvm_getptr( state, pars[FVM_MAX_PARAM - nargs + i], pars[FVM_MAX_PARAM - nargs + i - 1], 0 );
 	xdr_encode_opaque( &args, (uint8_t *)bufp, bufp ? pars[FVM_MAX_PARAM - nargs + i - 1] : 0 );
 	break;
       default:
@@ -268,8 +268,8 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint64_t id;
       
       read_pars( state, pars, 5 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
-      name = fvm_getptr( state, pars[1], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
+      name = fvm_getstr( state, pars[1] );
       ename = fvm_getptr( state, pars[2], 0, 1 );
 
       id = 0;
@@ -303,7 +303,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *path;
       uint32_t pars[3], u32;
       read_pars( state, pars, 3 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
       sts = -1;
       if( path ) {
 	sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_UINT32, (char *)&u32, sizeof(u32), NULL );
@@ -326,7 +326,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *path, *str;
       
       read_pars( state, pars, 4 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
       str = fvm_getptr( state, pars[1], pars[2], 1 );
       sts = -1;
       if( path && str ) {
@@ -348,7 +348,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *path, *res;
       
       read_pars( state, pars, 4 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
       res = fvm_getptr( state, pars[2], pars[1], 1 );
       lenp = 0;
       if( path ) {
@@ -363,7 +363,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t pars[2];
       char *path;
       read_pars( state, pars, 2 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
       if( path ) freg_put( NULL, 0, path, FREG_TYPE_UINT32, (char *)&pars[1], 4, NULL );
     }
     break;
@@ -373,8 +373,8 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t pars[2];
       char *path, *str;
       read_pars( state, pars, 2 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
-      str = fvm_getptr( state, pars[1], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
+      str = fvm_getstr( state, pars[1] );
       if( path ) freg_put( NULL, 0, path, FREG_TYPE_STRING, (char *)(str ? str : ""), str ? strlen( str ) + 1 : 1, NULL );
     }    
     break;
@@ -384,8 +384,8 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t pars[3];
       char *path, *buf;
       read_pars( state, pars, 3 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
-      buf = fvm_getptr( state, pars[2], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
+      buf = fvm_getptr( state, pars[2], pars[1], 0 );
       if( path ) freg_put( NULL, 0, path, FREG_TYPE_OPAQUE, buf, buf ? pars[1] : 0, NULL );
     }        
     break;
@@ -395,7 +395,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t pars[1];
       char *path;
       read_pars( state, pars, 1 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
       if( path ) freg_subkey( NULL, 0, path, FREG_CREATE, NULL );
     }
     break;
@@ -408,7 +408,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint64_t val;
       
       read_pars( state, pars, 3 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
 
       sts = -1;
       if( path ) {
@@ -432,7 +432,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint64_t val;
       
       read_pars( state, pars, 3 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
       val = ((uint64_t)pars[1] << 32) | pars[2];
       if( path ) freg_put( NULL, 0, path, FREG_TYPE_UINT64, (char *)&val, 8, NULL );
     }
@@ -491,7 +491,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 
       read_pars( state, pars, 6 );
       str = fvm_getptr( state, pars[0], 0, 0 );
-      fmt = fvm_getptr( state, pars[1], 0, 0 );
+      fmt = fvm_getstr( state, pars[1] );
 
       if( !str ) break;
       
@@ -504,7 +504,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	  p++;
 	  switch( *p ) {
 	  case 's':
-	    strp = fvm_getptr( state, pars[2 + iarg], 0, 0 );
+	    strp = fvm_getstr( state, pars[2 + iarg] );
 	    sprintf( q, "%s", strp ? strp : "" );
 	    iarg++;
 	    q += strlen( q );
@@ -555,7 +555,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       reslen = fvm_stack_read( state, 12 );      
       keyaddr = fvm_stack_read( state, 16 );
       keylen  = fvm_stack_read( state, 20 );
-      resbuf = fvm_getptr( state, resaddr, 0, 1 );
+      resbuf = fvm_getptr( state, resaddr, reslen, 1 );
       keybuf = fvm_getptr( state, keyaddr, 0, 0 );
 
       memset( &entry, 0, sizeof(entry) );
@@ -605,7 +605,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t pars[1];
       char *str;
       read_pars( state, pars, 1 );
-      str = fvm_getptr( state, pars[0], 0, 0 );
+      str = fvm_getstr( state, pars[0] );
       if( str ) puts( str );	
     }
     break;
@@ -621,10 +621,10 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       int sts;
       
       read_pars( state, pars, 7 );
-      modname = fvm_getptr( state, pars[0], 0, 0 );
+      modname = fvm_getstr( state, pars[0] );
       m = NULL;
       if( modname ) m = fvm_module_by_name( modname );
-      procname = fvm_getptr( state, pars[1], 0, 0 );
+      procname = fvm_getstr( state, pars[1] );
 
       procid = -1;
       if( m && procname ) procid = fvm_procid_by_name( m, procname );
@@ -658,8 +658,8 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *modname, *procname, *buf;
       read_pars( state, pars, 6 );
       id = (((uint64_t)(pars[0])) << 32) | pars[1];
-      modname = fvm_getptr( state, pars[2], 0, 0 );
-      procname = fvm_getptr( state, pars[3], 0, 0 );
+      modname = fvm_getstr( state, pars[2] );
+      procname = fvm_getstr( state, pars[3] );
       buf = fvm_getptr( state, pars[5], 0, 0 );
       if( modname && procname ) {
 	fvm_cluster_run( id, modname, procname, buf, buf ? pars[4] : 0 );

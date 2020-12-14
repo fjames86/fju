@@ -85,6 +85,7 @@ uint32_t fvm_stack_read( struct fvm_state *state, uint32_t depth );
 int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u );
 uint32_t fvm_read_u32( struct fvm_state *state, uint32_t addr );
 char *fvm_getptr( struct fvm_state *state, uint32_t addr, int len, int writeable );
+char *fvm_getstr( struct fvm_state *state, uint32_t addr );
 void fvm_setdebug( int debugmode );
 
 #endif

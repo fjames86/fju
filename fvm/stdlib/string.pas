@@ -12,6 +12,30 @@ Begin
 	End;
 End;
 
+Procedure Memset(dest : opaque, val : int, len : int)
+Begin
+	var i : int;
+	i = 0;
+	While i < len Do Begin
+	      dest[i] = val;
+	      i = i + 1;
+	End;
+End;
+
+Procedure Memcmp(p1 : opaque, p2 : opaque, len : int, var result : int)
+Begin
+	var i : int;
+	i = 0;
+	While i < len Do Begin
+	      If p1[i] <> p2[i] Then Begin
+	      	 result = 0;
+		 Return;
+	      End;
+	      i = i + 1;
+	End;
+	result = 1;
+End;
+
 Procedure Strcpy(dest : string, src : string)
 Begin
 	var i : int;

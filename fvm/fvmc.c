@@ -198,9 +198,10 @@ static int getnexttok( FILE *f, struct token *tok ) {
     p = tok->val;
     i = 0;
     while( 1 ) {
-      if( i >= tok->len - 1) {
+      if( i >= (tok->len - 2)) {
 	tok->len = (3 * tok->len) / 2;
 	tok->val = realloc( tok->val, tok->len );
+	p = tok->val + i;
       }
       
       c = fgetc( f );
@@ -1124,10 +1125,12 @@ static void emitopcode( op_t op, void *data, int len ) {
   }
   
   u8 = op;
-  if( glob.pass == 2 ) fwrite( &u8, 1, 1, glob.outfile );
+  if( glob.pass == 2 ) {
+    fwrite( &u8, 1, 1, glob.outfile );
+    fwrite( data, 1, info->pcdata, glob.outfile );
+  }
   glob.pc += 1 + info->pcdata;
   glob.stackoffset += info->stackadjust;
-  if( glob.pass == 2 ) fwrite( data, 1, info->pcdata, glob.outfile );
 }
 
 
@@ -2798,7 +2801,7 @@ static void disassemblefile( char *path ) {
   }
   
   if( xdr.count != (xdr.offset + hdr.textsize) ) {
-    usage( "Bad size buffer size" );
+    usage( "Bad buffer size %u expected %u", xdr.count, xdr.offset + hdr.textsize );
   }
   
   for( i = 0; i < hdr.nprocs; i++ ) {

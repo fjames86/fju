@@ -169,7 +169,23 @@ Begin
 	   Syscall Puts("String compare failure");
 	   
    End;
-   
+
+   Procedure TestMemcmp()
+   Begin
+	var p1 : opaque[32];
+	var p2 : opaque[32];
+	var r : int;
+	
+	Call Memset(p1,0,32);
+	Call Memset(p2,1,32);
+	Call Memcmp(p1,p2,32,r);
+	If r Then Syscall Puts("Memcmp shows same (incorrect!)") Else Syscall Puts("Memcmp shows different (correct)");
+
+	Call Memset(p1,1,32);
+	Call Memcmp(p1,p2,32,r);
+	If r Then Syscall Puts("Memcmp shows same (correct)") Else Syscall Puts("Memcmp shows different (incorrect!)");  
+   End;
+		
    Procedure Main()
    Begin
 	var i : int;
@@ -181,6 +197,7 @@ Begin
 	Call TestFvmClRun();
 	Call TestLoop();
 	Call TestStrcpy();
+	Call TestMemcmp();
 	
 	Syscall Puts("Done");
    End;

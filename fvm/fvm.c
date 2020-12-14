@@ -270,13 +270,14 @@ char *fvm_getptr( struct fvm_state *state, uint32_t addr, int len, int writeable
 
 char *fvm_getstr( struct fvm_state *state, uint32_t addr ) {
   char *ptr, *p;
+  
   ptr = fvm_getptr( state, addr, 1, 0 );
   if( !ptr ) return NULL;
 
   /* check string is null terminated within memory bounds */
   p = ptr;
   while( 1 ) {
-    if( !p ) break;
+    if( !*p ) break;
     
     addr++;
     if( !fvm_getptr( state, addr, 1, 0 ) ) return NULL;    

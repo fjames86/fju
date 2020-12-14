@@ -36,7 +36,6 @@ End;
 
 Procedure ProcList(var lognames2 : string)
 Begin
-	var p : opaque;
 	Call Memcpy(lognames, "hello", 6);
   	lognames2 = lognames;	
 End;

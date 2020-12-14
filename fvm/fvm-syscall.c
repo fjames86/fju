@@ -483,7 +483,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     break;
   case 20:
     {
-      /* Sprintf(fmt:string,arg1:int,arg2:int,arg3:int,arg4:int,result:string,resultlen:int) */
+      /* Sprintf(dest:string,fmt:string,arg1:int,arg2:int,arg3:int,arg4:int) */
       uint32_t pars[6];
       char *str, *fmt;
       char *p, *q, *strp;
@@ -494,6 +494,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fmt = fvm_getstr( state, pars[1] );
 
       if( !str ) break;
+      if( !fmt ) break;
       
       p = fmt;
       q = str;

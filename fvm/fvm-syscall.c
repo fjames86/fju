@@ -272,6 +272,10 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       name = fvm_getstr( state, pars[1] );
       ename = fvm_getptr( state, pars[2], 0, 1 );
 
+      /* write default failure value to result so we can exit early on failure */
+      fvm_write_u32( state, pars[4], 0 ); 
+      if( !path ) break;
+      
       id = 0;
       sts = -1;
       parentid = freg_id_by_name( NULL, path, NULL );

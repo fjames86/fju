@@ -6,7 +6,7 @@
  * working as expected.
 }
 
-Program Test(0,0,Main,TestXCallCB); 
+Program Test(0,0,Main,TestXCallCB,TestStrcpy); 
 Begin
    { Includes }
    Include "syscall.pas";
@@ -172,5 +172,10 @@ Begin
 	Syscall Puts("Done");
    End;
 
+   Procedure TestStrcpy()
+   Begin
+	var s : string[64];
+	Call Strcpy(s,"Hello");
+   End;
 
 End.

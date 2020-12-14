@@ -306,7 +306,8 @@ int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
     memcpy( &state->stack[addr - FVM_ADDR_STACK], &u, 4 );
     return 0;
   }
-  
+
+  printf( " WARNING attempt to set invalid address %x\n", addr );
   return -1;  
 }
 
@@ -590,6 +591,7 @@ static int fvm_step( struct fvm_state *state ) {
       addr = fvm_pop( state );
       ptr = (uint8_t *)fvm_getptr( state, addr, 1, 1 );
       if( ptr ) *ptr = u32;
+      else printf( ";; WARNING ST8 attempt to set invalid address %x\n", addr );
     }
     break;    
   case OP_SYSCALL:

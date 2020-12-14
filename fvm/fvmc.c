@@ -753,7 +753,7 @@ static struct proc *addproc( char *name, struct param *params, int nparams, uint
   
   if( glob.pass == 2 ) usage( "assert" );
 
-  fvmc_printf( ";; Add procedure %s\n", name );
+  fvmc_printf( ";; %04x Add procedure %s\n", glob.pc, name );
   
   p = getproc( name );
   if( p ) usage( "Proc %s already exists", name );
@@ -837,12 +837,7 @@ static struct var *addlocal( struct proc *proc, char *name, var_t type, uint32_t
   /* this local is the shallowest variable on stack so can be accessed at depth of its size */
   v->offset = v->size;
 
-  /* push all other params + locals further back in the stack */
-#if 0
-  for( i = 0; i < proc->nparams; i++ ) {
-    proc->params[i].offset += v->size;
-  }
-#endif
+  /* push all other locals further back in the stack */
   v2 = proc->locals;
   while( v2 ) {
     v2->offset += v->size;
@@ -1098,6 +1093,17 @@ static struct opinfo *getopinfo( op_t op ) {
   return NULL;
 }
 
+static void emitcomment( char *fmt, ... ) {
+  va_list args;
+  if( fvmc_debug ) {
+    printf( ";; " );
+    va_start( args, fmt );
+    vprintf( fmt, args );
+    va_end( args );
+    printf( "\n" );
+  }
+}
+
 static void emitopcode( op_t op, void *data, int len ) {
   uint8_t u8;
   struct opinfo *info;
@@ -1311,7 +1317,13 @@ static void parseexpr( FILE *f ) {
     addlabel( lname1 );
     emit_ldi32( 0 );
     addlabel( lname2 );
-    glob.stackoffset -= 4;    
+    glob.stackoffset -= 4;
+  } else if( accepttok( f, TOK_MINUS ) ) {
+    /* - expr */
+    /* TODO: could improve this by adding a negation opcode, but for now we just subtract from 0 */
+    emit_ldi32( 0 ); 
+    parseexpr( f );
+    emit_sub();
   } else if( glob.tok.type == TOK_U32 ) {
     emit_ldi32( glob.tok.u32 );
     expecttok( f, TOK_U32 );
@@ -1375,7 +1387,7 @@ static void parseexpr( FILE *f ) {
     struct var *v;
     struct param *p;
     var_t vartype = VAR_TYPE_U32;
-    
+
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {
       vartype = v->type;
@@ -2038,7 +2050,7 @@ static void parseproceduresig( FILE *f, struct param **params, int *nparams, uin
   /* parse procedure */
   int nparam, isvar;
   uint32_t arraylen;
-  struct param *p, *np;
+  struct param *p, *np, *tmpp;
   uint64_t siginfo;
   
   nparam = 0;
@@ -2076,7 +2088,15 @@ static void parseproceduresig( FILE *f, struct param **params, int *nparams, uin
     parsevartype( f, &p->type, &arraylen );
     if( arraylen ) usage( "array vars not allowed in proc params" );
     if( nparam <= FVM_MAX_PARAM ) siginfo |= ((p->type | (p->isvar ? 4 : 0)) << (nparam * 3));
-    p->offset = 8 + 4*nparam;
+
+    /* push all previous params back in the stack */
+    tmpp = *params;
+    while( tmpp ) {
+      tmpp->offset += 4;
+      tmpp = tmpp->next;
+    }
+    /* last parameter has offset 8 (4 for the return address, 4 for the parameter itsefl) */
+    p->offset = 8;      
     
     if( np ) np->next = p;
     else *params = p;
@@ -2699,19 +2719,25 @@ static void compile_file( char *path, char *outpath ) {
   }
   {
     struct proc *p;
+    struct param *param;
     int i;
     
     p = glob.procs;
     while( p ) {
       fvmc_printf( "Proc: %s 0x%0x siginfo 0x%"PRIx64"\n", p->name, p->address, p->siginfo );
-      for( i = 0; i < p->nparams; i++ ) {
+      param = p->params;
+      i = 0;
+      while( param ) {
 	fvmc_printf( "  Param %u: %s%s : %s\n",
-		i, p->params[i].isvar ? "var " : "",
-		p->params[i].name,
-		p->params[i].type == VAR_TYPE_U32 ? "Int" :
-		p->params[i].type == VAR_TYPE_STRING ? "String" :
-		p->params[i].type == VAR_TYPE_OPAQUE ? "Opaque" :
-		"Other" );
+		     i,
+		     param->isvar ? "var " : "",
+		     param->name,
+		     param->type == VAR_TYPE_U32 ? "Int" :
+		     param->type == VAR_TYPE_STRING ? "String" :
+		     param->type == VAR_TYPE_OPAQUE ? "Opaque" :
+		     "Other" );
+	i = i + 1;
+	param = param->next;
       }
       p = p->next;
     }

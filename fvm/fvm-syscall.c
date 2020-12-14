@@ -271,7 +271,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       path = fvm_getptr( state, pars[0], 0, 0 );
       name = fvm_getptr( state, pars[1], 0, 0 );
       ename = fvm_getptr( state, pars[2], 0, 1 );
-      
+
       id = 0;
       sts = -1;
       parentid = freg_id_by_name( NULL, path, NULL );

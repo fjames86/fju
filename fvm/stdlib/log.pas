@@ -2,7 +2,7 @@
 { -*- mode:fvm -*- }
 
 
-Program Log(0,0,LogRead,LogWrite,LogWritef);
+Program Log(0,0,LogRead,LogWrite);
 Begin
 
 Include "syscall.pas";
@@ -22,19 +22,5 @@ Procedure LogWrite(logname : string, flags : int, len : int, buf : opaque)
 Begin
 	Syscall LogWrite(logname,flags,len,buf);
 End;
-
-Procedure LogWritef(flags : int, fmt : string, arg1 : int, arg2 : int, arg3 : int, arg4 : int)
-Begin
-	var str : string[1024];
-	var len : int;
-
-	Syscall LogWrite(0,LogLvlTrace,5,"Here");
-	
-	Syscall Sprintf(str,fmt,arg1,arg2,arg3,arg4);
-	
-	Call Strlen(str,len);
-	Syscall LogWrite(0,flags,len,str);
-End;
-
 
 End.

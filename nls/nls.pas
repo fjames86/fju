@@ -24,7 +24,6 @@ Begin
    Const MaxLog = 8;
    
    { declarations }
-   Declare Procedure Log/LogWritef(flags : int, fmt : string, arg1 : int, arg2 : int, arg3 : int, arg4 : int);
    
    { globals }
    var nlogs : u32;
@@ -42,13 +41,13 @@ Begin
 	var buf : opaque[256];
 
 	Syscall LogWrite(0,LogLvlTrace,12,"NlsProcList");
-	Call Log/LogWritef(LogLvlTrace,"NlsProcList",0,0,0,0);
 	
 	offset = 0;
 	Call XdrEncodeU32(buf,offset,nlogs);
 	i = 0;
 	While i < nlogs Do Begin
 	      Call XdrEncodeString(buf,offset,lognames + (i*32));
+	      Call XdrEncodeU64(buf,offset,*(logids + (2*i)), *(logids + (2*i) + 1));
 	      i = i + 1;
 	End;
 
@@ -100,15 +99,15 @@ Begin
 	Call XdrEncodeString(argbuf,offset,logname);
 	Call XdrEncodeU64(argbuf,offset,hosth,hostl);
 	Call XdrEncodeU32(argbuf,offset,flags);
-	Call XdrEncodeOpaque(argbuf,offset,len,buf);
+	Call XdrEncodeOpaque(argbuf,offset,buf,len);
 
-	Syscall FvmClRun(0,0,"Nls","Command",argbuf,offset);
+	Syscall FvmClRun(0,0,"Nls","Command",offset,argbuf);
 End;
 
 Procedure CheckLogId(logname : string)
 Begin
 	var idhigh, idlow : int;
-	var high, low : int;
+	var high, low, pub : int;
 	var len, flags : int;
 	var buf : opaque[1024];
 	
@@ -116,12 +115,14 @@ Begin
 	Call GetLogId(logname,high,low);
 	
 	{ if new message appeneded then issue command }
-	If (idhigh <> high) || (idlow <> low) Then
+	pub = 0;
+	If idhigh <> high Then pub = 1;
+	If idlow <> low Then pub = 1;
+	If pub Then
 	Begin
 		Syscall LogRead(logname,idhigh,idlow,1024,buf,flags,len);
 		Call PublishCommand(logname,flags,len,buf);
 	End;
-	
 
 End;
 
@@ -138,7 +139,7 @@ Begin
 	    If etype = FregTypeString Then
 	    Begin
   	        Call Strcpy(lognames + (i*32), ename);
-		Call GetLogId(ename, idhigh, idlow);
+		Syscall LogLastId(lognames + (i*32), idhigh,idlow);
 		logids[2*i] = idhigh;
 		logids[(2*i) + 1] = idlow;
 	        i = i + 1;
@@ -152,6 +153,9 @@ End;
 Procedure Service()
 Begin
 	var i : int;
+
+	Syscall LogWrite(0,LogLvlTrace,"NlsService",10);
+	
 	i = 0;
 	While i < nlogs Do
 	Begin

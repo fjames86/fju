@@ -406,6 +406,7 @@ static int fvm_step( struct fvm_state *state ) {
   
   if( (state->pc < FVM_ADDR_TEXT) || (state->pc >= (FVM_ADDR_TEXT + state->module->textsize)) ) {
     printf( "bad pc %04x\n", state->pc );
+    fvm_log( LOG_LVL_ERROR, "fvm_step bad pc" );
     return -1;
   }
 
@@ -466,6 +467,7 @@ static int fvm_step( struct fvm_state *state ) {
 	//printf( "Returning from entry point routine\n" );
       } else {
 	printf( "Attempt to return to invalid address %04x\n", u32 );
+	fvm_log( LOG_LVL_ERROR, "fvm_step return to invalid address %x frame %u", u32, state->frame );
 	return -1;
       }
     }
@@ -621,10 +623,14 @@ static int fvm_step( struct fvm_state *state ) {
   case OP_SYSCALL:
     u16 = fvm_read_pcu16( state );
     sts = fvm_syscall( state, u16 );
-    if( sts ) return -1;
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "fvm_step syscall %u failed", u16 );
+      return -1;
+    }
     break;
   default:
     printf( "Invalid opcode %u\n", op );
+    fvm_log( LOG_LVL_ERROR, "fvm_step invalid opcode" );
     return -1;
   }
 
@@ -642,7 +648,10 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
   int i, nargs, len;
   char *str, *buf;
   
-  if( (procid < 0) || (procid >= module->nprocs) ) return -1;
+  if( (procid < 0) || (procid >= module->nprocs) ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_run bad procid" );
+    return -1;
+  }
   
   memset( &state, 0, sizeof(state) );
   state.module = module;
@@ -666,7 +675,10 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
       u32[i] = FVM_ADDR_STACK + state.sp; /* address of result value */
       state.sp += 4;
     } else {
-      if( !argbuf ) return -1;
+      if( !argbuf ) {
+	fvm_log( LOG_LVL_ERROR, "fvm_run need args" );
+	return -1;
+      }
       
       /* input arg */
       switch( vartype[i] ) {
@@ -675,12 +687,18 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	  /* don't decode the u32 if the next param is opaque. that's because this will receive the length */
 	} else {
 	  sts = xdr_decode_uint32( argbuf, &u32[i] );
-	  if( sts ) return sts;
+	  if( sts ) {
+	    fvm_log( LOG_LVL_ERROR, "fvm_run xdr error u32" );
+	    return sts;
+	  }
 	}
 	break;
       case VAR_TYPE_STRING:
 	sts = xdr_decode_string( argbuf, state.stack + state.sp, FVM_MAX_STACK - state.sp );
-	if( sts ) return sts;
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error string" );
+	  return sts;
+	}
 	u32[i] = FVM_ADDR_STACK + state.sp;
 	len = strlen( state.stack + state.sp ) + 1;
 	if( len % 4 ) len += 4 - (len % 4);
@@ -689,7 +707,10 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
       case VAR_TYPE_OPAQUE:
 	len = FVM_MAX_STACK - state.sp;
 	sts = xdr_decode_opaque( argbuf, (uint8_t *)state.stack + state.sp, &len );
-	if( sts ) return sts;
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error opaque" );
+	  return sts;
+	}
 	u32[i - 1] = len;
 	u32[i] = FVM_ADDR_STACK + state.sp;
 	if( len % 4 ) len += 4 - (len % 4);
@@ -709,7 +730,10 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
   state.frame = 1;
   while( state.frame ) {
     sts = fvm_step( &state );
-    if( sts ) { printf( "step failed\n"); return -1; }
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "fvm_run step failed" );
+      return -1;
+    }
 
     if( (state.nsteps % 1000) == 0 ) {
       if( state.nsteps > glob.max_steps ) {
@@ -740,21 +764,30 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	  u = fvm_read_u32( &state, u32[i] );
 	  printf( "Extracted %u\n", u );
 	  sts = xdr_encode_uint32( resbuf, u );
-	  if( sts ) return sts;
+	  if( sts ) {
+	    fvm_log( LOG_LVL_ERROR, "fvm_run xdr error decoding result" );	    
+	    return sts;
+	  }
 	}
 	break;
       case VAR_TYPE_STRING:
 	u = fvm_read_u32( &state, u32[i] );
 	str = fvm_getstr( &state, u );
 	sts = xdr_encode_string( resbuf, str ? str : "" );
-	if( sts ) return sts;
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error decoding result" );	    	  
+	  return sts;
+	}
 	break;
       case VAR_TYPE_OPAQUE:
 	u = fvm_read_u32( &state, u32[i] );
 	len = u32[i - 1];	
 	buf = fvm_getptr( &state, u, len, 0 );
 	sts = xdr_encode_opaque( resbuf, (uint8_t *)buf, buf ? len : 0 );
-	if( sts ) return sts;
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error decoding result" );	    	  
+	  return sts;
+	}
 	break;
       }
     }
@@ -1224,11 +1257,14 @@ struct fvm_iterator {
 static void fvm_module_iter( struct rpc_iterator *iter ) {
   struct fvm_iterator *fiter;
   struct fvm_module *m;
-
+  int sts;
+  
   fiter = (struct fvm_iterator *)iter;
   m = fvm_module_by_name( fiter->modname );
   if( !m ) return;
-  fvm_run( m, fiter->procid, NULL, NULL );
+
+  sts = fvm_run( m, fiter->procid, NULL, NULL );
+  if( sts ) fvm_log( LOG_LVL_ERROR, "fvm iter failed" );
 }
 
 void fvm_rpc_register( void ) {
@@ -1260,6 +1296,7 @@ void fvm_rpc_register( void ) {
       sts = fvm_module_load_file( path, &m );
       if( sts ) goto cont;
 
+      strcpy( path, "" );
       sts = freg_get_by_name( NULL, entry.id, "service", FREG_TYPE_STRING, path, sizeof(path), NULL );
       if( sts && (fvm_procid_by_name( m, "service" ) >= 0) ) {
 	strcpy( path, "service" );
@@ -1270,8 +1307,9 @@ void fvm_rpc_register( void ) {
       sts = freg_get_by_name( NULL, entry.id, "service-period", FREG_TYPE_UINT32, (char *)&service_period, 4, NULL );
       if( sts ) service_period = 1000;
       
-      if( !sts ) {
+      if( path[0] ) {
 	struct fvm_iterator *iter = malloc( sizeof(*iter) );
+	fvm_log( LOG_LVL_INFO, "fvm service %s %s", m->name, path );
 	memset( iter, 0, sizeof(*iter) );
 	iter->iter.cb = fvm_module_iter;
 	strcpy( iter->modname, m->name );

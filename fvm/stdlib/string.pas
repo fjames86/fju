@@ -79,3 +79,9 @@ Begin
 	If str1[i] || str2[i] Then result = 0 Else result = 1;
 End;
 
+Procedure Printf(fmt : string, arg1 : int, arg2 : int, arg3 : int, arg4 : int)
+Begin
+	var str : string[1024];
+	Syscall Sprintf(str,fmt,arg1,arg2,arg3,arg4);
+	Syscall Puts(str);
+End;

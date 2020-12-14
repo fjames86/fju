@@ -93,7 +93,7 @@ Procedure CheckLogId(logname : string)
 Begin
 	var idhigh, idlow : int;
 	var high, low : int;
-	var len : int;
+	var len, flags : int;
 	var buf : opaque[1024];
 	
 	Syscall LogLastId(logname,idhigh,idlow);
@@ -102,8 +102,8 @@ Begin
 	{ if new message appeneded then issue command }
 	If (idhigh <> high) || (idlow <> low) Then
 	Begin
-		Syscall LogRead(logname,idhigh,idlow,1024,buf,len);
-		Call PublishCommand(logname,0,len,buf);
+		Syscall LogRead(logname,idhigh,idlow,1024,buf,flags,len);
+		Call PublishCommand(logname,flags,len,buf);
 	End;
 	
 

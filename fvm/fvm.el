@@ -7,8 +7,6 @@
 (defvar fvm-mode-syntax-table nil)
 (setq fvm-mode-syntax-table
       (let ((st (make-syntax-table)))
-;	(modify-syntax-entry ?# "<" st) ;; how to do both single line comments?
-;	(modify-syntax-entry ?\n ">" st)
 	(modify-syntax-entry ?{ "<" st)
 	(modify-syntax-entry ?} ">" st)
 	st))
@@ -26,8 +24,14 @@
 	`((,x-types-regexp . font-lock-type-face)
 	  (,x-keywords-regexp . font-lock-keyword-face))))
 
+
 (define-derived-mode fvm-mode fundamental-mode "fvm"
   "major mode for fvm pascal"
-  (setq font-lock-defaults '(fvm-highlights)))
+  (setq font-lock-defaults '(fvm-highlights))
+  (setq-local comment-start "{")
+  (setq-local comment-end "}"))
+
+
+
 
 (provide 'fvm-mode)

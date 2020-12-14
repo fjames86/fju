@@ -170,22 +170,55 @@ Begin
 	   
    End;
 
-   Procedure TestMemcmp()
-   Begin
-	var p1 : opaque[32];
-	var p2 : opaque[32];
-	var r : int;
+    Procedure TestMemcmp()
+    Begin
+        var p1 : opaque[32];
+        var p2 : opaque[32];
+   	var r : int;
 	
-	Call Memset(p1,0,32);
-	Call Memset(p2,1,32);
-	Call Memcmp(p1,p2,32,r);
-	If r Then Syscall Puts("Memcmp shows same (incorrect!)") Else Syscall Puts("Memcmp shows different (correct)");
+   	Call Memset(p1,0,32);
+   	Call Memset(p2,1,32);
+   	Call Memcmp(p1,p2,32,r);
+   	If r Then Syscall Puts("Memcmp shows same (incorrect!)") Else Syscall Puts("Memcmp shows different (correct)");
 
-	Call Memset(p1,1,32);
-	Call Memcmp(p1,p2,32,r);
-	If r Then Syscall Puts("Memcmp shows same (correct)") Else Syscall Puts("Memcmp shows different (incorrect!)");  
-   End;
+   	Call Memset(p1,1,32);
+   	Call Memcmp(p1,p2,32,r);
+   	If r Then Syscall Puts("Memcmp shows same (correct)") Else Syscall Puts("Memcmp shows different (incorrect!)");
+    End;
+
+    Const var MyLogName = "fred";
+    
+   Procedure TestLogProp()
+   Begin
+	var idh, idl : int;
+	var idh2, idl2 : int;
+	var flags, lenp : int;
+	var buf : opaque[1024];
+
+	Syscall LogLastId(MyLogName,idh,idl);
+	Call Printf("%s LastId %x%x", MyLogName,idh,idl,0);
+	
+	idh = 0;
+	idl = 0;
+	Do
+	Begin
+		Syscall LogNext(MyLogName,idh,idl,idh2,idl2);
+		If (idh2 | idl2) Then
+		Begin
+
+			Syscall LogRead(MyLogName,idh2,idl2,1024,buf,flags,lenp);
+			Call Printf("%x%x %s", idh2,idl2,buf,0);		
+		End Else Begin
+		    Call Printf("Failed to get next log entry for %x%x", idh,idl,0,0);
+		End;
+		    
 		
+		idh = idh2;
+		idl = idl2;
+	End While (idh | idl);
+
+   End;
+   
    Procedure Main()
    Begin
 	var i : int;
@@ -198,6 +231,7 @@ Begin
 	Call TestLoop();
 	Call TestStrcpy();
 	Call TestMemcmp();
+        Call TestLogProp();
 	
 	Syscall Puts("Done");
    End;

@@ -217,22 +217,30 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 3:
-    /* LogRead(logname,idhigh,idlow,len,buf, var lenp) */
+    /* LogRead(logname,idhigh,idlow,len,buf, var flags, var lenp) */
     {
       struct log_s log, *logp;
       uint64_t id;
-      int sts, lenp;
+      int sts;
       char *bufp;
-      uint32_t pars[6];
-
-      read_pars( state, pars, 6 );
+      uint32_t pars[7];
+      struct log_entry entry;
+      struct log_iov iov[1];
+      
+      read_pars( state, pars, 7 );
       logp = openlogfile( state, pars[0], &log );
       id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
 
       bufp = fvm_getptr( state, pars[4], pars[3], 0 );
-      
-      sts = log_read_buf( logp, id, bufp, pars[3], &lenp );
-      fvm_write_u32( state, pars[5], sts ? 0 : lenp );
+
+      memset( &entry, 0, sizeof(entry) );
+      iov[0].buf = bufp;
+      iov[0].len = bufp ? pars[3] : 0;
+      entry.iov = iov;
+      entry.niov = 1;	
+      sts = log_read_entry( logp, id, &entry );
+      fvm_write_u32( state, pars[5], sts ? 0 : entry.flags );
+      fvm_write_u32( state, pars[6], sts ? 0 : entry.msglen );
 
       if( logp ) log_close( logp );
     }

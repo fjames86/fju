@@ -50,7 +50,5 @@ fi
 # register as rpc program
 if [ $regprog ]; then
     freg put /fju/fvm/modules/$progname/register u32 1
-else
-    freg put /fju/fvm/modules/$progname/register u32 0    
 fi
 

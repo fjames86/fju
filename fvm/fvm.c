@@ -955,11 +955,13 @@ static int get_rpc_procid( struct fvm_module *m, int rpcid ) {
   char name[8];
   
   procid = 0;
-  for( i = 0; i < m->nprocs; i++ ) {
+  for( i = 0; i < m->nprocs; i++ ) {    
     memcpy( name, m->procs[i].name, 4 );
-    name[5] = '\0';
+    name[4] = '\0';
     if( strcasecmp( name, "proc" ) == 0 ) {
-      if( procid == rpcid ) return i;
+      if( procid == rpcid ) {
+	return i;
+      }
       procid++;
     }
   }
@@ -973,12 +975,18 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   struct fvm_module *m;
   struct rpc_conn *conn;
   struct xdr_s argbuf, resbuf;
-  
+
   m = fvm_module_by_progid( inc->msg.u.call.prog, inc->msg.u.call.vers );
-  if( !m ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  if( !m ) {
+    fvm_log( LOG_LVL_TRACE, "Unknown module progid=%u", inc->msg.u.call.prog );
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROG_UNAVAIL, NULL, NULL );
+  }
 
   procid = get_rpc_procid( m, inc->msg.u.call.proc );
-  if( (procid < 0) || (procid >= m->nprocs) ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  if( (procid < 0) || (procid >= m->nprocs) ) {
+    fvm_log( LOG_LVL_TRACE, "Unknown proc %u", inc->msg.u.call.proc );
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, NULL );
+  }
 
   fvm_log( LOG_LVL_DEBUG, "fvm_rpc_proc %s %s", m->name, m->procs[procid].name );
 
@@ -1269,6 +1277,7 @@ void fvm_rpc_register( void ) {
       registerp = (m->progid ? 1 : 0);
       sts = freg_get_by_name( NULL, entry.id, "register", FREG_TYPE_UINT32, (char *)&registerp, sizeof(registerp), NULL );
       if( registerp ) {
+	fvm_log( LOG_LVL_INFO, "Registering program %s", m->name );
 	fvm_register_program( m->name );
       }
 

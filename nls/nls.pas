@@ -37,9 +37,8 @@ End;
 Procedure ProcList(var lognames2 : string)
 Begin
 	var p : opaque;
-  	lognames2 = "";
-   	p = lognames + 32;
-	Call Memcpy(p, "hello", 6);
+	Call Memcpy(lognames, "hello", 6);
+  	lognames2 = lognames;	
 End;
 
 Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)

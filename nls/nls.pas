@@ -12,7 +12,7 @@
   * 
 }
 
-Program NLS(0x2FFF7773,1,ProcNull,ProcList,Init,Service,Command);
+Program Nls(0x2FFF7773,1,ProcNull,ProcList,Init,Service,Command);
 Begin
 
    { includes }

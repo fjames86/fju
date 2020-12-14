@@ -1224,7 +1224,8 @@ void fvm_rpc_register( void ) {
   char path[256];
   struct fvm_module *m;
   uint32_t registerp;
-
+  uint32_t service_period;
+  
   rpc_program_register( &fvm_prog );
   raft_app_register( &fvm_app );  
 
@@ -1250,6 +1251,10 @@ void fvm_rpc_register( void ) {
 	strcpy( path, "service" );
 	sts = 0;
       }
+
+      service_period = 1000;
+      sts = freg_get_by_name( NULL, entry.id, "service-period", FREG_TYPE_UINT32, (char *)&service_period, 4, NULL );
+      if( sts ) service_period = 1000;
       
       if( !sts ) {
 	struct fvm_iterator *iter = malloc( sizeof(*iter) );
@@ -1257,6 +1262,7 @@ void fvm_rpc_register( void ) {
 	iter->iter.cb = fvm_module_iter;
 	strcpy( iter->modname, m->name );
 	iter->procid = fvm_procid_by_name( m, path );
+	iter->iter.period = service_period;
 	rpc_iterator_register( &iter->iter );
       }
 

@@ -21,8 +21,10 @@ Begin
    Include "xdr.pas";
    
    { constants }
-
+   Const MaxLog = 8;
+   
    { declarations }
+   Declare Procedure Log/LogWritef(flags : int, fmt : string, arg1 : int, arg2 : int, arg3 : int, arg4 : int);
    
    { globals }
    var nlogs : u32;
@@ -34,10 +36,24 @@ Procedure ProcNull()
 Begin
 End;
 
-Procedure ProcList(var lognames2 : string)
+Procedure ProcList(var lenp : int, var bufp : opaque) 
 Begin
-	Call Memcpy(lognames, "hello", 6);
-  	lognames2 = lognames;	
+	var offset, i : int;
+	var buf : opaque[256];
+
+	Syscall LogWrite(0,LogLvlTrace,12,"NlsProcList");
+	Call Log/LogWritef(LogLvlTrace,"NlsProcList",0,0,0,0);
+	
+	offset = 0;
+	Call XdrEncodeU32(buf,offset,nlogs);
+	i = 0;
+	While i < nlogs Do Begin
+	      Call XdrEncodeString(buf,offset,lognames + (i*32));
+	      i = i + 1;
+	End;
+
+	bufp = buf;
+	lenp = offset;
 End;
 
 Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)
@@ -110,7 +126,7 @@ Begin
 End;
 
 { initialization routine - load log names from registry and set log ids }
-Procedure Init(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
+Procedure Init()
 Begin
 	var ename : string[32];
 	var i, etype, result : int;
@@ -121,18 +137,19 @@ Begin
 	While ename[0] Do Begin
 	    If etype = FregTypeString Then
 	    Begin
-  	        Call Memcpy(lognames + (i*32), ename, 32);
-		Call GetLogId(lognames + (i*32), idhigh, idlow);
+  	        Call Strcpy(lognames + (i*32), ename);
+		Call GetLogId(ename, idhigh, idlow);
 		logids[2*i] = idhigh;
 		logids[(2*i) + 1] = idlow;
 	        i = i + 1;
+		If i > MaxLog Then Break;
             End;
 	    Syscall FregNext("/fju/nls/logs",ename,ename,etype,result);	
 	End;
 	nlogs = i;
 End;
 
-Procedure Service(argcount : u32, argbuf : opaque, var rescount : u32, var resbuf : opaque )
+Procedure Service()
 Begin
 	var i : int;
 	i = 0;

@@ -115,6 +115,9 @@ Begin
 	   End;
 		
 	End While cont;
+
+	Syscall FregNext("/fju/nls/logs","",entryname,entrytype,result);
+	Call Printf("/fju/nls/logs/%s", entryname,0,0,0);
    End;
 
    Procedure TestXCallCB(var s : string)

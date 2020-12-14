@@ -37,7 +37,7 @@ static struct log_s *openlogfile( struct fvm_state *state, uint32_t addr, struct
   memset( logname, 0, sizeof(logname) );
   if( addr ) {
     strp = fvm_getstr( state, addr );
-    if( strp ) {
+    if( strp && *strp ) {
       strncpy( logname, strp, sizeof(logname) - 8 );
       strcat( logname, ".log" );
       sts = log_open( mmf_default_path( logname, NULL ), NULL, log );
@@ -119,9 +119,13 @@ static void fvm_xcall( struct fvm_state *state ) {
       }
     }
   }
-  
+
+  fvm_log( LOG_LVL_TRACE, "fvm_xcall %s/%s args=%u", m->name, m->procs[procid].name, args.offset );
   sts = fvm_run( m, procid, &args, &res );
-  if( sts ) goto done;
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_xcall failed to run %s/%s", m->name, m->procs[procid].name );
+    goto done;
+  }
 
   sp = state->sp;
   for( i = 0; i < nargs; i++ ) {

@@ -67,15 +67,18 @@ static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
 }
 
 static int get_init_proc( struct fvm_module *m, char *procname ) {
-  int sts;
+  int sts, procid;
   char path[256];
   sprintf( path, "/fju/fvm/modules/%s/init", m->name );
   sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, procname, FVM_MAX_NAME, NULL );
   if( !sts ) return 0;
-  if( fvm_procid_by_name( m, "init" ) >= 0 ) {
-    strcpy( procname, "init" );
+
+  procid = fvm_procid_by_name( m, "init" );
+  if( procid >= 0 ) {
+    strcpy( procname, m->procs[procid].name );
     return 0;
   }
+  
   return -1;
 }
 
@@ -170,7 +173,9 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
 
   sts = get_init_proc( module, procname );
   if( !sts ) {
-    fvm_run( module, fvm_procid_by_name( module, procname ), NULL, NULL );
+    fvm_log( LOG_LVL_TRACE, "fvm_module_load: %s running init proc %s", module->name, procname );
+    sts = fvm_run( module, fvm_procid_by_name( module, procname ), NULL, NULL );
+    if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_load: init routine failed" );
   }
   
   return 0;

@@ -1094,6 +1094,7 @@ static struct opinfo *getopinfo( op_t op ) {
   return NULL;
 }
 
+#if 0
 static void emitcomment( char *fmt, ... ) {
   va_list args;
   if( fvmc_debug ) {
@@ -1104,6 +1105,7 @@ static void emitcomment( char *fmt, ... ) {
     printf( "\n" );
   }
 }
+#endif
 
 static void emitopcode( op_t op, void *data, int len ) {
   uint8_t u8;
@@ -2639,6 +2641,9 @@ static void compile_file( char *path, char *outpath ) {
   fvmc_printf( "--------------------- Pass 1 -------------------- \n" );
   glob.pass = 1;  
   processfile( path );
+
+  if( glob.pc > (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) usage( "Text segment size %d > max %d", glob.textsize, FVM_MAX_TEXT);
+  if( glob.datasize > FVM_MAX_DATA ) usage( "Data segment size %d > max %d", glob.datasize, FVM_MAX_DATA );
   
   fvmc_printf( "--------------------- Pass 2 -------------------- \n" );
   glob.pass = 2;

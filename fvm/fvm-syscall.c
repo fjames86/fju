@@ -138,7 +138,7 @@ static void fvm_xcall( struct fvm_state *state ) {
 	break;
       case VAR_TYPE_STRING:
 	strp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );
-	xdr_decode_string( &res, strp, 1024 );
+	xdr_decode_string( &res, strp, FVM_MAX_STACK - sp );
 	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], FVM_ADDR_STACK + sp );
 	u32 = strlen( strp ) + 1;
 	if( u32 % 4 ) u32 += 4 - (u32 % 4);
@@ -146,7 +146,7 @@ static void fvm_xcall( struct fvm_state *state ) {
 	break;
       case VAR_TYPE_OPAQUE:
 	bufp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );
-	u32 = 1024;
+	u32 = FVM_MAX_STACK - sp;
 	xdr_decode_opaque( &res, (uint8_t *)bufp, (int *)&u32 );
 	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i - 1], u32 );
 	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], FVM_ADDR_STACK + sp );
@@ -647,7 +647,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       read_pars( state, pars, 4 );
       id = (((uint64_t)(pars[0])) << 32) | pars[1];
       buf = fvm_getptr( state, pars[3], 0, 0 );
-      raft_cluster_command( id, buf, buf ? pars[5] : 0, NULL );
+      raft_cluster_command( id, buf, buf ? pars[2] : 0, NULL );
     }
     break;
   case 27:
@@ -660,9 +660,9 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       id = (((uint64_t)(pars[0])) << 32) | pars[1];
       modname = fvm_getptr( state, pars[2], 0, 0 );
       procname = fvm_getptr( state, pars[3], 0, 0 );
-      buf = fvm_getptr( state, pars[4], 0, 0 );
+      buf = fvm_getptr( state, pars[5], 0, 0 );
       if( modname && procname ) {
-	fvm_cluster_run( id, modname, procname, buf, buf ? pars[5] : 0 );
+	fvm_cluster_run( id, modname, procname, buf, buf ? pars[4] : 0 );
       }
     }
   case 0xffff:

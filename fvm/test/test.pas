@@ -134,6 +134,30 @@ Begin
 	Syscall FvmClRun(0,0,"Test","TestXCallCB",0,0);
    End;
    
+
+   Procedure TestLoop()
+   Begin
+	var i : int;
+	var str : string[64];
+
+	Syscall Puts("TestLoop Start");
+	i = 0;
+	while i < 10 Do
+	Begin
+	      If i % 2 Then Begin
+	      	 i = i + 1;
+		 Continue;
+	      End;
+	      
+	      If i = 8 Then Break;
+	      Syscall Sprintf(str,"I = %u", i,0,0,0);
+	      Syscall Puts(str);
+	      i = i + 1;
+	End;
+
+	Syscall Puts("TestLoop Done");
+   End;
+   
    Procedure Main()
    Begin
 	var i : int;
@@ -143,6 +167,7 @@ Begin
 	Call TestFreg();
 	Call TestXCall();
 	Call TestFvmClRun();
+	Call TestLoop();
 	
 	Syscall Puts("Done");
    End;

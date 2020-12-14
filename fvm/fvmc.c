@@ -645,6 +645,13 @@ static struct {
   uint32_t stackoffset;  /* offset relative to last local var. */
   uint32_t linecount;
   char curfile[256];
+
+  /* 
+   * store label names for break and continue statements. 
+   * if these are empty string then break/continue statements are invalid 
+   */
+  char brklbl[64];
+  char contlbl[64];
 } glob;
 
 static void incrementlinecount( void ) {
@@ -1797,46 +1804,85 @@ static int parsestatement( FILE *f ) {
     
   } else if( acceptkeyword( f, "do" ) ) {
     /* do statement while expr */
-    char lnamestart[FVM_MAX_NAME];
     struct label *l;
-    
-    getlabelname( "DO", lnamestart );
-    l = addlabel( lnamestart );
+    uint32_t doaddr;
+    char dolbl[64], brklbl[64], contlbl[64];
 
+    /* copy current break/continue labels */
+    strcpy( brklbl, glob.brklbl );
+    strcpy( contlbl, glob.contlbl );
+
+    /* allocate label names */
+    getlabelname( "DO", dolbl );
+    getlabelname( "BRK", glob.brklbl );
+    getlabelname( "CONT", glob.contlbl );
+
+    /* set start address */
+    l = addlabel( dolbl );
+    doaddr = l->address;
+    
     parsestatement( f );
 
     expectkeyword( f, "while" );
+    addlabel( glob.contlbl );    /* continue statement takes us to the test */
     parseexpr( f );
-    emit_br( l->address );
+    emit_br( doaddr );
+    addlabel( glob.brklbl );
     
+    /* restore break/cont labels */
+    strcpy( glob.brklbl, brklbl );
+    strcpy( glob.contlbl, contlbl );
   } else if( acceptkeyword( f, "while" ) ) {
     /* while expr do statement */
     struct label *l;
-    uint16_t addr1, addr2;
-    char lnamew[FVM_MAX_NAME], lnamedo[FVM_MAX_NAME];
+    uint16_t whileaddr, doaddr;
+    char whilelbl[FVM_MAX_NAME], dolbl[FVM_MAX_NAME];
+    char brklbl[64], contlbl[64];
 
-    getlabelname( "WHILE", lnamew );
-    getlabelname( "DO", lnamedo );
+    /* save break/continue labels */
+    strcpy( brklbl, glob.brklbl );
+    strcpy( contlbl, glob.contlbl );
+    
+    getlabelname( "WHILE", whilelbl );
+    getlabelname( "DO", dolbl );
 
+    /* set break/continue labels */
+    strcpy( glob.brklbl, dolbl );
+    strcpy( glob.contlbl, whilelbl );
+    
     if( glob.pass == 1 ) {
-      addr1 = 0;
-      addr2 = 0;
+      whileaddr = 0;
+      doaddr = 0;
     } else {
-      l = getlabel( lnamew );
+      l = getlabel( whilelbl );
       if( !l ) usage( "Failed to get label" );
-      addr1 = l->address;
-      l = getlabel( lnamedo );
+      whileaddr = l->address;
+      l = getlabel( dolbl );
       if( !l ) usage( "Failed to get label" );
-      addr2 = l->address;
+      doaddr = l->address;
     }
     
-    addlabel( lnamew );
+    addlabel( whilelbl );
     parseexpr( f );
-    emit_brz( addr2 );
+    emit_brz( doaddr );
     expectkeyword( f, "Do" );
     parsestatement( f );
-    emit_jmp( addr1 );
-    addlabel( lnamedo );
+    emit_jmp( whileaddr );
+    addlabel( dolbl );
+
+    /* restore break/cont labels */
+    strcpy( glob.brklbl, brklbl );
+    strcpy( glob.contlbl, contlbl );
+  } else if( acceptkeyword( f, "break" ) ) {
+    struct label *l;
+    if( !glob.brklbl[0] ) usage( "Break statement invalid - not in a loop context" );
+    l = getlabel( glob.brklbl );
+    emit_jmp( l ? l->address : 0 );
+  } else if( acceptkeyword( f, "continue" ) ) {
+    struct label *l;
+    if( !glob.contlbl[0] ) usage( "Continue statement invalid - not in a loop context" );
+    l = getlabel( glob.contlbl );
+    emit_jmp( l ? l->address : 0 );    
   } else if( acceptkeyword( f, "return" ) ) {
     if( glob.currentproc->localsize ) {
       emit_subsp( glob.currentproc->localsize );

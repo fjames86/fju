@@ -67,7 +67,7 @@ static void fvm_xcall( struct fvm_state *state ) {
   var_t vartype;
   uint32_t u32, sp;
   uint64_t siginfo;
-  struct rpc_conn *conn;
+  struct rpc_conn *conn = NULL;
   char *strp, *bufp;
   struct xdr_s args, res;
   char *tmpbufp = NULL;

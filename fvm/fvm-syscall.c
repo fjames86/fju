@@ -337,7 +337,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, str, pars[2], NULL );
       }
       if( sts ) {
-	strcpy( str, "" );
+	if( str ) strcpy( str, "" );
 	fvm_write_u32( state, pars[3], 0 );
       } else {
 	fvm_write_u32( state, pars[3], 1 );
@@ -356,7 +356,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       res = fvm_getptr( state, pars[2], pars[1], 1 );
       lenp = 0;
       if( path ) {
-	freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, res, pars[1], &lenp );
+	freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, res, res ? pars[1] : 0, &lenp );
       }
       fvm_write_u32( state, pars[3], lenp );
     }
@@ -616,15 +616,23 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *modname, *procname;
       char *argbuf, *resbuf;
       int sts;
-      
-      read_pars( state, pars, 7 );
-      modname = fvm_getstr( state, pars[0] );
-      m = NULL;
-      if( modname ) m = fvm_module_by_name( modname );
-      procname = fvm_getstr( state, pars[1] );
 
-      procid = -1;
-      if( m && procname ) procid = fvm_procid_by_name( m, procname );
+      read_pars( state, pars, 7 );
+
+      /* write rlen=0 as default value so we can break early */
+      fvm_write_u32( state, pars[6], 0 );
+      
+      modname = fvm_getstr( state, pars[0] );
+      if( !modname ) break;
+
+      m = fvm_module_by_name( modname );
+      if( !m ) break;
+      
+      procname = fvm_getstr( state, pars[1] );
+      if( !procname ) break;
+      
+      procid = fvm_procid_by_name( m, procname );
+      if( procid < 0 ) break;
       
       argbuf = fvm_getptr( state, pars[3], pars[2], 0 );
       resbuf = fvm_getptr( state, pars[5], pars[4], 1 );

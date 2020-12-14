@@ -16,19 +16,24 @@ Begin
 	var l : int;
 	var buf : opaque[2048];
 
-	Syscall ChtRead(keylen,keybuf,2048,buf,l);
-	datalen = l;
-	databuf = buf;
+	If keylen = ChtKeySize Then Begin
+            Syscall ChtRead(keybuf,2048,buf,l);
+	    datalen = l;
+	    databuf = buf;
+	End Else Begin
+	    datalen = 0;
+	    databuf = 0;
+        End;
 End;
 
 Procedure ChtWrite(keylen : int, keybuf : opaque, datalen : int, databuf : opaque)
 Begin
-	Syscall ChtWrite(keylen,keybuf,datalen,databuf);
+	If Keylen = ChtKeySize Then Syscall ChtWrite(keybuf,datalen,databuf);
 End;
 
 Procedure ChtDelete(keylen : int, keybuf : opaque)
 Begin
-	Syscall ChtDelete(keylen,keybuf);
+	If Keylen = ChtKeySize Then Syscall ChtDelete(keybuf);
 End;
 
 End.

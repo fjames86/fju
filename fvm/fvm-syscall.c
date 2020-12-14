@@ -544,58 +544,50 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 21:
-    /* ChtRead(keylen,keybuf,reslen,resbuf,var len) */
+    /* ChtRead(keybuf,reslen,resbuf,var len) */
     {
-      uint32_t keylen,keyaddr,reslen,resaddr,rlenaddr;
+      uint32_t pars[4];
       char *keybuf, *resbuf;
       struct cht_entry entry;
+
+      read_pars( state, pars, 4 );
       
-      rlenaddr = fvm_stack_read( state, 4 );
-      resaddr = fvm_stack_read( state, 8 );
-      reslen = fvm_stack_read( state, 12 );      
-      keyaddr = fvm_stack_read( state, 16 );
-      keylen  = fvm_stack_read( state, 20 );
-      resbuf = fvm_getptr( state, resaddr, reslen, 1 );
-      keybuf = fvm_getptr( state, keyaddr, 0, 0 );
+      resbuf = fvm_getptr( state, pars[2], pars[1], 1 );
+      keybuf = fvm_getptr( state, pars[0], CHT_KEY_SIZE, 0 );
 
       memset( &entry, 0, sizeof(entry) );
-      if( keylen < 16 ) keybuf = NULL;
       if( keybuf ) {
-	cht_read( NULL, keybuf, resbuf, resbuf ? reslen : 0, &entry );
+	cht_read( NULL, keybuf, resbuf, resbuf ? pars[1] : 0, &entry );
       }
-      fvm_write_u32( state, rlenaddr, entry.flags & CHT_SIZE_MASK );
+      fvm_write_u32( state, pars[3], entry.flags & CHT_SIZE_MASK );
     }      
     break;
   case 22:
-    /* ChtWrite(keylen,keybuf,reslen,resbuf) */
+    /* ChtWrite(keybuf,reslen,resbuf) */
     {
-      uint32_t keylen,keyaddr,reslen,resaddr;
+      uint32_t pars[3];
       char *keybuf, *resbuf;
       struct cht_entry entry;
-      
-      resaddr = fvm_stack_read( state, 4 );
-      reslen = fvm_stack_read( state, 8 );      
-      keyaddr = fvm_stack_read( state, 12 );
-      keylen  = fvm_stack_read( state, 16 );
-      resbuf = fvm_getptr( state, resaddr, 0, 0 );
-      keybuf = fvm_getptr( state, keyaddr, 0, 0 );
-      if( keylen < CHT_KEY_SIZE ) keybuf = NULL;
+
+      read_pars( state, pars, 3 );
+
+      keybuf = fvm_getptr( state, pars[0], CHT_KEY_SIZE, 0 );
+      resbuf = fvm_getptr( state, pars[2], pars[1], 1 );
       
       memset( &entry, 0, sizeof(entry) );
       if( keybuf ) memcpy( entry.key, keybuf, CHT_KEY_SIZE );
-      cht_write( NULL, &entry, resbuf, resbuf ? reslen : 0 );
+      if( resbuf ) cht_write( NULL, &entry, resbuf, resbuf ? pars[1] : 0 );
     }
     break;
   case 23:
-    /* ChtDelete(keylen,keybuf) */
+    /* ChtDelete(keybuf) */
     {
-      uint32_t keylen,keyaddr;
+      uint32_t pars[1];
       char *keybuf;
       
-      keyaddr = fvm_stack_read( state, 4 );
-      keylen  = fvm_stack_read( state, 8 );
-      keybuf = fvm_getptr( state, keyaddr, 0, 0 );
-      if( keylen < CHT_KEY_SIZE ) keybuf = NULL;            
+      read_pars( state, pars, 1 );
+      
+      keybuf = fvm_getptr( state, pars[0], CHT_KEY_SIZE, 0 );
       if( keybuf ) cht_delete( NULL, keybuf );
     }
     break;

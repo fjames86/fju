@@ -36,9 +36,11 @@ Declare Syscall HostregIdByName(name : string, var idHigh : u32, idLow : u32 ) :
 Declare Syscall RpcNow(var nowHigh : u32, var nowLow : u32) : 18;
 Declare Syscall SecRandU32(var r : u32) : 19;
 Declare Syscall Sprintf(dest : string, fmt : string, arg1 : u32, arg2 : u32, arg3 : u32, arg4 : u32) : 20;
-Declare Syscall ChtRead(keylen : int, keybuf : opaque, datalen : int, databuf : opaque, var datalenp : int) : 21;
-Declare Syscall ChtWrite(keylen : int, keybuf : opaque, datalen : int, databuf : opaque) : 22;
-Declare Syscall ChtDelete(keylen : int, keybuf : opaque) : 23;
+
+Const ChtKeySize = 16;
+Declare Syscall ChtRead(keybuf : opaque, datalen : int, databuf : opaque, var datalenp : int) : 21;
+Declare Syscall ChtWrite(keybuf : opaque, datalen : int, databuf : opaque) : 22;
+Declare Syscall ChtDelete(keybuf : opaque) : 23;
 Declare Syscall Puts(str : string) : 24;
 Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf : opaque, reslen : int, resbuf : opaque, var rlen : int) : 25;
 Declare Syscall RaftCommand(idHigh : int, idLow : int, len : int, buf : opaque) : 26;

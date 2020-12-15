@@ -1824,7 +1824,6 @@ int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t off
     /* final block - mark as complete */
     mmf_read( &mmf, (char *)&info, sizeof(info), 0 );
     info.complete = 1;
-    //info.size = mmf.fsize - sizeof(info);
     mmf_write( &mmf, (char *)&info, sizeof(info), 0 );
   }
   

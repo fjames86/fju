@@ -121,17 +121,10 @@ Begin
 	{ if new message appeneded then issue command }
 	If (idhigh <> high) || (idlow <> low) Then
 	Begin
-		Call LogWritef(LogLvlTrace,"Nls New Log entry %x%x",high,low,0,0);
+		Call LogWritef(LogLvlTrace,"Nls New Log entry %x%x",idhigh,idlow,0,0);
 		
-		Do Begin
-		   Syscall LogNext(logname,high,low,high,low);
-		   Syscall LogRead(logname,high,low,1024,buf,flags,len);
-		   If !len Then Break;
-
-		   Call PublishCommand(logname,flags,len,buf);
-		   Call SetLogId(logname,high,low);
-
-		End While 1;
+		Syscall LogRead(logname,idhigh,idlow,1024,buf,flags,len);
+		If len Then Call PublishCommand(logname,flags,len,buf);
 		Call SetLogId(logname,idhigh,idlow);
 	End;
 	

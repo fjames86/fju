@@ -24,6 +24,8 @@ ssh root@${remoteip} mkdir -p /usr/local/bin
 ssh root@${remoteip} mkdir -p /usr/local/lib
 scp bin/* root@${remoteip}:/usr/local/bin
 scp lib/libfju.so root@${remoteip}:/usr/local/lib
+scp bin/nls.fvm root@${remoteip}:/root/nls.fvm
+
 
 ## restart remote services
 sh scripts/fjud.sh start

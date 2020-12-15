@@ -840,8 +840,8 @@ static void raft_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   }
 
   if( !res ) {
-    raft_log( LOG_LVL_TRACE, "raft_putcmd_cb timeout - retrying" );
-    raft_call_putcmd( cl, hostid, 0 );
+    raft_log( LOG_LVL_TRACE, "raft_putcmd_cb timeout" );
+    //raft_call_putcmd( cl, hostid, 0 );
     return;
   }
 

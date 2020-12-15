@@ -23,10 +23,10 @@ fvm/test/test1.fvm: fvm/test/test1.pas ${BINDIR}/fvmc
 fvm/test/test.fvm: fvm/test/test.pas ${BINDIR}/fvmc fvm/stdlib/string.pas fvm/stdlib/syscall.pas
 	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/test/test.pas
 
-${BINDIR}/cht.fvm: fvm/stdlib/cht.pas ${BINDIR}/fvmc fvm/stdlib/syscall.pas
-	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/stdlib/cht.pas
-${BINDIR}/log.fvm: fvm/stdlib/log.pas ${BINDIR}/fvmc fvm/stdlib/syscall.pas
-	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/stdlib/log.pas
+${BINDIR}/cht.fvm: fvm/modules/cht.pas ${BINDIR}/fvmc fvm/stdlib/syscall.pas
+	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/modules/cht.pas
+${BINDIR}/log.fvm: fvm/modules/log.pas ${BINDIR}/fvmc fvm/stdlib/syscall.pas
+	${BINDIR}/fvmc -o $@ -I fvm/stdlib fvm/modules/log.pas
 
 LIBRARIES+=fvm
 PROGRAMS+=fvm

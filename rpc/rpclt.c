@@ -93,6 +93,9 @@ static void fvm_run_results( struct xdr_s *xdr );
 static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_clrun_results( struct xdr_s *xdr );
 static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_reload_results( struct xdr_s *xdr );
+static void fvm_reload_args( int argc, char **argv, int i, struct xdr_s *xdr );
+
 
 static struct clt_info clt_procs[] = {
     { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
@@ -116,6 +119,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
+    { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname=*" },
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1304,3 +1308,27 @@ static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 }
 
 
+static void fvm_reload_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static void fvm_reload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *modname;
+  
+  modname = NULL;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "modname" ) == 0 ) {
+      modname = argval;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !modname ) usage( "Need modname" );
+  xdr_encode_string( xdr, modname );
+}

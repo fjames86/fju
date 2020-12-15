@@ -19,6 +19,7 @@ Begin
    Include "syscall.pas";
    Include "string.pas";
    Include "xdr.pas";
+   Include "log.pas";
    
    { constants }
    Const MaxLog = 8;
@@ -33,6 +34,7 @@ Begin
 { procedures }
 Procedure ProcNull()
 Begin
+	Call LogWritef(LogLvlTrace,"NlsProcNull",0,0,0,0);
 End;
 
 Procedure ProcList(var lenp : int, var bufp : opaque) 
@@ -40,7 +42,7 @@ Begin
 	var offset, i : int;
 	var buf : opaque[256];
 
-	Syscall LogWrite(0,LogLvlTrace,12,"NlsProcList");
+	Call LogWritef(LogLvlTrace,"NlsProcList",0,0,0,0);
 	
 	offset = 0;
 	Call XdrEncodeU32(buf,offset,nlogs);
@@ -62,7 +64,7 @@ Begin
 	While i < nlogs Do
 	Begin
 		Call Strcmp(lognames + (i*32), logname, result);
-		If result = 0 Then Begin
+		If result Then Begin
 		   logidhigh = logids[2*i];
 		   logidlow = logids[(2*i) + 1];
 		   Return;
@@ -93,6 +95,8 @@ Begin
 	var offset : int;
 	var hosth, hostl : int;
 
+	Call LogWritef(LogLvlTrace,"NlsPublishCommand len=%u",len,0,0,0);
+	
 	Syscall HostregLocalid(hosth,hostl);
 
 	offset = 0;
@@ -100,7 +104,7 @@ Begin
 	Call XdrEncodeU64(argbuf,offset,hosth,hostl);
 	Call XdrEncodeU32(argbuf,offset,flags);
 	Call XdrEncodeOpaque(argbuf,offset,buf,len);
-
+	
 	Syscall FvmClRun(0,0,"Nls","Command",offset,argbuf);
 End;
 
@@ -122,6 +126,7 @@ Begin
 	Begin
 		Syscall LogRead(logname,idhigh,idlow,1024,buf,flags,len);
 		Call PublishCommand(logname,flags,len,buf);
+		Call SetLogId(logname,idhigh,idlow);
 	End;
 
 End;
@@ -154,7 +159,7 @@ Procedure Service()
 Begin
 	var i : int;
 
-	Syscall LogWrite(0,LogLvlTrace,"NlsService",10);
+	Call LogWritef(LogLvlTrace,"NlsService",0,0,0,0);
 	
 	i = 0;
 	While i < nlogs Do
@@ -169,6 +174,8 @@ Procedure Command(logname : string, hosth : int, hostl : int, flags : int, len :
 Begin
 	var high, low : int;
 	var hostidh, hostidl : int;
+
+	Call LogWritef(LogLvlTrace,"NlsCommand Hostid=%x%x Logname=%s len=%u", hosth, hostl, logname, len);
 	
 	Syscall HostregLocalId(hostidh, hostidl);
 	If (hostidh = hosth) && (hostidl = hostl) Then Return;

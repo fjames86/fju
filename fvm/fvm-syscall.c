@@ -679,6 +679,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       procname = fvm_getstr( state, pars[3] );
       buf = fvm_getptr( state, pars[5], 0, 0 );
       if( modname && procname ) {
+	fvm_log( LOG_LVL_TRACE, "FvmClRun %s/%s len=%u %s", modname, procname, pars[4], buf ? "" : "NoBuf" );
 	fvm_cluster_run( id, modname, procname, buf, buf ? pars[4] : 0 );
       }
     }

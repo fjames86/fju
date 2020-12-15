@@ -1557,7 +1557,7 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
       case RAFT_STATE_FOLLOWER:
 	/* term timeout - convert to candidate */
 	if( !(glob.cl[i].flags & RAFT_CLUSTER_WITNESS) ) {
-	  raft_log( LOG_LVL_TRACE, "Term timeout - convert to candidate" );
+	  raft_log( LOG_LVL_TRACE, "Term timeout %u > %u - convert to candidate", (uint32_t)now, (uint32_t)glob.cl[i].timeout );
 	  raft_convert_candidate( &glob.cl[i] );
 	} else {
 	  raft_log( LOG_LVL_ERROR, "Term timeout - witness node cannot be candidate" );

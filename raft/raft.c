@@ -665,7 +665,8 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   int sts;
   uint64_t pterm, pseq;
 
-  raft_log( LOG_LVL_TRACE, "raft_call_ping clid=%"PRIx64" host %"PRIx64"", cl->clid, hostid );
+  raft_log( LOG_LVL_TRACE, "raft_call_ping clid=%"PRIx64" host=%"PRIx64" term=%"PRIu64" commitseq=%"PRIu64"",
+	    cl->clid, hostid, cl->term, cl->commitseq );
   
   raft_command_seq( cl->clid, &pterm, &pseq );
   
@@ -995,7 +996,7 @@ static void raft_snapsave_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   raft_cluster_set( cl );
 
   if( term > cl->term ) {
-    raft_convert_follower( cl, hostid, term );
+    raft_convert_follower( cl, term, hostid );
     return;
   }
   
@@ -1321,7 +1322,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
   if( term > clp->term ) {
     /* term increased, convert to follower */
-    raft_log( LOG_LVL_INFO, "Term increased - convert to follower" );
+    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower", term, clp->term );
     clp->state = RAFT_STATE_FOLLOWER;
     clp->term = term;
     clp->voteid = 0;    
@@ -1736,6 +1737,8 @@ int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   int sts, i;
   uint64_t seq;
 
+  raft_log( LOG_LVL_TRACE, "raft_cluster_command clid=%"PRIx64" len=%u", clid, len );
+  
   if( cseq ) *cseq = 0;
 
   if( len > RAFT_MAX_COMMAND ) return -1;

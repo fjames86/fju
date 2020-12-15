@@ -926,6 +926,8 @@ int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, i
   struct rpc_conn *c;
   int sts;
 
+  fvm_log( LOG_LVL_TRACE, "fvm_cluster_run %s/%s", modname, procname );
+  
   /* If cluster not specified lookup first cluster with appid=FVM_RPC_PROG */
   if( clid == 0 ) {
     clid = raft_clid_by_appid( FVM_RPC_PROG );

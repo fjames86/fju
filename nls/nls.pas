@@ -80,7 +80,7 @@ Begin
 	While i < nlogs Do
 	Begin
 		Call Strcmp(lognames + (i*32), logname, result);
-		If result = 0 Then Begin
+		If result Then Begin
 		   logids[2*i] = logidHigh;
 		   logids[(2*i) + 1] = logidLow;
 		   Return;
@@ -119,15 +119,22 @@ Begin
 	Call GetLogId(logname,high,low);
 	
 	{ if new message appeneded then issue command }
-	pub = 0;
-	If idhigh <> high Then pub = 1;
-	If idlow <> low Then pub = 1;
-	If pub Then
+	If (idhigh <> high) || (idlow <> low) Then
 	Begin
-		Syscall LogRead(logname,idhigh,idlow,1024,buf,flags,len);
-		Call PublishCommand(logname,flags,len,buf);
+		Call LogWritef(LogLvlTrace,"Nls New Log entry %x%x",high,low,0,0);
+		
+		Do Begin
+		   Syscall LogNext(logname,high,low,high,low);
+		   Syscall LogRead(logname,high,low,1024,buf,flags,len);
+		   If !len Then Break;
+
+		   Call PublishCommand(logname,flags,len,buf);
+		   Call SetLogId(logname,high,low);
+
+		End While 1;
 		Call SetLogId(logname,idhigh,idlow);
 	End;
+	
 
 End;
 

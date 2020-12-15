@@ -46,7 +46,7 @@
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
 	    "          set prop [elec_low=*] [elec_high=*] [term_low=*] [term_high=*] [rpc_timeout=*] [snapth=*]\n" 
-            "          add cluster [clid=ID] [appid=APPID] [witness=true|false]\n"
+            "          add cluster [clid=ID] [appid=APPID] [witness=true|false] [cookie=*]\n"
             "          set cluster ID [appid=APPID] [witness=true|false] [cookie=*]\n"
             "          rem cluster ID\n"
             "          add member [clid=CLID] [hostid=HOSTID]\n"
@@ -147,8 +147,10 @@ int main( int argc, char **argv ) {
 		   if( argval ) {
 		     if( strcmp( argval, "true" ) == 0 ) entry.flags |= RAFT_CLUSTER_WITNESS;
 		     else entry.flags &= ~RAFT_CLUSTER_WITNESS;
-		   }		   
-                 } else {
+		   }
+		 } else if( strcmp( argname, "cookie" ) == 0 ) {
+		   if( argval ) strncpy( entry.cookie, argval, RAFT_MAX_COOKIE - 1 );
+                 } else {		   
 		     printf( "Unknown field name %s\n", argname ); usage( NULL );
 		 }
                  i++;

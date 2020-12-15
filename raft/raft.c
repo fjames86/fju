@@ -1145,7 +1145,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   struct xdr_s res;
   char resbuf[64];
   char *bufp;
-  int len, b;
+  int len, b, found;
   char cookie[RAFT_MAX_COOKIE];
  
   /* we can guarantee this because we set a mandatory authenticator */
@@ -1173,9 +1173,19 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   }
 
   /* update last seen timestamp */
+  found = 0;
   for( i = 0; i < clp->nmember; i++ ) {
-    if( clp->member[i].hostid == hostid ) clp->member[i].lastseen = time( NULL );
+    if( clp->member[i].hostid == hostid ) {
+      clp->member[i].lastseen = time( NULL );
+      found = 1;
+      break;
+    }
   }
+  if( !found ) {
+    raft_log( LOG_LVL_ERROR, "Unknown member clid=%"PRIx64" hostid=%"PRIx64"", clid, hostid );
+    term = 0;    
+    goto done;
+  }  
   raft_cluster_set( clp );
   
   /* check term */
@@ -1260,7 +1270,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
  * sent from candidates to gather votes 
  */
 static int raft_proc_vote( struct rpc_inc *inc ) {
-  int handle, sts, success, i;
+  int handle, sts, success, i, found;
   uint64_t clid, hostid, term, lastterm, lastseq, seq;
   struct raft_cluster *clp;
   struct hrauth_context *hc;
@@ -1288,8 +1298,17 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   }
 
   /* update last seen timestamp */
+  found = 0;
   for( i = 0; i < clp->nmember; i++ ) {
-    if( clp->member[i].hostid == hostid ) clp->member[i].lastseen = time( NULL );
+    if( clp->member[i].hostid == hostid ) {      
+      clp->member[i].lastseen = time( NULL );
+      found = 1;
+      break;
+    }
+  }
+  if( !found ) {
+    raft_log( LOG_LVL_ERROR, "Unknown member clid=%"PRIx64" hostid=%"PRIx64"", clid, hostid );
+    goto done;
   }
   raft_cluster_set( clp );
   

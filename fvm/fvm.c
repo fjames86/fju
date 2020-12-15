@@ -176,6 +176,7 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   memset( module->data, 0, hdr.datasize );
   memcpy( module->text, xdr.buf + xdr.offset, hdr.textsize );
 
+  fvm_log( LOG_LVL_INFO, "fvm_module_load %s", module->name );
   module->next = glob.modules;
   glob.modules = module;
 
@@ -208,6 +209,8 @@ int fvm_module_unload( char *modname ) {
   prev = NULL;
   while( m ) {
     if( strcasecmp( m->name, modname ) == 0 ) {
+      fvm_log( LOG_LVL_INFO, "fvm_module_unload %s", modname );
+      
       /* unload any rpc program, if any */
       fvm_unregister_program( modname );
 
@@ -1405,6 +1408,9 @@ void fvm_rpc_register( void ) {
     id = entry.id;
   }
 
+  sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxruntime", FREG_TYPE_UINT32, (char *)&glob.max_runtime, 4, NULL );
+  sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxsteps", FREG_TYPE_UINT32, (char *)&glob.max_steps, 4, NULL );
+  
 }
 
 void fvm_setdebug( int debugmode ) {

@@ -44,7 +44,7 @@ int main( int argc, char **argv ) {
   int disass;
 
   disass = 0;
-  
+
   i = 1;
   while( i < argc ) {
     if( strcmp( argv[i], "-o" ) == 0 ) {
@@ -62,8 +62,46 @@ int main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-d" ) == 0 ) {
       disass = 1;
     } else {
+      char outpathstr[256];
+      int j;
+      char *p, *lastdirsep;
+      
+      strncpy( outpathstr, argv[i], sizeof(outpathstr) );
+      p = outpathstr;
+      lastdirsep = NULL;
+      while( p ) {
+#ifdef WIN32
+	p = strchr( p, '/' );
+#else
+	p = strchr( p, '/' );
+#endif
+	if( p ) {
+	  lastdirsep = p;
+	  p++;
+	}
+      }
+      if( lastdirsep ) {
+	*lastdirsep = '\0';
+	addincludepath( outpathstr );
+      }
+
+      
+      if( !outpath ) {
+	sprintf( outpathstr, "%s.fvm", argv[i] );
+	for( j = strlen( outpathstr ) - 1; j > 0; j-- ) {
+	  if( outpathstr[j] == '.' ) {
+	    outpathstr[j] = '\0';
+	    strcat( outpathstr + j, ".fvm" );
+	    break;
+	  }
+	}
+	      
+      } else {
+	strncpy( outpathstr, outpath, sizeof(outpathstr) );
+      }
+      
       if( disass ) disassemblefile( argv[i] );
-      else compile_file( argv[i], outpath ? outpath : "out.fvm" );
+      else compile_file( argv[i], outpathstr );
       break;
     }
     i++;

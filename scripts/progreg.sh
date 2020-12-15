@@ -14,7 +14,10 @@ do
 	l) CMDLIST=y ;;
 	n) PROGNAME=$OPTARG ;;
 	u) CMDUNREG=y ;;
-	i) PROGID=$OPTARG ;; 
+	i) PROGID=$OPTARG ;;
+	\? ) echo "Usage: progreg -n name -u -i progid"
+	     exit 1
+	     ;; 
     esac
 done
 

@@ -45,6 +45,7 @@ strip:
 
 install: all #strip
 	mkdir -p /opt/fju
+	sh scripts/fjud.sh stop 
 	cd bin && cp ${PROGRAMS} /usr/local/bin
 	cp ${LIBFJU} /usr/local/lib
 	mkdir -p /opt/fju/fvm

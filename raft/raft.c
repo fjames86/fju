@@ -1799,7 +1799,7 @@ int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t off
     mmf_delete_file( path );
   }
 
-  sts = mmf_open( path, &mmf );
+  sts = mmf_open2( path, &mmf, offset == 0 ? 0 : MMF_OPEN_EXISTING );
   if( sts ) return sts;
 
   /* offset==0 means new file so write header */
@@ -1816,11 +1816,15 @@ int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t off
   if( len > 0 ) {
     offset += sizeof(info);
     mmf_write( &mmf, buf, len, offset );
+
+    mmf_read( &mmf, (char *)&info, sizeof(info), 0 );
+    info.size += len;
+    mmf_write( &mmf, (char *)&info, sizeof(info), 0 );    
   } else if( len == 0 ) {
     /* final block - mark as complete */
     mmf_read( &mmf, (char *)&info, sizeof(info), 0 );
     info.complete = 1;
-    info.size = mmf.fsize - sizeof(info);
+    //info.size = mmf.fsize - sizeof(info);
     mmf_write( &mmf, (char *)&info, sizeof(info), 0 );
   }
   

@@ -664,6 +664,8 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
   char argbuf[256];
   int sts;
   uint64_t pterm, pseq;
+
+  raft_log( LOG_LVL_TRACE, "raft_call_ping clid=%"PRIx64" host %"PRIx64"", cl->clid, hostid );
   
   raft_command_seq( cl->clid, &pterm, &pseq );
   
@@ -699,9 +701,13 @@ static void raft_send_pings( struct raft_cluster *cl ) {
   int i;
   uint64_t seq;
 
-
+  raft_log( LOG_LVL_TRACE, "raft_send_pings cl=%"PRIx64" nmember %u", cl->clid, cl->nmember );
+  
   raft_command_seq( cl->clid, NULL, &seq );
   for( i = 0; i < cl->nmember; i++ ) {
+    raft_log( LOG_LVL_TRACE, "raft_send_pings cl=%"PRIx64" i=%u hostid=%"PRIx64"",
+	      cl->clid, i, cl->member[i].hostid );
+    
     if( cl->member[i].storedseq < seq ) {
       raft_call_putcmd( cl, cl->member[i].hostid, 0 );
     } else {
@@ -1096,8 +1102,9 @@ static void raft_convert_candidate( struct raft_cluster *cl ) {
 
 static void raft_convert_leader( struct raft_cluster *cl ) {
   int i;
+  uint64_t seq;
   
-  raft_log( LOG_LVL_INFO, "Convert to leader" );
+  raft_log( LOG_LVL_INFO, "Convert to leader cl=%"PRIx64"", cl->clid );
 
   cl->state = RAFT_STATE_LEADER;
   cl->leaderid = hostreg_localid();
@@ -1105,8 +1112,14 @@ static void raft_convert_leader( struct raft_cluster *cl ) {
     cl->member[i].flags &= ~RAFT_MEMBER_VOTED;
   }
   raft_cluster_set( cl );
-  
-  raft_send_pings( cl );
+
+  raft_command_seq( cl->clid, NULL, &seq );
+  for( i = 0; i < cl->nmember; i++ ) {
+    raft_log( LOG_LVL_TRACE, "raft_send_pings cl=%"PRIx64" i=%u hostid=%"PRIx64"",
+	      cl->clid, i, cl->member[i].hostid );    
+    raft_call_ping( cl, cl->member[i].hostid );
+  }
+
   cl->timeout = rpc_now() + glob.prop.term_low / 2;  
   raft_cluster_set( cl );
   raft_set_iter_timeout();  

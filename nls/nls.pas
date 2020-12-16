@@ -121,7 +121,7 @@ Begin
 	{ if new message appeneded then issue command }
 	If (idhigh <> high) || (idlow <> low) Then
 	Begin
-		Call LogWritef(LogLvlTrace,"Nls New Log entry %x%x",idhigh,idlow,0,0);
+		Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",logname,idhigh,idlow,0);
 		
 		Syscall LogRead(logname,idhigh,idlow,1024,buf,flags,len);
 		If len Then Call PublishCommand(logname,flags,len,buf);
@@ -159,7 +159,7 @@ Procedure Service()
 Begin
 	var i : int;
 
-	Call LogWritef(LogLvlTrace,"NlsService",0,0,0,0);
+	{ Call LogWritef(LogLvlTrace,"NlsService",0,0,0,0); }
 	
 	i = 0;
 	While i < nlogs Do
@@ -175,7 +175,7 @@ Begin
 	var high, low : int;
 	var hostidh, hostidl : int;
 
-	Call LogWritef(LogLvlTrace,"NlsCommand Hostid=%x%x Logname=%s len=%u", hosth, hostl, logname, len);
+	Call LogWritef(LogLvlTrace,"NlsCommand Hostid=%08x%08x Logname=%s len=%u", hosth, hostl, logname, len);
 	
 	Syscall HostregLocalId(hostidh, hostidl);
 	If (hostidh = hosth) && (hostidl = hostl) Then Return;

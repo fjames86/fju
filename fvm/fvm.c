@@ -699,7 +699,7 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
       /* input arg */
       switch( vartype[i] ) {
       case VAR_TYPE_U32:
-	if( (i < (nargs - 1)) && (vartype[i + 1] == VAR_TYPE_OPAQUE) ) {
+	if( (i < (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo, i + 1) == VAR_TYPE_OPAQUE) ) {
 	  /* don't decode the u32 if the next param is opaque. that's because this will receive the length */
 	} else {
 	  sts = xdr_decode_uint32( argbuf, &u32[i] );
@@ -719,12 +719,12 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	len = strlen( state.stack + state.sp ) + 1;
 	if( len % 4 ) len += 4 - (len % 4);
 	state.sp += len;
-	break;
+	break;	
       case VAR_TYPE_OPAQUE:
 	len = FVM_MAX_STACK - state.sp;
 	sts = xdr_decode_opaque( argbuf, (uint8_t *)state.stack + state.sp, &len );
 	if( sts ) {
-	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error opaque" );
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error opaque i=%d argbuf=%d/%d", i, argbuf->offset,argbuf->count );
 	  return sts;
 	}
 	u32[i - 1] = len;
@@ -891,7 +891,7 @@ static void fvm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
     {
       uint32_t procid;
       
-      fvm_log( LOG_LVL_TRACE, "fvm run mod=%s proc=%s arglen=%u", cmd.modname, cmd.u.run.procname, cmd.u.run.len );
+      fvm_log( LOG_LVL_TRACE, "fvm run %s/%s arglen=%u", cmd.modname, cmd.u.run.procname, cmd.u.run.len );
       
       if( (cmd.u.run.hostid == 0) || (cmd.u.run.hostid == hostreg_localid()) ) {
 	struct xdr_s args;
@@ -903,7 +903,8 @@ static void fvm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
 	}
 
 	xdr_init( &args, (uint8_t *)cmd.u.run.args, cmd.u.run.len );
-	fvm_run( m, procid, &args, NULL );
+	sts = fvm_run( m, procid, &args, NULL );
+	if( sts ) fvm_log( LOG_LVL_ERROR, "fvm run %s/%s failed", cmd.modname, cmd.u.run.procname );
       }
     }
     break;

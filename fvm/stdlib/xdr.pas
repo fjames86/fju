@@ -59,8 +59,8 @@ End;
 Procedure XdrEncodeOpaque(buf : opaque, var offset : int, bufp : opaque, len : int)
 Begin
 	Call XdrEncodeU32(buf,offset,len);
-	if len % 4 then len = len + 4 - (len % 4);
 	Call Memcpy(buf + offset,bufp,len);
+	if len % 4 then len = len + 4 - (len % 4);	
 	offset = offset + len;
 End;
 

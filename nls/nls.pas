@@ -49,7 +49,7 @@ Begin
 	i = 0;
 	While i < nlogs Do Begin
 	      Call XdrEncodeString(buf,offset,lognames + (i*32));
-	      Call XdrEncodeU64(buf,offset,*(logids + (2*i)), *(logids + (2*i) + 1));
+	      Call XdrEncodeU64(buf,offset,logids[2*i], logids[(2*i) + 1]);
 	      i = i + 1;
 	End;
 

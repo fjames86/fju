@@ -253,17 +253,15 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     /* LogLastId(logname,var idHigh,var idLow) */
     {
       struct log_s log, *logp;
-      uint32_t idlowaddr, idhighaddr, nameaddr;
+      uint32_t pars[3];
       struct log_prop prop;
-      
-      idlowaddr = fvm_stack_read( state, 4 );
-      idhighaddr = fvm_stack_read( state, 8 );
-      nameaddr = fvm_stack_read( state, 12 );
-      logp = openlogfile( state, nameaddr, &log );
+
+      read_pars( state, pars, 3 );
+      logp = openlogfile( state, pars[0], &log );
 
       log_prop( logp, &prop );
-      fvm_write_u32( state, idlowaddr, prop.last_id & 0xffffffff );
-      fvm_write_u32( state, idhighaddr, prop.last_id >> 32 );
+      fvm_write_u32( state, pars[2], prop.last_id & 0xffffffff );
+      fvm_write_u32( state, pars[1], prop.last_id >> 32 );
       
       if( logp ) log_close( logp );      
     }

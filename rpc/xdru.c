@@ -114,10 +114,18 @@ int main( int argc, char **argv ) {
 	sts = xdr_decode_uint32( &xdr, &u32 );
 	if( sts ) usage( "XDR Error decoding uint32" );
 	printf( "%u ", u32 );
+      } else if( strcmp( argname, "x32" ) == 0 ) {
+	sts = xdr_decode_uint32( &xdr, &u32 );
+	if( sts ) usage( "XDR Error decoding uint32" );
+	printf( "%x ", u32 );	
       } else if( strcmp( argname, "u64" ) == 0 ) {
 	sts = xdr_decode_uint64( &xdr, &u64 );
 	if( sts ) usage( "XDR Error decoding uint64" );
 	printf( "%"PRIu64" ", u64 );
+      } else if( strcmp( argname, "x64" ) == 0 ) {
+	sts = xdr_decode_uint64( &xdr, &u64 );
+	if( sts ) usage( "XDR Error decoding uint64" );
+	printf( "%"PRIx64" ", u64 );	
       } else if( strcmp( argname, "str" ) == 0 ) {
 	sts = xdr_decode_string( &xdr, str, sizeof(str) );
 	if( sts ) usage( "XDR Error decoding string" );

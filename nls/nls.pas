@@ -117,8 +117,24 @@ Begin
 	
 	Syscall LogLastId(logname,idhigh,idlow);
 	Call GetLogId(logname,high,low);
+
+	{ read entries until we get to the last one, if any }
+	While (idhigh <> high) || (idlow <> low) Do
+	Begin
+		Syscall LogNext(logname,high,low,high,low);
+		Syscall LogRead(logname,high,low,1024,buf,flags,len);
+		If len Then Begin
+		    Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",logname,idhigh,idlow,0);
+		    Call PublishCommand(logname,flags,len,buf);
+		End Else Begin
+		     high = idhigh;
+		     low = idlow;
+		End;
+	End;
+	Call SetLogId(logname,idhigh,idlow);
 	
 	{ if new message appeneded then issue command }
+	{
 	If (idhigh <> high) || (idlow <> low) Then
 	Begin
 		Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",logname,idhigh,idlow,0);
@@ -127,7 +143,7 @@ Begin
 		If len Then Call PublishCommand(logname,flags,len,buf);
 		Call SetLogId(logname,idhigh,idlow);
 	End;
-	
+	}
 
 End;
 

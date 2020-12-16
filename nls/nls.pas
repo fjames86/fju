@@ -4,12 +4,16 @@
 { 
   * This defines a module which does the following:
   * - Monitors a configurable set of logs (stored as keys in freg /fju/nls/logs)
-  * - When a new entry is appended issue an fvm cluster command to run a specified
-  * command procedure.
-  * - The command includes the originating hostid. Don't write if the message originated locally
-  * - Increment internal seqnos so that no subsequent commands are issued after replicating
-  * log entries.
+  * - When a new entry is appended, issue an fvm cluster command to run a command procedure.
+  * - The command includes the originating hostid. Don't write if the message originated locally.
+  * - Increment internal seqnos so that no subsequent commands are issued after replicating log entries.
   * 
+  * This results in any messages written localy to be replicated across the cluster.
+  * Note it doesn't guarantee ordering, only that the message gets written.
+  *
+  * Uses for this include e.g. a pub/sub system. 
+  * "publish" by writing to a specified logname (logname would be the message category). 
+  * "subscribe" by monitoring the log for new messages.
 }
 
 Program Nls(0x2FFF7773,1,ProcNull,ProcList,Init,Service,Command);
@@ -22,16 +26,19 @@ Begin
    Include "log.pas";
    
    { constants }
-   Const MaxLog = 8;
+   Const MaxLog = 32;
    
    { declarations }
    
    { globals }
    var nlogs : u32;
-   var lognames : string[256]; { 32 byte name, 8 names max = 256 }
-   var logids : u32[16];
+   var lognames : string[1024]; { 32 byte name, 32 names max = 1024 }
+   var logids : u32[64];
    
 { procedures }
+
+{ ---------------- RPC interface -------------------- }
+
 Procedure ProcNull()
 Begin
 	Call LogWritef(LogLvlTrace,"NlsProcNull",0,0,0,0);
@@ -56,6 +63,8 @@ Begin
 	bufp = buf;
 	lenp = offset;
 End;
+
+{ -------------------- Utility functions ------------------------- }
 
 Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)
 Begin
@@ -135,6 +144,8 @@ Begin
 
 End;
 
+{ -------------------------- Public procedures ----------------------- }
+
 { initialization routine - load log names from registry and set log ids }
 Procedure Init()
 Begin
@@ -159,6 +170,7 @@ Begin
 	nlogs = i;
 End;
 
+{ Service routine - periodically check logs for new messages } 
 Procedure Service()
 Begin
 	var i : int;
@@ -180,7 +192,8 @@ Begin
 	var hostidh, hostidl : int;
 
 	Call LogWritef(LogLvlTrace,"NlsCommand Hostid=%08x%08x Logname=%s len=%u", hosth, hostl, logname, len);
-	
+
+	{ Ignore messages originating from local machine }
 	Syscall HostregLocalId(hostidh, hostidl);
 	If (hostidh = hosth) && (hostidl = hostl) Then Return;
 	

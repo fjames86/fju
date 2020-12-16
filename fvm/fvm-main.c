@@ -92,7 +92,7 @@ int main( int argc, char **argv ) {
       if( i >= argc ) usage( NULL );
       xdr_encode_string( &argxdr, argv[i] );
       nargs++;
-      siginfo |= (1 << (3*nargs));
+      siginfo |= (1ULL << (3*nargs));
     } else if( strcmp( argv[i], "--opaque" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -103,7 +103,7 @@ int main( int argc, char **argv ) {
       if( sts % 4 ) argxdr.offset += 4;
 
       nargs++;
-      siginfo |= (2 << (3*nargs));
+      siginfo |= (2ULL << (3*nargs));
     } else break;
     
     i++;

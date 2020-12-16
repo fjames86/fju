@@ -1060,11 +1060,11 @@ static int rpc_dobroadcast( struct rpc_inc *inc, int timeout, rpc_broadcast_cb_t
 #else
   int fd;
   struct pollfd pfd[1];
+  int64_t tmo;
 #endif
   int sts, bc;
   struct sockaddr_in sin;
   uint64_t to;
-  int64_t tmo;
   uint32_t xid;
 
   xid = inc->msg.xid;
@@ -1078,7 +1078,7 @@ static int rpc_dobroadcast( struct rpc_inc *inc, int timeout, rpc_broadcast_cb_t
   if( sts < 0 ) goto done;
 
   bc = 1;
-  sts = setsockopt( fd, SOL_SOCKET, SO_BROADCAST, &bc, sizeof(bc) );
+  sts = setsockopt( fd, SOL_SOCKET, SO_BROADCAST, (char *)&bc, sizeof(bc) );
   if( sts < 0 ) goto done;
   
   sts = sendto( fd, inc->xdr.buf, inc->xdr.offset, 0,

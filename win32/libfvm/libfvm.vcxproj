@@ -139,6 +139,7 @@
     <ClInclude Include="..\..\include\fju\fvm.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\fvm\fvm-syscall.c" />
     <ClCompile Include="..\..\fvm\fvm.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

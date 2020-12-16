@@ -331,7 +331,7 @@ static int mynet_pton( char *str, uint8_t *inaddr ) {
 	    i++;
 	    p++;
 	}
-	inaddr[j] = strtoul( tmp, NULL, 10 );
+	inaddr[j] = (uint8_t)strtoul( tmp, NULL, 10 );
     }
 
     return 0;

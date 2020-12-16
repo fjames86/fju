@@ -220,3 +220,5 @@ cht_write
 cht_delete
 cht_purge
 cht_entry_by_index 
+mmf_delete_file
+fvm_setdebug

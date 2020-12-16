@@ -500,55 +500,53 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       /* Sprintf(dest:string,fmt:string,arg1:int,arg2:int,arg3:int,arg4:int) */
       uint32_t pars[6];
       char *str, *fmt;
-      char *p, *q, *strp;
+      char *p, *q;
       int iarg;
-
+      char tmpfmt[64], *tmpfmtp;
+      
       read_pars( state, pars, 6 );
       str = fvm_getptr( state, pars[0], 0, 0 );
       fmt = fvm_getstr( state, pars[1] );
 
       if( !str ) break;
       if( !fmt ) break;
-      
+
       p = fmt;
       q = str;
       iarg = 0;
       while( 1 ) {
 	if( !*p ) break;
 	if( *p == '%' ) {
+	  memset( tmpfmt, 0, sizeof(tmpfmt) );
+	  tmpfmtp = p;
 	  p++;
-	  switch( *p ) {
-	  case 's':
-	    strp = fvm_getstr( state, pars[2 + iarg] );
-	    sprintf( q, "%s", strp ? strp : "" );
-	    iarg++;
-	    q += strlen( q );
+	  while( *p ) {
+	    if( *p == 's' ) {
+	      memcpy( tmpfmt, tmpfmtp, p - tmpfmtp + 1 );
+	      sprintf( q, tmpfmt, fvm_getstr( state, pars[2 + iarg] ) );
+	      q += strlen( q );	      
+	      iarg++;
+	      p++;
+	      break;
+	    }
+	    if( *p == 'd' || *p == 'u' || *p == 'x' || *p == 'o' ) {
+	      memcpy( tmpfmt, tmpfmtp, p - tmpfmtp + 1 );
+	      sprintf( q, tmpfmt, pars[2 + iarg] );
+	      q += strlen( q );
+	      iarg++;
+	      p++;
+	      break;
+	    }
+
+	    if( *p == '%' ) {
+	      *q = '%';
+	      q++;
+	      break;
+	    }
+
 	    p++;
-	    break;
-	  case 'u':
-	    sprintf( q, "%u", pars[2 + iarg] );
-	    iarg++;
-	    q += strlen( q );
-	    p++;	    
-	    break;
-	  case 'd':
-	    sprintf( q, "%d", pars[2 + iarg] );
-	    iarg++;
-	    q += strlen( q );
-	    p++;	    
-	    break;
-	  case 'x':
-	    sprintf( q, "%x", pars[2 + iarg] );
-	    iarg++;
-	    q += strlen( q );
-	    p++;	    
-	    break;
-	  case '%':
-	    *q = '%';
-	    q++;
-	    p++;
-	    break;
 	  }
+	  
 	} else {
 	  *q = *p;
 	  p++;

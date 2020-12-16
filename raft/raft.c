@@ -604,17 +604,21 @@ static void raft_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   struct raft_cluster *cl;
   struct raft_member *mp;
   int i, success, sts;
+
+  clid = hcallp->cxt2;
+  hostid = hcallp->hostid;
   
-  raft_log( LOG_LVL_TRACE, "raft_ping_cb %s count=%d", res ? "Success" : "Timeout", res ? res->count - res->offset : -1 );
+  raft_log( LOG_LVL_TRACE, "raft_ping_cb clid=%"PRIx64" hostid=%"PRIx64" %s",
+	    clid, hostid, res ? "" : "Timeout" );
+  
   if( !res ) return;
   
-  clid = hcallp->cxt2;
   cl = cl_by_id( clid );
   if( !cl ) {
     raft_log( LOG_LVL_TRACE, "Unknown cluster" );
     return;
   }
-  hostid = hcallp->hostid;
+
 
   mp = NULL;
   for( i = 0; i < cl->nmember; i++ ) {

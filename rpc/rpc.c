@@ -501,6 +501,7 @@ int rpc_init_call( struct rpc_inc *inc, int32_t prog, uint32_t vers, uint32_t pr
 
   if( handle ) *handle = inc->xdr.offset;
 
+  rpc_log( RPC_LOG_TRACE, "rpc_init_call XID=%u", inc->msg.xid );
   return sts;    
 }
 
@@ -574,7 +575,10 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     
   switch( inc->msg.tag ) {
   case RPC_CALL:
-    rpc_log( RPC_LOG_DEBUG, "CALL %d:%d:%d AUTH=%u Count=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour, inc->xdr.count );
+    rpc_log( RPC_LOG_DEBUG, "CALL XID=%u %d:%d:%d AUTH=%u Count=%u",
+	     inc->msg.xid,
+	     inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,
+	     inc->msg.u.call.auth.flavour, inc->xdr.count );
 
     /* lookup function */
     sts = rpc_program_find( inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,

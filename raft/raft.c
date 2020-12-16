@@ -386,7 +386,7 @@ int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
 
   if( term ) *term = 0;
   if( seq ) *seq = 0;
-  
+
   log = clog_by_id( clid );
   if( !log ) return -1;
 
@@ -787,7 +787,7 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   int sts;
   uint64_t lastterm, lastseq;
   
-  raft_command_seq( cl->clid, &lastterm, &lastseq );
+  raft_highest_storedseq( cl->clid, &lastterm, &lastseq );
   
   xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
   /* encode args */
@@ -1083,6 +1083,7 @@ static void raft_convert_follower( struct raft_cluster *cl, uint64_t term, uint6
   cl->term = term;
   cl->timeout = raft_term_timeout();
   cl->leaderid = leaderid;
+  cl->voteid = 0;
   for( i = 0; i < cl->nmember; i++ ) {
     cl->member[i].flags &= ~RAFT_MEMBER_VOTED;
   }
@@ -1323,25 +1324,20 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   
   if( term < clp->term ) {
     /* term too old, reject */
-    raft_log( LOG_LVL_WARN, "Old term - rejecting" );
+    raft_log( LOG_LVL_WARN, "Old term %"PRIu64" < %"PRIu64" - rejecting", term, clp->term );
     term = clp->term;
     goto done;
   }
 
+  if( term > clp->term ) {
+    /* term increased, convert to follower */
+    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower leader=%"PRIx64"", clp->term, term, hostid );
+    raft_convert_follower( clp, term, hostid );
+  }
+
   /* grant vote if not voted yet or voted for this host already AND the candidate is at least as up to date as us */
-  sts = raft_command_seq( clp->clid, NULL, &seq );
+  sts = raft_highest_storedseq( clp->clid, NULL, &seq );
   if( !sts && ((clp->voteid == 0) || (clp->voteid == hostid)) && (lastseq >= seq) ) {
-    if( term > clp->term ) {
-      /* term increased, convert to follower */
-      raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower leader=%"PRIx64"", clp->term, term, hostid );
-      clp->state = RAFT_STATE_FOLLOWER;
-      clp->leaderid = hostid;
-      clp->term = term;
-      clp->voteid = 0;
-      clp->timeout = raft_term_timeout();
-      raft_cluster_set( clp );    
-    }
-    
     raft_log( LOG_LVL_DEBUG, "Granting vote" );
     clp->voteid = hostid;
     success = 1;

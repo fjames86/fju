@@ -1328,23 +1328,30 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
     goto done;
   }
 
-  if( term > clp->term ) {
-    /* term increased, convert to follower */
-    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower leader=%"PRIx64"", clp->term, term, hostid );
-    clp->state = RAFT_STATE_FOLLOWER;
-    clp->leaderid = hostid;
-    clp->term = term;
-    clp->voteid = 0;
-    clp->timeout = raft_term_timeout();
-    raft_cluster_set( clp );    
-  }
-
   /* grant vote if not voted yet or voted for this host already AND the candidate is at least as up to date as us */
   sts = raft_command_seq( clp->clid, NULL, &seq );
-  if( !sts && (clp->voteid == 0 || clp->voteid == hostid) && (lastseq >= seq) ) {
+  if( !sts && ((clp->voteid == 0) || (clp->voteid == hostid)) && (lastseq >= seq) ) {
+    if( term > clp->term ) {
+      /* term increased, convert to follower */
+      raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower leader=%"PRIx64"", clp->term, term, hostid );
+      clp->state = RAFT_STATE_FOLLOWER;
+      clp->leaderid = hostid;
+      clp->term = term;
+      clp->voteid = 0;
+      clp->timeout = raft_term_timeout();
+      raft_cluster_set( clp );    
+    }
+    
     raft_log( LOG_LVL_DEBUG, "Granting vote" );
     clp->voteid = hostid;
     success = 1;
+  } else {
+    raft_log( LOG_LVL_INFO, "Denying vote request (%s) clid=%"PRIx64" hostid=%"PRIx64"",
+	      sts ? "Failed to get command seq" : 
+	      (clp->voteid != 0) ? "Already voted this election" :
+	      lastseq < seq ? "Candidate seq too low" :
+	      "Other",
+	      clid, hostid );
   }
 
   

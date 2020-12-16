@@ -1198,7 +1198,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
 
   if( term > clp->term ) {
     /* term increased, convert to follower */
-    raft_log( LOG_LVL_INFO, "Term increased - Convert to follower %"PRIx64"", hostid );
+    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - Convert to follower %"PRIx64"", clp->term, term, hostid );
     clp->voteid = 0;
     raft_convert_follower( clp, term, hostid );
   }
@@ -1208,6 +1208,9 @@ static int raft_proc_append( struct rpc_inc *inc ) {
     sts = raft_command_by_seq( clid, prevlogseq, &plogterm, NULL, 0, &entryid );
     if( sts < 0 ) {
       raft_log( LOG_LVL_ERROR, "Failed to find command at seq %"PRIu64"", prevlogseq );
+
+      clp->timeout = raft_term_timeout();
+      raft_cluster_set( clp );
       goto done;
     }
     if( plogterm != prevlogterm ) {
@@ -1322,7 +1325,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
   if( term > clp->term ) {
     /* term increased, convert to follower */
-    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower", term, clp->term );
+    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower", clp->term, term );
     clp->state = RAFT_STATE_FOLLOWER;
     clp->term = term;
     clp->voteid = 0;    

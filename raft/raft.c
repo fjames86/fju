@@ -1473,7 +1473,7 @@ static int raft_proc_change( struct rpc_inc *inc ) {
   int sts, handle;  
   char cmdbuf[256];
   struct xdr_s xdr;
-  int i, bmembers, bcookie, bappid;
+  int i, bmembers, bcookie, bappid, breset;
   uint64_t rclid, clid;
   char cookie[RAFT_MAX_COOKIE];
   uint64_t members[RAFT_MAX_MEMBER];
@@ -1489,27 +1489,38 @@ static int raft_proc_change( struct rpc_inc *inc ) {
   }
   sts = xdr_decode_boolean( &inc->xdr, &bmembers );
   if( sts ) goto bad;
-  sts = xdr_decode_uint32( &inc->xdr, &nmembers );
-  if( sts ) goto bad;
-  if( nmembers > RAFT_MAX_MEMBER ) {
-    sts = -1;
-    goto bad;
-  }
-  for( i = 0; i < nmembers; i++ ) {
-    sts = xdr_decode_uint64( &inc->xdr, &members[i] );
+  if( bmembers ) {
+    sts = xdr_decode_uint32( &inc->xdr, &nmembers );
     if( sts ) goto bad;
+    if( nmembers > RAFT_MAX_MEMBER ) {
+      sts = -1;
+      goto bad;
+    }
+    for( i = 0; i < nmembers; i++ ) {
+      sts = xdr_decode_uint64( &inc->xdr, &members[i] );
+      if( sts ) goto bad;
+    }
   }
-
+  
   sts = xdr_decode_boolean( &inc->xdr, &bappid );
   if( sts ) goto bad;
   if( bappid ) {
     sts = xdr_decode_uint32( &inc->xdr, &appid );
     if( sts ) goto bad;
   }
+  sts = xdr_decode_boolean( &inc->xdr, &breset );
+  if( sts ) goto bad;
   
  bad:
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
+  raft_log( LOG_LVL_TRACE, "raft_proc_change clid=%"PRIx64" %s %s %s %s",
+	    clid,
+	    bcookie ? "cookie" : "",
+	    bmembers ? "members" : "",
+	    bappid ? "appid" : "",
+	    breset ? "reset" : "" );
+  
   /* 
    * Lookup first cluster with appid=RAFT_RPC_PROG. This is the raft metadata distributor cluster
    * i.e. all nodes in that cluster get sent the change command 
@@ -1530,6 +1541,7 @@ static int raft_proc_change( struct rpc_inc *inc ) {
   }
   xdr_encode_boolean( &xdr, bappid );
   if( bappid ) xdr_encode_uint32( &xdr, appid );
+  xdr_encode_boolean( &xdr, breset );
   
   raft_cluster_command( rclid, cmdbuf, xdr.offset, NULL );
 
@@ -1924,7 +1936,7 @@ int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len ) {
 
 static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len ) {
   struct xdr_s xdr;
-  int sts, i, bcookie, bmembers, bappid;
+  int sts, i, bcookie, bmembers, bappid, breset;
   uint64_t clid;
   char cookie[RAFT_MAX_COOKIE];
   uint32_t nmember, appid;
@@ -1960,8 +1972,14 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
     sts = xdr_decode_uint32( &xdr, &appid );
     if( sts ) return;
   }
- 
-
+  sts = xdr_decode_boolean( &xdr, &breset );
+  if( sts ) return;
+  
+  raft_log( LOG_LVL_INFO, "raft change %"PRIx64" %s %s %s %s",
+	    clid,
+	    bcookie ? "cookie" : "", bmembers ? "members" : "",
+	    bappid ? "appid" : "", breset ? "reset" : "" );
+  
   clp = cl_by_id( clid );
   if( !clp ) {
     struct raft_cluster clpp;
@@ -2005,6 +2023,28 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
     clp->appid = appid;
   }
 
+  if( breset ) {
+    struct log_s *logp;
+    char clstr[64];
+    char *path;
+    
+    clp->term = 1;
+    clp->commitseq = 0;
+    clp->appliedseq = 0;
+    clp->state = RAFT_STATE_FOLLOWER;
+    clp->leaderid = 0;
+    clp->voteid = 0;
+    
+    /* delete log entries */
+    logp = clog_by_id( clp->clid );
+    if( logp ) log_reset( logp );
+    
+    /* delete snapshot */
+    sprintf( clstr, "%"PRIx64"-snapshot.dat.new", cl->clid );
+    path = mmf_default_path( "raft", clstr, NULL );
+    mmf_delete_file( path );
+  }
+  
   raft_cluster_set( clp );
   
 }

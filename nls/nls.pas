@@ -100,7 +100,7 @@ End;
 
 Procedure PublishCommand(logname : string, flags : int, len : int, buf : opaque)
 Begin
-	var argbuf : opaque[1024];
+	var argbuf : opaque[4096];
 	var offset : int;
 	var hosth, hostl : int;
 
@@ -122,7 +122,7 @@ Begin
 	var idhigh, idlow : int;
 	var high, low, pub : int;
 	var len, flags : int;
-	var buf : opaque[1024];
+	var buf : opaque[4096];
 	
 	Syscall LogLastId(logname,idhigh,idlow);
 	Call GetLogId(logname,high,low);
@@ -131,7 +131,7 @@ Begin
 	While (idhigh <> high) || (idlow <> low) Do
 	Begin
 		Syscall LogNext(logname,high,low,high,low);
-		Syscall LogRead(logname,high,low,1024,buf,flags,len);
+		Syscall LogRead(logname,high,low,4096,buf,flags,len);
 		If len Then Begin
 		    Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",logname,idhigh,idlow,0);
 		    Call PublishCommand(logname,flags,len,buf);

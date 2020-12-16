@@ -90,13 +90,24 @@ int main( int argc, char **argv ) {
     base64_encode( buf, xdr.offset, bufstr );
     printf( "%s\n", bufstr );
   } else if( strcmp( argv[i], "decode" ) == 0 ) {
-    i++;
-    if( i >= argc ) usage( NULL );
-    sts = base64_decode( buf, sizeof(buf), argv[i] );
-    if( sts < 0 ) usage( "Failed to decode base64 %s", argv[i] );
+    i++;    
+    sts = -1;
+    if( i < argc ) {
+      sts = base64_decode( buf, sizeof(buf), argv[i] );
+    }
+    
+    if( sts < 0 ) {
+      /* failed to decode the stinrg passed - try reading from stdin? */
+      char *tmpstr = malloc( 32*1024 );
+      sts = fju_readstdin( tmpstr, 32*1024 );
+      sts = base64_decode( buf, sizeof(buf), tmpstr );
+      if( sts < 0 ) usage( "Failed to decode base64" );
+      free( tmpstr );      
+    } else {
+      i++;
+    }
     if( sts % 4 ) usage( "XDR buffer not a multiple of 4" );
     xdr_init( &xdr, (uint8_t *)buf, sts );
-    i++;
     while( i < argc ) {
       argval_split( argv[i], argname, &argval );      
       if( strcmp( argname, "u32" ) == 0 ) {

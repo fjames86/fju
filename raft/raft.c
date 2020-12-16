@@ -638,7 +638,7 @@ static void raft_ping_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
 
   raft_log( LOG_LVL_TRACE, "raft_ping_cb success=%s term=%"PRIu64" storeseq=%"PRIu64"", success ? "true" : "false", term, seq );
   if( term > cl->term ) {
-    raft_log( LOG_LVL_TRACE, "Remote term higher - convert to follower" );
+    raft_log( LOG_LVL_TRACE, "Remote term higher - convert to follower leaderid=%"PRIx64"", hcallp->hostid );
     cl->voteid = 0;
     raft_convert_follower( cl, term, hcallp->hostid );
   }
@@ -722,8 +722,11 @@ static void raft_vote_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   struct raft_cluster *cl;
   struct raft_member *mp;
   int i, success, sts, count;
+
+  clid = hcallp->cxt2;
+  hostid = hcallp->hostid;
   
-  raft_log( LOG_LVL_DEBUG, "raft_vote_cb %s", res ? "Success" : "timeout" );
+  raft_log( LOG_LVL_DEBUG, "raft_vote_cb clid=%"PRIx64" hostid=%"PRIx64" %s", clid, hostid, res ? "" : "timeout" );
   if( !res ) return;
   
   clid = hcallp->cxt2;
@@ -732,7 +735,7 @@ static void raft_vote_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
     raft_log( LOG_LVL_TRACE, "Unknown cluster %"PRIx64"", clid );
     return;
   }
-  hostid = hcallp->hostid;
+
 
   mp = NULL;
   for( i = 0; i < cl->nmember; i++ ) {
@@ -754,8 +757,10 @@ static void raft_vote_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   }
 
   if( term > cl->term ) {
-    raft_log( LOG_LVL_TRACE, "Vote returned newer term - convert to follower" );
+    raft_log( LOG_LVL_TRACE, "Vote returned newer term - convert to follower leaderid=%"PRIx64"", hostid );
     raft_convert_follower( cl, term, hostid );
+  } else if( !success ) {
+    raft_log( LOG_LVL_TRACE, "Vote request rejected clid=%"PRIx64" hostid=%"PRIx64"", clid, hostid );
   } else if( success ) {
     mp->flags |= RAFT_MEMBER_VOTED;
     count = 1;
@@ -763,7 +768,7 @@ static void raft_vote_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
       if( cl->member[i].flags & RAFT_MEMBER_VOTED ) count++;
     }
 
-    raft_log( LOG_LVL_TRACE, "Vote success count=%u", count );
+    raft_log( LOG_LVL_TRACE, "Vote success clid=%"PRIx64" count=%u", cl->clid, count );
     if( count >= raft_cluster_quorum( cl ) ) {
       raft_log( LOG_LVL_TRACE, "Sufficient votes received - convert to leader" );
       raft_convert_leader( cl );
@@ -1325,10 +1330,12 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
   if( term > clp->term ) {
     /* term increased, convert to follower */
-    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower", clp->term, term );
+    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower leader=%"PRIx64"", clp->term, term, hostid );
     clp->state = RAFT_STATE_FOLLOWER;
+    clp->leaderid = hostid;
     clp->term = term;
-    clp->voteid = 0;    
+    clp->voteid = 0;
+    clp->timeout = raft_term_timeout();
     raft_cluster_set( clp );    
   }
 
@@ -1605,22 +1612,22 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
       case RAFT_STATE_FOLLOWER:
 	/* term timeout - convert to candidate */
 	if( !(glob.cl[i].flags & RAFT_CLUSTER_WITNESS) ) {
-	  raft_log( LOG_LVL_TRACE, "Term timeout %u > %u - convert to candidate", (uint32_t)now, (uint32_t)glob.cl[i].timeout );
+	  raft_log( LOG_LVL_TRACE, "%"PRIx64" Term timeout %u > %u - convert to candidate", glob.cl[i].clid, (uint32_t)now, (uint32_t)glob.cl[i].timeout );
 	  raft_convert_candidate( &glob.cl[i] );
 	} else {
-	  raft_log( LOG_LVL_ERROR, "Term timeout - witness node cannot be candidate" );
+	  raft_log( LOG_LVL_ERROR, "%"PRIx64" Term timeout - witness node cannot be candidate", glob.cl[i].clid );
 	  glob.cl[i].timeout = raft_term_timeout();
 	  raft_cluster_set( &glob.cl[i] );
 	}
 	break;
       case RAFT_STATE_CANDIDATE:
 	/* election timeout - start new election */
-	raft_log( LOG_LVL_TRACE, "Election timeout - new election" );
+	raft_log( LOG_LVL_TRACE, "%"PRIx64" Election timeout - new election", glob.cl[i].clid );
 	raft_convert_candidate( &glob.cl[i] );
 	break;
       case RAFT_STATE_LEADER:
 	/* send pings to keep term alive */
-	raft_log( LOG_LVL_TRACE, "Send pings to keep term alive" );
+	raft_log( LOG_LVL_TRACE, "%"PRIx64" Send pings to keep term alive", glob.cl[i].clid );
 	raft_send_pings( &glob.cl[i] );
 	glob.cl[i].timeout = rpc_now() + glob.prop.term_low / 2;
 	raft_cluster_set( &glob.cl[i] );

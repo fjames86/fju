@@ -94,7 +94,7 @@ static int get_init_proc( struct fvm_module *m, char *procname ) {
   return -1;
 }
 
-int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
+int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep ) {
   /* parse header, load data and text segments */
   struct fvm_headerinfo hdr;
   struct fvm_module *module;
@@ -156,8 +156,12 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
     }
   }
   if( fvm_module_by_name( hdr.name ) ) {
-    fvm_log( LOG_LVL_ERROR, "Module already registered" );
-    return -1;
+    if( flags & FVM_RELOAD ) {
+      fvm_module_unload( hdr.name );
+    } else {
+      fvm_log( LOG_LVL_ERROR, "Module already registered" );
+      return -1;
+    }
   }
   
   module = malloc( sizeof(*module) + hdr.datasize + hdr.textsize );
@@ -198,13 +202,13 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   return 0;
 }
 
-int fvm_module_load_file( char *filename, struct fvm_module **modulep ) {
+int fvm_module_load_file( char *filename, uint32_t flags, struct fvm_module **modulep ) {
   struct mmf_s mmf;
   int sts;
   sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
   if( sts ) return sts;
   mmf_remap( &mmf, mmf.fsize );
-  sts = fvm_module_load( mmf.file, mmf.fsize, modulep );
+  sts = fvm_module_load( mmf.file, mmf.fsize, flags, modulep );
   mmf_close( &mmf );
   return sts;
 }
@@ -1156,12 +1160,14 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   char *bufp;
   int lenp, sts;
   struct fvm_module *modulep;
+  uint32_t flags;
   
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
   if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &registerp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
-  sts = fvm_module_load( bufp, lenp, &modulep );
+  sts = fvm_module_load( bufp, lenp, flags, &modulep );
   if( sts ) goto done;
   
   if( registerp ) {
@@ -1371,7 +1377,7 @@ static int fvm_init_module( char *modname ) {
     fvm_log( LOG_LVL_ERROR, "No module path configured" );
     return -1;
   }
-  sts = fvm_module_load_file( path, &m );
+  sts = fvm_module_load_file( path, 0, &m );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "Failed to load module file" );
     return -1;

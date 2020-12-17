@@ -41,8 +41,9 @@ struct fvm_module {
 };
 
 
-int fvm_module_load( char *buf, int size, struct fvm_module **modulep );
-int fvm_module_load_file( char *filename, struct fvm_module **modulep );
+#define FVM_RELOAD 0x0001 
+int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep );
+int fvm_module_load_file( char *filename, uint32_t flags, struct fvm_module **modulep );
 int fvm_module_unload( char *modname );
 
 struct fvm_module *fvm_module_by_name( char *name );

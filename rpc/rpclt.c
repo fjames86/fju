@@ -115,7 +115,7 @@ static struct clt_info clt_procs[] = {
     { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
     { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*] [reset]" },
     { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
-    { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* register=*" },
+    { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
@@ -1157,15 +1157,19 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   int sts;
   int registerp;
   struct mmf_s mmf;
+  uint32_t flags;
   
   filename = NULL;
   registerp = 0;
+  flags = 0;
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "filename" ) == 0 ) {
       filename = argval;
     } else if( strcmp( argname, "register" ) == 0 ) {
       registerp = 1;
+    } else if( strcmp( argname, "reload" ) == 0 ) {
+      flags |= FVM_RELOAD;
     } else usage( NULL );
     
     i++;
@@ -1178,6 +1182,7 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 
   mmf_remap( &mmf, mmf.fsize );
   xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
+  xdr_encode_uint32( xdr, flags );
   xdr_encode_boolean( xdr, registerp );
   mmf_close( &mmf );
 }

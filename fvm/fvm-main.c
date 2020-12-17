@@ -111,7 +111,7 @@ int main( int argc, char **argv ) {
   
   while( i < argc ) {
 
-    sts = fvm_module_load_file( argv[i], &module );
+    sts = fvm_module_load_file( argv[i], 0, &module );
     if( sts ) usage( "Failed to load module \"%s\"", argv[i] );
     if( strcmp( mname, "" ) == 0 ) {
       strcpy( mname, module->name );

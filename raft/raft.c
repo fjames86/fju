@@ -921,7 +921,11 @@ static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t
   }
 
   len = raft_command_by_seq( cl->clid, cseq, &cterm, glob.buf, sizeof(glob.buf), NULL );
-  if( len < 0 ) return;
+  if( len < 0 ) {
+    raft_log( LOG_LVL_ERROR, "raft_call_putcmd: failed to find command clid=%"PRIx64" seq=%"PRIu64"", cl->clid, cseq );
+    raft_call_ping( cl, hostid );
+    return;
+  }
 
   pseq = cseq - 1;
   sts = raft_command_by_seq( cl->clid, pseq, &pterm, NULL, 0, NULL );
@@ -1233,12 +1237,14 @@ static int raft_proc_append( struct rpc_inc *inc ) {
     sts = raft_command_by_seq( clid, prevlogseq, &plogterm, NULL, 0, &entryid );
     if( sts < 0 ) {
       raft_log( LOG_LVL_ERROR, "Failed to find command at seq %"PRIu64"", prevlogseq );
-
+#if 0
       clp->timeout = raft_term_timeout();
       raft_cluster_set( clp );
       goto done;
+#endif
     }
-    if( plogterm != prevlogterm ) {
+
+    if( !sts && (plogterm != prevlogterm) ) {
       struct log_s *logp;
       raft_log( LOG_LVL_WARN, "Conflicting log entry found" );
       logp = clog_by_id( clid );

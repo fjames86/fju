@@ -38,8 +38,7 @@ struct raft_cluster {
 
   uint32_t appid;
   uint32_t flags;
-#define RAFT_CLUSTER_WITNESS 0x0001
-
+#define RAFT_CLUSTER_WITNESS  0x0001
   char cookie[RAFT_MAX_COOKIE];
   
   uint32_t spare[2];

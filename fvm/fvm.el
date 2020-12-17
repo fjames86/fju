@@ -25,13 +25,23 @@
 	  (,x-keywords-regexp . font-lock-keyword-face))))
 
 
+(defvar fvm-mode-map nil)
+
+(defvar fvm-compiler-path (expand-file-name "~/fju/bin/fvmc"))
+(defvar fvm-include-path (expand-file-name "~/fju/fvm/stdlib"))
+
+(defun fvm-compile ()
+  (interactive)
+  (shell-command (format "%s -I %s %s" fvm-compiler-path fvm-include-path (buffer-file-name))))
+
+(setq fvm-mode-map (make-sparse-keymap))
+(define-key fvm-mode-map (kbd "C-c C-c") 'fvm-compile)
+
 (define-derived-mode fvm-mode fundamental-mode "fvm"
   "major mode for fvm pascal"
   (setq font-lock-defaults '(fvm-highlights))
   (setq-local comment-start "{")
   (setq-local comment-end "}"))
-
-
 
 
 (provide 'fvm-mode)

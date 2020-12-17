@@ -222,3 +222,4 @@ cht_purge
 cht_entry_by_index 
 mmf_delete_file
 fvm_setdebug
+raft_clid_by_cookie

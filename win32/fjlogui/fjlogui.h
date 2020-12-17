@@ -25,7 +25,7 @@ HICON fjlogui_icon(void);
 #define CMD_OPEN 2 
 #define CMD_ABOUT 3
 #define CMD_CLOSE 4
-#define CMD_CONNECT 5 
+#define CMD_CLEAR 5
 
 #endif
 

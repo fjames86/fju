@@ -10,11 +10,12 @@
 #include <fju/log.h>
 #include <fju/hostreg.h>
 #include <fju/hrauth.h>
-//#include <fju/nls.h>
 #include <fju/rpcd.h>
 
 
 #include "fjlogui.h"
+
+static void load_log( char *path, uint64_t id );
 
 static struct {
 	int exiting;
@@ -143,145 +144,6 @@ static void main_service_networking( void ) {
 }
 
 
-
-struct nls_read_cxt {
-  uint64_t hostid;
-  uint64_t hshare;
-  uint64_t seq;
-  uint64_t lastid;
-};
-
-static int nls_decode_prop( struct xdr_s *xdr, struct nls_share *share, struct log_prop *prop ) {
-  int sts;
-  
-  sts = xdr_decode_uint64( xdr, &share->hshare );
-  if( !sts ) sts = xdr_decode_uint32( xdr, &prop->version );  
-  if( !sts ) sts = xdr_decode_uint64( xdr, &prop->seq );
-  if( !sts ) sts = xdr_decode_uint32( xdr, &prop->lbacount );
-  if( !sts ) sts = xdr_decode_uint32( xdr, &prop->start );
-  if( !sts ) sts = xdr_decode_uint32( xdr, &prop->count );
-  if( !sts ) sts = xdr_decode_uint64( xdr, &prop->last_id );
-  if( !sts ) sts = xdr_decode_uint32( xdr, &prop->flags );
-
-  return sts;
-}
-
-static void nls_read_cb( struct xdr_s *xdr, void *cxt ) {
-  int sts, b;
-  struct log_s log;
-  uint64_t id, lastid, previd, seq;
-  uint32_t flags;
-  char *bufp = NULL;
-  int lenp;
-  struct log_entry e;
-  struct log_iov iov[1];
-  struct nls_read_cxt *nlscxtp = (struct nls_read_cxt *)cxt;
-  int logopen = 0;
-  struct nls_remote remote;
-  struct nls_share rshare;
-  struct log_prop prop;
-  int nmsgs = 0, eof;
-  
-  /* do nothing if call timed out? */
-  if( !xdr ) {
-    MessageBoxA( glob.hwnd[HWND_MAIN], "RPC timeout", "Error", MB_OK|MB_ICONERROR );
-    goto done;
-  }
-
-  /* decode results */
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts || !b ) {
-	  MessageBoxA( glob.hwnd[HWND_MAIN], "Error Status", "Error", MB_OK|MB_ICONERROR );
-    goto done;
-  }
-
-  sts = nls_decode_prop( xdr, &rshare, &prop );
-  if( sts ) {
-    goto done;
-  }
-
-
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) goto done;
-  while( b ) {
-    sts = xdr_decode_uint64( xdr, &id );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &previd );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &seq );
-    if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
-    if( !sts ) sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
-    if( sts ) {
-      goto done;
-    }
-
-    memset( &e, 0, sizeof(e) );
-    iov[0].buf = bufp;
-    iov[0].len = lenp;
-    e.iov = iov;
-    e.niov = 1;
-    e.flags = flags;      
-	add_log_entry( &e );
-
-    lastid = id;
-    nmsgs++;
-    
-    sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) goto done;
-  }
-  sts = xdr_decode_boolean( xdr, &eof );
-  
-  /* Did we read all available messages? If not then continue */
-  if( eof || nmsgs == 0 || seq == nlscxtp->seq ) {
-    goto done;
-  }
-
-  nlscxtp->lastid = lastid;
-  nls_call_read( nlscxtp->hostid, nlscxtp->hshare, nlscxtp->seq, nlscxtp->lastid );
-  
- done:
-  free( cxt );
-}
-
-/* send a read command to server */
-static void nls_call_read( uint64_t hostid, uint64_t hshare, uint64_t seq, uint64_t lastid ) {
-  int sts;
-  struct nls_read_cxt *nlscxtp;
-  struct hrauth_call hcall;
-  struct xdr_s xdr;
-  uint8_t xdr_buf[32];
-  struct hrauth_call_opts opts;
-
-  nlscxtp = malloc( sizeof(*nlscxtp) );
-  nlscxtp->hostid = hostid;
-  nlscxtp->hshare = hshare;
-  nlscxtp->lastid = lastid;
-  nlscxtp->seq = seq;
-
-  memset( &hcall, 0, sizeof(hcall) );
-  hcall.hostid = hostid;
-  hcall.prog = NLS_RPC_PROG;
-  hcall.vers = NLS_RPC_VERS;
-  hcall.proc = 3;
-  hcall.donecb = nls_read_cb;
-  hcall.cxt = nlscxtp;
-  hcall.timeout = 1000;
-  hcall.service = HRAUTH_SERVICE_PRIV;
-  xdr_init( &xdr, xdr_buf, sizeof(xdr_buf) );
-  xdr_encode_uint64( &xdr, hshare );
-  xdr_encode_uint64( &xdr, lastid );
-  xdr_encode_uint32( &xdr, sizeof(glob.buf) );  
-
-  memset( &opts, 0, sizeof(opts) );
-  opts.mask = HRAUTH_CALL_OPT_FD|HRAUTH_CALL_OPT_TMPBUF|HRAUTH_CALL_OPT_PORT;
-  opts.fd = glob.fd;  
-  xdr_init( &opts.tmpbuf, glob.buf, sizeof(glob.buf) );
-  opts.port = glob.port;
-  sts = hrauth_call_udp_async( &hcall, &xdr, 1, &opts );
-  if( sts ) {
-    free( nlscxtp );
-  }
-
-}
-
 void winrpc_set_font( HWND hwnd ) {
 	static HFONT hf;
 
@@ -306,8 +168,8 @@ static void main_create( HWND hwnd ) {
 	menu = CreateMenu();
 	m = CreateMenu();
 	AppendMenuA( m, MF_STRING, CMD_OPEN, "Open" );
-	AppendMenuA( m,MF_STRING, CMD_CONNECT, "Connect..." );
 	AppendMenuA( m, MF_STRING|MF_DISABLED, CMD_CLOSE, "Close" );
+	AppendMenuA( m, MF_STRING, CMD_CLEAR, "Clear" );
 	AppendMenuA( m, MF_SEPARATOR, 0, 0 );
 	AppendMenuA( m, MF_STRING, CMD_QUIT, "Quit" );
 	AppendMenuA( menu, MF_POPUP, m, "File" );
@@ -356,6 +218,8 @@ static void main_create( HWND hwnd ) {
 	SetTimer( hwnd, &glob.htimer, 1000, 0 );
 
 	DragAcceptFiles( hwnd, TRUE );
+
+	load_log( mmf_default_path( "fju.log", NULL ), 0 );
 }
 
 static void add_log_entry( struct log_entry *entry ) {
@@ -363,7 +227,12 @@ static void add_log_entry( struct log_entry *entry ) {
 	time_t now;
 	struct tm *tm;
 	char str[1024];
-	int idx;
+	int idx, count;
+
+	count = SendMessageA( glob.hwnd[HWND_ELIST], LVM_GETITEMCOUNT, 0, 0 );
+	if( count >= 32*1024 ) {
+		SendMessageA( glob.hwnd[HWND_ELIST], LVM_DELETEITEM, 0, 0 );
+	}
 
 	memset( &lvi, 0, sizeof(lvi) );
 	lvi.mask = LVIF_TEXT|LVIF_PARAM|LVIF_PARAM;
@@ -468,146 +337,6 @@ static void load_log( char *path, uint64_t id ) {
 	free( buf );
 }
 
-static int call_list_shares( uint64_t hostid, int port, struct nls_share *share, int n ) {
-  int sts, handle, b, i;
-  struct nls_share tmpshare;
-  struct hostreg_host host;
-  struct sockaddr_in sin;
-  struct log_prop prop;
-  struct rpc_call_pars pars;
-  struct xdr_s res;
-      
-  sts = hostreg_host_by_id( hostid,&host );
-  if(sts) return sts;
-
-  memset( &sin,0,sizeof( sin ) );
-  sin.sin_family = AF_INET;
-  sin.sin_port = htons( port );
-  sin.sin_addr.s_addr = host.addr[0];
-
-  memset( &pars, 0, sizeof(pars) );
-  pars.prog = NLS_RPC_PROG;
-  pars.vers = NLS_RPC_VERS;
-  pars.proc = 1;
-  memcpy( &pars.raddr, &sin, sizeof(sin) );
-  pars.raddr_len = sizeof(sin);
-  pars.timeout = 500;
-  xdr_init( &pars.buf, glob.buf, sizeof(glob.buf) );
-  sts = rpc_call_udp( &pars, NULL, &res );
-  if( sts ) {
-	  goto done;
-  }
-
-  /* decode result from xdr */
-  sts = xdr_decode_boolean( &res, &b );
-  if( sts ) {
-	  goto done;
-  }
-  i = 0;
-  while( b ) {
-    sts = nls_decode_prop( &res, &tmpshare, &prop );
-	if( sts ) {
-		goto done;
-	}
-	if( i < n ) {
-		share[i] = tmpshare;
-	}
-	sts = xdr_decode_boolean( &res, &b );
-	if( sts ) {
-		goto done;
-	}
-	i++;
-  }
-  sts = i;
-    
- done:
-
-  return sts;
-}
-
-static INT_PTR WINAPI connect_dialog_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
-	int sts;
-
-	switch( msg ) {
-	case WM_INITDIALOG:
-		{
-		int n,m;
-		struct hostreg_host *hlist;
-		n = hostreg_host_list( NULL,0 );
-		hlist = malloc( sizeof( *hlist ) * n );
-		m = hostreg_host_list( hlist,n );
-		if(m < n) n = m;
-
-		SendMessageA( GetDlgItem( hwnd,IDC_COMBO_HOST ),CB_RESETCONTENT,0,0 );
-		for( m = 0; m < n; m++ ) {
-			SendMessageA( GetDlgItem( hwnd,IDC_COMBO_HOST ),CB_ADDSTRING,0, hlist[m].name );
-		}
-		free( hlist );
-
-		SendMessageA( GetDlgItem( hwnd,IDC_COMBO_HOST ),CB_SETCURSEL,0,0 );
-
-		SetDlgItemTextA( hwnd,IDC_EDIT1,"8000" );
-		}
-		break;
-	case WM_COMMAND:
-		switch( LOWORD(wparam) ) {
-			case IDOK:
-			{
-				char str[128];
-				int sts;
-				struct hostreg_host host;
-				uint64_t hshare;
-
-				GetDlgItemTextA( hwnd, IDC_COMBO_HOST, str, sizeof( str ) );
-				sts = hostreg_host_by_name( str, &host );
-				glob.hostid = host.id;
-
-				GetDlgItemTextA( hwnd, IDC_COMBO_LOG, str, sizeof( str ) );
-				sscanf( str, "%llx", &hshare );
-				glob.hshare = hshare;
-			}
-			/* fall through */
-			case IDCANCEL:
-			EndDialog( hwnd, LOWORD(wparam) );
-			return TRUE;
-			break;
-		case IDC_COMBO_HOST:
-			/* set log list */
-		{
-			int sts;
-			char str[128];
-			struct hostreg_host host;
-			struct nls_share shares[32];
-			int port;
-			int i;
-
-			if( HIWORD(wparam) == CBN_SELCHANGE ) {
-				GetDlgItemTextA( hwnd,IDC_COMBO_HOST,str,sizeof( str ) );
-				sts = hostreg_host_by_name( str,&host );
-				GetDlgItemTextA( hwnd,IDC_EDIT1,str,sizeof( str ) );
-				glob.port = strtoul( str,NULL,10 );
-				sts = call_list_shares( host.id,glob.port,shares,32 );
-				if(sts < 0) {
-					MessageBoxA( hwnd,"Failed to contact remote host","Error",MB_OK|MB_ICONERROR );
-				} else {
-					SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_RESETCONTENT,0,0 );
-					if(sts > 32) sts= 32;
-					for(i = 0; i < sts; i++) {
-						sprintf( str,"%llx", shares[i].hshare );
-						SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_ADDSTRING,0,str );
-					}
-					if(sts > 0) SendMessageA( GetDlgItem( hwnd,IDC_COMBO_LOG ),CB_SETCURSEL,0,0 );
-				}
-			}
-
-		}
-			break;
-		}
-		break;
-	}
-	return FALSE;
-}
-
 static void main_command( HWND hwnd, int cmd ) {
 	int sts;
 
@@ -651,26 +380,8 @@ static void main_command( HWND hwnd, int cmd ) {
 			EnableMenuItem( GetSubMenu( GetMenu( glob.hwnd[HWND_MAIN] ), 0 ), CMD_CLOSE, MF_BYCOMMAND|MF_DISABLED );		
 		}
 		break;
-	case CMD_CONNECT:
-		/* prompt for host with selection dialog */
-		sts = DialogBoxA( NULL, MAKEINTRESOURCE(IDD_DIALOG_CONNECT), hwnd, connect_dialog_wndproc );
-		if( sts == IDOK ) {
-			/* close log (if any) */
-			if( glob.logopen ) {
-				log_close( &glob.log );
-				EnableMenuItem( GetSubMenu( GetMenu( glob.hwnd[HWND_MAIN] ), 0 ), CMD_CLOSE, MF_BYCOMMAND|MF_DISABLED );	
-				glob.logopen = 0;
-			}
-
-			/* clear messages */
-			ListView_DeleteAllItems( glob.hwnd[HWND_ELIST] );
-
-			/* start reading */
-			glob.seq = 0;
-			glob.lastid = 0;
-			nls_call_read( glob.hostid, glob.hshare, glob.seq, glob.lastid );
-		}
-
+	case CMD_CLEAR:
+	SendMessageA( glob.hwnd[HWND_ELIST], LVM_DELETEALLITEMS, 0, 0 );
 		break;
 	}
 }

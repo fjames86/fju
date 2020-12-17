@@ -67,6 +67,7 @@ struct fvm_headerinfo {
     uint32_t address;
     uint64_t siginfo;    /* 3 bits per param, 3*19=57 bits of param info, 5 bits of length info and 2 bits spare */
   } procs[FVM_MAX_PROC];
+  uint64_t timestamp;
 };
 
 struct fvm_state {

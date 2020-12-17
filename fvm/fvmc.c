@@ -17,6 +17,7 @@
 
 #include <fju/fvm.h>
 #include <fju/mmf.h>
+#include <fju/sec.h>
 
 #include "fvm-private.h"
 
@@ -88,7 +89,7 @@ int main( int argc, char **argv ) {
       
       if( !outpath ) {
 	sprintf( outpathstr, "%s.fvm", argv[i] );
-	for( j = strlen( outpathstr ) - 1; j > 0; j-- ) {
+	for( j = strlen( argv[i] ) - 1; j > 0; j-- ) {
 	  if( outpathstr[j] == '.' ) {
 	    outpathstr[j] = '\0';
 	    strcat( outpathstr + j, ".fvm" );
@@ -2630,6 +2631,7 @@ static void fvmc_encode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
     xdr_encode_uint32( xdr, x->procs[i].address );
     xdr_encode_uint64( xdr, x->procs[i].siginfo );
   }
+  xdr_encode_uint64( xdr, x->timestamp );
 }
 static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
   int i, sts;
@@ -2658,6 +2660,8 @@ static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
     sts = xdr_decode_uint64( xdr, &x->procs[i].siginfo );
     if( sts ) return sts;    
   }
+  sts = xdr_decode_uint64( xdr, &x->timestamp );
+  if( sts ) return sts;
   return 0;
 }
 
@@ -2728,6 +2732,7 @@ static void compile_file( char *path, char *outpath ) {
     header.nprocs++;
     e = e->next;
   }
+  header.timestamp = time( NULL );
   xdr_init( &xdr, (uint8_t *)hdrbuf, sizeof(hdrbuf) );
   fvmc_encode_header( &xdr, &header );
   fwrite( xdr.buf, 1, xdr.offset, glob.outfile );
@@ -2876,6 +2881,10 @@ static void disassemblefile( char *path ) {
   printf( "Name %s\n", hdr.name );
   printf( "ProgID %u %u\n", hdr.progid, hdr.versid );
   printf( "DataSize %u TextSize %u\n", hdr.datasize, hdr.textsize );
+  {
+    char timestr[64];
+    printf( "Timestamp %s\n", sec_timestr( hdr.timestamp, timestr ) );
+  }  
   for( i = 0; i < hdr.nprocs; i++ ) {
     printf( "[%u] %04x Procedure %s(", i, hdr.procs[i].address, hdr.procs[i].name );
     nargs = FVM_SIGINFO_NARGS(hdr.procs[i].siginfo);

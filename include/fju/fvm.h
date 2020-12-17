@@ -37,6 +37,7 @@ struct fvm_module {
   int datasize;
   char *text;
   int textsize;
+  uint64_t timestamp;
 };
 
 
@@ -54,6 +55,7 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 void fvm_rpc_register( void );
 
 int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, int len );
+int fvm_cluster_run2( uint64_t clid, char *modname, char *procname, char *args, int len, uint64_t tgt_hostid, uint64_t excl_hostid );
 int fvm_cluster_updatestate( uint64_t clid, char *modname );
 
 #endif

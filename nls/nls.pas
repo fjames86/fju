@@ -106,15 +106,12 @@ Begin
 
 	Call LogWritef(LogLvlTrace,"NlsPublishCommand len=%u",len,0,0,0);
 	
-	Syscall HostregLocalid(hosth,hostl);
-
 	offset = 0;
 	Call XdrEncodeString(argbuf,offset,logname);
-	Call XdrEncodeU64(argbuf,offset,hosth,hostl);
 	Call XdrEncodeU32(argbuf,offset,flags);
 	Call XdrEncodeOpaque(argbuf,offset,buf,len);
 	
-	Syscall FvmClRun(0,0,"Nls","Command",offset,argbuf);
+	Syscall FvmClRunOthers(0,0,"Nls","Command",offset,argbuf);
 End;
 
 Procedure CheckLogId(logname : string)
@@ -186,17 +183,13 @@ Begin
 End;
 
 { Command procedure - invoked to replicate log entries }
-Procedure Command(logname : string, hosth : int, hostl : int, flags : int, len : int, buf : opaque)
+Procedure Command(logname : string, flags : int, len : int, buf : opaque)
 Begin
 	var high, low : int;
 	var hostidh, hostidl : int;
 
-	Call LogWritef(LogLvlTrace,"NlsCommand Hostid=%08x%08x Logname=%s len=%u", hosth, hostl, logname, len);
+	Call LogWritef(LogLvlTrace,"NlsCommand Logname=%s len=%u", logname, len,0,0);
 
-	{ Ignore messages originating from local machine }
-	Syscall HostregLocalId(hostidh, hostidl);
-	If (hostidh = hosth) && (hostidl = hostl) Then Return;
-	
 	Syscall LogWrite(logname,flags,len,buf);
 	Syscall LogLastId(logname,high,low);
 	Call SetLogId(logname,high,low);

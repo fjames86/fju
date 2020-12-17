@@ -73,6 +73,8 @@ static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
     sts = xdr_decode_uint64( xdr, &x->procs[i].siginfo );
     if( sts ) return sts;    
   }
+  sts = xdr_decode_uint64( xdr, &x->timestamp );
+  if( sts ) return sts;
   return 0;
 }
 
@@ -173,10 +175,14 @@ int fvm_module_load( char *buf, int size, struct fvm_module **modulep ) {
   module->datasize = hdr.datasize;
   module->data = (char *)module + sizeof(*module);
   module->text = (char *)module + sizeof(*module) + hdr.datasize;
+  module->timestamp = hdr.timestamp;
   memset( module->data, 0, hdr.datasize );
   memcpy( module->text, xdr.buf + xdr.offset, hdr.textsize );
 
-  fvm_log( LOG_LVL_INFO, "fvm_module_load %s", module->name );
+  {
+    char timestr[64];
+    fvm_log( LOG_LVL_INFO, "fvm_module_load %s timestamp=%s", module->name, sec_timestr( hdr.timestamp, timestr ) );
+  }
   module->next = glob.modules;
   glob.modules = module;
 
@@ -222,6 +228,7 @@ int fvm_module_unload( char *modname ) {
       free( m );
       return 0;
     }
+    prev = m;
     m = m->next;
   }
   return -1;
@@ -829,7 +836,8 @@ struct fvm_command_s {
       int len;
     } updatestate;
     struct {
-      uint64_t hostid;           /* if hostid=0 the given proc is run on all nodes, otherwise it is run only on the given node */
+      uint64_t tgt_hostid;           /* target hostid: if 0 then run on all nodes, otherwise only run on the target */
+      uint64_t excl_hostid;          /* if non-zero, don't run on this hostid */
       char procname[FVM_MAX_NAME];
       char *args;                /* proc args */
       int len;
@@ -848,7 +856,8 @@ static int fvm_decode_command( struct xdr_s *xdr, struct fvm_command_s *x ) {
     sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&x->u.updatestate.buf, &x->u.updatestate.len );
     break;
   case FVM_MODE_RUN:
-    sts = xdr_decode_uint64( xdr, &x->u.run.hostid );
+    sts = xdr_decode_uint64( xdr, &x->u.run.tgt_hostid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &x->u.run.excl_hostid );    
     if( !sts ) sts = xdr_decode_string( xdr, x->u.run.procname, sizeof(x->u.run.procname) );
     if( !sts ) sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&x->u.run.args, &x->u.run.len );
     break;
@@ -893,7 +902,8 @@ static void fvm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
       
       fvm_log( LOG_LVL_TRACE, "fvm run %s/%s arglen=%u", cmd.modname, cmd.u.run.procname, cmd.u.run.len );
       
-      if( (cmd.u.run.hostid == 0) || (cmd.u.run.hostid == hostreg_localid()) ) {
+      if( ((cmd.u.run.tgt_hostid == 0) || (cmd.u.run.tgt_hostid == hostreg_localid())) &&
+	  (cmd.u.run.excl_hostid != hostreg_localid()) ) {
 	struct xdr_s args;
 	
 	procid = fvm_procid_by_name( m, cmd.u.run.procname );
@@ -923,6 +933,10 @@ static struct raft_app fvm_app =
 
 
 int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, int len ) {
+  return fvm_cluster_run2( clid, modname, procname, args, len, 0, 0 );
+}
+
+int fvm_cluster_run2( uint64_t clid, char *modname, char *procname, char *args, int len, uint64_t tgt_hostid, uint64_t excl_hostid ) {
   struct xdr_s buf;
   struct rpc_conn *c;
   int sts;
@@ -941,7 +955,8 @@ int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, i
   xdr_init( &buf, (uint8_t *)c->buf, c->count );
   xdr_encode_string( &buf, modname );
   xdr_encode_uint32( &buf, FVM_MODE_RUN );
-  xdr_encode_uint64( &buf, 0 ); /* hostid */
+  xdr_encode_uint64( &buf, tgt_hostid );  /* target hostid */
+  xdr_encode_uint64( &buf, excl_hostid ); /* exclude hostid */  
   xdr_encode_string( &buf, procname );
   xdr_encode_opaque( &buf, (uint8_t *)args, len );
   sts = raft_cluster_command( clid, (char *)buf.buf, buf.offset, NULL );
@@ -1119,7 +1134,8 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     xdr_encode_uint32( &inc->xdr, m->progid );
     xdr_encode_uint32( &inc->xdr, m->versid );
     xdr_encode_uint32( &inc->xdr, m->datasize );
-    xdr_encode_uint32( &inc->xdr, m->textsize );    
+    xdr_encode_uint32( &inc->xdr, m->textsize );
+    xdr_encode_uint64( &inc->xdr, m->timestamp );
     xdr_encode_uint32( &inc->xdr, m->nprocs );
     for( i = 0; i < m->nprocs; i++ ) {
       xdr_encode_string( &inc->xdr, m->procs[i].name ); 

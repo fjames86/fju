@@ -1105,8 +1105,9 @@ static void fvm_list_results( struct xdr_s *xdr ) {
   int sts, b, i;
   char name[64];
   uint32_t progid, versid, datasize, textsize, nprocs, address;
-  uint64_t siginfo;
+  uint64_t siginfo, timestamp;
   int vartype, isvar, nargs, j;
+  char timestr[64];
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
@@ -1115,9 +1116,10 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     xdr_decode_uint32( xdr, &progid );
     xdr_decode_uint32( xdr, &versid );
     xdr_decode_uint32( xdr, &datasize );
-    xdr_decode_uint32( xdr, &textsize );    
+    xdr_decode_uint32( xdr, &textsize );
+    xdr_decode_uint64( xdr, &timestamp );
     xdr_decode_uint32( xdr, &nprocs );
-    printf( "%s %u:%u Data=%u Text=%u\n", name, progid, versid, datasize, textsize );    
+    printf( "%s %u:%u Data=%u Text=%u Timestamp=%s\n", name, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ) );    
     for( i = 0; i < nprocs; i++ ) {
       xdr_decode_string( xdr, name, sizeof(name) ); 
       xdr_decode_uint32( xdr, &address );     

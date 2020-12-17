@@ -49,6 +49,7 @@ static void usage( char *fmt, ... ) {
             "          add cluster [clid=ID] [appid=APPID] [witness=true|false] [cookie=*]\n"
             "          set cluster ID [appid=APPID] [witness=true|false] [cookie=*]\n"
             "          rem cluster ID\n"
+	    "          get CLID|APPID\n" 
             "          add member [clid=CLID] [hostid=HOSTID]\n"
             "          set member\n"
             "          rem member clid=CLID hostid=HOSTID\n"
@@ -110,22 +111,22 @@ int main( int argc, char **argv ) {
       uint64_t clid = 0;
       uint32_t appid = 0;
       struct raft_cluster cl;
-      char argname[64], *argval;
+      char *term;
       
       i++;
-      while( i < argc ) {
-	argval_split( argv[i], argname, &argval );
-	if( strcmp( argname, "clid" ) == 0 ) {
-	  clid = strtoull( argval, NULL, 16 );
-	} else if( strcmp( argname, "appid" ) == 0 ) {
-	  appid = strtoul( argval, NULL, 0 );
-	} else usage( NULL );
-	i++;
+      if( i >= argc ) usage( NULL );
+      clid = strtoull( argv[i], &term, 16 );
+      if( *term ) {
+	appid = strtoul( argv[i], &term, 10 );
+	if( *term ) {
+	  clid = raft_clid_by_cookie( argv[i] );
+	  if( !clid ) usage( "Unable to find cluster %s", argv[i] );
+	} else {
+	  clid = raft_clid_by_appid( appid );
+	  if( !clid ) usage( "No cluster with appid %u", appid );
+	}	  
       }
-      if( appid ) {
-	clid = raft_clid_by_appid( appid );
-	if( !clid ) usage( "No cluster with appid=%u", appid );
-      }
+
       sts = raft_cluster_by_clid( clid, &cl );
       if( sts ) usage( "Failed to find cluster" );
       print_cluster( &cl );

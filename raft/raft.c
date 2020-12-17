@@ -176,6 +176,21 @@ uint64_t raft_clid_by_appid( uint32_t appid ) {
   return clid;
 }
 
+uint64_t raft_clid_by_cookie( char *cookie ) {
+  int i;
+  uint64_t clid = 0;
+  if( !glob.ocount ) return -1;
+  raft_lock();
+  for( i = 0; i < glob.file->prop.count; i++ ) {
+    if( strcmp( glob.file->cluster[i].cookie, cookie ) == 0 ) {
+      clid = glob.file->cluster[i].clid;
+      break;
+    }
+  }
+  raft_unlock();
+  return clid;
+}
+
 int raft_cluster_by_clid( uint64_t clid, struct raft_cluster *cl ) {
   int i, sts;
 

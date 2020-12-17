@@ -81,6 +81,7 @@ int raft_cluster_list( struct raft_cluster *cl, int ncl );
 int raft_clid_list( uint64_t *clid, int n );
 int raft_cluster_by_clid( uint64_t clid, struct raft_cluster *cl );
 uint64_t raft_clid_by_appid( uint32_t appid );
+uint64_t raft_clid_by_cookie( char *cookie );
 int raft_cluster_set( struct raft_cluster *cl );
 int raft_cluster_rem( uint64_t clid );
 

@@ -37,5 +37,8 @@
 #define RAFT2_RPC_PROG (FJU_BASE_PROG + 9)
 #define RAFT2_RPC_VERS 1
 
+#define LOG_RPC_PROG (FJU_BASE_PROG + 10)
+#define LOG_RPC_VERS 1
+
 #endif
 

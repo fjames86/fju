@@ -106,7 +106,10 @@ int main( int argc, char **argv ) {
     } else {
       i++;
     }
-    if( sts % 4 ) usage( "XDR buffer not a multiple of 4" );
+
+    if( i >= argc ) printf( "%s\n", buf );
+    else if( sts % 4 ) usage( "XDR buffer len %d not a multiple of 4", sts );
+    
     xdr_init( &xdr, (uint8_t *)buf, sts );
     while( i < argc ) {
       argval_split( argv[i], argname, &argval );      
@@ -153,7 +156,7 @@ int main( int argc, char **argv ) {
     
     if( xdr.offset < xdr.count ) {
       base64_encode( (char *)(xdr.buf + xdr.offset), xdr.count - xdr.offset, bufstr );
-      printf( "Remaining %u: %s\n", xdr.count - xdr.offset, bufstr );
+      printf( "%s\n", bufstr );
     }
   } else usage( NULL );
   

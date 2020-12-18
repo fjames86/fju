@@ -53,7 +53,7 @@ int main( int argc, char **argv ) {
   int verbose = 0;
   uint64_t start, end;
   uint64_t siginfo;
-  int nargs;
+  int nargs, sargs;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
@@ -129,7 +129,14 @@ int main( int argc, char **argv ) {
   procid = fvm_procid_by_name( module, pname );
   if( procid < 0 ) usage( "Unknown proc %s", pname );
 
-  if( FVM_SIGINFO_NARGS(module->procs[procid].siginfo) != nargs ) usage( "Needed %u args", FVM_SIGINFO_NARGS(module->procs[procid].siginfo) );
+  siginfo = module->procs[procid].siginfo;
+    
+  sargs = 0;
+  for( i = 0; i < FVM_SIGINFO_NARGS(siginfo); i++ ) {
+    if( !FVM_SIGINFO_ISVAR(siginfo,i) ) sargs++;
+  }
+  
+  if( sargs != nargs ) usage( "Needed %u args", sargs );
   for( i = 0; i < nargs; i++ ) {
     if( !FVM_SIGINFO_ISVAR(module->procs[procid].siginfo,i) ) {
       if( FVM_SIGINFO_VARTYPE(module->procs[procid].siginfo,i) != FVM_SIGINFO_VARTYPE(siginfo,i) )

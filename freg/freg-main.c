@@ -3,6 +3,9 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <Winsock2.h>
 #include <Windows.h>
+
+#define strcasecmp _stricmp
+#define strdup _strdup
 #endif
 
 #include <stdlib.h>
@@ -86,6 +89,7 @@ static void cmd_get( int argc, char **argv, int i );
 static void cmd_dump( uint64_t parentid, char *path );
 static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count );
 static void cmd_put( int argc, char **argv, int i );
+static void cmd_merge( char *filename );
 
 static void cmd_list( int argc, char **argv, int i ) {
   struct freg_entry *elist;
@@ -328,6 +332,11 @@ int main( int argc, char **argv ) {
       }
       end = rpc_now();
       printf( "%d cmd_put %dms %.3fus per call\n", niter, (int)(end - start), (float)(1000 * (end - start))/(float)niter );
+  } else if( strcmp( argv[i], "merge" ) == 0 ) {
+    /* merge filename */
+    i++;
+    if( i >= argc ) usage( NULL );
+    cmd_merge( argv[i] );
   } else if( strcmp( argv[i], "prop" ) == 0 ) {
     struct ftab_s ftab;
     struct ftab_prop prop;
@@ -622,3 +631,58 @@ static void cmd_put( int argc, char **argv, int i ) {
     if( ((flags & FREG_TYPE_MASK) == FREG_TYPE_STRING) && buf ) free( buf );
 }
 
+static void cmd_merge( char *filename ) {
+  FILE *f;
+  char line[4096];
+  char *buf, *path, *typestr, *valstr, *term;
+  int len, sts;
+  uint32_t flags;
+  
+  f = fopen( filename, "r" );
+  if( !f ) usage( "Failed to open \"%s\"", filename );
+
+  while( 1 ) {
+    if( !fgets( line, sizeof(line), f ) ) break;
+
+    /* parse the line */
+    path = strtok( line, " " );
+    typestr = strtok( NULL, " " );
+    valstr = strtok( NULL, "\n" );
+    if( !path || !typestr || !valstr ) break;
+
+    flags = 0;
+    if( strcasecmp( typestr, "u32" ) == 0 ) {
+      flags = FREG_TYPE_UINT32;
+      buf = malloc( 4 );
+      len = 4;
+      *((uint32_t *)buf) = strtoul( valstr, &term, 0 );
+      if( *term ) usage( "Failed to parse u32 %s", valstr );
+    } else if( strcasecmp( typestr, "u64" ) == 0 ) {
+      flags = FREG_TYPE_UINT64;
+      buf = malloc( 8 );
+      len = 8;
+      *((uint64_t *)buf) = strtoull( valstr, &term, 0 );
+      if( *term ) usage( "Failed to parse u64 %s", valstr );
+    } else if( strcasecmp( typestr, "str" ) == 0 ) {
+      flags = FREG_TYPE_STRING;
+      buf = strdup( valstr );
+      len = strlen( valstr ) + 1;
+    } else if( strcasecmp( typestr, "opaque" ) == 0 ) {
+      flags = FREG_TYPE_OPAQUE;
+      buf = malloc( 4096 );
+      len = base64_decode( buf, 4096, valstr );
+      if( len < 0 ) usage( "Failed to decode opaque %s", valstr );
+    } else if( strcasecmp( typestr, "key" ) == 0 ) {
+      flags = FREG_TYPE_KEY;
+      buf = NULL;
+      len = 0;
+    } else usage( "Failed to parse typestr %s", typestr );
+        
+    sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
+    if( sts < 0 ) printf( ";; Failed to put %s %s %s", path, typestr, valstr );
+
+    if( buf ) free( buf );
+  }
+  
+  fclose( f );
+}

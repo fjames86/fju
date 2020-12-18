@@ -32,6 +32,7 @@ elif [ $CMDUNREG ]; then
     fi
 else
     if [ $PROGNAME ]; then
+	echo -n ""
     else
 	freg /fju/rpc/progreg | tail -n +2 | awk '{printf "%-16s %d\n", $3, $6}' 
 	exit 0

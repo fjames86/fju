@@ -1,6 +1,7 @@
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
+#define strcasecmp _stricmp
 #endif
 
 #include <stdlib.h>
@@ -238,7 +239,7 @@ int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, stru
 	sts = freg_entry_by_id( freg, buf[j], &etry );
 	if( sts ) {
 	  /* invalid item? */
-	} else if( strcmp( etry.name, tmpname ) == 0 ) {
+	} else if( strcasecmp( etry.name, tmpname ) == 0 ) {
 	  if( entry ) *entry = etry;
 	  if( parentidp ) *parentidp = parentid;
 	  return 0;
@@ -332,7 +333,7 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
 	  sts = freg_entry_by_id( freg, tmpbuf[j], &entry );
 	  if( sts ) {
 	    /* invalid item? */
-	  } else if( strcmp( entry.name, tmpname ) == 0 ) {
+	  } else if( strcasecmp( entry.name, tmpname ) == 0 ) {
 	    /* check type match */
 	    if( (flags & FREG_TYPE_MASK) != (entry.flags & FREG_TYPE_MASK) ) return -1;
 
@@ -510,7 +511,7 @@ static int get_subentry( struct freg_s *freg, uint64_t parentid, char *path, uin
     if( idx >= (FREG_MAX_NAME - 1) ) return -1;
     *q = '\0';
     if( *p == '/' ) p++;
-    if( strcmp( tmpname, "" ) == 0 ) return -1;
+    if( strcasecmp( tmpname, "" ) == 0 ) return -1;
     if( *p == '\0' ) break;
     
     sts = freg_entry_by_name( freg, parentid, tmpname, &e, NULL );
@@ -560,7 +561,7 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
     if( idx >= (FREG_MAX_NAME - 1) ) return -1;
     *q = '\0';
     if( *p == '/' ) p++;
-    if( strcmp( tmpname, "" ) == 0 ) return -1;
+    if( strcasecmp( tmpname, "" ) == 0 ) return -1;
     if( (flags & FREG_VALUEPATH) && (*p == '\0') ) break;
     
     sts = freg_entry_by_name( freg, parentid, tmpname, &entry, NULL );

@@ -645,29 +645,37 @@ static void cmd_merge( char *filename ) {
     if( !fgets( line, sizeof(line), f ) ) break;
 
     /* parse the line */
-    path = strtok( line, " " );
-    typestr = strtok( NULL, " " );
+    path = strtok( line, " \n" );
+    typestr = strtok( NULL, " \n" );
     valstr = strtok( NULL, "\n" );
-    if( !path || !typestr || !valstr ) break;
+    if( !path || !typestr ) usage( "Failed to parse line %s", line );
 
     flags = 0;
     if( strcasecmp( typestr, "u32" ) == 0 ) {
+      if( !valstr ) usage( "Need valstr" );
+      
       flags = FREG_TYPE_UINT32;
       buf = malloc( 4 );
       len = 4;
       *((uint32_t *)buf) = strtoul( valstr, &term, 0 );
       if( *term ) usage( "Failed to parse u32 %s", valstr );
     } else if( strcasecmp( typestr, "u64" ) == 0 ) {
+      if( !valstr ) usage( "Need valstr" );
+      
       flags = FREG_TYPE_UINT64;
       buf = malloc( 8 );
       len = 8;
       *((uint64_t *)buf) = strtoull( valstr, &term, 0 );
       if( *term ) usage( "Failed to parse u64 %s", valstr );
     } else if( strcasecmp( typestr, "str" ) == 0 ) {
+      if( !valstr ) usage( "Need valstr" );
+      
       flags = FREG_TYPE_STRING;
       buf = strdup( valstr );
       len = strlen( valstr ) + 1;
     } else if( strcasecmp( typestr, "opaque" ) == 0 ) {
+      if( !valstr ) usage( "Need valstr" );
+      
       flags = FREG_TYPE_OPAQUE;
       buf = malloc( 4096 );
       len = base64_decode( buf, 4096, valstr );
@@ -676,10 +684,10 @@ static void cmd_merge( char *filename ) {
       flags = FREG_TYPE_KEY;
       buf = NULL;
       len = 0;
-    } else usage( "Failed to parse typestr %s", typestr );
+    } else usage( "Failed to parse typestr \"%s\"", typestr );
         
     sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
-    if( sts < 0 ) printf( ";; Failed to put %s %s %s", path, typestr, valstr );
+    if( sts < 0 ) printf( ";; Failed to put %s %s %s\n", path, typestr, valstr ? valstr : "" );
 
     if( buf ) free( buf );
   }

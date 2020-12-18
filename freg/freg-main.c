@@ -160,7 +160,7 @@ static void cmd_list( int argc, char **argv, int i ) {
       buf = malloc( len );
       sts = freg_get( glob.freg, elist[i].id, NULL, buf, len, NULL );
       {
-	char *strbuf = malloc( len > 0 ? len * 2 : 1 );
+	char *strbuf = malloc( 4*(len / 3) + 5 );
 	base64_encode( buf, len, strbuf );
 	printf( "%s", strbuf );
 	free( strbuf );
@@ -220,7 +220,7 @@ static void cmd_get( int argc, char **argv, int ii ) {
 	  break;
       case FREG_TYPE_OPAQUE:
 	{
-	  char *strbuf = malloc( len > 0 ? len * 2 : 1 );
+	  char *strbuf = malloc( (4*(len / 3)) + 5 );
 	  base64_encode( buf, len, strbuf );
 	  printf( "%s\n", strbuf );
 	  free( strbuf );

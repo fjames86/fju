@@ -835,7 +835,7 @@ static void rawmode_results( struct xdr_s *xdr ) {
   if( glob.rawmodeb64 ) {
     char *str;
     c = xdr->count - xdr->offset;
-    str = malloc( 4*((c / 3) + (c % 3 ? 1 : 0)) + 1 );
+    str = malloc( (4*(c / 3)) + 5 );
     base64_encode( (char *)(xdr->buf + xdr->offset), xdr->count - xdr->offset, str );
     printf( "%s\n", str );
     free( str );

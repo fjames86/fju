@@ -81,3 +81,7 @@ Begin
 End;
 
 End.
+
+{ Local Variables: }
+{ fvm-output-path: "/opt/fju/fvm/log.fvm" }
+{ End: }

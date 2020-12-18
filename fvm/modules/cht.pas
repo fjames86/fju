@@ -1,5 +1,5 @@
 
-{ -*- mode:fvm -*- }
+{ -*- mode: fvm; -*- }
 
 {
  * This module exports CHT syscalls as procedures so it can be
@@ -37,3 +37,8 @@ Begin
 End;
 
 End.
+
+
+{ Local Variables: }
+{ fvm-output-path: "/opt/fju/fvm/cht.fvm" }
+{ End: }

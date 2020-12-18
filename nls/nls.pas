@@ -201,3 +201,7 @@ End;
 End.
 
 
+
+{ Local Variables: }
+{ fvm-output-path: "/opt/fju/fvm/nls.fvm" }
+{ End: }

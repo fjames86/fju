@@ -1,8 +1,6 @@
 
 ;; Define a very simple mode for fvm.
 ;; Add to .emacs file: (load (expand-file-name "~/fju/fvm/fvm.el"))
-;; put this on first line:
-;; { -*- mode: fvm -*-  }
 
 (defvar fvm-mode-syntax-table nil)
 (setq fvm-mode-syntax-table
@@ -27,12 +25,18 @@
 
 (defvar fvm-mode-map nil)
 
-(defvar fvm-compiler-path (expand-file-name "~/fju/bin/fvmc"))
-(defvar fvm-include-path (expand-file-name "~/fju/fvm/stdlib"))
+(defvar fvm-compiler-path (expand-file-name "~/fju/bin/fvmc") "Path to fvmc compiler")
+(defvar fvm-include-path (expand-file-name "~/fju/fvm/stdlib") "Path to fvm stdlib include directory")
+
+(defvar fvm-output-path nil "Path to write compiled module or nil for default")
+(make-variable-buffer-local 'fvm-output-path)
+(put 'fvm-output-path 'safe-local-variable 'string-or-null-p)
 
 (defun fvm-compile ()
   (interactive)
-  (shell-command (format "%s -I %s %s" fvm-compiler-path fvm-include-path (buffer-file-name))))
+  (shell-command (if fvm-output-path
+		     (format "%s -o %s -I %s %s" fvm-compiler-path fvm-output-path fvm-include-path (buffer-file-name))
+		     (format "%s -I %s %s" fvm-compiler-path fvm-include-path (buffer-file-name)))))
 
 (setq fvm-mode-map (make-sparse-keymap))
 (define-key fvm-mode-map (kbd "C-c C-c") 'fvm-compile)
@@ -41,7 +45,12 @@
   "major mode for fvm pascal"
   (setq font-lock-defaults '(fvm-highlights))
   (setq-local comment-start "{")
-  (setq-local comment-end "}"))
+  (setq-local comment-end "}")
+  (setq-local fvm-output-path nil))
+
+
+
+
 
 
 (provide 'fvm-mode)

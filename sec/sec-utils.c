@@ -238,7 +238,7 @@ static char *base64_encode_block( uint8_t *buf, int len, char *str ) {
 }
 
 /* 
- * str must be a least 4*((blen / 3) + (blen % 3 ? 1 : 0)) + 1 bytes long
+ * str must be a least 4*(buflen / 3) + 5 bytes long
  */
 int base64_encode( char *buf, int buflen, char *str ) {
   int i;

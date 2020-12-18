@@ -416,7 +416,7 @@ static void cmd_get2( uint64_t parentid, char *path, char *name ) {
   case FREG_TYPE_OPAQUE:
     printf( "%s/%s opaque ", path, name );
     {
-      char *strbuf = malloc( e.len > 0 ? e.len * 2 : 1 );
+      char *strbuf = malloc( 4*(e.len / 3) + 5 );
       base64_encode( buf, e.len, strbuf );
       printf( "%s\n", strbuf );
       free( strbuf );
@@ -648,9 +648,10 @@ static void cmd_merge( char *filename ) {
     path = strtok( line, " \n" );
     typestr = strtok( NULL, " \n" );
     valstr = strtok( NULL, "\n" );
-    if( !path || !typestr ) usage( "Failed to parse line %s", line );
+    if( !path || !typestr ) continue;
 
     flags = 0;
+	buf = NULL;
     if( strcasecmp( typestr, "u32" ) == 0 ) {
       if( !valstr ) usage( "Need valstr" );
       
@@ -686,7 +687,8 @@ static void cmd_merge( char *filename ) {
       len = 0;
     } else usage( "Failed to parse typestr \"%s\"", typestr );
         
-    sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
+    if( flags == FREG_TYPE_KEY ) sts = freg_subkey( glob.freg, 0, path, FREG_CREATE, NULL );
+    else sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
     if( sts < 0 ) printf( ";; Failed to put %s %s %s\n", path, typestr, valstr ? valstr : "" );
 
     if( buf ) free( buf );

@@ -1,0 +1,27 @@
+/fju key
+/fju/hostreg key
+/fju/rpc key
+/fju/rpc/port u32 8000
+/fju/rpc/timeout u32 1000
+/fju/rpc/services key
+/fju/rpc/progreg key
+/fju/rpc/progreg/rpcbind u32 100000
+/fju/rpc/progreg/nls u32 805271411
+/fju/rpc/progreg/raft u32 805271409
+/fju/rpc/progreg/hrauth u32 805271410
+/fju/rpc/progreg/fjud u32 805271415
+/fju/rpc/progreg/freg u32 805271412
+/fju/rpc/progreg/fvm u32 805271413
+/fju/rpc/progreg/log u32 805271418
+/fju/raft key
+/fju/fvm key
+/fju/fvm/modules key
+/fju/fvm/modules/Nls key
+/fju/fvm/modules/Nls/path str /opt/fju/fvm/nls.fvm
+/fju/fvm/modules/Log key
+/fju/fvm/modules/Log/path str /opt/fju/fvm/log.fvm
+/fju/fvm/modules/Cht key
+/fju/fvm/modules/Cht/path str /opt/fju/fvm/cht.fvm
+/fju/nls key
+/fju/nls/logs key
+

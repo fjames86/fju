@@ -88,6 +88,9 @@ int main( int argc, char **argv ) {
       uint32_t appid = 0;
       struct raft_cluster cl;
       char *term;
+      char timestr[64];
+      struct raft_command_info *cmdlist;
+      int ncmd, n;
       
       i++;
       if( i >= argc ) usage( NULL );
@@ -106,6 +109,18 @@ int main( int argc, char **argv ) {
       sts = raft_cluster_by_clid( clid, &cl );
       if( sts ) usage( "Failed to find cluster" );
       print_cluster( &cl );
+
+      ncmd = raft_command_list( clid, NULL, 0 );
+      cmdlist = malloc( sizeof(*cmdlist) * ncmd );
+      n = raft_command_list( clid, cmdlist, ncmd );
+      if( n < ncmd ) ncmd = n;
+      for( i = 0; i < ncmd; i++ ) {
+	printf( "  Command Term %"PRIu64" Seq %"PRIu64" Len %u When %s\n",
+		cmdlist[i].term, cmdlist[i].seq,
+		cmdlist[i].len,
+		sec_timestr( cmdlist[i].stored, timestr ) );
+      }
+      
     } else if( strcmp( argv[i], "add" ) == 0 ) {
         i++;
         if( i >= argc ) usage( NULL );

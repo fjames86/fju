@@ -149,6 +149,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="fjui-net.c" />
+    <ClCompile Include="fjui-summary.c" />
     <ClCompile Include="main.c" />
   </ItemGroup>
   <ItemGroup>

@@ -142,7 +142,7 @@ static void winrpc_main_create( HWND hwnd ) {
 	winrpc_set_font( h );
 	winrpc.hwnds[WINRPC_IP] = h;
 
-	h = CreateWindowExA( WS_EX_CLIENTEDGE, WC_EDITA, "111", WS_VISIBLE|WS_CHILD|ES_NUMBER, 260, 25, 45, 23, hwnd, NULL, NULL, NULL );
+	h = CreateWindowExA( WS_EX_CLIENTEDGE, WC_EDITA, "8000", WS_VISIBLE|WS_CHILD|ES_NUMBER, 260, 25, 45, 23, hwnd, NULL, NULL, NULL );
 	winrpc_set_font( h );
 	winrpc.hwnds[WINRPC_PORT] = h;
 

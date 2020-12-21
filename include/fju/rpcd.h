@@ -170,5 +170,13 @@ struct rpcd_active_conn {
 };
 int rpcd_active_conn( struct rpcd_active_conn *aconn );
 
+void rpcd_init( void );
+void rpc_service( int timeout );
+
+#ifdef WIN32
+HANDLE rpcd_win32event( void );
+#endif
+
+
 #endif
 

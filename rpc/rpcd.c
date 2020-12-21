@@ -478,7 +478,7 @@ static void rpc_init_listen( void ) {
 #define RPC_POLLHUP       POLLHUP
 #endif
 
-static void rpc_poll( int timeout ) {
+void rpc_poll( int timeout ) {
 	int i, sts;
 	int npfd;
 #ifdef WIN32
@@ -1003,6 +1003,54 @@ static void rpc_accept( struct rpc_listen *lis ) {
   }
 }
 
+void rpcd_init( void ) {
+	int i;
+	struct rpc_conn *c;
+
+	/* setup connection table */
+	for( i = 0; i < RPC_MAX_CONN; i++ ) {
+		c = &rpc.conntab[i];
+		memset( c, 0, sizeof(*c) );
+		c->next = rpc.flist;
+		c->buf = rpc.buftab[i];
+		c->count = sizeof(rpc.buftab[i]);
+		rpc.flist = c;
+	}
+
+#ifdef WIN32
+	rpc.evt = WSACreateEvent();
+#endif
+}
+
+#ifdef WIN32
+HANDLE rpcd_win32event( void ) {
+	return rpc.evt;
+}
+#endif
+
+void rpc_service( int timeout ) {
+	struct rpc_conn *c;
+	uint64_t now;
+
+	/* detect stale connections */
+	c = rpc.clist;
+	now = rpc_now();
+	while( c ) {
+		if( now > (c->timestamp + RPC_CONNECTION_TIMEOUT) ) {
+		        rpc_log( RPC_LOG_DEBUG, "Closing stale connection fd=%d", (int)c->connid );
+			rpc_conn_close( c );
+		}
+
+		c = c->next;
+	}
+	rpc_close_connections();
+
+	/* service networking/iterators/waiters etc */
+	rpc_poll( timeout );
+	rpc_iterator_service();
+	rpc_waiter_service();
+}
+
 static void rpcd_run( void ) {
 	struct rpc_conn *c;
 	int i;
@@ -1017,19 +1065,11 @@ static void rpcd_run( void ) {
 	{
 		WSADATA wsadata;
 		WSAStartup( MAKEWORD( 2, 2 ), &wsadata );
-		rpc.evt = WSACreateEvent();
 	}
 #endif
 
-	/* setup connection table */
-	for( i = 0; i < RPC_MAX_CONN; i++ ) {
-		c = &rpc.conntab[i];
-		memset( c, 0, sizeof(*c) );
-		c->next = rpc.flist;
-		c->buf = rpc.buftab[i];
-		c->count = sizeof(rpc.buftab[i]);
-		rpc.flist = c;
-	}
+	/* setup connection table etc */
+	rpcd_init();
 	
 	/* register programs and initialize */
 	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_INIT, NULL, rpc.main_cxt );

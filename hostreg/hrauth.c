@@ -1028,8 +1028,8 @@ int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts ) {
   int i, sts;
   struct hrauth_conn *hc;
 
-  /* don't allow connecting to self */
-  if( hostid == hostreg_localid() ) return -1;
+  /* don't allow connecting to self if running as daemon */
+  if( hostid == hostreg_localid() && rpcdp() ) return -1;
   
   for( i = 0; i < conndata.nconn; i++ ) {
     if( conndata.conn[i].hostid == hostid ) return 0;

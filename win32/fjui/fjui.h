@@ -34,7 +34,7 @@ struct fjui_hostinfo {
 
 	uint64_t hostid;
 	char name[256];
-	struct lic_s licinfo;
+	struct lic_s lic;
 	struct fvm_module *modules;
 };
 struct fjui_hostinfo *fjui_hostinfo_by_name( char *name );
@@ -46,6 +46,7 @@ HINSTANCE fjui_hinstance( void );
 void fjui_set_statusbar( int index, char *fmt, ... );
 void fjui_call_getlicinfo( uint64_t hostid );
 uint64_t fjui_hostid( void );
+void fjui_summary_setinfo( struct fjui_hostinfo *hinfo );
 
 #endif
 

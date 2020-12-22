@@ -18,9 +18,12 @@ static LRESULT CALLBACK fjui_summary_cb( HWND hwnd, UINT msg, WPARAM wparam, LPA
 
 	switch( msg ) {
 	case WM_CREATE:
-		h = CreateWindowExA( WS_EX_TRANSPARENT, WC_STATICA, "Summary", WS_VISIBLE|WS_CHILD, 5, 5, 52, 15, hwnd, 0, 0, 0 );
+		h = CreateWindowExA( WS_EX_TRANSPARENT, WC_STATICA, "Licensed", WS_VISIBLE|WS_CHILD, 5, 5, 52, 15, hwnd, 0, 0, 0 );
 		fjui_set_font( h );
-		fjui_hwnd_register( "summary_lbl", h );
+
+		h = CreateWindowExA( WS_EX_TRANSPARENT, WC_STATICA, "", WS_VISIBLE|WS_CHILD, 100, 5, 52, 15, hwnd, 0, 0, 0 );
+		fjui_set_font( h );
+		fjui_hwnd_register( "licensed_lbl", h );
 
 
 
@@ -32,6 +35,7 @@ static LRESULT CALLBACK fjui_summary_cb( HWND hwnd, UINT msg, WPARAM wparam, LPA
 		//fjui_main_size( hwnd, LOWORD(lparam), HIWORD(lparam) );
 		break;
 	case WM_CTLCOLORSTATIC:
+#if 1
 		h = (HWND)lparam;
 		if( h == fjui_get_hwnd( "summary_lbl" ) ) {
 			//SetBkMode( (HDC)wparam, COLOR_BACKGROUND );
@@ -39,10 +43,27 @@ static LRESULT CALLBACK fjui_summary_cb( HWND hwnd, UINT msg, WPARAM wparam, LPA
 			//SetBkColor( (HDC)wparam, TRANSPARENT );
             return (BOOL) GetStockObject(COLOR_BACKGROUND);
 		}
+#else
+		SetBkColor((HDC)wparam, GetStockObject(COLOR_BACKGROUND) );
+		//SetBkMode((HDC)wparam, TRANSPARENT );
+		return (BOOL)GetStockObject( COLOR_BACKGROUND );
+#endif
 		break;
 	}
 
 	return DefWindowProcW( hwnd, msg, wparam, lparam );
+}
+
+void fjui_summary_setinfo( struct fjui_hostinfo *hinfo ) {
+	HWND hwnd;
+	char str[1024];
+
+	hwnd = fjui_get_hwnd( "licensed_lbl" );
+	if( hinfo ) {
+		sprintf( str, "%s", hinfo->hostid ? "True" : "False" );
+	}
+
+	SetWindowTextA( hwnd, hinfo ? str : "" );
 }
 
 static void summary_iter_cb( struct rpc_iterator *iter ) {

@@ -46,6 +46,9 @@ struct fjui_hostinfo *fjui_hostinfo_add( uint64_t hostid ) {
 static void getlicinfo_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
 	int sts;
 	char timestr[64];
+	uint64_t hostid;
+	struct fjui_hostinfo *info;
+	int b;
 
 	if( !xdr ) {
 		/* timeout */
@@ -54,6 +57,25 @@ static void getlicinfo_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	}
 
 	fjui_set_statusbar( 1, "Success ", sec_timestr( time( NULL ), timestr ) );
+
+	hostid = hcallp->hostid;
+	info = fjui_hostinfo_by_id( hostid );
+	if( !info ) info = fjui_hostinfo_add( hostid );
+
+	xdr_decode_boolean( xdr, &b );
+	if( b ) {
+		xdr_decode_uint64( xdr, &info->lic.hostid );
+		xdr_decode_uint64( xdr, &info->lic.expire );
+		xdr_decode_uint32( xdr, &info->lic.version );
+		xdr_decode_uint32( xdr, &info->lic.flags );
+		xdr_decode_uint32( xdr, &info->lic.spare[0] );
+		xdr_decode_uint32( xdr, &info->lic.spare[1] );        
+    } else {
+		memset( &info->lic, 0, sizeof(info->lic) );
+	}
+
+	/* notify summary page that hte info has been retreived */
+	fjui_summary_setinfo( info );
 }
 
 /* rpc calls for information */

@@ -1200,7 +1200,7 @@ int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, int na
   
   memset( w, 0, sizeof(*w) );  
   w->xid = inc.msg.xid;
-  w->timeout = rpc_now() + hcall->timeout;
+  w->timeout = rpc_now() + (hcall->timeout ? hcall->timeout : 200);
   w->cb = hrauth_conn_call_cb;
   w->cxt = hcallp;
   w->pvr = hrauth_provider();
@@ -1279,7 +1279,8 @@ static void hrauth_send_ping( struct hrauth_conn *hc ) {
   hcall.proc = 3; /* nullping proc */
   hcall.donecb = hrauth_ping_cb;
   hcall.cxt = NULL;
-  
+  hcall.timeout = 100;
+
   sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
   if( sts ) {
     hrauth_log( LOG_LVL_ERROR, "hrauth ping failed hostid=%"PRIx64"", hc->hostid );

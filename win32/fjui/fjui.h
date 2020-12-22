@@ -22,6 +22,7 @@
 #include <fju/log.h>
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
+#include <fju/raft.h>
 
 void fjui_set_font( HWND hwnd );
 void fjui_net_service( void );
@@ -34,8 +35,30 @@ struct fjui_hostinfo {
 
 	uint64_t hostid;
 	char name[256];
+	
 	struct lic_s lic;
-	struct fvm_module *modules;
+	
+	struct fvm_module modules[32];
+	int nmodule;
+
+	struct {
+		uint64_t connid;
+		uint32_t dirtype;
+		uint32_t cstate;
+		uint64_t rx, tx;
+		uint32_t coffset, ccount;
+		uint32_t type;
+		struct sockaddr_in sin;
+	} conn[16];
+	int nconn;
+
+	struct {
+		uint32_t prog, vers, prot, port;
+	} rpcbind[64];
+	int nrpcbind;
+
+	struct raft_cluster raft[32];
+	int nraft;
 };
 struct fjui_hostinfo *fjui_hostinfo_by_name( char *name );
 struct fjui_hostinfo *fjui_hostinfo_by_id( uint64_t hostid );

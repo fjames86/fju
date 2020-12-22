@@ -1388,6 +1388,8 @@ int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res, int nres ) {
     sts = hrauth_reply_tcp( hcxt, inc->msg.xid, RPC_ACCEPT_SUCCESS, res, nres );
     if( !sts ) return 1;
     hrauth_log( LOG_LVL_TRACE, "hrauth_reply_tcp failed" );
+
+	/* try sending on incoming */
   }
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );

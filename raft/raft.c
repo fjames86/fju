@@ -1591,6 +1591,40 @@ static int raft_proc_change( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int raft_proc_list( struct rpc_inc *inc ) {
+	int handle;
+	struct raft_cluster cl[32];
+	int i, n, j;
+
+	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+	n = raft_cluster_list( cl, 32 );
+	for( i = 0; i < n; i++ ) {
+		xdr_encode_boolean( &inc->xdr, 1 );
+
+		xdr_encode_uint64( &inc->xdr, cl[i].clid );
+		xdr_encode_uint64( &inc->xdr, cl[i].leaderid );
+		xdr_encode_uint64( &inc->xdr, cl[i].voteid );
+		xdr_encode_uint64( &inc->xdr, cl[i].term );
+		xdr_encode_uint64( &inc->xdr, cl[i].appliedseq );
+		xdr_encode_uint64( &inc->xdr, cl[i].commitseq );
+		xdr_encode_uint32( &inc->xdr, cl[i].state );
+		xdr_encode_uint32( &inc->xdr, cl[i].appid );
+		xdr_encode_uint32( &inc->xdr, cl[i].flags );
+		xdr_encode_fixed( &inc->xdr, cl[i].cookie, RAFT_MAX_COOKIE );
+		xdr_encode_uint32( &inc->xdr, cl[i].nmember );
+		for( j = 0; j < cl[i].nmember; j++ ) {
+			xdr_encode_uint64( &inc->xdr, cl[i].member[j].hostid );
+			xdr_encode_uint64( &inc->xdr, cl[i].member[j].lastseen );
+			xdr_encode_uint64( &inc->xdr, cl[i].member[j].storedseq );
+			xdr_encode_uint32( &inc->xdr, cl[i].member[j].flags );
+		}
+	}
+	xdr_encode_boolean( &inc->xdr, 0 );
+	rpc_complete_accept_reply( inc, handle );
+  
+	return 0;
+}
+
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_append },
@@ -1599,6 +1633,7 @@ static struct rpc_proc raft_procs[] = {
   { 4, raft_proc_snapsave },
   { 5, raft_proc_snapshot },
   { 6, raft_proc_change },
+  { 7, raft_proc_list },
   { 0, NULL }
 };
 

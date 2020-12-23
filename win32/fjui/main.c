@@ -29,7 +29,7 @@ name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 #define CMD_EXIT 1
-#define CMD_ABORT 2
+#define CMD_ABOUT 2
 #define CMD_HOSTLB 3
 
 static LRESULT CALLBACK fjui_main( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
@@ -176,10 +176,13 @@ static void fjui_main_create( HWND hwnd ) {
 	AppendMenuA( m, MF_STRING, (UINT_PTR)CMD_EXIT, "E&xit" );
 	AppendMenuA( menu, MF_POPUP,(UINT_PTR) m, "&File" );
 	m = CreateMenu();
-	AppendMenuA( m, MF_STRING, (UINT_PTR)0, "&Connect" );
+	AppendMenuA( m, MF_STRING, (UINT_PTR)0, "&Connect..." );
+	AppendMenuA( m, MF_STRING, (UINT_PTR)0, "&Refresh" );
+	AppendMenuA( m, MF_SEPARATOR, (UINT_PTR)0, NULL );
+	AppendMenuA( m, MF_STRING, (UINT_PTR)0, "&Base64..." );
 	AppendMenuA( menu, MF_POPUP, (UINT_PTR)m, "&Edit" );
 	m = CreateMenu();
-	AppendMenuA( m, MF_STRING, (UINT_PTR)CMD_ABORT, "&About" );
+	AppendMenuA( m, MF_STRING, (UINT_PTR)CMD_ABOUT, "&About" );
 	AppendMenuA( menu, MF_POPUP, (UINT_PTR)m, "&Help" );
 	SetMenu( hwnd, menu );
 
@@ -270,7 +273,7 @@ static void fjui_main_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 		/* menu exit */
 		DestroyWindow( hwnd );
 		break;
-	case CMD_ABORT:
+	case CMD_ABOUT:
 		/* about */
 		MessageBoxA( hwnd, 
 				"FJU management interface.\n"

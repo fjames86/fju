@@ -148,6 +148,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="fjui-fvm.c" />
     <ClCompile Include="fjui-net.c" />
     <ClCompile Include="fjui-summary.c" />
     <ClCompile Include="main.c" />

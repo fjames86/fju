@@ -30,6 +30,7 @@ processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 #define CMD_EXIT 1
 #define CMD_ABORT 2
+#define CMD_HOSTLB 3
 
 static LRESULT CALLBACK fjui_main( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
 
@@ -94,6 +95,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	hrauth_register();
 	/* Q: do we want to load any other services here e.g. fvm ? */
 	fjui_summary_register();
+	fjui_fvm_register();
 
 	/* register main class and create the window */
 	memset( &cls, 0, sizeof(cls) );
@@ -108,7 +110,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 
 	RegisterClassExW( &cls );
 
-	h = CreateWindowExW( 0, L"FJUI", L"fjui", WS_VISIBLE|WS_OVERLAPPEDWINDOW, 200, 200, 560, 420, NULL, 0, hInstance, NULL );
+	h = CreateWindowExW( 0, L"FJUI", L"fjui", WS_VISIBLE|WS_OVERLAPPEDWINDOW, 200, 200, 800, 600, NULL, 0, hInstance, NULL );
 	fjui_hwnd_register( "main", h );
 
 	UpdateWindow( h );
@@ -202,11 +204,18 @@ static void fjui_main_create( HWND hwnd ) {
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "FVM";
 	TabCtrl_InsertItem( tabh, 2, &tci );
+	h = CreateWindowA( "FJUIFVM", NULL, WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	fjui_hwnd_register( "fvm", h );
 
 	memset( &tci, 0, sizeof(tci) );
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "Freg";
 	TabCtrl_InsertItem( tabh, 3, &tci );
+
+	memset( &tci, 0, sizeof(tci) );
+	tci.mask = TCIF_TEXT;
+	tci.pszText = "Raft";
+	TabCtrl_InsertItem( tabh, 4, &tci );
 
 	h = CreateWindowA( STATUSCLASSNAMEA, NULL, WS_VISIBLE|WS_CHILD|SBARS_SIZEGRIP, 0, 0, 0, 0, hwnd, 0, 0, NULL );
 	fjui_set_font( h );
@@ -227,19 +236,20 @@ static void fjui_main_create( HWND hwnd ) {
 		fjui_set_statusbar( 1, " Disconnected" );
 	}
 
-	h = CreateWindowExA( WS_EX_CLIENTEDGE, WC_LISTBOXA, NULL, WS_VISIBLE|WS_CHILD|LBS_NOTIFY, 0, 0, 0, 0, hwnd, 0, 0, NULL );
+	h = CreateWindowExA( WS_EX_CLIENTEDGE, WC_LISTBOXA, NULL, WS_VISIBLE|WS_CHILD|LBS_NOTIFY, 0, 0, 0, 0, hwnd, CMD_HOSTLB, 0, NULL );
 	fjui_set_font( h );
 	fjui_hwnd_register( "hostlb", h );
 	{
-		struct hostreg_host *hlist;
+		uint64_t hostid[32];
 		int i, n;
+		char name[64];
 
-		hlist = malloc( sizeof(*hlist) * 32 );
-		n = hostreg_host_list( hlist, 32 );
+		n = hrauth_conn_list( hostid, 32 );
 		for( i = 0; i < n; i++ ) {
-			SendMessageA( h, LB_ADDSTRING, 0, hlist[i].name );
+			hostreg_name_by_hostid( hostid[i], name );
+			SendMessageA( h, LB_ADDSTRING, 0, name );
 		}
-		free( hlist );
+
 	}
 
 }
@@ -254,8 +264,8 @@ void fjui_set_statusbar( int index, char *fmt, ... ) {
 }
 
 
-static void fjui_main_command( HWND hwnd, int cmd, HWND hcmd ) {
-	switch( cmd ) {
+static void fjui_main_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
+	switch( id ) {
 	case CMD_EXIT:
 		/* menu exit */
 		DestroyWindow( hwnd );
@@ -269,18 +279,25 @@ static void fjui_main_command( HWND hwnd, int cmd, HWND hcmd ) {
 				"About", 
 				MB_OK|MB_ICONINFORMATION );
 		break;
-	default:
-		if( hcmd == fjui_get_hwnd( "hostlb" ) ) {
-			int idx;
-			char namestr[256];
+	case CMD_HOSTLB:
+	{
+		int idx;
+		char namestr[256];
 
+		if( cmd == LBN_SELCHANGE ) {
 			/* inform all tabs to update their info to the currently selected host */
 			idx = SendMessageA( hcmd, LB_GETCURSEL, 0, 0 );
+			if( idx < 0 ) break;
 			SendMessageA( hcmd, LB_GETTEXT, idx, namestr );
 			glob.hostid = hostreg_hostid_by_name( namestr );
-			fjui_set_statusbar( 0, "%s", namestr );
-			fjui_call_getlicinfo( glob.hostid );
+			if( glob.hostid ) {
+				fjui_set_statusbar( 0, "%s", namestr );
+			
+				fjui_summary_refresh( glob.hostid );
+				fjui_fvm_refresh( glob.hostid );
+			}
 		}
+	}
 		break;
 	}
 
@@ -301,6 +318,8 @@ static void fjui_main_size( HWND hwnd, int width, int height ) {
 
 	h = fjui_get_hwnd( "summary" );
 	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	h = fjui_get_hwnd( "fvm" );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
 
 	h = fjui_get_hwnd( "hostlb" );
 	SetWindowPos( h, HWND_TOP, 5, 5, 95, height - 25, 0 );
@@ -315,6 +334,8 @@ static void fjui_main_notify( HWND hwnd, NMHDR *nmhdr ) {
 			int page = TabCtrl_GetCurSel( fjui_get_hwnd( "tabctrl" ) );
 			h = fjui_get_hwnd( "summary" );
 			ShowWindow( h, page == 0 ? SW_SHOW : SW_HIDE );
+			h = fjui_get_hwnd( "fvm" );
+			ShowWindow( h, page == 2 ? SW_SHOW : SW_HIDE );
 		}
 		break;
 	}
@@ -331,7 +352,7 @@ static LRESULT CALLBACK fjui_main( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
 		PostQuitMessage( 0 );
 		break;
 	case WM_COMMAND:
-		fjui_main_command( hwnd, LOWORD( wparam ), (HWND)lparam );
+		fjui_main_command( hwnd, LOWORD( wparam ), HIWORD( wparam ), (HWND)lparam );
 		break;
 	case WM_SIZE:
 		fjui_main_size( hwnd, LOWORD(lparam), HIWORD(lparam) );

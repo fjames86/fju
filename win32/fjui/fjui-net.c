@@ -50,17 +50,16 @@ static void getlicinfo_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	struct fjui_hostinfo *info;
 	int b;
 
-	if( !xdr ) {
-		/* timeout */
-		fjui_set_statusbar( 1, "Timeout" );
-		return;
-	}
-
-	fjui_set_statusbar( 1, "Success ", sec_timestr( time( NULL ), timestr ) );
-
 	hostid = hcallp->hostid;
 	info = fjui_hostinfo_by_id( hostid );
 	if( !info ) info = fjui_hostinfo_add( hostid );
+
+	if( !xdr ) {
+		/* timeout */
+		fjui_set_statusbar( 1, "%s Timeout", info->name );
+		return;
+	}
+	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 	xdr_decode_boolean( xdr, &b );
 	if( b ) {
@@ -98,6 +97,7 @@ void fjui_call_getlicinfo( uint64_t hostid ) {
   sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
   if( sts ) {
     //hrauth_log( LOG_LVL_ERROR, "fjui_call_getlicinfo failed hostid=%"PRIx64"", hostid );
+		log_writef( NULL, LOG_LVL_INFO, "Failed to call" );
   }
 }
 
@@ -110,17 +110,17 @@ static void connlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	int b;
 	uint32_t addr, port;
 
-	if( !xdr ) {
-		/* timeout */
-		fjui_set_statusbar( 1, "Timeout" );
-		return;
-	}
-
-	fjui_set_statusbar( 1, "Success ", sec_timestr( time( NULL ), timestr ) );
-
 	hostid = hcallp->hostid;
 	info = fjui_hostinfo_by_id( hostid );
 	if( !info ) info = fjui_hostinfo_add( hostid );
+
+	if( !xdr ) {
+		/* timeout */
+		fjui_set_statusbar( 1, "%s Timeout", info->name );
+		return;
+	}
+	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
+
 
 	info->nconn = 0;
 	sts = xdr_decode_boolean( xdr, &b );
@@ -187,17 +187,16 @@ static void fvmlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	int i, b;
 	uint32_t addr, port;
 
-	if( !xdr ) {
-		/* timeout */
-		fjui_set_statusbar( 1, "Timeout" );
-		return;
-	}
-
-	fjui_set_statusbar( 1, "Success ", sec_timestr( time( NULL ), timestr ) );
-
 	hostid = hcallp->hostid;
 	info = fjui_hostinfo_by_id( hostid );
 	if( !info ) info = fjui_hostinfo_add( hostid );
+
+	if( !xdr ) {
+		/* timeout */
+		fjui_set_statusbar( 1, "%s Timeout", info->name );
+		return;
+	}
+	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 
 	info->nmodule = 0;
@@ -219,13 +218,13 @@ static void fvmlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		}
 
 		info->nmodule++;
-		if( info->modules >= 32 ) break;
+		if( info->nmodule >= 32 ) break;
 
 		sts = xdr_decode_boolean( xdr, &b );
 		if( sts ) return;
 	}
 
-
+	fjui_fvm_setinfo( info );
 }
 
 void fjui_call_fvmlist( uint64_t hostid ) {
@@ -261,17 +260,16 @@ static void rpcbindlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	int i, b;
 	uint32_t addr, port;
 
-	if( !xdr ) {
-		/* timeout */
-		fjui_set_statusbar( 1, "Timeout" );
-		return;
-	}
-
-	fjui_set_statusbar( 1, "Success ", sec_timestr( time( NULL ), timestr ) );
-
 	hostid = hcallp->hostid;
 	info = fjui_hostinfo_by_id( hostid );
 	if( !info ) info = fjui_hostinfo_add( hostid );
+
+	if( !xdr ) {
+		/* timeout */
+		fjui_set_statusbar( 1, "%s Timeout", info->name );
+		return;
+	}
+	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 
 	info->nrpcbind = 0;
@@ -290,7 +288,7 @@ static void rpcbindlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		if( sts ) return;
 	}
 
-
+	fjui_summary_setinfo( info );
 }
 
 void fjui_call_rpcbindlist( uint64_t hostid ) {
@@ -325,17 +323,17 @@ static void raftlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	int i, b, j;
 	uint32_t addr, port;
 
-	if( !xdr ) {
-		/* timeout */
-		fjui_set_statusbar( 1, "Timeout" );
-		return;
-	}
-
-	fjui_set_statusbar( 1, "Success ", sec_timestr( time( NULL ), timestr ) );
 
 	hostid = hcallp->hostid;
 	info = fjui_hostinfo_by_id( hostid );
 	if( !info ) info = fjui_hostinfo_add( hostid );
+
+	if( !xdr ) {
+		/* timeout */
+		fjui_set_statusbar( 1, "%s Timeout", info->name );
+		return;
+	}
+	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 
 	info->nraft = 0;

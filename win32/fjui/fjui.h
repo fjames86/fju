@@ -8,6 +8,7 @@
 
 #include <Winsock2.h>
 #include <Windows.h>
+#include <CommCtrl.h>
 
 #include <stdint.h>
 #include <inttypes.h>
@@ -23,6 +24,7 @@
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
 #include <fju/raft.h>
+#include <fju/freg.h>
 
 void fjui_set_font( HWND hwnd );
 void fjui_net_service( void );
@@ -70,6 +72,15 @@ void fjui_set_statusbar( int index, char *fmt, ... );
 void fjui_call_getlicinfo( uint64_t hostid );
 uint64_t fjui_hostid( void );
 void fjui_summary_setinfo( struct fjui_hostinfo *hinfo );
+void fjui_call_raftlist( uint64_t hostid );
+void fjui_call_rpcbindlist( uint64_t hostid );
+void fjui_call_fvmlist( uint64_t hostid );
+void fjui_call_connlist( uint64_t hostid );
+void fjui_summary_refresh( uint64_t hostid );
+void fjui_fvm_register( void );
+void fjui_set_label( char *lblname, char *text );
+void fjui_fvm_setinfo( struct fjui_hostinfo *info );
+void fjui_fvm_refresh( uint64_t hostid );
 
 #endif
 

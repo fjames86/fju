@@ -130,6 +130,7 @@ struct hrauth_conn_opts {
 };
 int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts );
 int hrauth_conn_unregister( uint64_t hostid );
+int hrauth_conn_list( uint64_t *hostid, int n );
 int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs );
 int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs );
 int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat, struct xdr_s *res, int nres );

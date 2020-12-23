@@ -945,6 +945,14 @@ static struct hrauth_conn *hrauth_conn_by_connid( uint64_t connid ) {
   return NULL;
 }
 
+int hrauth_conn_list( uint64_t *hostid, int n ) {
+	int i;
+	for( i = 0; i < conndata.nconn; i++ ) {
+		if( i < n ) hostid[i] = conndata.conn[i].hostid;
+	}
+	return conndata.nconn;
+}
+
 static int hrauth_connect( struct hrauth_conn *hc );
 
 

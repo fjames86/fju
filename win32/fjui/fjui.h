@@ -81,6 +81,8 @@ void fjui_fvm_register( void );
 void fjui_set_label( char *lblname, char *text );
 void fjui_fvm_setinfo( struct fjui_hostinfo *info );
 void fjui_fvm_refresh( uint64_t hostid );
+void fjui_call_fvmrun( uint64_t hostid, char *modname, char *procname, struct xdr_s *args );
+void fjui_fvm_setcallres( struct xdr_s *xdr );
 
 #endif
 

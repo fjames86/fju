@@ -1,6 +1,9 @@
 
 #include "fjui.h"
 
+#define CMD_CALL 1
+
+
 static void fvm_size( HWND hwnd, int width, int height ) {
 	HWND h;
 
@@ -14,6 +17,34 @@ static void fvm_size( HWND hwnd, int width, int height ) {
 	SetWindowPos( h, HWND_TOP, 5, height - 50, 75, 25, 0 );
 }
 
+static void fvm_callsig( char *modname, char *procname, uint64_t siginfo, char *str ) {
+	int k;
+	sprintf( str, "%s/%s(", modname, procname );
+	for( k = 0; k < FVM_SIGINFO_NARGS(siginfo); k++ ) {
+		if( FVM_SIGINFO_ISVAR(siginfo, k) ) continue;
+		switch( FVM_SIGINFO_VARTYPE(siginfo, k) ) {
+			case 0: 
+			if( FVM_SIGINFO_VARTYPE(siginfo,k + 1) == 2 ) continue;
+			if( k > 0 ) sprintf( str + strlen( str ), ", " );
+			sprintf( str + strlen( str ), "0" );
+			break;
+			case 1: 
+			if( k > 0 ) sprintf( str + strlen( str ), ", " );
+			sprintf( str + strlen( str ), "String" );
+			break;
+			case 2: 
+			if( k > 1 ) sprintf( str + strlen( str ), ", " );
+			sprintf( str + strlen( str ), "Opaque" );
+			break;
+			case 3: 
+			if( k > 0 ) sprintf( str + strlen( str ), ", " );
+			sprintf( str + strlen( str ), "Other" );
+			break;
+		}
+	}
+	sprintf( str + strlen( str ), ")" );
+}
+
 static void fvm_notify( HWND hwnd, NMHDR *nmhdr ) {
 	HWND h;
 
@@ -23,18 +54,24 @@ static void fvm_notify( HWND hwnd, NMHDR *nmhdr ) {
 			int idx;
 			LVITEMA lvi;
 			char str[1024];
-
+			struct fvm_module *mp;
+			struct fjui_hostinfo *info;
+			
 			h = fjui_get_hwnd( "fvm_lv" );
 			idx = SendMessageA( h, LVM_GETNEXTITEM, -1, LVNI_SELECTED );
 
 			if( idx >= 0 ) {
 				memset( &lvi, 0, sizeof(lvi) );
 				lvi.iItem = idx;
-				lvi.mask = LVIF_TEXT;
+				lvi.mask = LVIF_TEXT|LVIF_PARAM;
 				lvi.pszText = str;
 				lvi.cchTextMax = 1024;
 				SendMessageA( h, LVM_GETITEMA, 0, &lvi );
+				
+				info = fjui_hostinfo_by_id( fjui_hostid() );
 
+				mp = (struct fvm_module *)&info->modules[lvi.lParam & 0xffff];
+				fvm_callsig( mp->name, mp->procs[(lvi.lParam >> 16) & 0xffff].name, mp->procs[(lvi.lParam >> 16) & 0xffff].siginfo, str );
 				SetWindowTextA( fjui_get_hwnd( "fvm_calltxt" ), str );
 			}
 		}
@@ -44,20 +81,182 @@ static void fvm_notify( HWND hwnd, NMHDR *nmhdr ) {
 			LVITEMA lvi;
 			NMLISTVIEW *arg = (NMLISTVIEW *)nmhdr;
 			char str[1024];
+			struct fvm_module *mp;
+			struct fjui_hostinfo *info;
 
 			if( (arg->uNewState & LVIS_SELECTED) && !(arg->uOldState & LVIS_SELECTED) ) {
 				memset( &lvi, 0, sizeof(lvi) );
 				lvi.iItem = arg->iItem;
-				lvi.mask = LVIF_TEXT;
+				lvi.mask = LVIF_TEXT|LVIF_PARAM;
 				lvi.pszText = str;
 				lvi.cchTextMax = 1024;
 				SendMessageA( nmhdr->hwndFrom, LVM_GETITEMA, 0, &lvi );
+
+				info = fjui_hostinfo_by_id( fjui_hostid() );
+				mp = (struct fvm_module *)&info->modules[lvi.lParam & 0xffff];
+				fvm_callsig( mp->name, mp->procs[(lvi.lParam >> 16) & 0xffff].name, mp->procs[(lvi.lParam >> 16) & 0xffff].siginfo, str );
 
 				SetWindowTextA( fjui_get_hwnd( "fvm_calltxt" ), str );
 			}
 		}
 		break;
 	}
+}
+
+static void fvm_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
+	char str[1024];
+	char modname[64], procname[64], *p;
+	struct xdr_s args;
+	char argbuf[4096];
+	uint64_t siginfo;
+	struct fjui_hostinfo *info;
+	int i, j;
+	uint32_t u32;
+	char *term;
+
+	switch( id ) {
+	case CMD_CALL:
+		GetWindowTextA( fjui_get_hwnd( "fvm_calltxt" ), str, sizeof(str) );
+		/* parse into module/procname/args */
+		p = strtok( str, "/" );
+		if( !p ) break;
+		strcpy( modname, p );
+
+		p = strtok( NULL, "(" );
+		if( !p ) break;
+		strcpy( procname, p );
+
+		/* now parse args delimited by comma. we need to know the signature */
+		siginfo = 0;
+		info = fjui_hostinfo_by_id( fjui_hostid() );
+		for( i = 0; i < info->nmodule; i++ ) {
+			if( strcasecmp( info->modules[i].name, modname ) == 0 ) {
+				for( j = 0; j < info->modules[i].nprocs; j++ ) {
+					if( strcasecmp( info->modules[i].procs[j].name, procname ) == 0 ) {
+						siginfo = info->modules[i].procs[j].siginfo;
+						break;
+					}
+				}
+			}
+			if( siginfo ) break;
+		}
+
+		xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+		for( i = 0; i < FVM_SIGINFO_NARGS(siginfo); i++ ) {
+			if( FVM_SIGINFO_ISVAR( siginfo, i ) ) continue;
+
+			switch( FVM_SIGINFO_VARTYPE( siginfo, i ) ) {
+			case 0: 
+			/* integer */
+			if( FVM_SIGINFO_VARTYPE(siginfo,i + 1) == 2 ) continue;
+
+			p = strtok( NULL, ",)" );
+			if( !p ) {
+				MessageBoxA( hwnd, "Expected param", "Error", MB_OK|MB_ICONERROR );
+				return;
+			}
+
+			u32 = strtol( p, &term, 0 );
+			if( *term ) {
+				MessageBoxA( hwnd, "Failed to parse u32", "Error", MB_OK|MB_ICONERROR );
+				return;
+			}
+
+			xdr_encode_uint32( &args, u32 );
+			break;
+			case 1:
+			/* string */
+			p = strtok( NULL, ",)" );
+			if( !p ) {
+				MessageBoxA( hwnd, "Expected param", "Error", MB_OK|MB_ICONERROR );
+				return;
+			}
+
+			xdr_encode_string( &args, p );
+			break;
+			case 2:
+			/* opaque */
+			p = strtok( NULL, ",)" );
+			if( !p ) {
+				MessageBoxA( hwnd, "Expected param", "Error", MB_OK|MB_ICONERROR );
+				return;
+			}
+
+			u32 = base64_decode( args.buf + args.offset + 4, args.count - args.offset - 4, p );
+			if( (int)u32 < 0 ) {
+				MessageBoxA( hwnd, "Failed to decode base64", "Error", MB_OK|MB_ICONERROR );
+				return;
+			}
+			xdr_encode_uint32( &args, u32 );
+			if( u32 % 4 ) u32 += 4 - (u32 % 4);
+			args.offset += u32;
+			break;
+			}
+		}
+
+		fjui_call_fvmrun( fjui_hostid(), modname, procname, &args );
+
+
+	break;
+	}
+}
+
+void fjui_fvm_setcallres( struct xdr_s *xdr ) {
+	HWND h;
+	LVITEMA lvi;
+	int idx;
+	struct fjui_hostinfo *info;
+	struct fvm_module *mp;
+	char str[1024];
+	int i;
+	uint64_t siginfo;
+	uint32_t u32;
+	int nn;
+	char *bufp;
+
+	if( !xdr ) {
+		SetWindowTextA( fjui_get_hwnd( "fvm_calltxt" ), "Timeout" );
+		return;
+	}
+
+	SetWindowTextA( fjui_get_hwnd( "fvm_calltxt" ), "" );
+
+	h = fjui_get_hwnd( "fvm_lv" );
+	idx = SendMessageA( h, LVM_GETNEXTITEM, -1, LVNI_SELECTED );
+	if( idx < 0 ) return;
+
+	memset( &lvi, 0, sizeof(lvi) );
+	lvi.iItem = idx;
+	lvi.mask = LVIF_TEXT|LVIF_PARAM;
+	SendMessageA( h, LVM_GETITEMA, 0, &lvi );
+				
+	info = fjui_hostinfo_by_id( fjui_hostid() );
+	mp = (struct fvm_module *)&info->modules[lvi.lParam & 0xffff];
+	sprintf( str, "%s/%s(", mp->name, mp->procs[(lvi.lParam >> 16) & 0xffff].name );
+	siginfo = mp->procs[(lvi.lParam >> 16) & 0xffff].siginfo;
+	nn = 0;
+	for( i = 0; i < FVM_SIGINFO_NARGS(siginfo); i++ ) {
+		if( !FVM_SIGINFO_ISVAR(siginfo,i) ) continue;
+		if( FVM_SIGINFO_VARTYPE(siginfo,i+1) == 2 ) continue;
+		if( nn > 0 ) sprintf( str + strlen( str ), "," );
+		switch( FVM_SIGINFO_VARTYPE(siginfo,i) ) {
+		case 0:
+		xdr_decode_uint32( xdr, &u32 );
+		sprintf( str + strlen( str ), "%u", u32 );
+		break;
+		case 1:
+		xdr_decode_string( xdr, str + strlen( str ), 64 );
+		break;
+		case 2:
+		xdr_decode_opaque_ref( xdr, &bufp, &u32 );
+		base64_encode( bufp, u32, str + strlen( str ) );
+		//sprintf( str + strlen( str ), "Opaque(%u)", u32 );
+		break;
+		}
+		nn++;
+	}
+	sprintf( str + strlen( str ), ")" );
+	SetWindowTextA( fjui_get_hwnd( "fvm_calltxt" ), str );
 }
 
 static LRESULT CALLBACK fvm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
@@ -113,12 +312,13 @@ static LRESULT CALLBACK fvm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		fjui_set_font( h );
 		fjui_hwnd_register( "fvm_calltxt", h );
 
-		h = CreateWindowA( WC_BUTTONA, "Call", WS_VISIBLE|WS_CHILD|WS_BORDER, 5, 0, 75, 25, hwnd, 0, 0, NULL );
+		h = CreateWindowA( WC_BUTTONA, "Call", WS_VISIBLE|WS_CHILD|WS_BORDER, 5, 0, 75, 25, hwnd, CMD_CALL, 0, NULL );
 		fjui_set_font( h );
 		fjui_hwnd_register( "fvm_callbtn", h );
 
 		break;	
 	case WM_COMMAND:
+		fvm_command( hwnd, LOWORD( wparam ), HIWORD( wparam ), (HWND)lparam );
 		break;
 	case WM_SIZE:
 		fvm_size(hwnd, LOWORD(lparam), HIWORD(lparam) );
@@ -145,9 +345,10 @@ void fjui_fvm_setinfo( struct fjui_hostinfo *info ) {
 	ListView_DeleteAllItems( hwnd );
 	for( i = 0; i < info->nmodule; i++ ) {
 		memset( &lvi, 0, sizeof(lvi) );
-		lvi.mask = LVIF_TEXT|LVIF_PARAM|LVIF_PARAM;
+		lvi.mask = LVIF_TEXT|LVIF_PARAM;
 		lvi.iItem = 0x7ffffffe;
 		lvi.iSubItem = 0;
+		lvi.lParam = i;
 		sprintf( str, "%s", info->modules[i].name );
 		lvi.pszText = str;			
 		idx = (int)SendMessageA( hwnd, LVM_INSERTITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
@@ -182,9 +383,10 @@ void fjui_fvm_setinfo( struct fjui_hostinfo *info ) {
 
 		for( j = 0; j < info->modules[i].nprocs; j++ ) {
 			memset( &lvi, 0, sizeof(lvi) );
-			lvi.mask = LVIF_TEXT|LVIF_PARAM|LVIF_PARAM;
+			lvi.mask = LVIF_TEXT|LVIF_PARAM;
 			lvi.iItem = 0x7ffffffe;
 			lvi.iSubItem = 0;
+			lvi.lParam = (j << 16) | i;
 			sprintf( str, "%s/%s(", info->modules[i].name, info->modules[i].procs[j].name );
 			for( k = 0; k < FVM_SIGINFO_NARGS(info->modules[i].procs[j].siginfo); k++ ) {
 				if( k > 0 ) sprintf( str + strlen( str ), ", " );

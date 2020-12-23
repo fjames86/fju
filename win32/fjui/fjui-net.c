@@ -393,3 +393,42 @@ void fjui_call_raftlist( uint64_t hostid ) {
     //hrauth_log( LOG_LVL_ERROR, "fjui_call_getlicinfo failed hostid=%"PRIx64"", hostid );
   }
 }
+
+static void fvmrun_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
+	int sts;
+	int b;
+	sts = xdr_decode_boolean( xdr, &b );
+
+	fjui_fvm_setcallres( sts || !b ? NULL : xdr );
+}
+
+void fjui_call_fvmrun( uint64_t hostid, char *modname, char *procname, struct xdr_s *args ) {
+	struct hrauth_call hcall;
+	int sts;
+	struct xdr_s args2[2];
+	char bb[256];
+
+  //hrauth_log( LOG_LVL_TRACE, "fjui_call_getlicinfo %"PRIx64"", hostid );
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = FVM_RPC_PROG;
+  hcall.vers = FVM_RPC_VERS;
+  hcall.proc = 4; 
+  hcall.donecb = fvmrun_cb;
+  hcall.cxt = NULL;
+  hcall.timeout = 1000;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  xdr_init( &args2[0], bb, sizeof(bb) );
+  xdr_encode_string( &args2[0], modname );
+  xdr_encode_string( &args2[0], procname );
+  xdr_encode_uint32( &args2[0], args->offset );
+  xdr_init( &args2[1], args->buf, args->offset );
+  args2[1].offset = args->offset;
+  sts = hrauth_call_tcp_async( &hcall, args2, 2 );
+  if( sts ) {
+    MessageBoxA( NULL, "Failed to call FvmRun", "Error", MB_OK );
+  }
+}
+

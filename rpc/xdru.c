@@ -135,6 +135,10 @@ int main( int argc, char **argv ) {
 }
 
 static int printed = 0;
+static void decodeerror( struct xdr_s *xdr, char *msg ) {
+  printf( "XDR decode error %s offset=%u", msg, xdr->offset );
+  exit( 1 );
+}
 
 static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
   int sts, i, b;
@@ -146,63 +150,66 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
   int lenp;
   
   switch( *fmt ) {
+  case 'v':
+    fmt++;
+    break;
   case 'u':
   case 'x':
     sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) usage( "XDR error decode u32" );
-    if( *fmt == 'u' ) printf( "%s%u", printed ? " " : "", u32 );
-    else printf( "%s%x", printed ? " " : "", u32 );
+    if( sts ) decodeerror( xdr, "u32" );
+    if( *fmt == 'u' ) printf( "%s%u", printed ? ", " : "", u32 );
+    else printf( "%s%x", printed ? ", " : "", u32 );
     fmt++;
     printed = 1;
     break;
   case 'i':
     sts = xdr_decode_int32( xdr, &i32 );
-    if( sts ) usage( "XDR error decode i32" );
-    printf( "%s%d", printed ? " " : "", i32 );
+    if( sts ) decodeerror( xdr, "i32" );
+    printf( "%s%d", printed ? ", " : "", i32 );
     fmt++;
     printed = 1;    
     break;
   case 'U':
   case 'X':
     sts = xdr_decode_uint64( xdr, &u64 );
-    if( sts ) usage( "XDR error decode u64" );
-    if( *fmt == 'U' ) printf( "%s%"PRIu64"", xdr->offset > 0 ? " " : "", u64 );
-    else printf( "%s%"PRIx64"", printed ? " " : "", u64 );
+    if( sts ) decodeerror( xdr, "u64" );
+    if( *fmt == 'U' ) printf( "%s%"PRIu64"", printed ? ", " : "", u64 );
+    else printf( "%s%"PRIx64"", printed ? ", " : "", u64 );
     fmt++;
     printed = 1;    
     break;
   case 'I':
     sts = xdr_decode_int64( xdr, &i64 );
-    if( sts ) usage( "XDR error decode i64" );
-    printf( "%s%"PRIi64"", printed ? " " : "", i64 );
+    if( sts ) decodeerror( xdr, "i64" );
+    printf( "%s%"PRIi64"", printed ? ", " : "", i64 );
     fmt++;
     printed = 1;    
     break;
   case 's':
     sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) usage( "XDR error decode string len" );
+    if( sts ) decodeerror( xdr, "string" );
     xdr->offset -= 4;
     str = malloc( u32 + 1 );
     sts = xdr_decode_string( xdr, str, u32 + 1 );
-    if( sts ) usage( "XDR error decode string" );
-    printf( "%s%s", printed ? " " : "", str );
+    if( sts ) decodeerror( xdr, "string" );
+    printf( "%s\"%s\"", printed ? ", " : "", str );
     free( str );
     fmt++;
     printed = 1;    
     break;
   case 'b':
     sts = xdr_decode_boolean( xdr, &i32 );
-    if( sts ) usage( "XDR error decode bool" );
-    printf( "%s%s", printed ? " " : "", i32 ? "True" : "False" );
+    if( sts ) decodeerror( xdr, "boolean" );
+    printf( "%s%s", printed ? ", " : "", i32 ? "True" : "False" );
     fmt++;
     printed = 1;    
     break;
   case 'o':
     sts = xdr_decode_opaque_ref( xdr, &bufp, &lenp );
-    if( sts ) usage( "XDR error decode opaque" );
+    if( sts ) decodeerror( xdr, "opaque" );
     str = malloc( (4 * lenp) / 3 + 5 );
     base64_encode( bufp, lenp, str );
-    printf( "%s%s", printed ? " " : "", str );
+    printf( "%s%s", printed ? ", " : "", str );
     free( str );
     fmt++;
     printed = 1;    
@@ -216,10 +223,10 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     fmt = str + 1;
     bufp = malloc( u32 );
     sts = xdr_decode_fixed( xdr, bufp, u32 );
-    if( sts ) usage( "XDR error decode fixed" );
+    if( sts ) decodeerror( xdr, "fixed" );
     str = malloc( 4*(u32 / 3) + 5 );
     base64_encode( bufp, u32, str );
-    printf( "%s%s", xdr->offset > 0 ? " " : "", str );
+    printf( "%s%s", xdr->offset > 0 ? ", " : "", str );
     free( str );
     free( bufp );
     printed = 1;    
@@ -227,19 +234,23 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
   case 'A':
     /* A(...) */
     sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) usage( "XDR error decode array" );
+    if( sts ) decodeerror( xdr, "fixed" );
     fmt++;
     if( *fmt != '(' ) usage( "Bad format: expect ( after A" );
     fmt++;
     p = fmt;
-    printf( "[" );
+    printf( "%s[", printed ? ", " : "" );
     printed = 0;    
     for( i = 0; i < u32; i++ ) {
       if( i > 0 ) printf( "," );
       fmt = p;
+      printf( "{ " );
+      printed = 0;
       while( *fmt && (*fmt != ')') ) {
 	fmt = decodevalue( xdr, fmt );
       }
+      printf( " }" );
+      printed = 1;
       if( !fmt ) usage( "Bad format: expect ) after A" );      
     }
     printf( "]" );
@@ -252,20 +263,24 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     if( *fmt != '(' ) usage( "Bad format: expect ( after L" );
     fmt++;
     p = fmt;
-    printf( "[" );
+    printf( "%s[", printed ? ", " : "" );
     printed = 0;    
     sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) usage( "XDR error decode list" );
+    if( sts ) decodeerror( xdr, "list" );
     i = 0;
     while( b ) {
       if( i > 0 ) printf( "," );
       fmt = p;
+      printf( "{ " );
+      printed = 0;
       while( *fmt && (*fmt != ')') ) {
 	fmt = decodevalue( xdr, fmt );
       }
+      printf( " }" );
+      printed = 1;
       if( !fmt ) usage( "Bad format: expect ) after L" );
       sts = xdr_decode_boolean( xdr, &b );
-      if( sts ) usage( "XDR error decode list" );
+      if( sts ) decodeerror( xdr, "list" );
       i++;
     }
     printed = 1;    
@@ -275,11 +290,11 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
   case 'O':
     /* O(...) */
     sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) usage( "XDR error decode optional" );
+    if( sts ) decodeerror( xdr, "optional" );
     fmt++;    
     if( *fmt != '(' ) usage( "Bad format: expect ( after O" );
     fmt++;
-    printf( "{" );
+    printf( "%s{", printed ? ", " : "" );
     printed = 0;    
     if( b ) {
       while( *fmt && (*fmt != ')') ) {
@@ -301,6 +316,74 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     printf( "}" );
     fmt++;
     break;
+  case 'V':
+    /* V(int:...;int:...;...) */
+    fmt++;
+    if( *fmt !=  '(' ) usage( "Bad format: expect ( after U" );
+    fmt++;
+    sts = xdr_decode_int32( xdr, &i32 );
+    if( sts ) decodeerror( xdr, "union" );
+
+    printf( "%s{ %d: ", printed ? ", " : "", i32 );
+    printed = 0;
+    
+    while( *fmt && *fmt != ')' ) {
+      if( *fmt == 't' ) {
+	/* default final case */
+	fmt++;
+	if( *fmt != ':' ) usage( "Bad format: expect : after t" );
+	fmt++;
+	while( *fmt && (*fmt != ')') ) {
+	  fmt = decodevalue( xdr, fmt );
+	}
+	if( *fmt == '\0' ) usage( "Bad format: unexpected end of string" );
+	fmt++;
+	break;
+      } else {
+	char *term;
+	int32_t x = strtol( fmt, &term, 0 );
+	if( *term != ':' ) usage( "Bad format: expect : after number" );
+	fmt = term + 1;	
+	if( x == i32 ) {
+	  while( *fmt && (*fmt != ';') && (*fmt != ')') ) {
+	    fmt = decodevalue( xdr, fmt );
+	  }
+	  if( *fmt == '\0' ) usage( "Bad format: unexpected end of string" );
+	  if( *fmt == ';' ) {
+	    /* advance to end */
+	    u32 = 1; /* paren counter - when hits zero we have hit end */
+	    while( 1 ) {
+	      if( *fmt == '\0' ) usage( "Bad format: unexpected end of string" );
+	      if( *fmt == '(' ) u32++;
+	      if( *fmt == ')' ) u32--;
+	      if( u32 == 0 ) break;
+	      fmt++;
+	    }
+	  }
+	  fmt++;
+	  break;
+	} else {
+	  /* not a match - advance to next arm */
+	  fmt++;
+	  u32 = 0;
+	  while( 1 ) {
+	    if( *fmt == '\0' ) usage( "Bad format: unexpected end of string" );
+	    if( *fmt == '(' ) u32++;
+	    if( *fmt == ')' ) {
+	      if( u32 == 0 ) break;
+	      else u32--;
+	    }
+	    if( *fmt == ';' && (u32 == 0) ) break;
+	    fmt++;
+	  }
+	  fmt++;
+	}
+      }
+    }
+
+    printf( "%s}", printed ? " " : "" );
+    printed = 1;
+    break;
   default:
     usage( "Bad format character %c", *fmt );
     break;
@@ -311,7 +394,9 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
 
 
 static void decodeformat( struct xdr_s *xdr, char *fmt ) {
+  printf( "{ " );
   while( *fmt ) {
-    fmt = decodevalue( xdr, fmt );
+    fmt = decodevalue( xdr, fmt );    
   }
+  printf( " }" );
 }

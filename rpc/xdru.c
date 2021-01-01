@@ -63,11 +63,11 @@ int main( int argc, char **argv ) {
   static char buf[32*1024];
   static char bufstr[64*1024];
   
-  int sts, i, len;
+  int sts, i;
   struct xdr_s xdr;
   uint32_t u32;
   uint64_t u64;
-  char str[1024], *term;
+  char *term;
   char argname[64], *argval;
   
   if( argc < 2 ) usage( NULL );
@@ -124,7 +124,7 @@ int main( int argc, char **argv ) {
       free( tmpstr );      
     }
 
-    xdr_init( &xdr, buf, sts );
+    xdr_init( &xdr, (uint8_t *)buf, sts );
     decodeformat( &xdr, fmt );
     printf( "\n" );
     
@@ -208,7 +208,7 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     printed = 1;    
     break;
   case 'o':
-    sts = xdr_decode_opaque_ref( xdr, &bufp, &lenp );
+    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
     if( sts ) decodeerror( xdr, "opaque" );
     str = malloc( (4 * lenp) / 3 + 5 );
     base64_encode( bufp, lenp, str );
@@ -225,7 +225,7 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     if( *str != ')' ) usage( "Bad format: expect ) after fixed num" );
     fmt = str + 1;
     bufp = malloc( u32 );
-    sts = xdr_decode_fixed( xdr, bufp, u32 );
+    sts = xdr_decode_fixed( xdr, (uint8_t *)bufp, u32 );
     if( sts ) decodeerror( xdr, "fixed" );
     str = malloc( 4*(u32 / 3) + 5 );
     base64_encode( bufp, u32, str );

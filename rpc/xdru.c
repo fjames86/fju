@@ -23,10 +23,13 @@ static void usage( char *fmt, ... ) {
 	  "        s        string\n"
 	  "        b        boolean\n"
 	  "        o        opaque\n"
-	  "        f(nnn)   fixed\n"
+	  "        f(nnn)   fixed\n"	  
+	  "        v        void\n"
+	  "        {...}    struct\n" 
 	  "        O(...)   optional\n"
 	  "        A(...)   array\n"
-	  "        L(...)   list\n" 
+	  "        L(...)   list\n"
+	  "        V(nnn:...;nnn:...;t:...)  union\n"
 	  );
 
   if( fmt ) {
@@ -242,16 +245,10 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     printf( "%s[", printed ? ", " : "" );
     printed = 0;    
     for( i = 0; i < u32; i++ ) {
-      if( i > 0 ) printf( "," );
+      if( i > 0 ) printf( ", " );
       fmt = p;
-      printf( "{ " );
-      printed = 0;
-      while( *fmt && (*fmt != ')') ) {
-	fmt = decodevalue( xdr, fmt );
-      }
-      printf( " }" );
-      printed = 1;
-      if( !fmt ) usage( "Bad format: expect ) after A" );      
+      fmt = decodevalue( xdr, fmt );
+      if( *fmt != ')' ) usage( "Bad format: expect ) after A" );      
     }
     printf( "]" );
     printed = 1;    
@@ -269,16 +266,10 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     if( sts ) decodeerror( xdr, "list" );
     i = 0;
     while( b ) {
-      if( i > 0 ) printf( "," );
+      if( i > 0 ) printf( ", " );
       fmt = p;
-      printf( "{ " );
-      printed = 0;
-      while( *fmt && (*fmt != ')') ) {
-	fmt = decodevalue( xdr, fmt );
-      }
-      printf( " }" );
-      printed = 1;
-      if( !fmt ) usage( "Bad format: expect ) after L" );
+      fmt = decodevalue( xdr, fmt );
+      if( *fmt != ')' ) usage( "Bad format: expect ) after L" );
       sts = xdr_decode_boolean( xdr, &b );
       if( sts ) decodeerror( xdr, "list" );
       i++;
@@ -294,13 +285,9 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     fmt++;    
     if( *fmt != '(' ) usage( "Bad format: expect ( after O" );
     fmt++;
-    printf( "%s{", printed ? ", " : "" );
-    printed = 0;    
     if( b ) {
-      while( *fmt && (*fmt != ')') ) {
-	fmt = decodevalue( xdr, fmt );
-      }
-      if( !fmt ) usage( "Bad format: expect ) after O" );
+      fmt = decodevalue( xdr, fmt );
+      if( *fmt != ')' ) usage( "Bad format: expect ) after O value" );
     } else {
       u32 = 1;
       while( *fmt ) {
@@ -312,8 +299,6 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
       }
       if( !fmt ) usage( "Bad format: expect ) after O" );      
     }
-    printed = 1;    
-    printf( "}" );
     fmt++;
     break;
   case 'V':
@@ -333,10 +318,9 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
 	fmt++;
 	if( *fmt != ':' ) usage( "Bad format: expect : after t" );
 	fmt++;
-	while( *fmt && (*fmt != ')') ) {
-	  fmt = decodevalue( xdr, fmt );
-	}
+	fmt = decodevalue( xdr, fmt );
 	if( *fmt == '\0' ) usage( "Bad format: unexpected end of string" );
+	if( *fmt != ')' ) usage( "Bad format: expect ) after final clause" );
 	fmt++;
 	break;
       } else {
@@ -345,11 +329,9 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
 	if( *term != ':' ) usage( "Bad format: expect : after number" );
 	fmt = term + 1;	
 	if( x == i32 ) {
-	  while( *fmt && (*fmt != ';') && (*fmt != ')') ) {
-	    fmt = decodevalue( xdr, fmt );
-	  }
+	  fmt = decodevalue( xdr, fmt );
 	  if( *fmt == '\0' ) usage( "Bad format: unexpected end of string" );
-	  if( *fmt == ';' ) {
+	  else if( *fmt == ';' ) {
 	    /* advance to end */
 	    u32 = 1; /* paren counter - when hits zero we have hit end */
 	    while( 1 ) {
@@ -359,7 +341,7 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
 	      if( u32 == 0 ) break;
 	      fmt++;
 	    }
-	  }
+	  } else if( *fmt != ')' ) usage( "Bad format: expect ; or ) after union clause" );
 	  fmt++;
 	  break;
 	} else {
@@ -384,6 +366,19 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     printf( "%s}", printed ? " " : "" );
     printed = 1;
     break;
+  case '{':
+    /* { ... } is a struct */
+    fmt++;
+    printf( "{" );
+    printed = 0;
+    while( *fmt && (*fmt != '}') ) {
+      fmt = decodevalue( xdr, fmt );
+    }
+    if( !fmt ) usage( "Bad format: unexpected end of string after {" );
+    printf( "}" );
+    printed = 1;
+    fmt++;
+    break;
   default:
     usage( "Bad format character %c", *fmt );
     break;
@@ -394,9 +389,9 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
 
 
 static void decodeformat( struct xdr_s *xdr, char *fmt ) {
-  printf( "{ " );
   while( *fmt ) {
-    fmt = decodevalue( xdr, fmt );    
+    printed = 0;
+    fmt = decodevalue( xdr, fmt );
+    printf( "\n" );
   }
-  printf( " }" );
 }

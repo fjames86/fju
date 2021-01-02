@@ -7,10 +7,10 @@ mkdir bin\
 copy win32\x64\Release\*.exe bin\
 copy win32\x64\Release\libfju.dll bin\
 
-bin\fvmc.exe -I fvm\stdlib fvm\test\test.pas 
-bin\fvmc.exe -o bin\nls.fvm -I fvm\stdlib nls\nls.pas
-bin\fvmc.exe -o bin\log.fvm -I fvm\stdlib fvm\modules\log.pas
-bin\fvmc.exe -o bin\cht.fvm -I fvm\stdlib fvm\modules\cht.pas
+bin\fju.exe fvmc -I fvm\stdlib fvm\test\test.pas 
+bin\fju.exe fvmc -o bin\nls.fvm -I fvm\stdlib nls\nls.pas
+bin\fju.exe fvmc -o bin\log.fvm -I fvm\stdlib fvm\modules\log.pas
+bin\fju.exe fvmc -o bin\cht.fvm -I fvm\stdlib fvm\modules\cht.pas
 
 type out.txt 
 del out.txt

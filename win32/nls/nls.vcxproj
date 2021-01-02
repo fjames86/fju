@@ -101,7 +101,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fvmc.exe -o ..\..\nls\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas</Command>
+      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\nls\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -118,7 +118,7 @@
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fvmc.exe -o ..\..\nls\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas</Command>
+      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\nls\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -139,7 +139,7 @@
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fvmc.exe -o ..\..\nls\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas</Command>
+      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\nls\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -160,7 +160,7 @@
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fvmc.exe -o ..\..\nls\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas</Command>
+      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\nls\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

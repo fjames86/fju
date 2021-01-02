@@ -27,8 +27,11 @@ LIBFJU=${LIBDIR}/libfju.so
 
 .PHONY: all strip clean tar install uninstall strip ${PROJECTS}
 
-all: ${PROJECTS} ${LIBFJU} 
+all: ${PROJECTS} ${LIBFJU} ${BINDIR}/fju
 	rm -f *.o
+
+${BINDIR}/fju: ${LIBFJU}
+	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c log/fjlog.c rpc/rpclt.c rpc/xdru.c raft/raft-main.c cht/cht-main.c dh/ecdh.c sec/shamir.c fvm/fvm-main.c fvm/fvmc.c freg/freg-main.c
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
@@ -46,14 +49,14 @@ strip:
 install: all #strip
 	mkdir -p /opt/fju
 	sh scripts/fjud.sh stop 
-	cd bin && cp ${PROGRAMS} /usr/local/bin
+	cp bin/fju bin/fjud /usr/local/bin
 	cp ${LIBFJU} /usr/local/lib
 	mkdir -p /opt/fju/fvm
 	cp ${BINDIR}/*.fvm /opt/fju/fvm
 	for fname in $$(find /opt/fju/fvm -name \*.fvm); do sh scripts/regfvm.sh -p $$fname; done 
 
 uninstall:
-	cd /usr/local/bin && rm ${PROGRAMS}
+	cd /usr/local/bin && rm fju fjud 
 	cd /usr/local/lib && rm libfju.so
 
 FJU_DEPS=

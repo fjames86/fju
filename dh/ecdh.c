@@ -80,7 +80,7 @@ static void bn2hex( char *bn, char *hex, int len ) {
   hex[len*2] = '\0';
 }
 
-int main( int argc, char **argv ) {
+int ecdh_main( int argc, char **argv ) {
   int i;
   char secret_buf[SEC_ECDH_MAX_PRIVKEY];
   char pub_buf[SEC_ECDH_MAX_PUBKEY];

@@ -1610,7 +1610,7 @@ static int raft_proc_list( struct rpc_inc *inc ) {
 		xdr_encode_uint32( &inc->xdr, cl[i].state );
 		xdr_encode_uint32( &inc->xdr, cl[i].appid );
 		xdr_encode_uint32( &inc->xdr, cl[i].flags );
-		xdr_encode_fixed( &inc->xdr, cl[i].cookie, RAFT_MAX_COOKIE );
+		xdr_encode_fixed( &inc->xdr, (uint8_t *)cl[i].cookie, RAFT_MAX_COOKIE );
 		xdr_encode_uint32( &inc->xdr, cl[i].nmember );
 		for( j = 0; j < cl[i].nmember; j++ ) {
 			xdr_encode_uint64( &inc->xdr, cl[i].member[j].hostid );

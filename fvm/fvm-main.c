@@ -44,7 +44,7 @@ static void usage( char *fmt, ... ) {
 
 static uint8_t argbuf[FVM_MAX_STACK];
 
-int main( int argc, char **argv ) {
+int fvm_main( int argc, char **argv ) {
   int i, sts;
   char mname[64], pname[64];
   int procid;

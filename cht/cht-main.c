@@ -63,7 +63,7 @@ static void parsekey( char *idstr, char *key );
 static uint32_t parseflags( char *str );
 static void cht_rehash( struct cht_s *cht, char *outpath, int newcount );
 
-int main( int argc, char **argv ) {
+int cht_main( int argc, char **argv ) {
   int i, sts;
   char *path = NULL;
   char *fpath = NULL;

@@ -87,7 +87,7 @@ static void cmd_write( void );
 static void cmd_tail( void );
 static void cmd_test( void );
 
-int main( int argc, char **argv ) {
+int log_main( int argc, char **argv ) {
   int i;
   int sts;
   int logsize = 2*1024*1024;

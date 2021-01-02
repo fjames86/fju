@@ -231,7 +231,7 @@ static void cmd_get( int argc, char **argv, int ii ) {
   free( buf );
 }
 
-int main( int argc, char **argv ) {
+int reg_main( int argc, char **argv ) {
   int sts, i;
   uint64_t id;
 

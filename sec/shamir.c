@@ -50,7 +50,7 @@ static void usage( char *fmt, ... ) {
 }
 
 
-int main( int argc, char **argv ) {
+int shamir_main( int argc, char **argv ) {
   int argi;
   int n = 3, k = 2;
 
@@ -123,3 +123,5 @@ int main( int argc, char **argv ) {
 
   return 0;
 }
+
+

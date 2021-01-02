@@ -198,7 +198,7 @@ static struct {
     int rawmodeb64;
 } glob;
 
-int main( int argc, char **argv ) {
+int rpc_main( int argc, char **argv ) {
   int i, sts, idx;
     struct clt_info *info;
     char *term;

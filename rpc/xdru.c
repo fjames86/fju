@@ -59,7 +59,7 @@ static void argval_split( char *instr, char *argname, char **argval ) {
     *argname = '\0';
 }
 
-int main( int argc, char **argv ) {
+int xdr_main( int argc, char **argv ) {
   static char buf[32*1024];
   static char bufstr[64*1024];
   

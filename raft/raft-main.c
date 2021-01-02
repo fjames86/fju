@@ -62,7 +62,7 @@ static void cmd_list( void );
 static void cmd_prop( void );
 static void print_cluster( struct raft_cluster *cluster );
 
-int main( int argc, char **argv ) {
+int raft_main( int argc, char **argv ) {
     int sts, i;
 
 #ifdef WIN32

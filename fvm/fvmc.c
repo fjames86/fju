@@ -39,7 +39,7 @@ static void fvmc_printf( char *fmt, ... ) {
   }
 }
 
-int main( int argc, char **argv ) {
+int fvmc_main( int argc, char **argv ) {
   int i;
   char *outpath = NULL;
   int disass;

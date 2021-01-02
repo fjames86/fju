@@ -21,34 +21,34 @@ if [ ! $modpath ]; then
     exit 1
 fi
 
-progname=$(fvmc -d $modpath | head -n 2 | grep -i NAME | awk '{print $2}')
+progname=$(fju fvmc -d $modpath | head -n 2 | grep -i NAME | awk '{print $2}')
 if [ ! $progname ]; then
     echo "$modpath Need progname"
     exit 1
 fi
 
 # install module
-freg put /fju/fvm key
-freg put /fju/fvm/modules key 
-freg put /fju/fvm/modules/$progname key
-freg put /fju/fvm/modules/$progname/path str $modpath
+fju reg put /fju/fvm key
+fju reg put /fju/fvm/modules key 
+fju reg put /fju/fvm/modules/$progname key
+fju reg put /fju/fvm/modules/$progname/path str $modpath
 
 # set init routine
 if [ $initproc ]; then
-    freg put /fju/fvm/modules/$progname/init str $initproc
+    fju reg put /fju/fvm/modules/$progname/init str $initproc
 else
-    freg rem /fju/fvm/modules/$progname/init > /dev/null
+    fju reg rem /fju/fvm/modules/$progname/init > /dev/null
 fi
 
 # set service proc 
 if [ $serviceproc ]; then
-    freg put /fju/fvm/modules/$progname/service str $serviceproc
+    fju reg put /fju/fvm/modules/$progname/service str $serviceproc
 else
-    freg rem /fju/fvm/modules/$progname/service > /dev/null
+    fju reg rem /fju/fvm/modules/$progname/service > /dev/null
 fi
 
 # register as rpc program
 if [ $regprog ]; then
-    freg put /fju/fvm/modules/$progname/register u32 1
+    fju reg put /fju/fvm/modules/$progname/register u32 1
 fi
 

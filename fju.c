@@ -1,4 +1,12 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#include <Winsock2.h>
+#include <Windows.h>
+
+#define strcasecmp _stricmp
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +23,7 @@ int fvm_main( int argc, char **argv );
 int fvmc_main( int argc, char **argv );
 int ecdh_main( int argc, char **argv );
 int shamir_main( int argc, char **argv );
+int hostreg_main( int argc, char **argv );
 
 static struct {
   char *name;
@@ -30,6 +39,7 @@ static struct {
     { "fvmc", fvmc_main },
     { "ecdh", ecdh_main },
     { "shamir", shamir_main },
+    { "hostreg", hostreg_main },
     { NULL, NULL }	       
 };
 

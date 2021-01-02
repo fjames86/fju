@@ -30,8 +30,19 @@ LIBFJU=${LIBDIR}/libfju.so
 all: ${PROJECTS} ${LIBFJU} ${BINDIR}/fju
 	rm -f *.o
 
+fju_files += log/fjlog.c
+fju_files += rpc/rpclt.c
+fju_files += rpc/xdru.c
+fju_files += raft/raft-main.c
+fju_files += cht/cht-main.c
+fju_files += dh/ecdh.c
+fju_files += sec/shamir.c
+fju_files += fvm/fvm-main.c
+fju_files += fvm/fvmc.c
+fju_files += freg/freg-main.c
+fju_files += hostreg/hostreg-main.c 
 ${BINDIR}/fju: ${LIBFJU}
-	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c log/fjlog.c rpc/rpclt.c rpc/xdru.c raft/raft-main.c cht/cht-main.c dh/ecdh.c sec/shamir.c fvm/fvm-main.c fvm/fvmc.c freg/freg-main.c
+	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c ${fju_files}
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 

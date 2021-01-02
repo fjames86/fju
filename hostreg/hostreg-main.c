@@ -73,7 +73,7 @@ static int mynet_pton( char *str, uint8_t *inaddr );
 static char *mynet_ntop( uint32_t inaddr, char *str );
 static void cmd_common( uint64_t id );
 
-int main( int argc, char **argv ) {
+int hostreg_main( int argc, char **argv ) {
     int sts, i;
 
 #ifdef WIN32

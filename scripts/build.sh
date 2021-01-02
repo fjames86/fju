@@ -4,11 +4,11 @@ set -e
 
 remoteip=$1
 if [ ! $remoteip ]; then
-    remoteip=$(freg get /remotehost)
+    remoteip=$(fju reg get /remotehost)
 fi
 
 # backup registry in case something goes wrong! 
-freg dump > /opt/fju/freg-backup.txt
+fju reg dump > /opt/fju/freg-backup.txt
 
 ## stop services and rebuild all 
 sh scripts/fjud.sh stop 
@@ -22,7 +22,7 @@ ssh root@${remoteip} sh ~/fjud.sh stop
 ssh root@${remoteip} mkdir -p /opt/fju
 ssh root@${remoteip} mkdir -p /usr/local/bin
 ssh root@${remoteip} mkdir -p /usr/local/lib
-scp bin/* root@${remoteip}:/usr/local/bin
+scp bin/fju bin/fjud root@${remoteip}:/usr/local/bin
 scp lib/libfju.so root@${remoteip}:/usr/local/lib
 scp bin/nls.fvm root@${remoteip}:/root/nls.fvm
 

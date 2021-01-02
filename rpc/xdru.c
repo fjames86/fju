@@ -245,7 +245,6 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     printf( "%s[", printed ? ", " : "" );
     printed = 0;    
     for( i = 0; i < u32; i++ ) {
-      if( i > 0 ) printf( ", " );
       fmt = p;
       fmt = decodevalue( xdr, fmt );
       if( *fmt != ')' ) usage( "Bad format: expect ) after A" );      
@@ -266,7 +265,6 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     if( sts ) decodeerror( xdr, "list" );
     i = 0;
     while( b ) {
-      if( i > 0 ) printf( ", " );
       fmt = p;
       fmt = decodevalue( xdr, fmt );
       if( *fmt != ')' ) usage( "Bad format: expect ) after L" );

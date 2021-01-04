@@ -1,14 +1,29 @@
 
 #include "fjui.h"
 
+static void reg_size( HWND hwnd, int width, int height ) {
+	HWND h;
+
+	h = fjui_get_hwnd( "reg_tv" );
+	SetWindowPos( h, HWND_TOP, 5, 5, width - 10, height - 10, 0 );
+
+}
+
+
+
 static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
+	HWND h;
+
 	switch(	msg ) {
 	case WM_CREATE:
 		/* create a treeview */
+		h = CreateWindowA( WC_TREEVIEWA, NULL, WS_VISIBLE|WS_CHILD, 0, 0, 0, 0, hwnd, 0, 0, NULL );
+		fjui_hwnd_register( "reg_tv", h );
 		break;	
 	case WM_COMMAND:
 		break;
 	case WM_SIZE:
+		reg_size( hwnd, LOWORD(lparam), HIWORD(lparam) );
 		break;
 	case WM_NOTIFY:
 		break;

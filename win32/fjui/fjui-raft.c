@@ -26,7 +26,7 @@ static LRESULT CALLBACK raft_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 		lvc.pszText = "CLID";
 		lvc.cchTextMax = (int)strlen( lvc.pszText );
 		lvc.mask = LVCF_TEXT|LVCF_SUBITEM|LVCF_WIDTH;
-		lvc.cx = 100;
+		lvc.cx = 120;
 		lvc.iSubItem = 0;
 		ListView_InsertColumn( h, 0, &lvc );
 
@@ -40,7 +40,7 @@ static LRESULT CALLBACK raft_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 		lvc.pszText = "Leader";
 		lvc.cchTextMax = (int)strlen( lvc.pszText );
 		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
-		lvc.cx = 80;
+		lvc.cx = 100;
 		lvc.iSubItem = 2;
 		ListView_InsertColumn(h, 2, &lvc );
 

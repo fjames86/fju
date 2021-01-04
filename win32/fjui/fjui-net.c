@@ -431,7 +431,7 @@ void fjui_call_fvmrun( uint64_t hostid, char *modname, char *procname, struct xd
 
 static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
 	/* results: nentries,opaque array of entries */
-	/* each entry is msgid(uint64), flags (uint32) data (opaque) */
+	/* each entry is msgid(uint64), flags (uint32) timestamp(u64) data (opaque) */
 	int i, len, sts;
 	char *bufp;
 	uint32_t nentry, flags;

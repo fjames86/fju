@@ -25,6 +25,7 @@ ssh root@${remoteip} mkdir -p /usr/local/lib
 scp bin/fju bin/fjud root@${remoteip}:/usr/local/bin
 scp lib/libfju.so root@${remoteip}:/usr/local/lib
 scp bin/nls.fvm root@${remoteip}:/root/nls.fvm
+scp bin/log.fvm root@${remoteip}:/root/log.fvm
 
 
 ## restart remote services

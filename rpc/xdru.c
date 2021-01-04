@@ -287,6 +287,7 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
       fmt = decodevalue( xdr, fmt );
       if( *fmt != ')' ) usage( "Bad format: expect ) after O value" );
     } else {
+      printf( "%s{}", printed ? ", " : "" );
       u32 = 1;
       while( *fmt ) {
 	if( *fmt == ')' ) u32--;
@@ -393,3 +394,316 @@ static void decodeformat( struct xdr_s *xdr, char *fmt ) {
     printf( "\n" );
   }
 }
+
+#if 0
+
+struct xstruct {
+  int len;
+  struct xvalue *vals;
+};
+struct xunion {
+  int32_t tag;
+  struct xvalue *val;
+};
+struct xarray {
+  int len;
+  struct xvalue *vals;
+};
+
+typedef enum {
+    XVAL_U32,
+    XVAL_I32,
+    XVAL_U64,
+    XVAL_I64,
+    XVAL_STRING,
+    XVAL_BOOLEAN,
+    XVAL_OPAQUE,
+    XVAL_FIXED,
+    XVAL_ARRAY,
+    XVAL_LIST,
+    XVAL_OPTIONAL,
+    XVAL_STRUCT,
+} xvalue_t;
+
+struct xvalue {
+  xvalue_t type;
+  union {
+    uint32_t u32;
+    int32_t i32;
+    uint64_t u64;
+    int64_t u64;
+    int b;
+    char *str;
+    struct {
+      int len;
+      char *buf;
+    } opaque;
+    struct xstruct strct;
+    struct xunion unin;
+    struct xarray arr;
+  } u;
+};
+
+
+/* 
+ * need a function that takes as its input a format string and a value string and returns as its value 
+ * an xvalue structure
+ */
+
+struct parse_s {
+  char *fmt;
+  char *valstr;  
+};
+
+static void skipwhitespace( struct parse_s *parse ) {
+  while( *parse->valstr == ' ' ) {
+    parse->valstr++;
+  }    
+}
+
+static struct xvalue *parsevalue( struct parse_s *parse ) {
+  /* 
+   * walk the format string, building up an xvalue from the contents of hte valstring
+   * contents of valstr is expected to match the format string
+   */
+  struct xvalue *xval;
+
+  skipwhitespace( parse );
+  
+  switch( parse->fmt[0] ) {
+  case '\0':
+    /* end of format string */
+    return NULL;
+    break;
+  case 'u':
+    /* u32 decimal */
+    {
+      uint32_t u32;
+      u32 = strtoul( parse->valstr, &term, 10 );
+      parse->valstr = term;
+      parse->fmt++;
+      
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_U32;
+      xval->u.u32 = u32;
+      return xval;
+    }
+    break;
+  case 'x':
+    /* u32 hex */
+    {
+      uint32_t u32;
+      u32 = strtoul( parse->valstr, &term, 16 );
+      parse->valstr = term;
+      parse->fmt++;
+      
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_U32;
+      xval->u.u32 = u32;
+      return xval;
+    }    
+    break;
+  case 'd':
+    /* i32 */
+    {
+      int32_t i32;
+      i32 = strtol( parse->valstr, &term, 10 );
+      parse->valstr = term;
+      parse->fmt++;
+      
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_I32;
+      xval->u.i32 = i32;
+      return xval;
+    }    
+    break;
+  case 'U':
+    {
+      uint64_t u64;
+      u64 = strtoull( parse->valstr, &term, 10 );
+      parse->valstr = term;
+      parse->fmt++;
+      
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_U64;
+      xval->u.u64 = u64;
+      return xval;
+    }    
+    break;
+  case 'X':
+    {
+      uint64_t u64;
+      u64 = strtoull( parse->valstr, &term, 16 );
+      parse->valstr = term;
+      parse->fmt++;
+      
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_U64;
+      xval->u.u64 = u64;
+      return xval;
+    }        
+    break;
+  case 'D':
+    {
+      uint64_t i64;
+      i64 = strtoll( parse->valstr, &term, 10 );
+      parse->valstr = term;
+      parse->fmt++;
+      
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_I64;
+      xval->u.u64 = i64;
+      return xval;
+    }        
+    break;
+  case 's':
+    {
+      char *s, *p;
+      int slen, sl;
+
+      slen = 32;
+      sl = 0;
+      s = malloc( slen );
+      
+      parse->valstr++;
+      p = parse->valstr;
+      while( *p != '"' ) {
+	if( *p == '\0' ) usage( "Unexpected end of string" );
+	if( *p == '\\' ) {
+	  p++;
+	}
+	
+	s[sl] = *p;
+	sl++;
+	p++;	
+	if( sl >= (slen - 1) ) {
+	  slen = (3*slen) / 2;
+	  s = realloc( slen );
+	}
+      }
+      s[sl] = '\0';
+
+      parse->valstr = p + 1;
+      parse->fmt++;
+
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_STRING;
+      xval->u.str = s;
+      return xval;
+    }
+    break;
+  case 'b':
+    {
+      char tmp[6];
+      int b;
+
+      b = 0;
+      memset( tmp, 0, 6 );
+      memcpy( tmp, parse->valstr, 4 );
+      if( strcasecmp( tmp, "true" ) ) {
+	b = 1;
+	parse->valstr += 4;
+      } else {
+	memcpy( tmp, parse->valstr, 5 );
+	if( strcasecmp( tmp, "false" ) == 0 ) {
+	  b = 0;
+	  parse->valstr += 5;
+	} else usage( "Bad boolean value" );
+      }
+      parse->fmt++;
+      
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_BOOLEAN;
+      xval->u.b = b;
+      return xval;
+    }
+    break;
+  case 'o':
+    {
+      /* find end of base64 string */
+      int i;
+      char *p;
+      p = parse->valstr;
+      while( (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || (*p == '/') || (*p == '+') || (*p == '=') ) {
+	p++;
+	i++;
+      }
+      p = malloc( i + 1 );
+      memcpy( p, parse->valstr, i );
+      p[i] = '\0';
+      len = (3*i) / 4 + 5;
+      buf = malloc( len );
+      len = base64_decode( buf, len, p );
+      if( len < 0 ) usage( "Bad base64 string" );
+      free( p );
+      
+      fmt++;
+      parse->valstr += i;
+
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_OPAQUE;
+      xval->u.opaque.len = len;
+      xval->u.opaque.buf = buf;
+      return xval;
+    }
+    break;
+  case 'f':
+    {
+      uint32_t len, ln;
+      char *term;
+      int i;
+      char *p;
+      
+      len = strtoul( parse->fmt, &term, 10 );
+      if( *term != ')' ) usage( "Bad foramt string: expect ) after f" );
+      parse->fmt = term + 1;
+
+      p = parse->valstr;
+      while( (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || (*p == '/') || (*p == '+') || (*p == '=') ) {
+	p++;
+	i++;
+      }
+      p = malloc( i + 1 );
+      memcpy( p, parse->valstr, i );
+      p[i] = '\0';
+      ln = (3*i) / 4 + 5;
+      buf = malloc( ln );
+      ln = base64_decode( buf, ln, p );
+      if( ln < 0 ) usage( "Bad base64 string" );
+      if( ln != len ) usage( "fixed length %d does not match format length %d", ln, len );
+      free( p );
+      
+      parse->valstr += i;
+      xval = malloc( sizeof(*xval) );
+      xval->type = XVAL_FIXED;
+      xval->u.opaque.len = len;
+      xval->u.opaque.buf = buf;
+      return xval;
+    }
+    break;
+  case 'O':
+    {
+      parse->fmt++;
+      if( *parse->fmt != '(' ) usage( "Bad format string: expect ( after O" );
+      /* if value is {} then skip the format until closing ) otherwise extract the value and compare against format */
+    }
+    break;
+  case 'A':
+    break;
+  case 'L':
+    break;
+  case '{':
+    break;
+  default:
+    usage( "Bad format string" );
+    break;
+  }
+}
+
+
+static void encodevalue( struct xdr_s *xdr, char *fmt, struct xvalue *xval ) {
+  
+}
+
+
+#endif

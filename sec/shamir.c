@@ -10,29 +10,6 @@
 #include <fju/sec.h>
 
 
-static char *u8_to_hex( uint8_t *u8, int len, char *hex ) {
-  int i;
-  strcpy( hex, "" );
-  for( i = 0; i < len; i++ ) {
-    sprintf( hex + strlen( hex ), "%02x", u8[i] );
-  }
-  return hex;
-}
-
-static uint8_t *hex_to_u8( char *hex, uint8_t *u8 ) {
-  char tmp[4];
-  int i, len;
-  len = strlen( hex ) / 2;
-  for( i = 0; i < len; i++ ) {
-    tmp[0] = hex[2*i];
-    tmp[1] = hex[2*i + 1];
-    tmp[2] = 0;
-    u8[i] = strtoul( tmp, NULL, 16 );
-  }
-  return u8;
-}
-
-
 static void usage( char *fmt, ... ) {
   printf( "Usage: shamir [-n n] [-k k] split secret\n"
 	  "              join share ...\n"
@@ -90,28 +67,35 @@ int shamir_main( int argc, char **argv ) {
     }
     sec_shamir_split( (uint8_t *)buf, secretlen, shares, n, k );
 
-    hex = malloc( (secretlen + 1) * 2 + 1 );
+    hex = malloc( (4*secretlen) / 3 + 5 );
     for( row = 0; row < n; row++ ) {
-      u8_to_hex( shares[row].sharebuf, secretlen + 1, hex );
+      base64_encode( (char *)shares[row].sharebuf, secretlen + 1, hex );
       printf( "%s\n", hex );
       free( shares[row].sharebuf );
     }
     free( shares );
     free( hex );
   } else if( strcmp( argv[argi], "join" ) == 0 ) {
-    int k, secretlen, i;
+    int k, secretlen, i, sl;
     struct sec_shamir_share *shares;
     uint8_t *secret;
 
     argi++;
     if( argi >= argc ) usage( NULL );
     k = argc - argi;
-    secretlen = strlen(argv[argi]) - 1;
+    secretlen = -1; /* get secretlen from length of first share */
     shares = malloc( k * sizeof(*shares) );
 
     for( i = 0; i < k; i++ ) {
-      shares[i].sharebuf = malloc( strlen( argv[argi] ) / 2 );;
-      hex_to_u8( argv[argi], shares[i].sharebuf );
+      sl = strlen( argv[argi] );
+      sl = (4*sl) / 3 + 5;
+      shares[i].sharebuf = malloc( sl );
+      memset( shares[i].sharebuf, 0, sl );
+      sl = base64_decode( (char *)shares[i].sharebuf, sl, argv[argi] );
+      if( sl < 0 ) usage( "Bad share %d", i );
+      if( secretlen == -1 ) secretlen = sl;
+      else if( sl != secretlen ) usage( "Share %d length mismatch %d != %d", i, sl, secretlen );
+
       argi++;
     }
 

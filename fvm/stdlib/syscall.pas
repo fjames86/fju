@@ -46,3 +46,5 @@ Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf
 Declare Syscall RaftCommand(idHigh : int, idLow : int, len : int, buf : opaque) : 26;
 Declare Syscall FvmClRun(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 27;
 Declare Syscall FvmClRunOthers(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 28;
+
+Declare Syscall LogReadInfo(logname : string, idHigh : int, idLow : int, var len : int, var flags : int, var timestampHigh : int, var timestampLow : int ) : 29;

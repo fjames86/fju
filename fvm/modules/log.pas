@@ -9,6 +9,8 @@ Include "syscall.pas";
 Include "string.pas";
 Include "xdr.pas";
 
+Const LogEntryHeader = 24; { reserve space for id,flags,timestamp,msglen }
+
 Procedure ProcNull()
 Begin
 End;
@@ -17,6 +19,7 @@ End;
 Procedure ProcRead(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, var ebuf : opaque)
 Begin
 	var flags, len, offset, ne : int;
+	var timeH, timeL, l, f : int;
 	var p : opaque;
 	var xdr : opaque[2048];
 
@@ -27,15 +30,19 @@ Begin
 	Begin
 		flags = 0;
 		len = 0;
-		p = xdr + offset + 16;
-		Syscall LogRead(logname,idhigh,idlow,2048 - (offset + 16),p,flags,len);
-		If len > 2048 - (offset + 16) Then Begin
+		p = xdr + offset + LogEntryHeader;
+		Syscall LogRead(logname,idhigh,idlow,2048 - (offset + LogEntryHeader),p,flags,len);
+		If len > 2048 - (offset + LogEntryHeader) Then Begin
 		   { the entry was larger than space left in buffer so break here }
 		   Break;
 		End;
 		
 		Call XdrEncodeU64(xdr,offset,idhigh,idlow);		
 		Call XdrEncodeU32(xdr,offset,flags);
+
+		Syscall LogReadInfo(logname,idhigh,idlow,l,f,timeH,timeL);
+		Call XdrEncodeU64(xdr,offset,timeH,timeL);
+		
 		Call XdrEncodeU32(xdr,offset,len);
 		If len % 4 Then len = len + 4 - (len % 4);
 		offset = offset + len;

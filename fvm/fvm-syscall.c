@@ -698,6 +698,30 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       }
     }
     break;
+  case 29:
+    /* LogReadInfo(logname,idhigh,idlow,var len,var flags,var timestampHIgh, var timestampLow) */
+    {
+      struct log_s log, *logp;
+      uint64_t id;
+      int sts;
+      uint32_t pars[7];
+      struct log_entry entry;
+      
+      read_pars( state, pars, 7 );
+      logp = openlogfile( state, pars[0], &log );
+      id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
+
+      memset( &entry, 0, sizeof(entry) );
+      entry.niov = 0;
+      sts = log_read_entry( logp, id, &entry );
+      fvm_write_u32( state, pars[3], sts ? 0 : entry.msglen );
+      fvm_write_u32( state, pars[4], sts ? 0 : entry.flags );
+      fvm_write_u32( state, pars[5], sts ? 0 : (uint32_t)(entry.timestamp >> 32) );
+      fvm_write_u32( state, pars[6], sts ? 0 : entry.timestamp & 0xffffffff );
+
+      if( logp ) log_close( logp );
+    }
+    break;    
   case 0xffff:
     fvm_xcall( state );
     break;

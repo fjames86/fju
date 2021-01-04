@@ -96,6 +96,9 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	/* Q: do we want to load any other services here e.g. fvm ? */
 	fjui_summary_register();
 	fjui_fvm_register();
+	fjui_raft_register();
+	fjui_log_register();
+	fjui_reg_register();
 
 	/* register main class and create the window */
 	memset( &cls, 0, sizeof(cls) );
@@ -202,6 +205,8 @@ static void fjui_main_create( HWND hwnd ) {
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "Log";
 	TabCtrl_InsertItem( tabh, 1, &tci );
+	h = CreateWindowA( "FJUILOG", NULL, WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	fjui_hwnd_register( "log", h );
 
 	memset( &tci, 0, sizeof(tci) );
 	tci.mask = TCIF_TEXT;
@@ -214,11 +219,15 @@ static void fjui_main_create( HWND hwnd ) {
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "Freg";
 	TabCtrl_InsertItem( tabh, 3, &tci );
+	h = CreateWindowA( "FJUIREG", NULL, WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	fjui_hwnd_register( "reg", h );
 
 	memset( &tci, 0, sizeof(tci) );
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "Raft";
 	TabCtrl_InsertItem( tabh, 4, &tci );
+	h = CreateWindowA( "FJUIRAFT", NULL, WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	fjui_hwnd_register( "raft", h );
 
 	h = CreateWindowA( STATUSCLASSNAMEA, NULL, WS_VISIBLE|WS_CHILD|SBARS_SIZEGRIP, 0, 0, 0, 0, hwnd, 0, 0, NULL );
 	fjui_set_font( h );
@@ -298,6 +307,8 @@ static void fjui_main_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 			
 				fjui_summary_refresh( glob.hostid );
 				fjui_fvm_refresh( glob.hostid );
+				fjui_log_refresh( glob.hostid );
+				fjui_raft_refresh( glob.hostid );
 			}
 		}
 	}
@@ -323,6 +334,12 @@ static void fjui_main_size( HWND hwnd, int width, int height ) {
 	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
 	h = fjui_get_hwnd( "fvm" );
 	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	h = fjui_get_hwnd( "raft" );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	h = fjui_get_hwnd( "log" );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	h = fjui_get_hwnd( "reg" );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
 
 	h = fjui_get_hwnd( "hostlb" );
 	SetWindowPos( h, HWND_TOP, 5, 5, 95, height - 25, 0 );
@@ -337,8 +354,14 @@ static void fjui_main_notify( HWND hwnd, NMHDR *nmhdr ) {
 			int page = TabCtrl_GetCurSel( fjui_get_hwnd( "tabctrl" ) );
 			h = fjui_get_hwnd( "summary" );
 			ShowWindow( h, page == 0 ? SW_SHOW : SW_HIDE );
+			h = fjui_get_hwnd( "log" );
+			ShowWindow( h, page == 1 ? SW_SHOW : SW_HIDE );
 			h = fjui_get_hwnd( "fvm" );
 			ShowWindow( h, page == 2 ? SW_SHOW : SW_HIDE );
+			h = fjui_get_hwnd( "reg" );
+			ShowWindow( h, page == 3 ? SW_SHOW : SW_HIDE );
+			h = fjui_get_hwnd( "raft" );
+			ShowWindow( h, page == 4 ? SW_SHOW : SW_HIDE );
 		}
 		break;
 	}

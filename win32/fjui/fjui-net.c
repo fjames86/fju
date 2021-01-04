@@ -341,9 +341,6 @@ static void raftlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	if( sts ) return;
 	while( b ) {
 		
-		info->nraft++;
-		if( info->nraft >= 32 ) break;
-
 		xdr_decode_uint64( xdr, &info->raft[info->nraft].clid );
 		xdr_decode_uint64( xdr, &info->raft[info->nraft].leaderid );
 		xdr_decode_uint64( xdr, &info->raft[info->nraft].voteid );
@@ -369,7 +366,7 @@ static void raftlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		if( sts ) return;
 	}
 
-
+	fjui_raft_setinfo( info );
 }
 
 void fjui_call_raftlist( uint64_t hostid ) {
@@ -432,3 +429,63 @@ void fjui_call_fvmrun( uint64_t hostid, char *modname, char *procname, struct xd
   }
 }
 
+static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
+	/* results: nentries,opaque array of entries */
+	/* each entry is msgid(uint64), flags (uint32) data (opaque) */
+	int i, len, sts;
+	char *bufp;
+	uint32_t nentry, flags;
+	uint64_t msgid, timestamp;
+	struct xdr_s xx;
+
+	if( !xdr ) {
+		//fjui_call_logread( hcallp->hostid, hcallp->cxt2 );
+		return;
+	}
+
+	sts = xdr_decode_uint32( xdr, &nentry );
+	sts = xdr_decode_opaque_ref( xdr, &bufp, &len );
+	xdr_init( &xx, bufp, len );
+	for( i = 0; i < nentry; i++ ) {
+		sts = xdr_decode_uint64( &xx, &msgid );
+		if( !sts ) sts = xdr_decode_uint32( &xx, &flags );
+		if( !sts ) sts = xdr_decode_uint64( &xx, &timestamp );
+		if( !sts ) sts = xdr_decode_opaque_ref( &xx, &bufp, &len );
+		if( sts ) return;
+
+		if(fjui_log_addentry( hcallp->hostid, msgid, flags, timestamp, bufp, len )) return;
+	}
+
+	if( nentry > 0 ) {
+		fjui_call_logread( hcallp->hostid, msgid );
+	}
+}
+
+void fjui_call_logread( uint64_t hostid, uint64_t lastid ) {
+	struct hrauth_call hcall;
+	int sts;
+	struct xdr_s args[1];
+	char bb[256];
+
+  //hrauth_log( LOG_LVL_TRACE, "fjui_call_getlicinfo %"PRIx64"", hostid );
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = LOG_RPC_PROG;
+  hcall.vers = LOG_RPC_VERS;
+  hcall.proc = 1; 
+  hcall.donecb = logread_cb;
+  hcall.cxt = NULL;
+  hcall.cxt2 = lastid;
+  hcall.timeout = 1000;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  xdr_init( &args[0], bb, sizeof(bb) );
+  xdr_encode_string( &args[0], "fju" );
+  xdr_encode_uint64( &args[0], lastid );
+  xdr_encode_uint32( &args[0], 16 );
+  sts = hrauth_call_tcp_async( &hcall, args, 1 );
+  if( sts ) {
+    MessageBoxA( NULL, "Failed to call LogRead", "Error", MB_OK );
+  }
+}

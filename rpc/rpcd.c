@@ -698,6 +698,13 @@ void rpc_poll( int timeout ) {
 					c->inc.raddr_len = c->addrlen;
 					rpc.aconn.listen = NULL;
 					rpc.aconn.conn = c;
+
+					/* If the msg is a reply and the reply handler wants to send back on this connection then it 
+					 * can't because the connection is still in recv state. we can safely set it back to recvlen here */
+					c->cstate = RPC_CSTATE_RECVLEN;
+					c->nstate = RPC_NSTATE_RECV;
+					c->cdata.offset = 0;
+
 					sts = rpc_process_incoming( &c->inc );
 					memset( &rpc.aconn, 0, sizeof(rpc.aconn) );
 					

@@ -84,5 +84,20 @@ void fjui_fvm_refresh( uint64_t hostid );
 void fjui_call_fvmrun( uint64_t hostid, char *modname, char *procname, struct xdr_s *args );
 void fjui_fvm_setcallres( struct xdr_s *xdr );
 
+void fjui_raft_register( void );
+void fjui_raft_setinfo( struct fjui_hostinfo *info );
+void fjui_raft_refresh( uint64_t hostid );
+
+void fjui_log_register( void );
+void fjui_log_setinfo( struct fjui_hostinfo *info );
+void fjui_log_refresh( uint64_t hostid );
+
+void fjui_reg_register( void );
+void fjui_reg_setinfo( struct fjui_hostinfo *info );
+void fjui_reg_refresh( uint64_t hostid );
+
+void fjui_call_logread( uint64_t hostid, uint64_t lastid );
+int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len );
+
 #endif
 

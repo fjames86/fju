@@ -11,9 +11,15 @@
 
 
 static void usage( char *fmt, ... ) {
-  printf( "Usage: shamir [-n n] [-k k] split secret\n"
-	  "              join share ...\n"
+  printf( "Usage: shamir [-n n] [-k k] [-b] split secret\n"
+	  "                  join share ...\n"
+	  "    Where:\n"
+	  "     -n     number of shares\n"
+	  "     -k     share threshold\n"
+	  "     -b     binary mode, expect secet as base64 and emit share as base64\n"
+	  "\n"
 	  );
+
   if( fmt ) {
     va_list args;
     printf( "Error: " );

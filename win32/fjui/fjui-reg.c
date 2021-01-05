@@ -59,11 +59,12 @@ HTREEITEM reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, in
 	memset( &tvins, 0, sizeof(tvins) );
 	tvins.hParent = parent;
 	tvins.hInsertAfter = TVI_LAST;
-	tvins.item.mask = TVIF_TEXT|TVIF_PARAM;
+	tvins.item.mask = TVIF_TEXT|TVIF_PARAM|TVIF_IMAGE|TVIF_SELECTEDIMAGE;
 	tvins.item.pszText = txt;
 	tvins.item.cchTextMax = strlen( txt ) + 1;
 	tvins.item.lParam = itemid;
-
+	tvins.item.iImage = ((flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) ? 0 : 1;
+	tvins.item.iSelectedImage = ((flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) ? 0 : 1;
 	hitem = (HTREEITEM)SendMessageA( htree, TVM_INSERTITEMA, 0, (LPARAM)&tvins ); 
 	return hitem;
 }
@@ -81,13 +82,17 @@ static void reg_notify( HWND hwnd, NMHDR *nmhdr ) {
 
 
 static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
+	static char *images[] = { "fjui", "fjui" };
 	HWND h;
+	HIMAGELIST himl;
 
 	switch(	msg ) {
 	case WM_CREATE:
 		/* create a treeview */
 		h = CreateWindowA( WC_TREEVIEWA, NULL, WS_VISIBLE|WS_CHILD|TVS_HASLINES|TVS_LINESATROOT|TVS_HASBUTTONS, 0, 0, 0, 0, hwnd, 0, 0, NULL );
 		fjui_hwnd_register( "reg_tv", h );
+		himl = fjui_create_imagelist( images, 2, 32 );
+		TreeView_SetImageList( h, himl, TVSIL_NORMAL );
 		reg_additem( "/", 0, FREG_TYPE_KEY, NULL, 0, TVI_ROOT );
 		break;	
 	case WM_COMMAND:

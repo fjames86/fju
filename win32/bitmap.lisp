@@ -40,9 +40,13 @@ Generate the bitmap using gimp and save as a bmp file in 32bpp format (8a 8r 8g 
 	  (do ((i 0 (+ i 4)))
 	      ((= i (- (length bmp) offset)))
 	    (let ((aa (aref bmp (+ offset i 0)))
-		  (bb (aref bmp (+ offset i 1)))
+		  (bb (aref bmp (+ offset i 3)))
 		  (gg (aref bmp (+ offset i 2)))
-		  (rr (aref bmp (+ offset i 3))))
+		  (rr (aref bmp (+ offset i 1))))
+	      #+nil(setf (aref bmp (+ offset i 3)) bb
+		    (aref bmp (+ offset i 2)) gg
+		    (aref bmp (+ offset i 1)) rr
+		    (aref bmp (+ offset i 0)) aa)
 	      (setf (aref bmp (+ offset i 0))
 		    (truncate (* bb aa) #xff)
 		    (aref bmp (+ offset i 1))

@@ -26,6 +26,8 @@
 #include <fju/raft.h>
 #include <fju/freg.h>
 
+#include "resource.h"
+
 void fjui_set_font( HWND hwnd );
 void fjui_net_service( void );
 void fjui_hwnd_register( char *name, HWND hwnd );
@@ -104,6 +106,7 @@ int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t
 void fjui_init_bitmaps( void );
 HBITMAP fjui_get_bitmap( char *name );
 HICON fjui_get_icon( char *name );
+HIMAGELIST fjui_create_imagelist( char **images, int nimages, int bitwidth );
 
 #endif
 

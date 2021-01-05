@@ -90,6 +90,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
     InitCommonControlsEx( &icex );
 
 	/* open all libraries etc */
+	fjui_init_bitmaps();
 	rpcd_init();
 	hostreg_open();
 	hrauth_register();
@@ -100,6 +101,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	fjui_log_register();
 	fjui_reg_register();
 
+
 	/* register main class and create the window */
 	memset( &cls, 0, sizeof(cls) );
 	cls.cbSize = sizeof(cls);
@@ -108,8 +110,8 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	cls.lpszClassName = L"FJUI";
 	cls.hbrBackground = GetSysColorBrush( COLOR_3DFACE );
 	cls.hCursor = LoadCursorW( NULL, (LPCWSTR)IDC_ARROW );
-	//cls.hIcon = winrpc_icon();
-	//cls.hIconSm = winrpc_icon();
+	cls.hIcon = fjui_get_icon( "fjui" );
+	cls.hIconSm = cls.hIcon;
 
 	RegisterClassExW( &cls );
 

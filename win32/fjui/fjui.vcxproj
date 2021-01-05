@@ -148,6 +148,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="bitmaps.c" />
     <ClCompile Include="fjui-fvm.c" />
     <ClCompile Include="fjui-log.c" />
     <ClCompile Include="fjui-net.c" />

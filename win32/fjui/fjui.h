@@ -101,5 +101,9 @@ void reg_deletechildren( HTREEITEM parent );
 void fjui_call_logread( uint64_t hostid, uint64_t lastid );
 int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len );
 
+void fjui_init_bitmaps( void );
+HBITMAP fjui_get_bitmap( char *name );
+HICON fjui_get_icon( char *name );
+
 #endif
 

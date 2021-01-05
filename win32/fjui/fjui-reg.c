@@ -68,43 +68,6 @@ HTREEITEM reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, in
 	return hitem;
 }
 
-static HTREEITEM reg_hitem_by_path( char *path, uint64_t *itemid ) {
-	char *p;
-	char *prev = path;
-	HWND htree;
-	HTREEITEM hitem;
-	TVITEMA tvi;
-	char str[256];
-
-	htree = fjui_get_hwnd( "reg_tv" );
-	hitem = TreeView_GetRoot( htree );
-	if( itemid ) *itemid = 0;
-
-	p = strtok( path, "/" );
-	while( p ) {
-		/* find the node with this name, if any */
-		hitem = TreeView_GetChild( htree, hitem );
-		while( hitem ) {
-			memset( &tvi, 0, sizeof(tvi) );
-			tvi.mask = TVIF_TEXT|TVIF_PARAM;
-			tvi.hItem = hitem;
-			tvi.pszText = str;
-			tvi.cchTextMax = sizeof(str);
-			TreeView_GetItem( htree, &tvi );
-			if( strcasecmp( str, p ) == 0 ) break;
-		}
-		if( !hitem ) return NULL;
-
-		if( itemid ) *itemid = tvi.lParam;
-
-		prev = p;
-		p = strtok( NULL, "/" );
-	}
-
-	return hitem;
-}
-
-
 static void reg_notify( HWND hwnd, NMHDR *nmhdr ) {
 	switch( nmhdr->code ) {
 	case TVN_SELCHANGEDA:
@@ -147,7 +110,7 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 void fjui_reg_refresh( uint64_t hostid ) {
 	HTREEITEM hroot;
 
-	hroot = reg_hitem_by_path( "/", NULL );
+	hroot = TreeView_GetRoot( fjui_get_hwnd( "reg_tv" ) );
 	reg_deletechildren( hroot );
 
 	fjui_call_reglist( hostid, 0, hroot );

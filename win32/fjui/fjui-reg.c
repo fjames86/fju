@@ -9,6 +9,112 @@ static void reg_size( HWND hwnd, int width, int height ) {
 
 }
 
+void reg_deletechildren( HTREEITEM parent ) {
+	HWND htree;
+	HTREEITEM hitem;
+
+	htree = fjui_get_hwnd( "reg_tv" );
+
+	hitem = TreeView_GetChild( htree, parent );
+	while( hitem ) {
+		TreeView_DeleteItem( htree, hitem );
+		hitem = TreeView_GetChild( htree, parent );
+	}
+}
+
+HTREEITEM reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, int len, HTREEITEM parent ) {
+	TVINSERTSTRUCTA tvins;
+	HTREEITEM hitem;
+	HWND htree;
+	TVITEMA tvi;
+	char str[256];
+
+	htree = fjui_get_hwnd( "reg_tv" );
+
+	/* try and find the item, if we do then don't add it a second time */
+	hitem = TreeView_GetChild( htree, parent );
+	while( hitem ) {
+		memset( &tvi, 0, sizeof(tvi) );
+		tvi.pszText = str;
+		tvi.cchTextMax = sizeof(str);
+		tvi.mask = TVIF_TEXT|TVIF_PARAM;
+		tvi.hItem = hitem;
+		if( TreeView_GetItem( htree, &tvi ) && 
+			(strcasecmp( str, txt ) == 0) ) {
+			if( tvi.lParam != itemid ) {
+				memset( &tvi, 0, sizeof(tvi) );
+				tvi.hItem = hitem;
+				tvi.mask = TVIF_TEXT|TVIF_PARAM;
+				tvi.pszText = txt;
+				tvi.cchTextMax = strlen( txt ) + 1;
+				tvi.lParam = itemid;
+				TreeView_SetItem( htree, &tvi );
+			}
+			return hitem;
+		}
+
+		hitem = TreeView_GetNextSibling( htree, hitem );
+	}
+
+	memset( &tvins, 0, sizeof(tvins) );
+	tvins.hParent = parent;
+	tvins.hInsertAfter = TVI_LAST;
+	tvins.item.mask = TVIF_TEXT|TVIF_PARAM;
+	tvins.item.pszText = txt;
+	tvins.item.cchTextMax = strlen( txt ) + 1;
+	tvins.item.lParam = itemid;
+
+	hitem = (HTREEITEM)SendMessageA( htree, TVM_INSERTITEMA, 0, (LPARAM)&tvins ); 
+	return hitem;
+}
+
+static HTREEITEM reg_hitem_by_path( char *path, uint64_t *itemid ) {
+	char *p;
+	char *prev = path;
+	HWND htree;
+	HTREEITEM hitem;
+	TVITEMA tvi;
+	char str[256];
+
+	htree = fjui_get_hwnd( "reg_tv" );
+	hitem = TreeView_GetRoot( htree );
+	if( itemid ) *itemid = 0;
+
+	p = strtok( path, "/" );
+	while( p ) {
+		/* find the node with this name, if any */
+		hitem = TreeView_GetChild( htree, hitem );
+		while( hitem ) {
+			memset( &tvi, 0, sizeof(tvi) );
+			tvi.mask = TVIF_TEXT|TVIF_PARAM;
+			tvi.hItem = hitem;
+			tvi.pszText = str;
+			tvi.cchTextMax = sizeof(str);
+			TreeView_GetItem( htree, &tvi );
+			if( strcasecmp( str, p ) == 0 ) break;
+		}
+		if( !hitem ) return NULL;
+
+		if( itemid ) *itemid = tvi.lParam;
+
+		prev = p;
+		p = strtok( NULL, "/" );
+	}
+
+	return hitem;
+}
+
+
+static void reg_notify( HWND hwnd, NMHDR *nmhdr ) {
+	switch( nmhdr->code ) {
+	case TVN_SELCHANGEDA:
+	{
+		NMTREEVIEWA *nmtv = (NMTREEVIEWA *)nmhdr;
+		fjui_call_reglist( fjui_hostid(), nmtv->itemNew.lParam, nmtv->itemNew.hItem );
+	}
+	break;
+	}
+}
 
 
 static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
@@ -17,8 +123,9 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 	switch(	msg ) {
 	case WM_CREATE:
 		/* create a treeview */
-		h = CreateWindowA( WC_TREEVIEWA, NULL, WS_VISIBLE|WS_CHILD, 0, 0, 0, 0, hwnd, 0, 0, NULL );
+		h = CreateWindowA( WC_TREEVIEWA, NULL, WS_VISIBLE|WS_CHILD|TVS_HASLINES|TVS_LINESATROOT|TVS_HASBUTTONS, 0, 0, 0, 0, hwnd, 0, 0, NULL );
 		fjui_hwnd_register( "reg_tv", h );
+		reg_additem( "/", 0, FREG_TYPE_KEY, NULL, 0, TVI_ROOT );
 		break;	
 	case WM_COMMAND:
 		break;
@@ -26,6 +133,7 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		reg_size( hwnd, LOWORD(lparam), HIWORD(lparam) );
 		break;
 	case WM_NOTIFY:
+		reg_notify( hwnd, (NMHDR *)lparam );
 		break;
 	case WM_CTLCOLORSTATIC:
 		SetBkMode((HDC)wparam, TRANSPARENT );
@@ -36,11 +144,13 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 	return DefWindowProcW( hwnd, msg, wparam, lparam );
 }
 
-void fjui_reg_setinfo( struct fjui_hostinfo *info ) {	
-}
-
 void fjui_reg_refresh( uint64_t hostid ) {
-	//fjui_call_raftlist( hostid );
+	HTREEITEM hroot;
+
+	hroot = reg_hitem_by_path( "/", NULL );
+	reg_deletechildren( hroot );
+
+	fjui_call_reglist( hostid, 0, hroot );
 }
 
 void fjui_reg_register( void ) {

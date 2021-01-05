@@ -309,6 +309,7 @@ static void fjui_main_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 				fjui_fvm_refresh( glob.hostid );
 				fjui_log_refresh( glob.hostid );
 				fjui_raft_refresh( glob.hostid );
+				fjui_reg_refresh( glob.hostid );
 			}
 		}
 	}

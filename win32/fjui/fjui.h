@@ -93,8 +93,10 @@ void fjui_log_setinfo( struct fjui_hostinfo *info );
 void fjui_log_refresh( uint64_t hostid );
 
 void fjui_reg_register( void );
-void fjui_reg_setinfo( struct fjui_hostinfo *info );
 void fjui_reg_refresh( uint64_t hostid );
+void fjui_call_reglist( uint64_t hostid, uint64_t hitem, HTREEITEM hparent );
+HTREEITEM reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, int len, HTREEITEM parent );
+void reg_deletechildren( HTREEITEM parent );
 
 void fjui_call_logread( uint64_t hostid, uint64_t lastid );
 int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len );

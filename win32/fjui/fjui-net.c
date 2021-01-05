@@ -457,7 +457,7 @@ static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	}
 
 	if( nentry > 0 ) {
-		fjui_call_logread( hcallp->hostid, msgid );
+		//fjui_call_logread( hcallp->hostid, msgid );
 	}
 }
 
@@ -487,5 +487,100 @@ void fjui_call_logread( uint64_t hostid, uint64_t lastid ) {
   sts = hrauth_call_tcp_async( &hcall, args, 1 );
   if( sts ) {
     MessageBoxA( NULL, "Failed to call LogRead", "Error", MB_OK );
+  }
+}
+
+
+static void reglist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
+	int sts, b;
+	uint64_t id, u64;
+	char name[256];
+	char str[1024];
+	uint32_t flags, u32;
+	char *bufp;
+	int len;
+	HTREEITEM hparent;
+
+	hparent = (HTREEITEM)hcallp->cxt2;
+
+	if( !xdr ) return;
+
+	//reg_deletechildren( hparent );
+
+	sts = xdr_decode_boolean( xdr, &b );
+	if( sts ) return;
+	while( b ) {
+
+		sts = xdr_decode_uint64( xdr, &id );
+		if( !sts ) xdr_decode_string( xdr, name, sizeof(name) );
+		if( !sts ) xdr_decode_uint32( xdr, &flags );
+		if( sts ) return;
+
+		bufp = NULL;
+		len = 0;
+
+		switch( flags & FREG_TYPE_MASK ) {
+		case FREG_TYPE_UINT32:
+			sts = xdr_decode_uint32( xdr, &u32 );
+			if( sts ) return;
+			bufp = (char *)&u32;
+			len = sizeof(u32);
+			break;
+		case FREG_TYPE_UINT64:
+			sts = xdr_decode_uint64( xdr, &u64 );	
+			if( sts ) return;
+			bufp = (char *)&u64;
+			len = sizeof(u64);
+			break;
+		case FREG_TYPE_KEY:
+			bufp = NULL;
+			len = 0;
+			break;
+		case FREG_TYPE_STRING:
+			sts = xdr_decode_string( xdr, str, sizeof(str) );
+			if( sts ) return;
+			bufp = str;
+			len = strlen( str ) + 1;
+			break;
+		case FREG_TYPE_OPAQUE:
+			sts = xdr_decode_opaque_ref( xdr, (uint8_t *)&bufp, &len );
+			if( sts ) return;
+			break;
+		}
+
+		reg_additem( name, id, flags, bufp, len, hparent );
+
+		sts = xdr_decode_boolean( xdr, &b );
+		if( sts ) return;
+	}
+
+
+	TreeView_Expand( fjui_get_hwnd( "reg_tv" ), hparent, TVE_EXPAND|TVE_EXPANDPARTIAL );
+}
+
+void fjui_call_reglist( uint64_t hostid, uint64_t hitem, HTREEITEM hparent ) {
+	struct hrauth_call hcall;
+	int sts;
+	struct xdr_s args[1];
+	char bb[256];
+
+  //hrauth_log( LOG_LVL_TRACE, "fjui_call_getlicinfo %"PRIx64"", hostid );
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = FREG_RPC_PROG;
+  hcall.vers = FREG_RPC_VERS;
+  hcall.proc = 1; 
+  hcall.donecb = reglist_cb;
+  hcall.cxt = NULL;
+  hcall.cxt2 = hparent;
+  hcall.timeout = 1000;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  xdr_init( &args[0], bb, sizeof(bb) );
+  xdr_encode_uint64( &args[0], hitem );
+  sts = hrauth_call_tcp_async( &hcall, args, 1 );
+  if( sts ) {
+    MessageBoxA( NULL, "Failed to call RegList", "Error", MB_OK );
   }
 }

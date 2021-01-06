@@ -228,3 +228,5 @@ rpcd_init
 rpcd_win32event
 hrauth_call_tcp_async
 hrauth_conn_list
+hrauth_conn_register
+

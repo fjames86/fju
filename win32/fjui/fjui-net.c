@@ -97,7 +97,7 @@ void fjui_call_getlicinfo( uint64_t hostid ) {
   sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
   if( sts ) {
     //hrauth_log( LOG_LVL_ERROR, "fjui_call_getlicinfo failed hostid=%"PRIx64"", hostid );
-		log_writef( NULL, LOG_LVL_INFO, "Failed to call" );
+    fjui_set_statusbar( 1, "GetLicInfo failed" );
   }
 }
 
@@ -173,6 +173,7 @@ void fjui_call_connlist( uint64_t hostid ) {
 
   sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
   if( sts ) {
+    fjui_set_statusbar( 1, "ConnList failed" );    
     //hrauth_log( LOG_LVL_ERROR, "fjui_call_getlicinfo failed hostid=%"PRIx64"", hostid );
   }
 }
@@ -245,6 +246,7 @@ void fjui_call_fvmlist( uint64_t hostid ) {
 
   sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
   if( sts ) {
+    fjui_set_statusbar( 1, "FvmList failed" );    
     //hrauth_log( LOG_LVL_ERROR, "fjui_call_getlicinfo failed hostid=%"PRIx64"", hostid );
   }
 }
@@ -309,6 +311,7 @@ void fjui_call_rpcbindlist( uint64_t hostid ) {
 
   sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
   if( sts ) {
+    fjui_set_statusbar( 1, "RpcBindList failed" );    
     //hrauth_log( LOG_LVL_ERROR, "fjui_call_getlicinfo failed hostid=%"PRIx64"", hostid );
   }
 }
@@ -387,6 +390,7 @@ void fjui_call_raftlist( uint64_t hostid ) {
 
   sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
   if( sts ) {
+    fjui_set_statusbar( 1, "RaftList failed" );    
     //hrauth_log( LOG_LVL_ERROR, "fjui_call_getlicinfo failed hostid=%"PRIx64"", hostid );
   }
 }
@@ -429,7 +433,7 @@ void fjui_call_fvmrun( uint64_t hostid, char *modname, char *procname, struct xd
   args2[1].offset = args->offset;
   sts = hrauth_call_tcp_async( &hcall, args2, 2 );
   if( sts ) {
-    MessageBoxA( NULL, "Failed to call FvmRun", "Error", MB_OK );
+    fjui_set_statusbar( 1, "FvmRun failed" );
   }
 }
 
@@ -494,7 +498,7 @@ void fjui_call_logread( uint64_t hostid, uint64_t lastid ) {
   xdr_encode_uint32( &args[0], 256 );
   sts = hrauth_call_tcp_async( &hcall, args, 1 );
   if( sts ) {
-    MessageBoxA( NULL, "Failed to call LogRead", "Error", MB_OK );
+    fjui_set_statusbar( 1, "LogRead failed" );
   }
 }
 
@@ -593,7 +597,7 @@ void fjui_call_reglist( uint64_t hostid, uint64_t hitem, HTREEITEM hparent ) {
   xdr_encode_uint64( &args[0], hitem );
   sts = hrauth_call_tcp_async( &hcall, args, 1 );
   if( sts ) {
-    MessageBoxA( NULL, "Failed to call RegList", "Error", MB_OK );
+    fjui_set_statusbar( 1, "RegList failed" );
   }
 }
 
@@ -626,12 +630,15 @@ void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid ) {
   xdr_encode_uint64( &args[0], itemid );
   sts = hrauth_call_tcp_async( &hcall, args, 1 );
   if( sts ) {
-    MessageBoxA( NULL, "Failed to call RegRem", "Error", MB_OK );
+    fjui_set_statusbar( 1, "RegRem failed" );
   }
 }
 
 static void regput_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	fjui_set_statusbar( 1, "RegPut %s", xdr ? "Succes" : "Timeout" );
+	if( xdr ) {
+	  fjui_reg_refresh_selected( hcallp->hostid );
+	}
 }
 
 void fjui_call_regput( uint64_t hostid, uint64_t parentid, char *name, uint32_t flags, char *buf, int len ) {
@@ -662,6 +669,6 @@ void fjui_call_regput( uint64_t hostid, uint64_t parentid, char *name, uint32_t 
   args[1].offset = len;
   sts = hrauth_call_tcp_async( &hcall, args, 2 );
   if( sts ) {
-    MessageBoxA( NULL, "Failed to call RegPut", "Error", MB_OK );
+    fjui_set_statusbar( 1, "RegPut failed" );
   }
 }

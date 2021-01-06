@@ -18,7 +18,7 @@ static void reg_size( HWND hwnd, int width, int height ) {
 	h = fjui_get_hwnd( "reg_type" );
 	SetWindowPos( h, HWND_TOP, 410, height - 90, 100, 22, 0 );
 	h = fjui_get_hwnd( "reg_value" );
-	SetWindowPos( h, HWND_TOP, 520, height - 90, 200, 22, 0 );
+	SetWindowPos( h, HWND_TOP, 520, height - 90, width - 540, 22, 0 );
 	h = fjui_get_hwnd( "reg_rem" );
 	SetWindowPos( h, HWND_TOP, 210, height - 60, 75, 25, 0 );
 	
@@ -125,8 +125,8 @@ void reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, int len
 		sprintf( str, "%s", buf );
 		break;
 	case FREG_TYPE_OPAQUE:
-		if( len > 128 ) len = 128;
-		base64_encode( buf, len, str );
+		base64_encode( buf, len > 128 ? 128 : len, str );
+		if( len > 128 ) strcat( str, "..." );
 		break;
 	}
 	lvi.pszText = str;
@@ -144,10 +144,49 @@ static void reg_notify( HWND hwnd, NMHDR *nmhdr ) {
 		ListView_DeleteAllItems( fjui_get_hwnd( "reg_lv" ) );
 	}
 	break;
+	case LVN_ITEMCHANGED:
+	  {
+	    /* set name/type/value to currently selected item */
+	    HWND h;
+	    int idx;
+	    LVITEMA lvi;
+	    char str[1024];
+	    
+	    h = fjui_get_hwnd( "reg_lv" );
+	    idx = ListView_GetNextItem( h, -1, LVNI_SELECTED );
+	    if( idx >= 0 ) {
+		memset( &lvi, 0, sizeof(lvi) );
+		lvi.mask = LVIF_TEXT;
+		lvi.pszText = str;
+		lvi.cchTextMax = sizeof(str);
+		lvi.iItem = idx;
+		lvi.iSubItem = 0;
+		ListView_GetItem( h, &lvi );
+		SetWindowTextA( fjui_get_hwnd( "reg_name" ), str );
+		memset( &lvi, 0, sizeof(lvi) );
+		lvi.mask = LVIF_TEXT;
+		lvi.pszText = str;
+		lvi.cchTextMax = sizeof(str);
+		lvi.iItem = idx;
+		lvi.iSubItem = 1;
+		ListView_GetItem( h, &lvi );
+		SetWindowTextA( fjui_get_hwnd( "reg_type" ), str );
+		memset( &lvi, 0, sizeof(lvi) );
+		lvi.mask = LVIF_TEXT;
+		lvi.pszText = str;
+		lvi.cchTextMax = sizeof(str);
+		lvi.iItem = idx;
+		lvi.iSubItem = 2;
+		ListView_GetItem( h, &lvi );
+		SetWindowTextA( fjui_get_hwnd( "reg_value" ), str );
+	    }
+
+	  }
+	  break;
 	}
 }
 
-static void reg_getselected( uint64_t *parentid, uint64_t *itemid ) {
+static void reg_getselected( uint64_t *parentid, uint64_t *itemid, HTREEITEM *hparent ) {
 	int idx;
 	LVITEMA lvi;
 	HTREEITEM hitem;
@@ -155,7 +194,8 @@ static void reg_getselected( uint64_t *parentid, uint64_t *itemid ) {
 
 	*itemid = 0;
 	*parentid = 0;
-
+	if( hparent ) *hparent = 0;
+	
 	idx = ListView_GetNextItem( fjui_get_hwnd( "reg_lv" ), -1, LVNI_SELECTED );
 	if( idx >= 0 ) {
 		memset( &lvi, 0, sizeof(lvi) );
@@ -175,6 +215,7 @@ static void reg_getselected( uint64_t *parentid, uint64_t *itemid ) {
 
 		if( *itemid ) {
 			*parentid = tvi.lParam;
+			if( hparent ) *hparent = hitem;
 		} else {
 			*itemid = tvi.lParam;
 
@@ -184,6 +225,7 @@ static void reg_getselected( uint64_t *parentid, uint64_t *itemid ) {
 			tvi.mask = TVIF_PARAM;
 			TreeView_GetItem( fjui_get_hwnd( "reg_tv" ), &tvi );
 			*parentid = tvi.lParam;
+			if( hparent ) *hparent = hitem;			
 		}
 	}
 
@@ -203,7 +245,7 @@ static void reg_command( HWND hwnd, int id, int cmd ) {
 		int len;
 		char bufp[256];
 
-		reg_getselected( &parentid, &itemid );
+		reg_getselected( &parentid, &itemid, NULL );
 		GetWindowTextA( fjui_get_hwnd( "reg_name" ), name, sizeof(name) );
 		GetWindowTextA( fjui_get_hwnd( "reg_type" ), type, sizeof(type) );
 		GetWindowTextA( fjui_get_hwnd( "reg_value" ), value, sizeof(value) );
@@ -213,6 +255,7 @@ static void reg_command( HWND hwnd, int id, int cmd ) {
 			flags = FREG_TYPE_KEY;
 			buf = NULL;
 			len = 0;
+			parentid = itemid; //?
 		} else if( strcasecmp( type, "u32" ) == 0 ) {
 			flags = FREG_TYPE_UINT32;
 			u32 = strtol( value, NULL, 0 );
@@ -238,7 +281,7 @@ static void reg_command( HWND hwnd, int id, int cmd ) {
 	}
 	break;
 	case CMD_REM:
-		reg_getselected( &parentid, &itemid );
+	  reg_getselected( &parentid, &itemid, NULL );
 		if( itemid ) {
 			fjui_call_regrem( fjui_hostid(), parentid, itemid );
 		}
@@ -308,7 +351,7 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		SendMessageA( h, CB_SETCURSEL, 0, 0 );
 		fjui_hwnd_register( "reg_type", h );
 
-		h = CreateWindowA( WC_EDITA, "Value", WS_VISIBLE|WS_CHILD|WS_BORDER, 0, 0, 0, 0, hwnd, 0, 0, 0 );
+		h = CreateWindowA( WC_EDITA, "Value", WS_VISIBLE|WS_CHILD|WS_BORDER|ES_AUTOHSCROLL, 0, 0, 0, 0, hwnd, 0, 0, 0 );
 		fjui_set_font( h );
 		fjui_hwnd_register( "reg_value", h );
 
@@ -336,8 +379,17 @@ void fjui_reg_refresh( uint64_t hostid ) {
 
 	hroot = TreeView_GetRoot( fjui_get_hwnd( "reg_tv" ) );
 	reg_deletechildren( hroot );
-
+	ListView_DeleteAllItems( fjui_get_hwnd( "reg_lv" ) );
+	
 	fjui_call_reglist( hostid, 0, hroot );
+}
+
+void fjui_reg_refresh_selected( uint64_t hostid ) {
+  uint64_t parentid, itemid;
+  HTREEITEM hitem;
+  
+  reg_getselected( &parentid, &itemid, &hitem );
+  if( parentid && hitem ) fjui_call_reglist( hostid, parentid, hitem );
 }
 
 void fjui_reg_register( void ) {

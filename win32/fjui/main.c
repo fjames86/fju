@@ -94,6 +94,8 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	rpcd_init();
 	hostreg_open();
 	hrauth_register();
+	hrauth_conn_register( hostreg_localid(), NULL );
+	
 	/* Q: do we want to load any other services here e.g. fvm ? */
 	fjui_summary_register();
 	fjui_fvm_register();

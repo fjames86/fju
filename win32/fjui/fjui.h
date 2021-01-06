@@ -110,6 +110,7 @@ HIMAGELIST fjui_create_imagelist( char **images, int nimages, int bitwidth );
 
 void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid );
 void fjui_call_regput( uint64_t hostid, uint64_t parentid, char *name, uint32_t flags, char *buf, int len );
+void fjui_reg_refresh_selected( uint64_t hostid );
 
 #endif
 

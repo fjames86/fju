@@ -284,6 +284,8 @@ static uint32_t fvm_pop( struct fvm_state *state ) {
 }
 
 char *fvm_getptr( struct fvm_state *state, uint32_t addr, int len, int writeable ) {
+  if( len < 0 ) return NULL;
+  
   if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize - len)) ) {
     return &state->module->data[addr - FVM_ADDR_DATA];
   }
@@ -514,7 +516,7 @@ static int fvm_step( struct fvm_state *state ) {
     u16 = fvm_read_pcu16( state );
     addr = FVM_ADDR_STACK + state->sp - u16;
     u32 = fvm_pop( state );
-    fvm_write_u32( state, addr, u32 );
+    if( fvm_write_u32( state, addr, u32 ) < 0 ) return -1;
     break;
   case OP_BR:
     u16 = fvm_read_pcu16( state );
@@ -626,7 +628,7 @@ static int fvm_step( struct fvm_state *state ) {
   case OP_ST:
     u32 = fvm_pop( state );
     addr = fvm_pop( state );
-    fvm_write_u32( state, addr, u32 );
+    if( fvm_write_u32( state, addr, u32 ) < 0 ) return -1;
     break;
   case OP_LD8:
     {
@@ -810,6 +812,10 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	u = fvm_read_u32( &state, u32[i] );
 	len = u32[i - 1];	
 	buf = fvm_getptr( &state, u, len, 0 );
+	if( !buf ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run failed to get opaque pointer" );
+	}
+	
 	sts = xdr_encode_opaque( resbuf, (uint8_t *)buf, buf ? len : 0 );
 	if( sts ) {
 	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error decoding result" );	    	  

@@ -2,7 +2,7 @@
 { -*- mode:fvm -*- }
 
 
-Program Log(0x2fff777a,1,ProcNull,ProcRead,ProcWrite,ProcLastId,LogRead,LogWrite);
+Program Log(0x2fff777a,1,ProcNull,ProcRead,ProcWrite,ProcLastId,ProcReadEnd,LogRead,LogWrite);
 Begin
 
 Include "syscall.pas";
@@ -15,8 +15,8 @@ Procedure ProcNull()
 Begin
 End;
 
-{ read up to n entries starting from id }
-Procedure ProcRead(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, var ebuf : opaque)
+{ helper function to read entries }
+Procedure ReadLogEntries(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, var ebuf : opaque, fromend : int)
 Begin
 	var flags, len, offset, ne : int;
 	var timeH, timeL, l, f : int;
@@ -25,9 +25,13 @@ Begin
 
 	offset = 0;
 	ne = 0;
-	Syscall LogNext(logname,idhigh,idlow,idhigh,idlow);
+	If fromend Then Syscall LogPrev(logname,idhigh,idlow,idhigh,idlow)
+	Else Syscall LogNext(logname,idhigh,idlow,idhigh,idlow);
+	
 	While (idhigh|idlow) Do
 	Begin
+		If (offset + LogEntryHeader) >= 2048 Then Break;
+		
 		flags = 0;
 		len = 0;
 		p = xdr + offset + LogEntryHeader;
@@ -48,13 +52,20 @@ Begin
 		offset = offset + len;
 		ne = ne + 1;
 		If ne >= n Then Break;
-		
-		Syscall LogNext(logname,idhigh,idlow,idhigh,idlow);
+
+		If fromend Then Syscall LogPrev(logname,idhigh,idlow,idhigh,idlow)
+		Else Syscall LogNext(logname,idhigh,idlow,idhigh,idlow);
 	End;
 	
 	nentries = ne;
 	elen = offset;
 	ebuf = xdr;
+End;
+
+{ read up to n entries starting from id }
+Procedure ProcRead(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, var ebuf : opaque)
+Begin
+	Call ReadLogEntries(logname,idhigh,idlow,n,nentries,elen,ebuf,0);
 End;
 
 { procedure to write into log }
@@ -68,6 +79,12 @@ End;
 Procedure ProcLastId(logname : string, var idhigh : int, var idlow : int)
 Begin
 	Syscall LogLastId(logname,idhigh,idlow);
+End;
+
+{ read entries from end }
+Procedure ProcReadEnd(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, var ebuf : opaque)
+Begin
+	Call ReadLogEntries(logname,idhigh,idlow,n,nentries,elen,ebuf,1);
 End;
 
 { ------- non-rpc procedures below ------ }

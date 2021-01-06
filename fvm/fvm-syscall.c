@@ -137,13 +137,20 @@ static void fvm_xcall( struct fvm_state *state ) {
 	if( (i < (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,i + 1) == VAR_TYPE_OPAQUE) ) {
 	} else {
 	  xdr_decode_uint32( &res, &u32 );
-	  fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], u32 );
+	  if( fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], u32 ) < 0 ) {
+	    sts = -1;
+	    goto done;
+	  }
 	}
 	break;
       case VAR_TYPE_STRING:
 	strp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );
 	xdr_decode_string( &res, strp, FVM_MAX_STACK - sp );
-	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], FVM_ADDR_STACK + sp );
+	if( fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], FVM_ADDR_STACK + sp ) < 0 ) {
+	  sts = -1;
+	  goto done;
+	}
+	  
 	u32 = strlen( strp ) + 1;
 	if( u32 % 4 ) u32 += 4 - (u32 % 4);
 	sp += u32;
@@ -152,8 +159,16 @@ static void fvm_xcall( struct fvm_state *state ) {
 	bufp = fvm_getptr( state, FVM_ADDR_STACK + sp, 0, 1 );
 	u32 = FVM_MAX_STACK - sp;
 	xdr_decode_opaque( &res, (uint8_t *)bufp, (int *)&u32 );
-	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i - 1], u32 );
-	fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], FVM_ADDR_STACK + sp );
+	if( fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i - 1], u32 ) ) {
+	  sts = -1;
+	  goto done;
+	}
+	    
+	if( fvm_write_u32( state, pars[FVM_MAX_PARAM - nargs + i], FVM_ADDR_STACK + sp ) < 0 ) {
+	  sts = -1;
+	  goto done;
+	}
+	
 	if( u32 % 4 ) u32 += 4 - (u32 % 4);
 	sp += u32;
 	break;
@@ -239,7 +254,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 
       memset( &entry, 0, sizeof(entry) );
       iov[0].buf = bufp;
-      iov[0].len = bufp ? pars[3] : 0;
+      iov[0].len = bufp && (pars[3] > 0) ? pars[3] : 0;
       entry.iov = iov;
       entry.niov = 1;	
       sts = log_read_entry( logp, id, &entry );
@@ -721,7 +736,37 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 
       if( logp ) log_close( logp );
     }
-    break;    
+    break;
+  case 30:
+    /* LogPrev(logname,idhigh,idlow,var high, var low) */
+    {
+      struct log_s log, *logp;
+      struct log_entry entry;
+      struct log_prop prop;
+      uint64_t id;
+      uint32_t pars[5];
+
+      read_pars( state, pars, 5 );
+      logp = openlogfile( state, pars[0], &log );      
+      id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
+
+      if( id == 0 ) {
+	/* get last id written */
+	log_prop( logp, &prop );
+	id = prop.last_id;
+      } else {
+	/* get prev id of this entry */
+	memset( &entry, 0, sizeof(entry) );
+	log_read_entry( logp, id, &entry );
+	id = entry.prev_id;
+      }
+
+      fvm_write_u32( state, pars[4], id & 0xffffffff );
+      fvm_write_u32( state, pars[3], (id >> 32) & 0xffffffff );
+
+      if( logp ) log_close( logp );
+    }
+    break;
   case 0xffff:
     fvm_xcall( state );
     break;

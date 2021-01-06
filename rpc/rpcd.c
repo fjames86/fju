@@ -276,7 +276,7 @@ int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 	sigaction( SIGIO, &sa, NULL );
 	sigaction( SIGUSR1, &sa, NULL );
 	sigaction( SIGHUP, &sa, NULL );
-	sigaction( SIGBUS, &sa, NULL );
+	//sigaction( SIGBUS, &sa, NULL );
 	sigaction( SIGPIPE, &sa, NULL );
 #endif
 

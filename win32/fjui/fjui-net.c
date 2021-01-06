@@ -59,7 +59,7 @@ static void getlicinfo_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		fjui_set_statusbar( 1, "%s Timeout", info->name );
 		return;
 	}
-	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
+	fjui_set_statusbar( 1, "%s GetLicInfo Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 	xdr_decode_boolean( xdr, &b );
 	if( b ) {
@@ -119,7 +119,7 @@ static void connlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		fjui_set_statusbar( 1, "%s Timeout", info->name );
 		return;
 	}
-	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
+	fjui_set_statusbar( 1, "%s ConnList Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 
 	info->nconn = 0;
@@ -196,7 +196,7 @@ static void fvmlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		fjui_set_statusbar( 1, "%s Timeout", info->name );
 		return;
 	}
-	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
+	fjui_set_statusbar( 1, "%s FvmList Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 
 	info->nmodule = 0;
@@ -269,7 +269,7 @@ static void rpcbindlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		fjui_set_statusbar( 1, "%s Timeout", info->name );
 		return;
 	}
-	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
+	fjui_set_statusbar( 1, "%s RpcBindList Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 
 	info->nrpcbind = 0;
@@ -333,7 +333,7 @@ static void raftlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		fjui_set_statusbar( 1, "%s Timeout", info->name );
 		return;
 	}
-	fjui_set_statusbar( 1, "%s Success ", info->name, sec_timestr( time( NULL ), timestr ) );
+	fjui_set_statusbar( 1, "%s RaftList Success ", info->name, sec_timestr( time( NULL ), timestr ) );
 
 
 	info->nraft = 0;
@@ -394,6 +394,10 @@ void fjui_call_raftlist( uint64_t hostid ) {
 static void fvmrun_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
 	int sts;
 	int b;
+
+	if( !xdr ) return;
+	fjui_set_statusbar( 1, "FvmRun Success " );
+
 	sts = xdr_decode_boolean( xdr, &b );
 
 	fjui_fvm_setcallres( sts || !b ? NULL : xdr );
@@ -438,10 +442,14 @@ static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	uint64_t msgid, timestamp;
 	struct xdr_s xx;
 
+	
+
 	if( !xdr ) {
 		//fjui_call_logread( hcallp->hostid, hcallp->cxt2 );
+		fjui_set_statusbar( 1, "FvmRun Timeout" );
 		return;
 	}
+	fjui_set_statusbar( 1, "FvmRun Success " );
 
 	sts = xdr_decode_uint32( xdr, &nentry );
 	sts = xdr_decode_opaque_ref( xdr, &bufp, &len );
@@ -473,7 +481,7 @@ void fjui_call_logread( uint64_t hostid, uint64_t lastid ) {
   hcall.hostid = hostid;
   hcall.prog = LOG_RPC_PROG;
   hcall.vers = LOG_RPC_VERS;
-  hcall.proc = 1; 
+  hcall.proc = 4; 
   hcall.donecb = logread_cb;
   hcall.cxt = NULL;
   hcall.cxt2 = lastid;
@@ -483,7 +491,7 @@ void fjui_call_logread( uint64_t hostid, uint64_t lastid ) {
   xdr_init( &args[0], bb, sizeof(bb) );
   xdr_encode_string( &args[0], "fju" );
   xdr_encode_uint64( &args[0], lastid );
-  xdr_encode_uint32( &args[0], 16 );
+  xdr_encode_uint32( &args[0], 256 );
   sts = hrauth_call_tcp_async( &hcall, args, 1 );
   if( sts ) {
     MessageBoxA( NULL, "Failed to call LogRead", "Error", MB_OK );
@@ -503,7 +511,11 @@ static void reglist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 
 	hparent = (HTREEITEM)hcallp->cxt2;
 
-	if( !xdr ) return;
+	if( !xdr ) {
+		fjui_set_statusbar( 1, "RegList Timeout " );
+		return;
+	}
+	fjui_set_statusbar( 1, "RegList Success " );
 
 	//reg_deletechildren( hparent );
 
@@ -582,5 +594,74 @@ void fjui_call_reglist( uint64_t hostid, uint64_t hitem, HTREEITEM hparent ) {
   sts = hrauth_call_tcp_async( &hcall, args, 1 );
   if( sts ) {
     MessageBoxA( NULL, "Failed to call RegList", "Error", MB_OK );
+  }
+}
+
+
+static void regrem_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
+	fjui_set_statusbar( 1, "RegRem %s", xdr ? "Succes" : "Timeout" );
+}
+
+void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid ) {
+	struct hrauth_call hcall;
+	int sts;
+	struct xdr_s args[1];
+	char bb[256];
+
+  //hrauth_log( LOG_LVL_TRACE, "fjui_call_getlicinfo %"PRIx64"", hostid );
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = FREG_RPC_PROG;
+  hcall.vers = FREG_RPC_VERS;
+  hcall.proc = 4; 
+  hcall.donecb = regrem_cb;
+  hcall.cxt = NULL;
+  hcall.cxt2 = itemid;
+  hcall.timeout = 1000;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  xdr_init( &args[0], bb, sizeof(bb) );
+  xdr_encode_uint64( &args[0], parentid );
+  xdr_encode_uint64( &args[0], itemid );
+  sts = hrauth_call_tcp_async( &hcall, args, 1 );
+  if( sts ) {
+    MessageBoxA( NULL, "Failed to call RegRem", "Error", MB_OK );
+  }
+}
+
+static void regput_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+	fjui_set_statusbar( 1, "RegPut %s", xdr ? "Succes" : "Timeout" );
+}
+
+void fjui_call_regput( uint64_t hostid, uint64_t parentid, char *name, uint32_t flags, char *buf, int len ) {
+	struct hrauth_call hcall;
+	int sts;
+	struct xdr_s args[2];
+	char bb[256];
+
+  //hrauth_log( LOG_LVL_TRACE, "fjui_call_getlicinfo %"PRIx64"", hostid );
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = FREG_RPC_PROG;
+  hcall.vers = FREG_RPC_VERS;
+  hcall.proc = 3; 
+  hcall.donecb = regput_cb;
+  hcall.cxt = NULL;
+  hcall.cxt2 = parentid;
+  hcall.timeout = 1000;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  xdr_init( &args[0], bb, sizeof(bb) );
+  xdr_encode_uint64( &args[0], parentid );
+  xdr_encode_string( &args[0], name );
+  xdr_encode_uint32( &args[0], flags );
+  xdr_encode_uint32( &args[0], len );
+  xdr_init( &args[1], buf, len );
+  args[1].offset = len;
+  sts = hrauth_call_tcp_async( &hcall, args, 2 );
+  if( sts ) {
+    MessageBoxA( NULL, "Failed to call RegPut", "Error", MB_OK );
   }
 }

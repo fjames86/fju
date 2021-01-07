@@ -77,7 +77,7 @@ void fjui_log_refresh( uint64_t hostid ) {
 	fjui_call_logread( hostid, 0 );
 }
 
-int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len ) {
+int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len, int index ) {
 	LVITEMA lvi;
 	char str[1024];
 	int idx;
@@ -87,9 +87,16 @@ int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t
 
 	hwnd = fjui_get_hwnd( "log_lv" );
 
+	idx = ListView_GetItemCount( hwnd );
+	while( idx > 1024 ) {
+	  ListView_DeleteItem( hwnd, idx - 1 );
+	  idx--;
+	}
+	    
+	
 	memset( &lvi, 0, sizeof(lvi) );
 	lvi.mask = LVIF_TEXT|LVIF_PARAM;
-	lvi.iItem = 0x7ffffffe;
+	lvi.iItem = index; //0x7ffffffe;
 	lvi.iSubItem = 0;
 	lvi.lParam = msgid;
 	sec_timestr( timestamp, str );	
@@ -132,6 +139,20 @@ int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t
 	return 0;
 }
 
+static void log_iter_cb( struct rpc_iterator *iter ) {
+  fjui_call_logread( fjui_hostid(), 0 );
+}
+
+static struct rpc_iterator log_iter = 
+{
+	NULL,
+	0,
+	5000,
+	log_iter_cb,
+	NULL
+};
+
+
 void fjui_log_register( void ) {
 	WNDCLASSEXW cls;
 
@@ -147,5 +168,7 @@ void fjui_log_register( void ) {
 	//cls.hIconSm = winrpc_icon();
 
 	RegisterClassExW( &cls );
+
+	rpc_iterator_register( &log_iter );
 }
 

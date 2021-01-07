@@ -353,6 +353,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
 	if( elist[i].iov[j].buf ) {
 	  elist[i].iov[j].buf[offset] = '\0';
 	  offset++;
+	  elist[i].msglen++;
 	}
       }
     }

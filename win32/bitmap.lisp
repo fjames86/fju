@@ -49,9 +49,9 @@ Generate the bitmap using gimp and save as a bmp file in 32bpp format (8a 8r 8g 
 		       (truncate (* bb aa) #xff)
 		       (aref bmp (+ offset i 1))
 		       (truncate (* gg aa) #xff)
-		       (aref bmp (+ offset i 3))
-		       (truncate (* rr aa) #xff)
 		       (aref bmp (+ offset i 2))
+		       (truncate (* rr aa) #xff)
+		       (aref bmp (+ offset i 3))
 		       aa))))
 	    (24
 	     #+nil(do ((i 0 (+ i 3)))

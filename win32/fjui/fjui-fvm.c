@@ -2,6 +2,8 @@
 #include "fjui.h"
 
 #define CMD_CALL 1
+#define CMD_LOAD 2
+#define CMD_UNLOAD 3
 
 
 static void fvm_size( HWND hwnd, int width, int height ) {
@@ -10,11 +12,17 @@ static void fvm_size( HWND hwnd, int width, int height ) {
 	h = fjui_get_hwnd( "fvm_lv" );
 	SetWindowPos( h, HWND_TOP, 5, 5, width - 10, height - 100, 0 );
 
+	h = fjui_get_hwnd( "fvm_loadbtn" );
+	SetWindowPos( h, HWND_TOP, 5, height - 90, 75, 25, 0 );
+	h = fjui_get_hwnd( "fvm_unloadbtn" );
+	SetWindowPos( h, HWND_TOP, 100, height - 90, 75, 25, 0 );
+
 	h = fjui_get_hwnd( "fvm_calltxt" );
 	SetWindowPos( h, HWND_TOP, 100, height - 50, width - 150, 25, 0 );
-
 	h = fjui_get_hwnd( "fvm_callbtn" );
 	SetWindowPos( h, HWND_TOP, 5, height - 50, 75, 25, 0 );
+	
+	
 }
 
 static void fvm_callsig( char *modname, char *procname, uint64_t siginfo, char *str ) {
@@ -198,6 +206,56 @@ static void fvm_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 
 
 	break;
+	case CMD_LOAD:
+	  {
+	    OPENFILENAMEA ofn;
+	    char fname[256];
+	    memset( &ofn, 0, sizeof(ofn) );
+	    ofn.lStructSize = sizeof(ofn);
+	    ofn.hwndOwner = hwnd;
+	    ofn.lpstrFilter = "FVM module file (*.fvm)\0*.fvm\0\0\0";
+	    ofn.lpstrFile = fname;
+	    ofn.nMaxFile = sizeof(fname);
+	    ofn.lpstrTitle = "FVM module";
+	    ofn.Flags = OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST;
+	    if( GetOpenFileNameA( &ofn ) ) {
+	      struct mmf_s mmf;
+	      int sts;
+	      
+	      sts = mmf_open2( fname, &mmf, MMF_OPEN_EXISTING );
+	      if( sts ) {
+		MessageBoxA( hwnd, "Error", "Failed to open file", MB_OK|MB_ICONERROR );
+	      } else {
+		mmf_remap( &mmf, mmf.fsize );
+		fjui_call_fvmload( fjui_hostid(), mmf.file, mmf.fsize, 0, 0 );
+		mmf_close( &mmf );
+	      }
+	    }
+	  }
+	  break;
+	case CMD_UNLOAD:
+	  {
+	    HWND h;
+	    int idx;
+	    LVITEMA lvi;
+	    struct fjui_hostinfo *hinfo;
+	    
+	    h = fjui_get_hwnd( "fvm_lv" );
+	    idx = SendMessageA( h, LVM_GETNEXTITEM, -1, LVNI_SELECTED );
+	    
+	    if( idx >= 0 ) {
+	      memset( &lvi, 0, sizeof(lvi) );
+	      lvi.iItem = idx;
+	      lvi.mask = LVIF_PARAM;
+	      SendMessageA( h, LVM_GETITEMA, 0, &lvi );
+	      idx = (lvi.lParam & 0xffff);
+	      hinfo = fjui_hostinfo_by_id( fjui_hostid() );
+	      if( hinfo && idx < hinfo->nmodule ) {
+		fjui_call_fvmunload( fjui_hostid(), hinfo->modules[idx].name );
+	      }
+	    }
+	  }
+	  break;
 	}
 }
 
@@ -315,6 +373,13 @@ static LRESULT CALLBACK fvm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		h = CreateWindowA( WC_BUTTONA, "Call", WS_VISIBLE|WS_CHILD|WS_BORDER, 5, 0, 75, 25, hwnd, CMD_CALL, 0, NULL );
 		fjui_set_font( h );
 		fjui_hwnd_register( "fvm_callbtn", h );
+
+		h = CreateWindowA( WC_BUTTONA, "Load...", WS_VISIBLE|WS_CHILD|WS_BORDER, 5, 0, 75, 25, hwnd, CMD_LOAD, 0, NULL );
+		fjui_set_font( h );
+		fjui_hwnd_register( "fvm_loadbtn", h );
+		h = CreateWindowA( WC_BUTTONA, "Unload", WS_VISIBLE|WS_CHILD|WS_BORDER, 5, 0, 75, 25, hwnd, CMD_UNLOAD, 0, NULL );
+		fjui_set_font( h );
+		fjui_hwnd_register( "fvm_unloadbtn", h );
 
 		break;	
 	case WM_COMMAND:

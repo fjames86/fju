@@ -101,7 +101,7 @@ void reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, int len
 void reg_deletechildren( HTREEITEM parent );
 
 void fjui_call_logread( uint64_t hostid, uint64_t lastid );
-int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len );
+int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len, int index );
 
 void fjui_init_bitmaps( void );
 HBITMAP fjui_get_bitmap( char *name );
@@ -111,6 +111,9 @@ HIMAGELIST fjui_create_imagelist( char **images, int nimages, int bitwidth );
 void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid );
 void fjui_call_regput( uint64_t hostid, uint64_t parentid, char *name, uint32_t flags, char *buf, int len );
 void fjui_reg_refresh_selected( uint64_t hostid );
+
+void fjui_call_fvmload( uint64_t hostid, char *buf, int len, uint32_t flags, int registerp );
+void fjui_call_fvmunload( uint64_t hostid, char *modname );
 
 #endif
 

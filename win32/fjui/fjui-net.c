@@ -250,7 +250,7 @@ void fjui_call_fvmlist( uint64_t hostid ) {
     //hrauth_log( LOG_LVL_ERROR, "fjui_call_getlicinfo failed hostid=%"PRIx64"", hostid );
   }
 }
-
+ 
 
 
 
@@ -450,10 +450,10 @@ static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 
 	if( !xdr ) {
 		//fjui_call_logread( hcallp->hostid, hcallp->cxt2 );
-		fjui_set_statusbar( 1, "FvmRun Timeout" );
+		fjui_set_statusbar( 1, "LogRead Timeout" );
 		return;
 	}
-	fjui_set_statusbar( 1, "FvmRun Success " );
+	fjui_set_statusbar( 1, "LogRead Success " );
 
 	sts = xdr_decode_uint32( xdr, &nentry );
 	sts = xdr_decode_opaque_ref( xdr, &bufp, &len );
@@ -465,7 +465,7 @@ static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 		if( !sts ) sts = xdr_decode_opaque_ref( &xx, &bufp, &len );
 		if( sts ) return;
 
-		if(fjui_log_addentry( hcallp->hostid, msgid, flags, timestamp, bufp, len )) return;
+		if(fjui_log_addentry( hcallp->hostid, msgid, flags, timestamp, bufp, len, i )) return;
 	}
 
 	if( nentry > 0 ) {
@@ -670,5 +670,78 @@ void fjui_call_regput( uint64_t hostid, uint64_t parentid, char *name, uint32_t 
   sts = hrauth_call_tcp_async( &hcall, args, 2 );
   if( sts ) {
     fjui_set_statusbar( 1, "RegPut failed" );
+  }
+}
+
+static void fvmload_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+  int sts, b;
+  fjui_set_statusbar( 1, "FvmLoad %s", xdr ? "Succes" : "Timeout" );
+  sts = xdr_decode_boolean( xdr, &b );
+  if( !sts && b ) {
+    fjui_fvm_refresh( hcallp->hostid );
+  }
+}
+
+void fjui_call_fvmload( uint64_t hostid, char *buf, int len, uint32_t flags, int registerp ) {
+	struct hrauth_call hcall;
+	int sts;
+	struct xdr_s args[3];
+	char argbuf[16], argbuf2[16];
+	
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = FVM_RPC_PROG;
+  hcall.vers = FVM_RPC_VERS;
+  hcall.proc = 2; 
+  hcall.donecb = fvmload_cb;
+  hcall.cxt = NULL;
+  hcall.timeout = 200;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  xdr_init( &args[0], argbuf, sizeof(argbuf) );
+  xdr_encode_uint32( &args[0], len );
+  xdr_init( &args[1], buf, len );
+  args[1].offset = len;
+  xdr_init( &args[2], argbuf2, sizeof(argbuf2) );
+  xdr_encode_uint32( &args[2], flags );
+  xdr_encode_boolean( &args[2], registerp );
+  
+  sts = hrauth_call_tcp_async( &hcall, args, 3 );
+  if( sts ) {
+    fjui_set_statusbar( 1, "FvmLoad failed" );    
+  }
+}
+
+static void fvmunload_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+  int sts, b;
+  
+  fjui_set_statusbar( 1, "FvUnload %s", xdr ? "Succes" : "Timeout" );
+  sts = xdr_decode_boolean( xdr, &b );
+  if( !sts && b ) {
+    fjui_fvm_refresh( hcallp->hostid );
+  }
+}
+
+void fjui_call_fvmunload( uint64_t hostid, char *modname ) {
+	struct hrauth_call hcall;
+	int sts;
+	struct xdr_s args;
+	char argbuf[64];
+	
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = FVM_RPC_PROG;
+  hcall.vers = FVM_RPC_VERS;
+  hcall.proc = 3; 
+  hcall.donecb = fvmload_cb;
+  hcall.cxt = NULL;
+  hcall.timeout = 200;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  xdr_init( &args, argbuf, sizeof(argbuf) );
+  xdr_encode_string( &args, modname );
+  sts = hrauth_call_tcp_async( &hcall, &args, 1 );
+  if( sts ) {
+    fjui_set_statusbar( 1, "FvmUnload failed" );    
   }
 }

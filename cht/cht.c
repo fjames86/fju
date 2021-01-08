@@ -419,7 +419,8 @@ int cht_purge( struct cht_s *cht, uint32_t mask, uint32_t flags ) {
 
 int cht_entry_by_index( struct cht_s *cht, int idx, uint32_t seq, struct cht_entry *entry ) {
   int sts;
-  
+
+  if( !cht ) cht = getdefaulthandle();
   if( idx >= cht->count ) return -1;
 
   sts = -1;

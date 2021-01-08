@@ -27,6 +27,8 @@
 
 #include "fvm-private.h"
 
+int cht_entry_by_index( struct cht_s *cht, int idx, uint32_t seq, struct cht_entry *entry );
+
 static struct log_s *openlogfile( struct fvm_state *state, uint32_t addr, struct log_s *log ) {
   struct log_s *logp;
   char logname[64];
@@ -765,6 +767,57 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, pars[3], (id >> 32) & 0xffffffff );
 
       if( logp ) log_close( logp );
+    }
+    break;
+  case 31:
+    /* ChtList(startkey,keybuf,nkeybuf,var nkeys) */
+    {
+      uint32_t pars[5];
+      int i, n, nk, reading;
+      char startkey[CHT_KEY_SIZE];
+      char *p, *keybuf;
+      int nkeys, firstkey, sts;
+      struct cht_entry entry;
+      struct cht_prop prop;
+
+      read_pars( state, pars, 4 );
+      
+      memset( startkey, 0, sizeof(startkey) );
+      firstkey = 1;
+
+      nkeys = pars[2];
+      keybuf = fvm_getptr( state, pars[1], CHT_KEY_SIZE * nkeys, 1 );
+      if( !keybuf ) nkeys = 0;
+      
+      p = fvm_getptr( state, pars[0], CHT_KEY_SIZE, 0 );
+      if( p ) {
+	memcpy( startkey, p, CHT_KEY_SIZE );
+	if( (*(uint64_t *)(startkey)) || (*(uint64_t *)(startkey + 8)) ) {
+	  firstkey = 0;
+	}
+      }
+
+      reading = firstkey;
+      nk = 0;
+      cht_prop( NULL, &prop );
+      for( i = 0; i < prop.count; i++ ) {
+	sts = cht_entry_by_index( NULL, i, 0, &entry );
+	if( sts == 0 ) {
+	  if( !reading && (memcmp( entry.key, startkey, CHT_KEY_SIZE ) == 0) ) {
+	    reading = 1;
+	  }
+	  
+	  if( reading ) {
+	    memcpy( keybuf, entry.key, CHT_KEY_SIZE );
+	    keybuf += CHT_KEY_SIZE;
+	    nkeys--;
+	    nk++;
+	    if( nkeys == 0 ) break;
+	  }
+	}
+      }
+
+      fvm_write_u32( state, pars[3], nk );
     }
     break;
   case 0xffff:

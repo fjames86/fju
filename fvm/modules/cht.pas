@@ -6,10 +6,12 @@
  * invoked from e.g. raft commands.
 }
 
-Program Cht(0,0,ChtRead,ChtWrite,ChtDelete);
+Program Cht(0,0,ChtRead,ChtWrite,ChtDelete,ChtList);
 Begin
 
 Include "syscall.pas";
+Include "String.pas";
+Include "log.pas";
 
 Procedure ChtRead(keylen : int, keybuf : opaque, var datalen : int, var databuf : opaque)
 Begin
@@ -34,6 +36,25 @@ End;
 Procedure ChtDelete(keylen : int, keybuf : opaque)
 Begin
 	If Keylen = ChtKeySize Then Syscall ChtDelete(keybuf);
+End;
+
+Procedure ChtList(startlen : int, startkey : opaque, var len : int, var keys : opaque)
+Begin
+	var nk : int;
+	var keybuf : opaque[4096];
+	var skey : opaque[ChtKeySize];
+	
+	If startlen <> ChtKeySize Then Begin
+	   Call Memset(skey,0,ChtKeySize);
+	   startkey = skey;
+	End;
+	
+	Syscall ChtList(startkey,keybuf,4096/ChtKeySize,nk);
+
+	If nk = 0 Then Call LogWritef(LogLvlDebug,"No entries found",0,0,0,0);
+	   
+	len = nk * ChtKeySize;
+	keys = keybuf;
 End;
 
 End.

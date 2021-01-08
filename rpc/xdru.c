@@ -221,6 +221,7 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     /* f(nnn) : nnn must parse as an int */
     fmt++;
     if( *fmt != '(' ) usage( "Bad format: expect ( after f" );
+    fmt++;
     u32 = strtoul( fmt, &str, 0 );
     if( *str != ')' ) usage( "Bad format: expect ) after fixed num" );
     fmt = str + 1;

@@ -230,7 +230,7 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
     if( sts ) decodeerror( xdr, "fixed" );
     str = malloc( 4*(u32 / 3) + 5 );
     base64_encode( bufp, u32, str );
-    printf( "%s%s", xdr->offset > 0 ? ", " : "", str );
+    printf( "%s%s", printed ? ", " : "", str );
     free( str );
     free( bufp );
     printed = 1;    

@@ -449,7 +449,6 @@ static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	
 
 	if( !xdr ) {
-		//fjui_call_logread( hcallp->hostid, hcallp->cxt2 );
 		fjui_set_statusbar( 1, "LogRead Timeout" );
 		return;
 	}
@@ -473,7 +472,7 @@ static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	}
 }
 
-void fjui_call_logread( uint64_t hostid, uint64_t lastid ) {
+void fjui_call_logread( uint64_t hostid, char *name, uint64_t lastid ) {
 	struct hrauth_call hcall;
 	int sts;
 	struct xdr_s args[1];
@@ -493,7 +492,7 @@ void fjui_call_logread( uint64_t hostid, uint64_t lastid ) {
   hcall.service = HRAUTH_SERVICE_PRIV;
 
   xdr_init( &args[0], bb, sizeof(bb) );
-  xdr_encode_string( &args[0], "fju" );
+  xdr_encode_string( &args[0], name ? name : "fju" );
   xdr_encode_uint64( &args[0], lastid );
   xdr_encode_uint32( &args[0], 256 );
   sts = hrauth_call_tcp_async( &hcall, args, 1 );

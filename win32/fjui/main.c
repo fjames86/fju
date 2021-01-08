@@ -202,35 +202,35 @@ static void fjui_main_create( HWND hwnd ) {
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "Summary";
 	TabCtrl_InsertItem( tabh, 0, &tci );
-	h = CreateWindowA( "FJUISUMMARY", NULL, WS_VISIBLE|WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	h = CreateWindowA( "FJUISUMMARY", NULL, WS_VISIBLE|WS_CHILD, 0, 0, 0, 0, tabh, 0, 0, NULL );
 	fjui_hwnd_register( "summary", h );
 
 	memset( &tci, 0, sizeof(tci) );
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "Log";
 	TabCtrl_InsertItem( tabh, 1, &tci );
-	h = CreateWindowA( "FJUILOG", NULL, WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	h = CreateWindowA( "FJUILOG", NULL, WS_CHILD, 0, 0, 0, 0, tabh, 0, 0, NULL );
 	fjui_hwnd_register( "log", h );
 
 	memset( &tci, 0, sizeof(tci) );
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "FVM";
 	TabCtrl_InsertItem( tabh, 2, &tci );
-	h = CreateWindowA( "FJUIFVM", NULL, WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	h = CreateWindowA( "FJUIFVM", NULL, WS_CHILD, 0, 0, 0, 0, tabh, 0, 0, NULL );
 	fjui_hwnd_register( "fvm", h );
 
 	memset( &tci, 0, sizeof(tci) );
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "Freg";
 	TabCtrl_InsertItem( tabh, 3, &tci );
-	h = CreateWindowA( "FJUIREG", NULL, WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	h = CreateWindowA( "FJUIREG", NULL, WS_CHILD, 0, 0, 0, 0, tabh, 0, 0, NULL );
 	fjui_hwnd_register( "reg", h );
 
 	memset( &tci, 0, sizeof(tci) );
 	tci.mask = TCIF_TEXT;
 	tci.pszText = "Raft";
 	TabCtrl_InsertItem( tabh, 4, &tci );
-	h = CreateWindowA( "FJUIRAFT", NULL, WS_CHILD|WS_BORDER, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	h = CreateWindowA( "FJUIRAFT", NULL, WS_CHILD, 0, 0, 0, 0, tabh, 0, 0, NULL );
 	fjui_hwnd_register( "raft", h );
 
 	h = CreateWindowA( STATUSCLASSNAMEA, NULL, WS_VISIBLE|WS_CHILD|SBARS_SIZEGRIP, 0, 0, 0, 0, hwnd, 0, 0, NULL );

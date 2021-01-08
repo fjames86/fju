@@ -100,7 +100,7 @@ void fjui_call_reglist( uint64_t hostid, uint64_t hitem, HTREEITEM hparent );
 void reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, int len, HTREEITEM parent );
 void reg_deletechildren( HTREEITEM parent );
 
-void fjui_call_logread( uint64_t hostid, uint64_t lastid );
+void fjui_call_logread( uint64_t hostid, char *name, uint64_t lastid );
 int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len, int index );
 
 void fjui_init_bitmaps( void );

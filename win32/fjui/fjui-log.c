@@ -4,8 +4,11 @@
 static void log_size( HWND hwnd, int width, int height ) {
 	HWND h;
 
+	h = fjui_get_hwnd( "log_name" );
+	SetWindowPos( h, HWND_TOP, 100, 5, 200, 23, 0 );
+	
 	h = fjui_get_hwnd( "log_lv" );
-	SetWindowPos( h, HWND_TOP, 5, 5, width - 10, height - 10, 0 );
+	SetWindowPos( h, HWND_TOP, 5, 30, width - 10, height - 40, 0 );
 
 }
 
@@ -52,6 +55,13 @@ static LRESULT CALLBACK log_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		lvc.iSubItem = 3;
 		ListView_InsertColumn(h, 3, &lvc );
 
+		h = CreateWindowA( WC_STATICA, "Log name:", WS_VISIBLE|WS_CHILD, 5, 5, 75, 25, hwnd, 0, NULL, 0 );
+		fjui_set_font( h );
+		
+		h = CreateWindowExA( WS_EX_CLIENTEDGE, WC_EDITA, "fju", WS_VISIBLE|WS_CHILD|WS_BORDER|ES_AUTOHSCROLL, 0, 0, 0, 0, hwnd, 0, NULL, 0 );
+		fjui_set_font( h );
+		fjui_hwnd_register( "log_name", h );
+		
 		break;	
 	case WM_COMMAND:
 		break;
@@ -73,8 +83,11 @@ void fjui_log_setinfo( struct fjui_hostinfo *info ) {
 }
 
 void fjui_log_refresh( uint64_t hostid ) {
-	ListView_DeleteAllItems( fjui_get_hwnd( "log_lv" ) );
-	fjui_call_logread( hostid, 0 );
+  char name[64];
+  GetWindowTextA( fjui_get_hwnd( "log_name" ), name, sizeof(name) );
+  
+  ListView_DeleteAllItems( fjui_get_hwnd( "log_lv" ) );
+  fjui_call_logread( hostid, name, 0 );
 }
 
 int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t timestamp, char *msg, int len, int index ) {
@@ -92,7 +105,13 @@ int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t
 	  ListView_DeleteItem( hwnd, idx - 1 );
 	  idx--;
 	}
-	    
+
+	/* don't add this item if it was already added */
+	memset( &lvi, 0, sizeof(lvi) );
+	lvi.iItem = index;
+	lvi.mask = LVIF_PARAM;
+	if( ListView_GetItem( hwnd, &lvi ) && lvi.lParam == msgid ) return;
+		
 	
 	memset( &lvi, 0, sizeof(lvi) );
 	lvi.mask = LVIF_TEXT|LVIF_PARAM;
@@ -140,7 +159,9 @@ int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t
 }
 
 static void log_iter_cb( struct rpc_iterator *iter ) {
-  fjui_call_logread( fjui_hostid(), 0 );
+  char name[64];
+  GetWindowTextA( fjui_get_hwnd( "log_name" ), name, sizeof(name) );
+  fjui_call_logread( fjui_hostid(), name, 0 );
 }
 
 static struct rpc_iterator log_iter = 

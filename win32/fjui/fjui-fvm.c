@@ -101,6 +101,7 @@ static void fvm_notify( HWND hwnd, NMHDR *nmhdr ) {
 				SendMessageA( nmhdr->hwndFrom, LVM_GETITEMA, 0, &lvi );
 
 				info = fjui_hostinfo_by_id( fjui_hostid() );
+				if( !info ) return;
 				mp = (struct fvm_module *)&info->modules[lvi.lParam & 0xffff];
 				fvm_callsig( mp->name, mp->procs[(lvi.lParam >> 16) & 0xffff].name, mp->procs[(lvi.lParam >> 16) & 0xffff].siginfo, str );
 
@@ -137,6 +138,7 @@ static void fvm_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 		/* now parse args delimited by comma. we need to know the signature */
 		siginfo = 0;
 		info = fjui_hostinfo_by_id( fjui_hostid() );
+		if( !info ) return;
 		for( i = 0; i < info->nmodule; i++ ) {
 			if( strcasecmp( info->modules[i].name, modname ) == 0 ) {
 				for( j = 0; j < info->modules[i].nprocs; j++ ) {

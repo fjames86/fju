@@ -368,7 +368,7 @@ static LRESULT CALLBACK fvm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		ListView_InsertColumn(h, 4, &lvc );
 
 
-		h = CreateWindowA( WC_EDITA, "", WS_VISIBLE|WS_CHILD|WS_BORDER, 100, 0, 100, 25, hwnd, 0, 0, NULL );
+		h = CreateWindowA( WC_EDITA, "", WS_VISIBLE|WS_CHILD|WS_BORDER|ES_AUTOHSCROLL, 100, 0, 100, 25, hwnd, 0, 0, NULL );
 		fjui_set_font( h );
 		fjui_hwnd_register( "fvm_calltxt", h );
 

@@ -31,6 +31,7 @@ processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #define CMD_EXIT 1
 #define CMD_ABOUT 2
 #define CMD_HOSTLB 3
+#define CMD_SHOWXDR 4
 
 static LRESULT CALLBACK fjui_main( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
 
@@ -44,7 +45,9 @@ static struct {
 	int exiting;
 	HINSTANCE hinstance;
 	struct fjui_hwnd *hwnds;
+	struct fjui_hwnd *dialogs;
 	uint64_t hostid;
+  int showxdr;
 } glob;
 
 void fjui_hwnd_register( char *name, HWND hwnd ) {
@@ -64,6 +67,38 @@ HWND fjui_get_hwnd( char *name ) {
 	}
 	return 0;
 }
+void fjui_dialog_register( char *name, HWND hwnd ) {
+	struct fjui_hwnd *h;
+	h = malloc( sizeof(*h) );
+	h->hwnd = hwnd;
+	strncpy( h->name, name, sizeof(h->name) - 1 );
+	h->next = glob.dialogs;
+	glob.dialogs = h;
+}
+HWND fjui_get_dialog( char *name ) {
+	struct fjui_hwnd *h;
+	h = glob.dialogs;
+	while( h ) {
+		if( strcmp( h->name, name ) == 0 ) return h->hwnd;
+		h = h->next;
+	}
+	return 0;
+}
+void fjui_dialog_unregister( char *name ) {
+	struct fjui_hwnd *d, *prev;
+	d = glob.dialogs;
+	prev = NULL;
+	while( d ) {
+		if( strcasecmp( d->name, name ) == 0 ) {
+			if( prev ) prev->next = d->next;
+			else glob.dialogs = d->next;
+			free( d );
+			return;
+		}
+		prev = d;
+		d = d->next;
+	}
+}
 HINSTANCE fjui_hinstance( void ) {
 	return glob.hinstance;
 }
@@ -80,6 +115,8 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	HANDLE evts[1];
 	INITCOMMONCONTROLSEX icex;
 	struct sockaddr_in sin;
+	struct fjui_hwnd *fjhwnd;
+	int processed;
 
 	glob.hinstance = hInstance;
 
@@ -102,7 +139,9 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	fjui_raft_register();
 	fjui_log_register();
 	fjui_reg_register();
+	fjui_xdr_register();
 
+	glob.showxdr = 1;
 
 	/* register main class and create the window */
 	memset( &cls, 0, sizeof(cls) );
@@ -146,8 +185,20 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 					break;
 				}
 
-				TranslateMessage( &msg );
-				DispatchMessageW( &msg );	
+				fjhwnd = glob.dialogs;
+				processed = 0;
+				while( fjhwnd ) {
+					if( IsDialogMessageA( fjhwnd->hwnd, &msg ) ) {
+						processed = 1;
+						break;
+					}
+					fjhwnd = fjhwnd->next;
+				}
+
+				if( !processed ) {
+					TranslateMessage( &msg );
+					DispatchMessageW( &msg );	
+				}
 
 			} while( sts );
 	
@@ -186,8 +237,10 @@ static void fjui_main_create( HWND hwnd ) {
 	AppendMenuA( m, MF_STRING, (UINT_PTR)0, "&Connect..." );
 	AppendMenuA( m, MF_STRING, (UINT_PTR)0, "&Refresh" );
 	AppendMenuA( m, MF_SEPARATOR, (UINT_PTR)0, NULL );
-	AppendMenuA( m, MF_STRING, (UINT_PTR)0, "&Base64..." );
+	AppendMenuA( m, MF_STRING, (UINT_PTR)CMD_SHOWXDR, "&Base64" );
+	CheckMenuItem( m, CMD_SHOWXDR, glob.showxdr ? MF_CHECKED : MF_UNCHECKED );
 	AppendMenuA( menu, MF_POPUP, (UINT_PTR)m, "&Edit" );
+
 	m = CreateMenu();
 	AppendMenuA( m, MF_STRING, (UINT_PTR)CMD_ABOUT, "&About" );
 	AppendMenuA( menu, MF_POPUP, (UINT_PTR)m, "&Help" );
@@ -252,7 +305,7 @@ static void fjui_main_create( HWND hwnd ) {
 		fjui_set_statusbar( 1, " Disconnected" );
 	}
 
-	h = CreateWindowExA( WS_EX_CLIENTEDGE, WC_LISTBOXA, NULL, WS_VISIBLE|WS_CHILD|LBS_NOTIFY, 0, 0, 0, 0, hwnd, CMD_HOSTLB, 0, NULL );
+	h = CreateWindowExA( WS_EX_CLIENTEDGE, WC_LISTBOXA, NULL, WS_VISIBLE|WS_CHILD|LBS_NOTIFY|LBS_NOINTEGRALHEIGHT, 0, 0, 0, 0, hwnd, CMD_HOSTLB, 0, NULL );
 	fjui_set_font( h );
 	fjui_hwnd_register( "hostlb", h );
 	{
@@ -268,6 +321,9 @@ static void fjui_main_create( HWND hwnd ) {
 
 	}
 
+	h = CreateWindowExA( WS_EX_CLIENTEDGE, "FJUIXDR", NULL, WS_VISIBLE|WS_CHILD, 0,0,0,0, hwnd, 0, 0, NULL );
+	fjui_set_font( h );
+	fjui_hwnd_register( "xdr", h );
 }
 
 void fjui_set_statusbar( int index, char *fmt, ... ) {
@@ -279,6 +335,7 @@ void fjui_set_statusbar( int index, char *fmt, ... ) {
 	SendMessageA( fjui_get_hwnd( "statusbar" ), SB_SETTEXTA, index|SBT_NOBORDERS, str );
 }
 
+static void fjui_main_size( HWND hwnd, int width, int height );
 
 static void fjui_main_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 	switch( id ) {
@@ -318,6 +375,37 @@ static void fjui_main_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 		}
 	}
 		break;
+	case CMD_SHOWXDR:
+	  {
+	    RECT r;
+	    HMENU hm;
+	    glob.showxdr = !glob.showxdr;
+	    
+	    hm = GetMenu( hwnd );
+	    hm = GetSubMenu( hm, 1 );
+	    CheckMenuItem( hm, CMD_SHOWXDR, glob.showxdr ? MF_CHECKED : MF_UNCHECKED );
+
+	    ShowWindow( fjui_get_hwnd( "xdr" ), glob.showxdr ? SW_SHOW : SW_HIDE );
+	    //GetClientRect( fjui_get_hwnd( "xdr" ), &r );
+	    //InvalidateRect( hwnd, &r, FALSE );
+	    
+		GetClientRect( hwnd, &r );
+		InvalidateRect( hwnd, &r, FALSE );
+		fjui_main_size( hwnd, r.right, r.bottom );
+
+		#if 0
+		{
+			struct fjui_hwnd *fjhwnd;
+
+			fjhwnd = malloc( sizeof(*fjhwnd) );
+			memset( fjhwnd, 0, sizeof(*fjhwnd) );
+			fjhwnd->hwnd = CreateWindowExA( WS_EX_OVERLAPPEDWINDOW, "FJUIXDR", "Base64/XDR Utility", WS_VISIBLE|WS_OVERLAPPEDWINDOW, 200,200,500,200, hwnd, 0, NULL, 0 );
+			fjhwnd->next = glob.dialogs;
+			glob.dialogs = fjhwnd;
+		}
+		#endif
+	  }
+	  break;
 	}
 
 }
@@ -325,7 +413,10 @@ static void fjui_main_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 static void fjui_main_size( HWND hwnd, int width, int height ) {
 	HWND hw, h;
 	int parts[2];
+	int offset;
 
+	offset = glob.showxdr ? 90 : 0;
+	
 	h = fjui_get_hwnd( "statusbar" );
 	SetWindowPos( h, HWND_TOP, 0, h - 10, width, 10, 0 );
 	parts[0] = width / 2;
@@ -333,21 +424,25 @@ static void fjui_main_size( HWND hwnd, int width, int height ) {
 	SendMessageA( h, SB_SETPARTS, 2, parts );
 
 	h = fjui_get_hwnd( "tabctrl" );
-	SetWindowPos( h, HWND_TOP, 105, 5, width - 110, height - 30, 0 );
+	SetWindowPos( h, HWND_TOP, 105, 5, width - 110, height - (offset + 30), 0 );
 
 	h = fjui_get_hwnd( "summary" );
-	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - (offset + 70), 0 );
 	h = fjui_get_hwnd( "fvm" );
-	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - (offset + 70), 0 );
 	h = fjui_get_hwnd( "raft" );
-	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - (offset + 70), 0 );
 	h = fjui_get_hwnd( "log" );
-	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - (offset + 70), 0 );
 	h = fjui_get_hwnd( "reg" );
-	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - 70, 0 );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - (offset + 70), 0 );
 
 	h = fjui_get_hwnd( "hostlb" );
-	SetWindowPos( h, HWND_TOP, 5, 5, 95, height - 25, 0 );
+	SetWindowPos( h, HWND_TOP, 5, 5, 95, height - (offset + 30), 0 );
+
+	h = fjui_get_hwnd( "xdr" );
+	SetWindowPos( h, HWND_TOP, 5, height - 110, width - 10, 80, 0 );
+	ShowWindow( h, glob.showxdr ? SW_SHOW : SW_HIDE );
 }
 
 static void fjui_main_notify( HWND hwnd, NMHDR *nmhdr ) {

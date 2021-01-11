@@ -115,5 +115,11 @@ void fjui_reg_refresh_selected( uint64_t hostid );
 void fjui_call_fvmload( uint64_t hostid, char *buf, int len, uint32_t flags, int registerp );
 void fjui_call_fvmunload( uint64_t hostid, char *modname );
 
+void fjui_xdr_register( void );
+
+void fjui_dialog_register( char *name, HWND hwnd );
+void fjui_dialog_unregister( char *name );
+HWND fjui_get_dialog( char *name );
+
 #endif
 

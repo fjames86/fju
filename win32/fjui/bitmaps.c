@@ -391,7 +391,7 @@ static struct {
 	{ "fjui", 0, fjui_bits, 32, 32, NULL, NULL },
 	{ "reg_key", 0, reg_key_bits, 16, 24, NULL, NULL },
 	{ "reg_value", 0, reg_value_bits, 16, 32, NULL, NULL },
-	{ NULL, NULL, NULL, NULL }
+	{ NULL, 0, NULL, 0, 0, NULL, NULL }
 };
 
 static HBITMAP makebitmap( void *bits, int bitwidth, int bpp ) {

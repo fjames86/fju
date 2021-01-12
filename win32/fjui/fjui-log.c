@@ -110,7 +110,7 @@ int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t
 	memset( &lvi, 0, sizeof(lvi) );
 	lvi.iItem = index;
 	lvi.mask = LVIF_PARAM;
-	if( ListView_GetItem( hwnd, &lvi ) && lvi.lParam == msgid ) return;
+	if( ListView_GetItem( hwnd, &lvi ) && lvi.lParam == msgid ) return 0;
 		
 	
 	memset( &lvi, 0, sizeof(lvi) );

@@ -121,5 +121,7 @@ void fjui_dialog_register( char *name, HWND hwnd );
 void fjui_dialog_unregister( char *name );
 HWND fjui_get_dialog( char *name );
 
+void fjui_summary_register( void );
+
 #endif
 

@@ -1,7 +1,11 @@
 
+
+
 REM "C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\Common7\IDE\devenv.exe" "win32\win32.sln" -Build "Debug|x64" -Out out.txt
 REM type out.txt
-REM del out.txt 
+REM del out.txt
+
+"C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\Common7\IDE\devenv.exe" "win32\win32.sln" -Clean "Release|x64" -Out out.txt
 "C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\Common7\IDE\devenv.exe" "win32\win32.sln" -Build "Release|x64" -Out out.txt
 mkdir bin\
 copy win32\x64\Release\*.exe bin\

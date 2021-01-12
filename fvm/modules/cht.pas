@@ -10,7 +10,7 @@ Program Cht(0,0,ChtRead,ChtWrite,ChtDelete,ChtList);
 Begin
 
 Include "syscall.pas";
-Include "String.pas";
+Include "string.pas";
 Include "log.pas";
 
 Procedure ChtRead(keylen : int, keybuf : opaque, var datalen : int, var databuf : opaque)

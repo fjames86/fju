@@ -22,11 +22,12 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size );
 struct dmb_subscriber {
   struct dmb_subscriber *next;
   uint32_t category; /* message category. if non-zero only invoked on matching category, otehrwise receives all messges */
-  void (*cb)( uint64_t hostid, uint64_t seq, uint32_t msgid, char *buf, int size );
+  void (*cb)( uint64_t hostid, uint32_t msgid, uint32_t flags, char *buf, int size );
 };
 int dmb_subscribe( struct dmb_subscriber *sc );
 
 /* register a subscriber that is implemented as an fvm procedure */
+/* MUST have signature Proc(hostHigh : int, hostLow : int, msgid : int, flags : int, len : int, buf : opaque) */
 int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category );
 
 

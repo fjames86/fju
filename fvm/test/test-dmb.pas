@@ -21,10 +21,9 @@ Begin
 	Syscall DmbSubscribe("DmbTest","TestProc",0);
    End;
    
-   Procedure TestProc(hostH : int, hostL : int, seqH : int, seqL : int, msgid : int, flags : int, len : int, buf : opaque)
+   Procedure TestProc(hostH : int, hostL : int, msgid : int, flags : int, len : int, buf : opaque)
    Begin
-	Call LogWritef(LogLvlInfo,"DmbTest Host %x%x Seq %x%x", hostH, hostL, seqH, seqL);
-	Call LogWritef(LogLvlInfo,"DmbTest Msgid %u Flags %x", msgid, flags, 0, 0 );
+	Call LogWritef(LogLvlInfo,"DmbTest Host %x%x Msgid %x Flags %x", hostH, hostL, msgid, flags);
    End;
 
 

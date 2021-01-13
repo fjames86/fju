@@ -24,6 +24,7 @@
 #include <fju/freg.h>
 #include <fju/sec.h>
 #include <fju/cht.h>
+#include <fju/dmb.h>
 
 #include "fvm-private.h"
 
@@ -773,7 +774,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     /* ChtList(startkey,keybuf,nkeybuf,var nkeys) */
     {
       uint32_t pars[5];
-      int i, n, nk, reading;
+      int i, nk, reading;
       char startkey[CHT_KEY_SIZE];
       char *p, *keybuf;
       int nkeys, firstkey, sts;
@@ -818,6 +819,19 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       }
 
       fvm_write_u32( state, pars[3], nk );
+    }
+    break;
+  case 32:
+    /* DmbPublish(msgid : int, flags : int, len : int, buf : opaque) */
+    {
+      uint32_t pars[4];
+      char *bufp;
+      
+      read_pars( state, pars, 4 );
+      bufp = fvm_getptr( state, pars[2], pars[3], 0 );
+      if( bufp ) {
+	dmb_publish( pars[0], pars[1], bufp, pars[3] );
+      }
     }
     break;
   case 0xffff:

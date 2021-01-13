@@ -40,5 +40,8 @@
 #define LOG_RPC_PROG (FJU_BASE_PROG + 10)
 #define LOG_RPC_VERS 1
 
+#define DMB_RPC_PROG (FJU_BASE_PROG + 11)
+#define DMB_RPC_VERS 1
+
 #endif
 

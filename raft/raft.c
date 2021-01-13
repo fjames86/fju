@@ -1354,18 +1354,19 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
     goto done;
   }
 
-  if( term > clp->term ) {
-    /* term increased, convert to follower */
-    raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower leader=%"PRIx64"", clp->term, term, hostid );
-    raft_convert_follower( clp, term, hostid );
-  }
-
   /* grant vote if not voted yet or voted for this host already AND the candidate is at least as up to date as us */
   sts = raft_highest_storedseq( clp->clid, NULL, &seq );
   if( !sts && ((clp->voteid == 0) || (clp->voteid == hostid)) && (lastseq >= seq) ) {
     raft_log( LOG_LVL_DEBUG, "Granting vote" );
     clp->voteid = hostid;
     success = 1;
+
+    if( term > clp->term ) {
+      /* term increased, convert to follower */
+      raft_log( LOG_LVL_INFO, "Term increased %"PRIu64" -> %"PRIu64" - convert to follower leader=%"PRIx64"", clp->term, term, hostid );
+      raft_convert_follower( clp, term, hostid );
+    }
+    
   } else {
     raft_log( LOG_LVL_INFO, "Denying vote request (%s) clid=%"PRIx64" hostid=%"PRIx64"",
 	      sts ? "Failed to get command seq" : 

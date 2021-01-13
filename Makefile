@@ -13,7 +13,8 @@ PROJECTS += ef
 PROJECTS += ftab
 PROJECTS += freg
 PROJECTS += fvm
-PROJECTS += cht 
+PROJECTS += cht
+PROJECTS += dmb
 PROGRAMS=
 LIBRARIES=
 

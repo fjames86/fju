@@ -258,6 +258,8 @@ struct rpc_iterator {
   rpc_iterator_t cb;
   void *cxt;
 };
+#define RPC_ITERATOR(name,period,cb) struct rpc_iterator name = { NULL, 0, period, cb, NULL }
+
 void rpc_iterator_register( struct rpc_iterator *it );
 void rpc_iterator_unregister( struct rpc_iterator *it );
 int rpc_iterator_timeout( int timeout );

@@ -50,3 +50,4 @@ Declare Syscall FvmClRunOthers(idHigh : int, idLow : int, modname : string, proc
 Declare Syscall LogReadInfo(logname : string, idHigh : int, idLow : int, var len : int, var flags : int, var timestampHigh : int, var timestampLow : int ) : 29;
 Declare Syscall LogPrev(logname : string, idHigh : int, idLow : int, var high : int, var low : int ) : 30;
 Declare Syscall ChtList(startkey : opaque,keybuf : opaque, nkeybuf : int, var nkeys : int) : 31;
+Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque) : 32;

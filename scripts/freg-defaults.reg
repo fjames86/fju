@@ -6,6 +6,7 @@
 /fju/rpc/services key
 /fju/rpc/progreg key
 /fju/rpc/progreg/rpcbind u32 100000
+/fju/rpc/progreg/svctest u32 805271414
 /fju/rpc/progreg/nls u32 805271411
 /fju/rpc/progreg/raft u32 805271409
 /fju/rpc/progreg/hrauth u32 805271410
@@ -13,6 +14,7 @@
 /fju/rpc/progreg/freg u32 805271412
 /fju/rpc/progreg/fvm u32 805271413
 /fju/rpc/progreg/log u32 805271418
+/fju/rpc/progreg/dmb u32 805271419
 /fju/raft key
 /fju/fvm key
 /fju/fvm/modules key

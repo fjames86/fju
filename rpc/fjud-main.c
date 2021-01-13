@@ -17,6 +17,7 @@
 #include <fju/hostreg.h>
 #include <fju/lic.h>
 #include <fju/raft.h>
+#include <fju/dmb.h>
 
 #include "rpc-private.h"
 
@@ -60,6 +61,7 @@ static void init_cb( void ) {
   cmdprog_register();
   raft_register();
   rex_register();
+  dmb_open();
   
   //rpc_iterator_register( &rusage_iter );
 }

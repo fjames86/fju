@@ -371,7 +371,8 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size ) {
   entry.niov = 2;
   sts = log_write( &glob.log, &entry );
   if( sts ) return -1;
-  
+
+  dmb_iter.timeout = 0;
   return 0;
 }
 

@@ -60,10 +60,14 @@ static int dmb_set_lastid( uint64_t hkey, uint64_t lastid ) {
 static void publish_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   uint64_t entryid;
   int i;
-
-  if( !xdr ) return;
 	       
   entryid = hcallp->cxt2;
+  
+  if( !xdr ) {
+    dmb_log( LOG_LVL_TRACE, "dmb msg failure hostid=%"PRIx64" entryid=%"PRIx64"", hcallp->hostid, entryid );
+    return;
+  }
+
 
   for( i = 0; i < glob.nhost; i++ ) {
     if( glob.host[i].hostid == hcallp->hostid ) {
@@ -97,7 +101,7 @@ static int dmb_call_publish( uint64_t hostid, uint64_t entryid, uint64_t seq, ui
   hcall.hostid = hostid;
   hcall.prog = DMB_RPC_PROG;
   hcall.vers = DMB_RPC_VERS;
-  hcall.proc = 1; /* publish */
+  hcall.proc = 2; /* publish proc, using hrauth async calls */
   hcall.donecb = publish_cb;
   hcall.cxt2 = entryid;
   hcall.service = HRAUTH_SERVICE_PRIV;
@@ -159,11 +163,18 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
   uint64_t hostid, seq;
   uint32_t msgid, flags;
   char *bufp;
-  int lenp;
+  int lenp, replyp;
   struct xdr_s args;
   struct dmb_subscriber *sc;
   struct fvm_module *m;
   char argbuf[DMB_MAX_MSG + 64];
+
+  /* 
+   * if this is called through proc=2 then reply on outgoing hrauth connection,
+   * otherwise reply as normal 
+   */
+  replyp = 0;
+  if( inc->msg.u.call.proc == 2 ) replyp = 1;
   
   bufp = NULL;
   lenp = 0;
@@ -200,10 +211,13 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
       }
     }
   }
-  
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  xdr_encode_boolean( &inc->xdr, 1 );
-  rpc_complete_accept_reply( inc, handle );
+
+  if( replyp ) {
+    return hrauth_reply( inc, NULL, 0 );
+  } else {
+    rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+    rpc_complete_accept_reply( inc, handle );
+  }
   
   return 0;
 }
@@ -211,6 +225,7 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
 static struct rpc_proc dmb_procs[] = {
   { 0, dmb_proc_null },
   { 1, dmb_proc_publish },
+  { 2, dmb_proc_publish }, /* register twice so we can call using standard client or hrauth client async calls */
   { 0, NULL }
 };
 

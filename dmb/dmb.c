@@ -27,11 +27,11 @@ struct dmb_host {
 struct dmb_fvmsc {
   char modname[FVM_MAX_NAME];
   char procname[FVM_MAX_NAME];
+  uint32_t category;
 };
 
 #define DMB_MAX_HOST 32
 #define DMB_MAX_FVMSC 32
-#define DMB_MAX_MSG (16*1024)
 
 static struct {
   uint32_t ocount;
@@ -113,6 +113,8 @@ static void dmb_iter_cb( struct rpc_iterator *iter ) {
   struct log_iov iov[2];
   struct dmb_header hdr;
   char msgbuf[DMB_MAX_MSG];
+
+  if( !glob.ocount ) return;
   
   for( i = 0; i < glob.nhost; i++ ) {
     memset( &entry, 0, sizeof(entry) );
@@ -173,11 +175,13 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  dmb_log( LOG_LVL_INFO, "dmb recv hostid=%"PRIx64" seq=%"PRIu64" msgid=%u len=%u", hostid, seq, msgid, lenp );
+  dmb_log( LOG_LVL_INFO, "dmb recv hostid=%"PRIx64" seq=%"PRIu64" msgid=%u flags=%x len=%u", hostid, seq, msgid, flags, lenp );
   
   sc = glob.sc;
   while( sc ) {
-    sc->cb( hostid, seq, msgid, bufp, lenp );
+    if( (sc->category == 0) || (sc->category == ((msgid & 0xffff0000) >> 16)) ) {
+      sc->cb( hostid, seq, msgid, bufp, lenp );
+    }
     sc = sc->next;
   }
 
@@ -187,10 +191,13 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
   xdr_encode_uint32( &args, msgid );
   xdr_encode_uint32( &args, flags );
   xdr_encode_opaque( &args, (uint8_t *)bufp, lenp );
+  args.offset = 0;
   for( i = 0; i < glob.nfvmsc; i++ ) {
-    m = fvm_module_by_name( glob.fvmsc[i].modname );
-    if( m ) {
-      fvm_run( m, fvm_procid_by_name( m, glob.fvmsc[i].procname ), &args, NULL );
+    if( (glob.fvmsc[i].category == 0) || (glob.fvmsc[i].category == ((msgid & 0xffff0000) >> 16)) ) {
+      m = fvm_module_by_name( glob.fvmsc[i].modname );
+      if( m ) {
+	fvm_run( m, fvm_procid_by_name( m, glob.fvmsc[i].procname ), &args, NULL );
+      }
     }
   }
   
@@ -267,8 +274,12 @@ int dmb_open( void ) {
     if( ((entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) && (glob.nfvmsc < DMB_MAX_FVMSC) ) {
       sts = freg_get_by_name( NULL, entry.id, "modname", FREG_TYPE_STRING, glob.fvmsc[glob.nfvmsc].modname, FREG_MAX_NAME, NULL );
       if( !sts ) sts = freg_get_by_name( NULL, entry.id, "procname", FREG_TYPE_STRING, glob.fvmsc[glob.nfvmsc].procname, FREG_MAX_NAME, NULL );
+      if( !sts ) sts = freg_get_by_name( NULL, entry.id, "category", FREG_TYPE_UINT32, (char *)&glob.fvmsc[glob.nfvmsc].category, sizeof(uint32_t), NULL );      
       if( !sts ) {
-	dmb_log( LOG_LVL_INFO, "dmb init modname=%s procname=%s", glob.fvmsc[glob.nfvmsc].modname, glob.fvmsc[glob.nfvmsc].procname );
+	dmb_log( LOG_LVL_INFO, "dmb init modname=%s procname=%s category=%u",
+		 glob.fvmsc[glob.nfvmsc].modname,
+		 glob.fvmsc[glob.nfvmsc].procname,
+		 glob.fvmsc[glob.nfvmsc].category );
 	
 	glob.nfvmsc++;
       }
@@ -303,12 +314,15 @@ int dmb_subscribe( struct dmb_subscriber *sc ) {
   return 0;
 }
 
-int dmb_subscribe_fvm( char *modname, char *procname ) {
+int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category ) {
   int i;
 
+  dmb_log( LOG_LVL_TRACE, "dmb subscribe %s/%s %u", modname, procname, category );
+  
   for( i = 0; i < glob.nfvmsc; i++ ) {
     if( (strcmp( glob.fvmsc[i].modname, modname ) == 0) &&
 	(strcmp( glob.fvmsc[i].procname, procname ) == 0) ) {
+      glob.fvmsc[i].category = category;
       return 0;
     }
   }
@@ -317,6 +331,7 @@ int dmb_subscribe_fvm( char *modname, char *procname ) {
 
   strncpy( glob.fvmsc[glob.nfvmsc].modname, modname, FVM_MAX_NAME - 1 );
   strncpy( glob.fvmsc[glob.nfvmsc].procname, procname, FVM_MAX_NAME - 1 );
+  glob.fvmsc[glob.nfvmsc].category = category;
   glob.nfvmsc++;
 
   return 0;
@@ -328,6 +343,8 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size ) {
   struct log_iov iov[2];
   struct dmb_header hdr;
   int sts;
+
+  if( !glob.ocount ) return -1;
   
   memset( &hdr, 0, sizeof(hdr) );
   hdr.msgid = msgid;

@@ -30,6 +30,7 @@ log_deflogger(fvm_log,FVM_RPC_PROG)
 static int fvm_unregister_program( char *modname );
 static void fvm_unregister_iterator( char *modname );
 static int fvm_init_module( char *modname );
+static void fvm_register_iterator( char *modname, int procid, int period );
 
 struct fvm_iterator {
   struct rpc_iterator iter;
@@ -86,6 +87,27 @@ static int get_init_proc( struct fvm_module *m, char *procname ) {
   if( !sts ) return 0;
 
   procid = fvm_procid_by_name( m, "init" );
+  if( procid >= 0 ) {
+    strcpy( procname, m->procs[procid].name );
+    return 0;
+  }
+  
+  return -1;
+}
+
+static int get_service_proc( struct fvm_module *m, char *procname, int *service_period ) {
+  int sts, procid;
+  char path[256];
+
+  sprintf( path, "/fju/fvm/modules/%s/service-period", m->name );  
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_UINT32, (char *)service_period, 4, NULL );
+  if( sts ) *service_period = 1000;
+
+  sprintf( path, "/fju/fvm/modules/%s/service", m->name );  
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, procname, FVM_MAX_NAME, NULL );
+  if( !sts ) return 0;
+
+  procid = fvm_procid_by_name( m, "service" );
   if( procid >= 0 ) {
     strcpy( procname, m->procs[procid].name );
     return 0;
@@ -197,6 +219,16 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
     fvm_log( LOG_LVL_TRACE, "fvm_module_load: %s running init proc %s", module->name, procname );
     sts = fvm_run( module, fvm_procid_by_name( module, procname ), NULL, NULL );
     if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_load: init routine failed" );
+  }
+
+  /* register service routine if rpcdp=true and procedure named "Service" exists */
+  if( rpcdp() ) {
+    int service_period;
+    sts = get_service_proc( module, procname, &service_period );
+    if( !sts ) {
+      fvm_log( LOG_LVL_TRACE, "fvm_module_load %s registering service proc %s", module->name, procname );
+      fvm_register_iterator( module->name, fvm_procid_by_name( module, procname ), service_period );      
+    }
   }
   
   return 0;

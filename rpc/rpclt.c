@@ -25,6 +25,7 @@
 #include <fju/programs.h>
 #include <fju/raft.h>
 #include <fju/fvm.h>
+#include <fju/dmb.h>
 
 struct clt_info {
     uint32_t prog;
@@ -71,6 +72,7 @@ static void fvm_clrun_results( struct xdr_s *xdr );
 static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void fvm_reload_results( struct xdr_s *xdr );
 static void fvm_reload_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 
 static struct clt_info clt_procs[] = {
@@ -96,6 +98,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
+    { DMB_RPC_PROG, 1, 1, dmb_publish_args, NULL, "dmb.publish", "seq=* msgid=* flags=* buf=*" },
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1308,4 +1311,45 @@ static void fvm_reload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   if( i >= argc ) usage( "Need modname" );
   modname = argv[i];
   xdr_encode_string( xdr, modname );
+}
+
+static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  uint64_t seq;
+  uint32_t msgid, flags;
+  char *buf;
+  int len, sts;
+
+  seq = 0;
+  msgid = 0;
+  flags = 0;
+  buf = NULL;
+  len = 0;
+
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "seq" ) == 0 ) {
+      seq = strtoull( argval, NULL, 0 );
+    } else if( strcmp( argname, "msgid" ) == 0 ) {
+      msgid = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "flags" ) == 0 ) {
+      flags = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "buf" ) == 0 ) {
+      buf = malloc( DMB_MAX_MSG );
+      len = DMB_MAX_MSG;
+      sts = base64_decode( buf, len, argval );
+      if( sts < 0 ) usage( "Base64 decode error" );
+      len = sts;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !msgid ) usage( "Need msgid" );
+
+  xdr_encode_uint64( xdr, hostreg_localid() );
+  xdr_encode_uint64( xdr, seq );
+  xdr_encode_uint32( xdr, msgid );
+  xdr_encode_uint32( xdr, flags );
+  xdr_encode_opaque( xdr, (uint8_t *)buf, len );
 }

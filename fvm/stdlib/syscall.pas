@@ -51,4 +51,4 @@ Declare Syscall LogReadInfo(logname : string, idHigh : int, idLow : int, var len
 Declare Syscall LogPrev(logname : string, idHigh : int, idLow : int, var high : int, var low : int ) : 30;
 Declare Syscall ChtList(startkey : opaque,keybuf : opaque, nkeybuf : int, var nkeys : int) : 31;
 Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque) : 32;
-Declare Syscall DmbSubscribe(modname : string, procname : string) : 33;
+Declare Syscall DmbSubscribe(modname : string, procname : string, category : int) : 33;

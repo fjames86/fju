@@ -5,18 +5,29 @@
 
 #include <stdint.h>
 
+/* Maximum message buffer size */
+#define DMB_MAX_MSG (16*1024)
+
+/* message ids are composed of a category (high 16 bits) and identifier (low 16 bits) */
+#define DMB_MSGID(category,msgid) (uint32_t)((((category) & 0xffff) << 16) | ((msgid) & 0x0000ffff))
+
+/* open/close */
 int dmb_open( void );
 int dmb_close( void );
 
+/* publish a message */
 int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size );
 
+/* register a subscriber, optionally filtered on category */
 struct dmb_subscriber {
   struct dmb_subscriber *next;
+  uint32_t category; /* message category. if non-zero only invoked on matching category, otehrwise receives all messges */
   void (*cb)( uint64_t hostid, uint64_t seq, uint32_t msgid, char *buf, int size );
 };
 int dmb_subscribe( struct dmb_subscriber *sc );
 
-int dmb_subscribe_fvm( char *modname, char *procname );
+/* register a subscriber that is implemented as an fvm procedure */
+int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category );
 
 
 #endif

@@ -304,6 +304,15 @@ int dmb_subscribe( struct dmb_subscriber *sc ) {
 }
 
 int dmb_subscribe_fvm( char *modname, char *procname ) {
+  int i;
+
+  for( i = 0; i < glob.nfvmsc; i++ ) {
+    if( (strcmp( glob.fvmsc[i].modname, modname ) == 0) &&
+	(strcmp( glob.fvmsc[i].procname, procname ) == 0) ) {
+      return 0;
+    }
+  }
+	
   if( glob.nfvmsc >= (DMB_MAX_FVMSC - 1) ) return -1;
 
   strncpy( glob.fvmsc[glob.nfvmsc].modname, modname, FVM_MAX_NAME - 1 );

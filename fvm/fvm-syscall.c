@@ -834,6 +834,22 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       }
     }
     break;
+  case 33:
+    /* DmbSubscribe(modname: string, procname : string) */
+    {
+      uint32_t pars[2];
+      char *modname, *procname;
+      
+      read_pars( state, pars, 2 );
+      modname = fvm_getptr( state, pars[0], 0, 0 );
+      procname = fvm_getptr( state, pars[1], 0, 0 );
+      
+      if( modname && (strlen( modname ) < FVM_MAX_NAME) &&
+	  procname && (strlen( procname ) < FVM_MAX_NAME) ) {
+	dmb_subscribe_fvm( modname, procname );
+      }
+    }
+    break;    
   case 0xffff:
     fvm_xcall( state );
     break;

@@ -1,4 +1,8 @@
 
+#define _CRT_SECURE_NO_WARNINGS
+
+#include <inttypes.h>
+
 #include <fju/dmb.h>
 #include <fju/freg.h>
 #include <fju/fvm.h>
@@ -159,6 +163,9 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
   struct fvm_module *m;
   char argbuf[DMB_MAX_MSG + 64];
   
+  bufp = NULL;
+  lenp = 0;
+
   sts = xdr_decode_uint64( &inc->xdr, &hostid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &msgid );

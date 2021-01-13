@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -18,39 +18,34 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\fvm\modules\cht.pas" />
-    <None Include="..\..\fvm\modules\log.pas" />
-    <None Include="..\..\nls\nls.pas" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{9985F87E-26B9-4246-8E74-3F2B1D88B652}</ProjectGuid>
-    <RootNamespace>nls</RootNamespace>
+    <ProjectGuid>{328AF4E2-0645-416A-AA63-2FB9AD52A218}</ProjectGuid>
+    <RootNamespace>libdmb</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -97,17 +92,6 @@
       <AdditionalIncludeDirectories>..\..\include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <Link>
-      <AdditionalDependencies>libfju.lib;bcrypt.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-    </Link>
-    <PostBuildEvent>
-      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\log.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\log.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\cht.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\cht.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -118,16 +102,6 @@ $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I 
       <AdditionalIncludeDirectories>..\..\include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <Link>
-      <AdditionalDependencies>libfju.lib;bcrypt.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
-    </Link>
-    <PostBuildEvent>
-      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\log.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\log.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\cht.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\cht.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -143,15 +117,7 @@ $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I 
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>libfju.lib;bcrypt.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
-    <PostBuildEvent>
-      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\log.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\log.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\cht.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\cht.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -167,16 +133,14 @@ $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I 
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>libfju.lib;bcrypt.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\</AdditionalLibraryDirectories>
     </Link>
-    <PostBuildEvent>
-      <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\log.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\log.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\cht.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\cht.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\dmb\dmb.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\include\fju\dmb.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

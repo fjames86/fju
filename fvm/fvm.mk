@@ -5,6 +5,7 @@ fvmprogs += ${BINDIR}/log.fvm
 fvmprogs += fvm/test/test1.fvm
 fvmprogs += fvm/test/test.fvm
 fvmprogs += ${BINDIR}/dmb.fvm
+fvmprogs += fvm/test/test-dmb.fvm
 
 fvm: ${LIBDIR}/libfvm.a fvm/test/test1.fvm ${fvmprogs}
 
@@ -17,6 +18,8 @@ fvm/test/test1.fvm: fvm/test/test1.pas ${BINDIR}/fju
 
 fvm/test/test.fvm: fvm/test/test.pas ${BINDIR}/fju fvm/stdlib/string.pas fvm/stdlib/syscall.pas
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/test/test.pas
+fvm/test/test-dmb.fvm: fvm/test/test-dmb.pas fvm/stdlib/syscall.pas
+	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/test/test-dmb.pas
 
 ${BINDIR}/cht.fvm: fvm/modules/cht.pas ${BINDIR}/fju fvm/stdlib/syscall.pas
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/modules/cht.pas

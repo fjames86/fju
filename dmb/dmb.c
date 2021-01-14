@@ -16,7 +16,9 @@ static void dmb_iter_cb( struct rpc_iterator *iter );
 static RPC_ITERATOR(dmb_iter,1000,dmb_iter_cb);
 
 log_deflogger(dmb_log,DMB_RPC_PROG)
-  
+
+static void dmb_invoke_subscribers( uint64_t hostid, uint32_t msgid, uint32_t flags, char *buf, int len );
+
 struct dmb_host {
   uint64_t hostid;
   uint64_t lastid;
@@ -36,7 +38,8 @@ struct dmb_fvmsc {
 static struct {
   uint32_t ocount;
   struct log_s log;
-  
+
+  struct dmb_host local;
   struct dmb_host host[DMB_MAX_HOST];
   int nhost;
   struct dmb_fvmsc fvmsc[DMB_MAX_FVMSC];
@@ -82,7 +85,7 @@ static void publish_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   
 }
 
-static int dmb_call_publish( uint64_t hostid, uint64_t entryid, uint32_t msgid, uint32_t flags, char *buf, int len ) {
+static int dmb_call_invoke( uint64_t hostid, uint64_t entryid, uint32_t msgid, uint32_t flags, char *buf, int len ) {
   struct hrauth_call hcall;
   struct xdr_s args[2];
   char argbuf[64];
@@ -100,7 +103,7 @@ static int dmb_call_publish( uint64_t hostid, uint64_t entryid, uint32_t msgid, 
   hcall.hostid = hostid;
   hcall.prog = DMB_RPC_PROG;
   hcall.vers = DMB_RPC_VERS;
-  hcall.proc = 2; /* publish proc, using hrauth async calls */
+  hcall.proc = 2; /* invoke proc, using hrauth async calls */
   hcall.donecb = publish_cb;
   hcall.cxt2 = entryid;
   hcall.service = HRAUTH_SERVICE_PRIV;
@@ -118,6 +121,20 @@ static void dmb_iter_cb( struct rpc_iterator *iter ) {
   char msgbuf[DMB_MAX_MSG];
 
   if( !glob.ocount ) return;
+
+  /* invoke locally if necessary */
+  memset( &entry, 0, sizeof(entry) );
+  entry.iov = iov;
+  entry.niov = 2;
+  iov[0].buf = (char *)&hdr;
+  iov[0].len = sizeof(hdr);
+  iov[1].buf = msgbuf;
+  iov[1].len = sizeof(msgbuf);  
+  sts = log_read( &glob.log, glob.local.lastid, &entry, 1, &ne );
+  if( !sts && (ne == 1) ) {
+    if( !(hdr.flags & DMB_NOLOCAL) ) dmb_invoke_subscribers( hostreg_localid(), hdr.msgid, hdr.flags, msgbuf, iov[1].len );
+    glob.local.lastid = entry.id;
+  }
   
   for( i = 0; i < glob.nhost; i++ ) {
     memset( &entry, 0, sizeof(entry) );
@@ -141,10 +158,15 @@ static void dmb_iter_cb( struct rpc_iterator *iter ) {
     
     /* send this entry to the host */
     if( glob.host[i].sentseq < entry.seq ) {
-      dmb_log( LOG_LVL_INFO, "dmb publish hostid=%"PRIx64" entryid=%"PRIx64" len=%u", glob.host[i].hostid, entry.id, iov[1].len );
-      
-      sts = dmb_call_publish( glob.host[i].hostid, entry.id, hdr.msgid, hdr.flags, msgbuf, iov[1].len );
-      if( !sts ) glob.host[i].sentseq = entry.seq;
+      if( !(hdr.flags & DMB_NOREMOTE) ) {
+	dmb_log( LOG_LVL_INFO, "dmb publish hostid=%"PRIx64" entryid=%"PRIx64" len=%u", glob.host[i].hostid, entry.id, iov[1].len );
+	
+	sts = dmb_call_invoke( glob.host[i].hostid, entry.id, hdr.msgid, hdr.flags, msgbuf, iov[1].len );
+	if( !sts ) glob.host[i].sentseq = entry.seq;	
+      } else {
+	glob.host[i].sentseq = entry.seq;
+	glob.host[i].lastid = entry.id;
+      }
     }
   }
   
@@ -157,16 +179,44 @@ static int dmb_proc_null( struct rpc_inc *inc ) {
   return 0;
 }
 
-static int dmb_proc_publish( struct rpc_inc *inc ) {
-  int handle, sts, i;
+static void dmb_invoke_subscribers( uint64_t hostid, uint32_t msgid, uint32_t flags, char *buf, int len ) {
+  struct dmb_subscriber *sc;
+  struct xdr_s args;
+  struct fvm_module *m;
+  int i;
+  char argbuf[DMB_MAX_MSG + 64];
+  
+  sc = glob.sc;
+  while( sc ) {
+    if( (sc->category == 0) || (sc->category == ((msgid & 0xffff0000) >> 16)) ) {
+      sc->cb( hostid, msgid, buf, len );
+    }
+    sc = sc->next;
+  }
+
+  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+  xdr_encode_uint64( &args, hostid );
+  xdr_encode_uint32( &args, msgid );
+  xdr_encode_opaque( &args, (uint8_t *)buf, len );
+  args.offset = 0;
+  for( i = 0; i < glob.nfvmsc; i++ ) {
+    if( (glob.fvmsc[i].category == 0) || (glob.fvmsc[i].category == ((msgid & 0xffff0000) >> 16)) ) {
+      m = fvm_module_by_name( glob.fvmsc[i].modname );
+      if( m ) {
+	fvm_run( m, fvm_procid_by_name( m, glob.fvmsc[i].procname ), &args, NULL );
+      }
+    }
+  }
+
+
+}
+
+static int dmb_proc_invoke( struct rpc_inc *inc ) {
+  int handle, sts;
   uint64_t hostid;
   uint32_t msgid, flags;
   char *bufp;
   int lenp, replyp;
-  struct xdr_s args;
-  struct dmb_subscriber *sc;
-  struct fvm_module *m;
-  char argbuf[DMB_MAX_MSG + 64];
 
   /* 
    * if this is called through proc=2 then reply on outgoing hrauth connection,
@@ -184,31 +234,9 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  dmb_log( LOG_LVL_INFO, "dmb recv hostid=%"PRIx64" msgid=%u flags=%x len=%u", hostid, msgid, flags, lenp );
+  dmb_log( LOG_LVL_INFO, "dmb invoke hostid=%"PRIx64" msgid=%u flags=%x len=%u", hostid, msgid, flags, lenp );
+  dmb_invoke_subscribers( hostid, msgid, flags, bufp, lenp );
   
-  sc = glob.sc;
-  while( sc ) {
-    if( (sc->category == 0) || (sc->category == ((msgid & 0xffff0000) >> 16)) ) {
-      sc->cb( hostid, msgid, flags, bufp, lenp );
-    }
-    sc = sc->next;
-  }
-
-  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
-  xdr_encode_uint64( &args, hostid );
-  xdr_encode_uint32( &args, msgid );
-  xdr_encode_uint32( &args, flags );
-  xdr_encode_opaque( &args, (uint8_t *)bufp, lenp );
-  args.offset = 0;
-  for( i = 0; i < glob.nfvmsc; i++ ) {
-    if( (glob.fvmsc[i].category == 0) || (glob.fvmsc[i].category == ((msgid & 0xffff0000) >> 16)) ) {
-      m = fvm_module_by_name( glob.fvmsc[i].modname );
-      if( m ) {
-	fvm_run( m, fvm_procid_by_name( m, glob.fvmsc[i].procname ), &args, NULL );
-      }
-    }
-  }
-
   if( replyp ) {
     return hrauth_reply( inc, NULL, 0 );
   } else {
@@ -219,10 +247,34 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int dmb_proc_publish( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint32_t msgid, flags;
+  char *bufp;
+  int lenp;
+
+  bufp = NULL;
+  lenp = 0;
+
+  sts = xdr_decode_uint32( &inc->xdr, &msgid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  dmb_log( LOG_LVL_INFO, "dmb publish msgid=%u flags=%x len=%u", msgid, flags, lenp );
+  dmb_publish( msgid, flags, bufp, lenp );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc dmb_procs[] = {
   { 0, dmb_proc_null },
-  { 1, dmb_proc_publish },
-  { 2, dmb_proc_publish }, /* register twice so we can call using standard client or hrauth client async calls */
+  { 1, dmb_proc_invoke },
+  { 2, dmb_proc_invoke }, /* register twice so we can call using standard client or hrauth client async calls */
+  { 3, dmb_proc_publish },
   { 0, NULL }
 };
 
@@ -304,7 +356,7 @@ int dmb_open( void ) {
   rpc_iterator_register( &dmb_iter );
   rpc_program_register( &dmb_prog );
   
-  glob.ocount = 0;
+  glob.ocount = 1;
   return 0;
 }
 
@@ -357,7 +409,8 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size ) {
   int sts;
 
   if( !glob.ocount ) return -1;
-  
+
+  /* write into log and trigger iterator to send to remote hosts */
   memset( &hdr, 0, sizeof(hdr) );
   hdr.msgid = msgid;
   hdr.flags = flags;
@@ -369,6 +422,7 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size ) {
   iov[1].len = size;
   entry.iov = iov;
   entry.niov = 2;
+  entry.flags = LOG_BINARY;
   sts = log_write( &glob.log, &entry );
   if( sts ) return -1;
 

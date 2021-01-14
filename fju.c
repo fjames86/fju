@@ -24,6 +24,7 @@ int fvmc_main( int argc, char **argv );
 int ecdh_main( int argc, char **argv );
 int shamir_main( int argc, char **argv );
 int hostreg_main( int argc, char **argv );
+int dmb_main( int argc, char **argv );
 
 static struct {
   char *name;
@@ -40,6 +41,7 @@ static struct {
     { "ecdh", ecdh_main },
     { "shamir", shamir_main },
     { "hostreg", hostreg_main },
+    { "dmb", dmb_main },    
     { NULL, NULL }	       
 };
 

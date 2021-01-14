@@ -105,6 +105,7 @@ static int dmb_call_invoke( uint64_t hostid, uint64_t entryid, uint32_t msgid, u
   hcall.vers = DMB_RPC_VERS;
   hcall.proc = 2; /* invoke proc, using hrauth async calls */
   hcall.donecb = publish_cb;
+  hcall.timeout = 500;
   hcall.cxt2 = entryid;
   hcall.service = HRAUTH_SERVICE_PRIV;
   sts = hrauth_call_async( &hcall, args, 2 );

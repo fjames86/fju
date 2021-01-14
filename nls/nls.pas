@@ -131,6 +131,8 @@ Begin
 		Syscall LogRead(logname,high,low,4096,buf,flags,len);
 		If len Then Begin
 		    Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",logname,idhigh,idlow,0);
+
+		    { Looks like this can cause an infinite loop where nodes keep attempting to write the same entry back to the cluster }
 		    { Call PublishCommand(logname,flags,len,buf); } { temporarily disable this to stop it from doing anything } 
 		End Else Begin
 		     high = idhigh;

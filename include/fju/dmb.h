@@ -16,8 +16,8 @@ int dmb_open( void );
 int dmb_close( void );
 
 /* publish a message */
-#define DMB_NOLOCAL 0x0001 /* Do not publish locally */
-#define DMB_NOREMOTE 0x0002 /* Do not publish remotely */
+#define DMB_LOCAL 0x0001 /* Do not publish remotely */
+#define DMB_REMOTE 0x0002 /* Do not publish locally */
 int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size );
 
 /* register a subscriber, optionally filtered on category */

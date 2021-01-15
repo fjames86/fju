@@ -24,12 +24,7 @@
 #include <fju/fvm.h>
 
 static void usage( char *fmt, ... ) {
-    printf( "Usage:    [list]\n"
-			"          [add host]\n"
-			"          [rem host]\n"
-			"          [add modname/procname]\n"
-			"          [rem modname/procname]\n"
-			"          [publish msgid [base64]]\n"
+    printf( "Usage:    \n"
     );
 
     if( fmt ) {
@@ -47,17 +42,17 @@ int dmb_main( int argc, char **argv ) {
   int i;
   int sts;
   struct freg_entry entry;
-  struct log_opts opts;
   uint64_t hkey, hhosts, hostid, lastid;
   char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
   uint32_t category;
 
   sts = freg_open( NULL, NULL );
-
+  i = 1;
+  
   /* get toplevel handle */
   sts = freg_subkey( NULL, 0, "/fju/dmb", FREG_CREATE, &hkey );
   if( sts ) usage( "Failed to open /fju/dmb" );
-
+  
   /* read hosts from reg */
   sts = freg_subkey( NULL, hkey, "hosts", FREG_CREATE, &hhosts );
   if( sts ) return sts;  
@@ -69,14 +64,14 @@ int dmb_main( int argc, char **argv ) {
       sts = freg_get_by_name( NULL, entry.id, "hostid", FREG_TYPE_UINT64, (char *)&hostid, sizeof(uint64_t), NULL );
       if( !sts ) {
 	sts = freg_get_by_name( NULL, entry.id, "lastid", FREG_TYPE_UINT64, (char *)&lastid, sizeof(uint64_t), NULL );
-
+	
 	printf( "Host %"PRIx64" LastID %"PRIx64"\n", hostid, lastid );
       }
     }
     
     sts = freg_next( NULL, hhosts, entry.id, &entry );
   }
-
+  
   /* read fvm subscribers */
   sts = freg_subkey( NULL, hkey, "fvm", FREG_CREATE, &hhosts );
   if( sts ) return sts;
@@ -94,9 +89,9 @@ int dmb_main( int argc, char **argv ) {
 	printf( "FVM Subscriber %s/%s Category %u\n", modname, procname, category );
       }
     }
-   
+    
     sts = freg_next( NULL, hhosts, entry.id, &entry );
   }
-
   
+  return 0;
 }

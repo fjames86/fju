@@ -22,7 +22,7 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint32_t msgid, uint32_t fl
 struct dmb_host {
   uint64_t hostid;
   uint64_t lastid;
-  uint64_t sentseq;
+  int sent; /* true if message sent and waiting for reply */
   uint64_t hkey;
 };
 
@@ -48,6 +48,7 @@ static struct {
 } glob;
 
 
+
 struct dmb_header {
   uint32_t msgid;
   uint32_t flags;
@@ -57,6 +58,11 @@ struct dmb_header {
 static int dmb_set_lastid( uint64_t hkey, uint64_t lastid ) {
   int sts;
   sts = freg_put( NULL, hkey, "lastid", FREG_TYPE_UINT64, (char *)&lastid, sizeof(lastid), NULL );
+  if( sts ) {
+    dmb_log( LOG_LVL_ERROR, "dmb failed to set lastid hkey=%"PRIx64" %"PRIx64"",
+	     hkey, lastid );
+  }
+  
   return sts;
 }
 
@@ -66,19 +72,16 @@ static void publish_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	       
   entryid = hcallp->cxt2;
   
-  if( !xdr ) {
-    dmb_log( LOG_LVL_TRACE, "dmb msg failure hostid=%"PRIx64" entryid=%"PRIx64"", hcallp->hostid, entryid );
-    return;
-  }
-
-
   for( i = 0; i < glob.nhost; i++ ) {
     if( glob.host[i].hostid == hcallp->hostid ) {
-      dmb_log( LOG_LVL_TRACE, "dmb msg success hostid=%"PRIx64" entryid=%"PRIx64"", hcallp->hostid, entryid );
-      
-      glob.host[i].lastid = entryid;
-      dmb_set_lastid( glob.host[i].hkey, entryid );
-      dmb_iter.timeout = 0;
+      dmb_log( LOG_LVL_TRACE, "dmb msg %s hostid=%"PRIx64" entryid=%"PRIx64"", xdr ? "success" : "failure", hcallp->hostid, entryid );      
+      if( xdr ) {
+	glob.host[i].lastid = entryid;
+	dmb_set_lastid( glob.host[i].hkey, entryid );
+	dmb_iter.timeout = 0;
+      } else {
+	glob.host[i].sent = 0;
+      }
       break;
     }
   }
@@ -133,7 +136,7 @@ static void dmb_iter_cb( struct rpc_iterator *iter ) {
   iov[1].len = sizeof(msgbuf);  
   sts = log_read( &glob.log, glob.local.lastid, &entry, 1, &ne );
   if( !sts && (ne == 1) ) {
-    if( !(hdr.flags & DMB_NOLOCAL) ) dmb_invoke_subscribers( hostreg_localid(), hdr.msgid, hdr.flags, msgbuf, iov[1].len );
+    if( !(hdr.flags & DMB_REMOTE) ) dmb_invoke_subscribers( hostreg_localid(), hdr.msgid, hdr.flags, msgbuf, iov[1].len );
     glob.local.lastid = entry.id;
   }
   
@@ -151,21 +154,21 @@ static void dmb_iter_cb( struct rpc_iterator *iter ) {
       /* check this is even a known entry in the log, if not then reset to first entry */
       if( log_read_buf( &glob.log, glob.host[i].lastid, NULL, 0, NULL ) ) {
 	glob.host[i].lastid = 0;
-	glob.host[i].sentseq = 0;
+	glob.host[i].sent = 0;
 	dmb_set_lastid( glob.host[i].hkey, 0 );
       }
       break;
     }
     
     /* send this entry to the host */
-    if( glob.host[i].sentseq < entry.seq ) {
-      if( !(hdr.flags & DMB_NOREMOTE) ) {
+    if( !glob.host[i].sent ) {
+      if( !(hdr.flags & DMB_LOCAL) ) {
 	dmb_log( LOG_LVL_INFO, "dmb publish hostid=%"PRIx64" entryid=%"PRIx64" len=%u", glob.host[i].hostid, entry.id, iov[1].len );
 	
 	sts = dmb_call_invoke( glob.host[i].hostid, entry.id, hdr.msgid, hdr.flags, msgbuf, iov[1].len );
-	if( !sts ) glob.host[i].sentseq = entry.seq;	
+	if( !sts ) glob.host[i].sent = 1;
       } else {
-	glob.host[i].sentseq = entry.seq;
+	glob.host[i].sent = 1;
 	glob.host[i].lastid = entry.id;
       }
     }

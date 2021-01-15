@@ -2,7 +2,7 @@
 
 { -*- mode: fvm -*- }
 
-Program DmbTest(0,0,Init,MsgHandler,TestMsg);
+Program DmbTest(0,0,Init,Exit,MsgHandler,TestMsg);
 Begin
    { Includes }
    Include "syscall.pas";
@@ -24,6 +24,12 @@ Begin
 	Syscall DmbSubscribe("DmbTest","MsgHandler",0);
    End;
 
+   { Exit routine - called when module unloaded }
+   Procedure Exit()
+   Begin
+	Syscall DmbUnsubscribe("DmbTest","MsgHandle");
+   End;
+   
    { Message handler }
    Procedure MsgHandler(hostH : int, hostL : int, msgid : int, len : int, buf : opaque)
    Begin

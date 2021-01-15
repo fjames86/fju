@@ -47,19 +47,29 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
 int fvm_module_load_file( char *filename, uint32_t flags, struct fvm_module **modulep );
 int fvm_module_unload( char *modname );
 
-struct fvm_module *fvm_module_by_name( char *name );
-struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid );
-struct fvm_module *fvm_module_by_tag( int tag );
-int fvm_procid_by_name( struct fvm_module *module, char *procname );
+struct fvm_module *fvm_module_by_name( char *name ); /* lookup by name */
+struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid );  /* lookup by rpc prog */
+struct fvm_module *fvm_module_by_tag( int tag ); /* lookup by tag */
+int fvm_procid_by_name( struct fvm_module *module, char *procname ); /* lookup proc by name */
 
+/*
+ * get a handle to a proc so it can be called later without saving the full modname/procname strings 
+ * note the following: 
+ * - handles are invalid once the module is unloaded. 
+ * - handles cannot be passed between machines or persisted. 
+ */
 int fvm_handle_by_name( char *modname, char *procname, uint32_t *phandle );
+
+/* resolve a handle to module/procid so it can be called */
 int fvm_proc_by_handle( uint32_t phandle, struct fvm_module **m, int *procid );
 
+/* run the given proc with args receiving results */
 int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf );
 
 /* register rpc interface */
 void fvm_rpc_register( void );
 
+/* clustering routines */
 int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, int len );
 int fvm_cluster_run2( uint64_t clid, char *modname, char *procname, char *args, int len, uint64_t tgt_hostid, uint64_t excl_hostid );
 int fvm_cluster_updatestate( uint64_t clid, char *modname );

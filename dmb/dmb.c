@@ -19,35 +19,37 @@ log_deflogger(dmb_log,DMB_RPC_PROG)
 
 static void dmb_invoke_subscribers( uint64_t hostid, uint32_t msgid, uint32_t flags, char *buf, int len );
 
+/* host descriptor */
 struct dmb_host {
-  uint64_t hostid;
-  uint64_t lastid;
-  int sent; /* true if message sent and waiting for reply */
-  uint64_t hkey;
+  uint64_t hostid; /* host identifier */
+  uint64_t lastid; /* last id acked by host */
+  int sent;        /* true if message sent and waiting for reply */
+  uint64_t hkey;   /* registry handle */
 };
 
+/* fvm subscription descriptor */
 struct dmb_fvmsc {
-  uint32_t phandle;
-  uint32_t category;
+  uint32_t phandle;   /* proc handle */
+  uint32_t category;  /* category filter */
 };
 
-#define DMB_MAX_HOST 32
-#define DMB_MAX_FVMSC 32
+#define DMB_MAX_HOST  32    /* max number of hosts */
+#define DMB_MAX_FVMSC 64    /* max number of fvm subscribers */
 
 static struct {
-  uint32_t ocount;
-  struct log_s log;
+  uint32_t ocount;                        /* library open count */
+  struct log_s log;                       /* log handle */
 
-  struct dmb_host local;
-  struct dmb_host host[DMB_MAX_HOST];
+  struct dmb_host local;                  /* local host descriptor */
+  struct dmb_host host[DMB_MAX_HOST];     /* host descriptors */
   int nhost;
-  struct dmb_fvmsc fvmsc[DMB_MAX_FVMSC];
+  struct dmb_fvmsc fvmsc[DMB_MAX_FVMSC];  /* fvm subscribers */
   int nfvmsc;
-  struct dmb_subscriber *sc;
+  struct dmb_subscriber *sc;              /* native subscribers */
 } glob;
 
 
-
+/* message header stored in log, data follows */
 struct dmb_header {
   uint32_t msgid;
   uint32_t flags;

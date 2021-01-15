@@ -52,6 +52,8 @@ int dmb_subscribe( struct dmb_subscriber *sc );
  * A given modname/procname may only be registered once. Subsequent fvm_subscribe_fvm calls 
  * with the same procname will only change the category filter.
  * MUST have signature Proc(hostHigh : int, hostLow : int, msgid : int, len : int, buf : opaque) 
+ * Subscriptions MUST be unsubscribed before a module is unloaded. It is advisable to unsubscribe 
+ * from an exit routine.
 */
 int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category );
 

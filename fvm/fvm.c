@@ -96,6 +96,22 @@ static int get_init_proc( struct fvm_module *m, char *procname ) {
   return -1;
 }
 
+static int get_exit_proc( struct fvm_module *m, char *procname ) {
+  int sts, procid;
+  char path[256];
+  sprintf( path, "/fju/fvm/modules/%s/exit", m->name );
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, procname, FVM_MAX_NAME, NULL );
+  if( !sts ) return 0;
+
+  procid = fvm_procid_by_name( m, "exit" );
+  if( procid >= 0 ) {
+    strcpy( procname, m->procs[procid].name );
+    return 0;
+  }
+  
+  return -1;
+}
+
 static int get_service_proc( struct fvm_module *m, char *procname, int *service_period ) {
   int sts, procid;
   char path[256];
@@ -253,11 +269,21 @@ int fvm_module_load_file( char *filename, uint32_t flags, struct fvm_module **mo
 
 int fvm_module_unload( char *modname ) {
   struct fvm_module *m, *prev;
+  char procname[FVM_MAX_NAME];
+  int sts;
+  
   m = glob.modules;
   prev = NULL;
   while( m ) {
     if( strcasecmp( m->name, modname ) == 0 ) {
       fvm_log( LOG_LVL_INFO, "fvm_module_unload %s", modname );
+
+      sts = get_exit_proc( m, procname );
+      if( !sts ) {
+	fvm_log( LOG_LVL_TRACE, "fvm_module_unload: %s running exit proc %s", m->name, procname );
+	sts = fvm_run( m, fvm_procid_by_name( m, procname ), NULL, NULL );
+	if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_unload: exit routine failed" );
+      }
       
       /* unload any rpc program, if any */
       fvm_unregister_program( modname );

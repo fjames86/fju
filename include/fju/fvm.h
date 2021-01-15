@@ -38,6 +38,7 @@ struct fvm_module {
   char *text;
   int textsize;
   uint64_t timestamp;
+  int tag;
 };
 
 
@@ -48,7 +49,11 @@ int fvm_module_unload( char *modname );
 
 struct fvm_module *fvm_module_by_name( char *name );
 struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid );
+struct fvm_module *fvm_module_by_tag( int tag );
 int fvm_procid_by_name( struct fvm_module *module, char *procname );
+
+int fvm_handle_by_name( char *modname, char *procname, uint32_t *phandle );
+int fvm_proc_by_handle( uint32_t phandle, struct fvm_module **m, int *procid );
 
 int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf );
 

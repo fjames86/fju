@@ -45,6 +45,7 @@ static struct {
   uint32_t max_runtime;
   uint32_t debug;
   struct fvm_iterator *iterators;
+  uint32_t moduletag;
 } glob = { NULL, 1000000, 5000 };
 
 static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
@@ -209,6 +210,11 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
     char timestr[64];
     fvm_log( LOG_LVL_INFO, "fvm_module_load %s timestamp=%s", module->name, sec_timestr( hdr.timestamp, timestr ) );
   }
+
+  glob.moduletag = (glob.moduletag + 1) % 0x10000;
+  /* TODO: check this isn't already taken */
+  module->tag = glob.moduletag;
+  
   module->next = glob.modules;
   glob.modules = module;
 
@@ -290,6 +296,17 @@ struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid ) {
   return NULL;
 }
     
+struct fvm_module *fvm_module_by_tag( int tag ) {
+  struct fvm_module *m;
+  m = glob.modules;
+  while( m ) {
+    if( m->tag == tag ) return m;
+    m = m->next;
+  }
+  return NULL;
+}
+    
+
 int fvm_procid_by_name( struct fvm_module *module, char *procname ) {
   int i;
   for( i = 0; i < module->nprocs; i++ ) {
@@ -297,6 +314,39 @@ int fvm_procid_by_name( struct fvm_module *module, char *procname ) {
   }
   return -1;
 }
+
+int fvm_handle_by_name( char *modname, char *procname, uint32_t *phandle ) {
+  struct fvm_module *m;
+  int procid;
+
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  procid = fvm_procid_by_name( m, procname );
+  if( procid < 0 ) return -1;
+
+  *phandle = (m->tag << 16) | procid;
+  return 0;
+}
+
+int fvm_proc_by_handle( uint32_t phandle, struct fvm_module **m, int *procid ) {
+  uint32_t mtag, pid;
+  struct fvm_module *mp;
+  
+  mtag = (phandle >> 16) & 0xffff;
+  pid = (phandle & 0xffff);
+
+  mp = fvm_module_by_tag( mtag );
+  if( !mp ) return -1;
+
+  if( pid >= mp->nprocs ) return -1;
+
+  *m = mp;
+  *procid = pid;
+  return 0;
+}
+
+
 
 /* --------------- runtime ------------------- */
 

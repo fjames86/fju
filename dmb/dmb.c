@@ -27,8 +27,7 @@ struct dmb_host {
 };
 
 struct dmb_fvmsc {
-  char modname[FVM_MAX_NAME];
-  int procid;
+  uint32_t phandle;
   uint32_t category;
 };
 
@@ -199,7 +198,7 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint32_t msgid, uint32_t fl
   struct dmb_subscriber *sc;
   struct xdr_s args;
   struct fvm_module *m;
-  int i;
+  int i, procid, sts;
   char argbuf[DMB_MAX_MSG + 64];
   
   sc = glob.sc;
@@ -217,9 +216,9 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint32_t msgid, uint32_t fl
   args.offset = 0;
   for( i = 0; i < glob.nfvmsc; i++ ) {
     if( (glob.fvmsc[i].category == 0) || (glob.fvmsc[i].category == ((msgid & 0xffff0000) >> 16)) ) {
-      m = fvm_module_by_name( glob.fvmsc[i].modname );
-      if( m ) {
-	fvm_run( m, glob.fvmsc[i].procid, &args, NULL );
+      sts = fvm_proc_by_handle( glob.fvmsc[i].phandle, &m, &procid );
+      if( !sts ) {
+	fvm_run( m, procid, &args, NULL );
       }
     }
   }
@@ -310,7 +309,7 @@ int dmb_open( void ) {
   struct log_opts opts;
   uint64_t hkey, hhosts;
   struct log_prop prop;
-  char procname[FVM_MAX_NAME];
+  char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
   
   if( glob.ocount > 0 ) {
     glob.ocount++;
@@ -357,22 +356,20 @@ int dmb_open( void ) {
   while( !sts ) {
     if( ((entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) && (glob.nfvmsc < DMB_MAX_FVMSC) ) {
       glob.fvmsc[glob.nfvmsc].category = 0;
-      sts = freg_get_by_name( NULL, entry.id, "modname", FREG_TYPE_STRING, glob.fvmsc[glob.nfvmsc].modname, FREG_MAX_NAME, NULL );
+      sts = freg_get_by_name( NULL, entry.id, "modname", FREG_TYPE_STRING, modname, FREG_MAX_NAME, NULL );
       if( !sts ) sts = freg_get_by_name( NULL, entry.id, "procname", FREG_TYPE_STRING, procname, FREG_MAX_NAME, NULL );
       if( !sts ) freg_get_by_name( NULL, entry.id, "category", FREG_TYPE_UINT32, (char *)&glob.fvmsc[glob.nfvmsc].category, sizeof(uint32_t), NULL );      
       if( !sts ) {
-	struct fvm_module *m;
-	m = fvm_module_by_name( glob.fvmsc[glob.nfvmsc].modname );
-	if( m ) {
-	  glob.fvmsc[glob.nfvmsc].procid = fvm_procid_by_name( m, procname );
-	  if( glob.fvmsc[glob.nfvmsc].procid >= 0 ) {
-	    dmb_log( LOG_LVL_INFO, "dmb init modname=%s/%s (%u) category=%u",
-		     glob.fvmsc[glob.nfvmsc].modname,
-		     procname,
-		     glob.fvmsc[glob.nfvmsc].procid,
-		     glob.fvmsc[glob.nfvmsc].category );
+	sts = fvm_handle_by_name( modname, procname, &glob.fvmsc[glob.nfvmsc].phandle );
+	if( sts ) {
+	  dmb_log( LOG_LVL_ERROR, "Unknown proc %s/%s", modname, procname );
+	} else {
+	  dmb_log( LOG_LVL_INFO, "dmb init modname=%s/%s (%u) category=%u",
+		   modname,
+		   procname,
+		   glob.fvmsc[glob.nfvmsc].phandle,
+		   glob.fvmsc[glob.nfvmsc].category );
 	    glob.nfvmsc++;
-	  }
 	}
       }
     }
@@ -407,19 +404,19 @@ int dmb_subscribe( struct dmb_subscriber *sc ) {
 }
 
 int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category ) {
-  int i, procid;
-  struct fvm_module *m;
-
-  m = fvm_module_by_name( modname );
-  if( !m ) return -1;
-  procid = fvm_procid_by_name( m, procname );
-  if( procid < 0 ) return -1;
+  int i, sts;
+  uint32_t phandle;
+  
+  sts = fvm_handle_by_name( modname, procname, &phandle );
+  if( sts ) {
+    dmb_log( LOG_LVL_ERROR, "Unknown proc %s/%s", modname, procname );
+    return -1;
+  }
   
   dmb_log( LOG_LVL_TRACE, "dmb subscribe %s/%s %u", modname, procname, category );
   
   for( i = 0; i < glob.nfvmsc; i++ ) {
-    if( (strcmp( glob.fvmsc[i].modname, modname ) == 0) &&
-	(glob.fvmsc[i].procid == procid) ) {
+    if( glob.fvmsc[i].phandle == phandle ) {
       glob.fvmsc[i].category = category;
       return 0;
     }
@@ -427,8 +424,7 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category ) {
 	
   if( glob.nfvmsc >= (DMB_MAX_FVMSC - 1) ) return -1;
 
-  strncpy( glob.fvmsc[glob.nfvmsc].modname, modname, FVM_MAX_NAME - 1 );
-  glob.fvmsc[glob.nfvmsc].procid = procid;
+  glob.fvmsc[glob.nfvmsc].phandle = phandle;
   glob.fvmsc[glob.nfvmsc].category = category;
   glob.nfvmsc++;
 
@@ -436,18 +432,16 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category ) {
 }
 
 int dmb_unsubscribe_fvm( char *modname, char *procname ) {
-  int i, procid;
-  struct fvm_module *m;
-  m = fvm_module_by_name( modname );
-  if( !m ) return -1;
-  procid = fvm_procid_by_name( m, procname );
-  if( procid < 0 ) return -1;
+  int i, sts;
+  uint32_t phandle;
+
+  sts = fvm_handle_by_name( modname, procname, &phandle );
+  if( sts ) return -1;
   
   dmb_log( LOG_LVL_TRACE, "dmb unsubscribe %s/%s", modname, procname );
   
   for( i = 0; i < glob.nfvmsc; i++ ) {
-    if( (strcmp( glob.fvmsc[i].modname, modname ) == 0) &&
-	(glob.fvmsc[i].procid == procid) ) {
+    if( glob.fvmsc[i].phandle == phandle ) {
       if( i != (glob.nfvmsc - 1) ) glob.fvmsc[i] = glob.fvmsc[glob.nfvmsc - 1];
       glob.nfvmsc--;
       return 0;

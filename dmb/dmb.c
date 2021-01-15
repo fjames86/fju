@@ -28,7 +28,7 @@ struct dmb_host {
 
 struct dmb_fvmsc {
   char modname[FVM_MAX_NAME];
-  char procname[FVM_MAX_NAME];
+  int procid;
   uint32_t category;
 };
 
@@ -66,7 +66,7 @@ static int dmb_set_lastid( uint64_t hkey, uint64_t lastid ) {
   return sts;
 }
 
-static void publish_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+static void invoke_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   uint64_t entryid;
   int i;
 	       
@@ -74,7 +74,7 @@ static void publish_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   
   for( i = 0; i < glob.nhost; i++ ) {
     if( glob.host[i].hostid == hcallp->hostid ) {
-      dmb_log( LOG_LVL_TRACE, "dmb msg %s hostid=%"PRIx64" entryid=%"PRIx64"", xdr ? "success" : "failure", hcallp->hostid, entryid );      
+      dmb_log( LOG_LVL_TRACE, "dmb invoke_cb %s hostid=%"PRIx64" entryid=%"PRIx64"", xdr ? "success" : "failure", hcallp->hostid, entryid );      
       if( xdr ) {
 	glob.host[i].lastid = entryid;
 	glob.host[i].sent = 0;
@@ -108,7 +108,7 @@ static int dmb_call_invoke( uint64_t hostid, uint64_t entryid, uint32_t msgid, u
   hcall.prog = DMB_RPC_PROG;
   hcall.vers = DMB_RPC_VERS;
   hcall.proc = 2; /* invoke proc, using hrauth async calls */
-  hcall.donecb = publish_cb;
+  hcall.donecb = invoke_cb;
   hcall.timeout = 500;
   hcall.cxt2 = entryid;
   hcall.service = HRAUTH_SERVICE_PRIV;
@@ -219,11 +219,10 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint32_t msgid, uint32_t fl
     if( (glob.fvmsc[i].category == 0) || (glob.fvmsc[i].category == ((msgid & 0xffff0000) >> 16)) ) {
       m = fvm_module_by_name( glob.fvmsc[i].modname );
       if( m ) {
-	fvm_run( m, fvm_procid_by_name( m, glob.fvmsc[i].procname ), &args, NULL );
+	fvm_run( m, glob.fvmsc[i].procid, &args, NULL );
       }
     }
   }
-
 
 }
 
@@ -311,6 +310,7 @@ int dmb_open( void ) {
   struct log_opts opts;
   uint64_t hkey, hhosts;
   struct log_prop prop;
+  char procname[FVM_MAX_NAME];
   
   if( glob.ocount > 0 ) {
     glob.ocount++;
@@ -356,16 +356,24 @@ int dmb_open( void ) {
   sts = freg_next( NULL, hhosts, 0, &entry );
   while( !sts ) {
     if( ((entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) && (glob.nfvmsc < DMB_MAX_FVMSC) ) {
+      glob.fvmsc[glob.nfvmsc].category = 0;
       sts = freg_get_by_name( NULL, entry.id, "modname", FREG_TYPE_STRING, glob.fvmsc[glob.nfvmsc].modname, FREG_MAX_NAME, NULL );
-      if( !sts ) sts = freg_get_by_name( NULL, entry.id, "procname", FREG_TYPE_STRING, glob.fvmsc[glob.nfvmsc].procname, FREG_MAX_NAME, NULL );
-      if( !sts ) sts = freg_get_by_name( NULL, entry.id, "category", FREG_TYPE_UINT32, (char *)&glob.fvmsc[glob.nfvmsc].category, sizeof(uint32_t), NULL );      
+      if( !sts ) sts = freg_get_by_name( NULL, entry.id, "procname", FREG_TYPE_STRING, procname, FREG_MAX_NAME, NULL );
+      if( !sts ) freg_get_by_name( NULL, entry.id, "category", FREG_TYPE_UINT32, (char *)&glob.fvmsc[glob.nfvmsc].category, sizeof(uint32_t), NULL );      
       if( !sts ) {
-	dmb_log( LOG_LVL_INFO, "dmb init modname=%s procname=%s category=%u",
-		 glob.fvmsc[glob.nfvmsc].modname,
-		 glob.fvmsc[glob.nfvmsc].procname,
-		 glob.fvmsc[glob.nfvmsc].category );
-	
-	glob.nfvmsc++;
+	struct fvm_module *m;
+	m = fvm_module_by_name( glob.fvmsc[glob.nfvmsc].modname );
+	if( m ) {
+	  glob.fvmsc[glob.nfvmsc].procid = fvm_procid_by_name( m, procname );
+	  if( glob.fvmsc[glob.nfvmsc].procid >= 0 ) {
+	    dmb_log( LOG_LVL_INFO, "dmb init modname=%s/%s (%u) category=%u",
+		     glob.fvmsc[glob.nfvmsc].modname,
+		     procname,
+		     glob.fvmsc[glob.nfvmsc].procid,
+		     glob.fvmsc[glob.nfvmsc].category );
+	    glob.nfvmsc++;
+	  }
+	}
       }
     }
    
@@ -399,13 +407,19 @@ int dmb_subscribe( struct dmb_subscriber *sc ) {
 }
 
 int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category ) {
-  int i;
+  int i, procid;
+  struct fvm_module *m;
 
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+  procid = fvm_procid_by_name( m, procname );
+  if( procid < 0 ) return -1;
+  
   dmb_log( LOG_LVL_TRACE, "dmb subscribe %s/%s %u", modname, procname, category );
   
   for( i = 0; i < glob.nfvmsc; i++ ) {
     if( (strcmp( glob.fvmsc[i].modname, modname ) == 0) &&
-	(strcmp( glob.fvmsc[i].procname, procname ) == 0) ) {
+	(glob.fvmsc[i].procid == procid) ) {
       glob.fvmsc[i].category = category;
       return 0;
     }
@@ -414,7 +428,7 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category ) {
   if( glob.nfvmsc >= (DMB_MAX_FVMSC - 1) ) return -1;
 
   strncpy( glob.fvmsc[glob.nfvmsc].modname, modname, FVM_MAX_NAME - 1 );
-  strncpy( glob.fvmsc[glob.nfvmsc].procname, procname, FVM_MAX_NAME - 1 );
+  glob.fvmsc[glob.nfvmsc].procid = procid;
   glob.fvmsc[glob.nfvmsc].category = category;
   glob.nfvmsc++;
 
@@ -422,13 +436,18 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category ) {
 }
 
 int dmb_unsubscribe_fvm( char *modname, char *procname ) {
-  int i;
-
+  int i, procid;
+  struct fvm_module *m;
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+  procid = fvm_procid_by_name( m, procname );
+  if( procid < 0 ) return -1;
+  
   dmb_log( LOG_LVL_TRACE, "dmb unsubscribe %s/%s", modname, procname );
   
   for( i = 0; i < glob.nfvmsc; i++ ) {
     if( (strcmp( glob.fvmsc[i].modname, modname ) == 0) &&
-	(strcmp( glob.fvmsc[i].procname, procname ) == 0) ) {
+	(glob.fvmsc[i].procid == procid) ) {
       if( i != (glob.nfvmsc - 1) ) glob.fvmsc[i] = glob.fvmsc[glob.nfvmsc - 1];
       glob.nfvmsc--;
       return 0;
@@ -450,7 +469,10 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size ) {
     return -1;
   }
 
-  dmb_log( LOG_LVL_TRACE, "dmb_publish msgid=%x flags=%x len=%u", msgid, flags, size );
+  if( size > DMB_MAX_MSG ) {
+    dmb_log( LOG_LVL_ERROR, "dmb_publish size %u > max size %u", size, DMB_MAX_MSG );
+    return -1;
+  }
   
   /* write into log and trigger iterator to send to remote hosts */
   memset( &hdr, 0, sizeof(hdr) );
@@ -466,11 +488,14 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size ) {
   entry.niov = 2;
   entry.flags = LOG_BINARY;
   sts = log_write( &glob.log, &entry );
-  if( sts ) return -1;
+  if( sts ) {
+    dmb_log( LOG_LVL_ERROR, "dmb_publish failed to write entry" );
+    return -1;
+  }
 
-  dmb_log( LOG_LVL_TRACE, "dmb_publish success entryid=%"PRIx64"", entry.id );
-  
+  dmb_log( LOG_LVL_TRACE, "dmb_publish msgid=%x flags=%x len=%u entryid=%"PRIx64"", msgid, flags, size, entry.id );  
   dmb_iter.timeout = 0;
+  
   return 0;
 }
 

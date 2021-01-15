@@ -14,6 +14,8 @@
 #include <fju/rpc.h>
 #include <fju/freg.h>
 #include <fju/sec.h>
+#include <fju/dmb.h>
+#include <fju/hostreg.h>
 
 #include "fvm-private.h"
 
@@ -123,7 +125,9 @@ int fvm_main( int argc, char **argv ) {
   }
 
   freg_open( NULL, NULL );
-
+  hostreg_open();
+  dmb_open();
+  
   module = fvm_module_by_name( mname );
   if( !module ) usage( "Unknown module %s", mname );
   procid = fvm_procid_by_name( module, pname );

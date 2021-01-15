@@ -421,6 +421,23 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category ) {
   return 0;
 }
 
+int dmb_unsubscribe_fvm( char *modname, char *procname ) {
+  int i;
+
+  dmb_log( LOG_LVL_TRACE, "dmb unsubscribe %s/%s", modname, procname );
+  
+  for( i = 0; i < glob.nfvmsc; i++ ) {
+    if( (strcmp( glob.fvmsc[i].modname, modname ) == 0) &&
+	(strcmp( glob.fvmsc[i].procname, procname ) == 0) ) {
+      if( i != (glob.nfvmsc - 1) ) glob.fvmsc[i] = glob.fvmsc[glob.nfvmsc - 1];
+      glob.nfvmsc--;
+      return 0;
+    }
+  }
+	
+  return -1;
+}
+
 int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size ) {
   /* write into log */
   struct log_entry entry;

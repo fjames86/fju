@@ -30,6 +30,10 @@
 
 int cht_entry_by_index( struct cht_s *cht, int idx, uint32_t seq, struct cht_entry *entry );
 
+/* 
+ * TODO: this can be quite expensive to keep opening and closingthe log file. Would be better 
+ * to at least save a handle to the last opened log and reuse it if the name is the same 
+ */
 static struct log_s *openlogfile( struct fvm_state *state, uint32_t addr, struct log_s *log ) {
   struct log_s *logp;
   char logname[64];

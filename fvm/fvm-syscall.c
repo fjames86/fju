@@ -828,10 +828,15 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *bufp;
       
       read_pars( state, pars, 4 );
-      bufp = fvm_getptr( state, pars[2], pars[3], 0 );
-      if( bufp ) {
-	dmb_publish( pars[0], pars[1], bufp, pars[3] );
+      if( pars[3] > 0 ) {
+	bufp = fvm_getptr( state, pars[2], pars[3], 0 );
+	if( !bufp ) pars[3] = 0;
+      } else {
+	bufp = NULL;
+	pars[3] = 0;
       }
+      
+      dmb_publish( pars[0], pars[1], bufp, pars[3] );
     }
     break;
   case 33:

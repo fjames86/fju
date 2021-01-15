@@ -51,7 +51,7 @@ Declare Syscall LogReadInfo(logname : string, idHigh : int, idLow : int, var len
 Declare Syscall LogPrev(logname : string, idHigh : int, idLow : int, var high : int, var low : int ) : 30;
 Declare Syscall ChtList(startkey : opaque,keybuf : opaque, nkeybuf : int, var nkeys : int) : 31;
 
-Const DmbNoLocal = 0x1;   { Not published locally }
-Const DmbNoRemote = 0x2;  { Not published remotely }
+Const DmbLocal = 0x1;   { Not published remotely }
+Const DmbRemote = 0x2;  { Not published locally }
 Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque) : 32;
 Declare Syscall DmbSubscribe(modname : string, procname : string, category : int) : 33;

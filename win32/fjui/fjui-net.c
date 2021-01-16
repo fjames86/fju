@@ -602,7 +602,8 @@ void fjui_call_reglist( uint64_t hostid, uint64_t hitem, HTREEITEM hparent ) {
 
 
 static void regrem_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
-	fjui_set_statusbar( 1, "RegRem %s", xdr ? "Succes" : "Timeout" );
+	fjui_set_statusbar( 1, "RegRem %s", xdr ? "Success" : "Timeout" );
+	fjui_reg_refresh_selected( hcallp->hostid );
 }
 
 void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid ) {
@@ -620,7 +621,7 @@ void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid ) {
   hcall.proc = 4; 
   hcall.donecb = regrem_cb;
   hcall.cxt = NULL;
-  hcall.cxt2 = itemid;
+  hcall.cxt2 = parentid;
   hcall.timeout = 1000;
   hcall.service = HRAUTH_SERVICE_PRIV;
 

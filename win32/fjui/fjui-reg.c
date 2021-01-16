@@ -231,7 +231,7 @@ static void reg_command( HWND hwnd, int id, int cmd ) {
 		uint64_t u64;
 		char *buf;
 		int len;
-		char bufp[256];
+		char bufp[256], *term;
 
 		reg_getselected( &parentid, &itemid, NULL );
 		GetWindowTextA( fjui_get_hwnd( "reg_name" ), name, sizeof(name) );
@@ -243,15 +243,15 @@ static void reg_command( HWND hwnd, int id, int cmd ) {
 			flags = FREG_TYPE_KEY;
 			buf = NULL;
 			len = 0;
-			parentid = itemid; //?
+			//parentid = itemid; //?
 		} else if( strcasecmp( type, "u32" ) == 0 ) {
 			flags = FREG_TYPE_UINT32;
-			u32 = strtol( value, NULL, 0 );
+			u32 = strtoul( value, &term, 0 );
 			buf = &u32;
 			len = 4;
 		} else if( strcasecmp( type, "u64" ) == 0 ) {
 			flags = FREG_TYPE_UINT64;
-			u64 = strtoll( value, NULL, 0 );
+			u64 = strtoull( value, &term, 0 );
 			buf = &u64;
 			len = 8;
 		} else if( strcasecmp( type, "string" ) == 0 ) {

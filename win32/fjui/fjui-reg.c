@@ -213,20 +213,8 @@ static void reg_getselected( uint64_t *parentid, uint64_t *itemid, HTREEITEM *hp
 		tvi.mask = TVIF_PARAM;
 		TreeView_GetItem( fjui_get_hwnd( "reg_tv" ), &tvi );
 
-		if( *itemid ) {
-			*parentid = tvi.lParam;
-			if( hparent ) *hparent = hitem;
-		} else {
-			*itemid = tvi.lParam;
-
-			hitem = TreeView_GetParent( fjui_get_hwnd( "reg_tv" ), hitem );
-			memset( &tvi, 0, sizeof(tvi) );
-			tvi.hItem = hitem;
-			tvi.mask = TVIF_PARAM;
-			TreeView_GetItem( fjui_get_hwnd( "reg_tv" ), &tvi );
-			*parentid = tvi.lParam;
-			if( hparent ) *hparent = hitem;			
-		}
+		*parentid = tvi.lParam;
+		if( hparent ) *hparent = hitem;
 	}
 
 }
@@ -277,12 +265,12 @@ static void reg_command( HWND hwnd, int id, int cmd ) {
 			buf = bufp;
 		} else return;
 
-		fjui_call_regput( fjui_hostid(), parentid, name, flags, buf, len );
+		if( parentid ) fjui_call_regput( fjui_hostid(), parentid, name, flags, buf, len );
 	}
 	break;
 	case CMD_REM:
 	  reg_getselected( &parentid, &itemid, NULL );
-		if( itemid ) {
+		if( parentid && itemid ) {
 			fjui_call_regrem( fjui_hostid(), parentid, itemid );
 		}
 	break;

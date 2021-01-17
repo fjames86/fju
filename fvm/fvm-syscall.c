@@ -832,7 +832,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *bufp;
       uint64_t seq;
       
-      read_pars( state, pars, 4 );
+      read_pars( state, pars, 6 );
       if( pars[3] > 0 ) {
 	bufp = fvm_getptr( state, pars[2], pars[3], 0 );
 	if( !bufp ) pars[3] = 0;

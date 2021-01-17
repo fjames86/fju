@@ -53,7 +53,8 @@ Declare Syscall ChtList(startkey : opaque,keybuf : opaque, nkeybuf : int, var nk
 
 Const DmbLocal = 0x1;   { Not published remotely }
 Const DmbRemote = 0x2;  { Not published locally }
-Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque) : 32;
+Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque, var seqH : int, var seqL : int) : 32;
 Declare Syscall DmbSubscribe(modname : string, procname : string, category : int) : 33;
 Declare Syscall DmbUnsubscribe(modname : string, procname : string) : 34;
+Declare Syscall DmbHostInfo(hostH : int, hostL : int, var seqH : int, var seqL : int) : 35;
 

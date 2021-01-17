@@ -42,7 +42,7 @@ int dmb_main( int argc, char **argv ) {
   int i;
   int sts;
   struct freg_entry entry;
-  uint64_t hkey, hhosts, hostid, lastid;
+  uint64_t hkey, hhosts, hostid, lastid, seq;
   char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
   uint32_t category;
 
@@ -61,11 +61,13 @@ int dmb_main( int argc, char **argv ) {
     if( ((entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) ) {
       hostid = 0;
       lastid = 0;
+      seq = 0;
       sts = freg_get_by_name( NULL, entry.id, "hostid", FREG_TYPE_UINT64, (char *)&hostid, sizeof(uint64_t), NULL );
       if( !sts ) {
 	sts = freg_get_by_name( NULL, entry.id, "lastid", FREG_TYPE_UINT64, (char *)&lastid, sizeof(uint64_t), NULL );
+	sts = freg_get_by_name( NULL, entry.id, "seq", FREG_TYPE_UINT64, (char *)&seq, sizeof(uint64_t), NULL );
 	
-	printf( "Host %"PRIx64" LastID %"PRIx64"\n", hostid, lastid );
+	printf( "Host %"PRIx64" LastID %"PRIx64" Seq %"PRIu64"\n", hostid, lastid, seq );
       }
     }
     

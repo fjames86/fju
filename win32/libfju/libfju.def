@@ -234,4 +234,4 @@ dmb_close
 dmb_publish
 dmb_subscribe
 dmb_subscribe_fvm
-
+dmb_host_info

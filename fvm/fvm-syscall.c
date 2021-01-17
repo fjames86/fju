@@ -828,8 +828,9 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   case 32:
     /* DmbPublish(msgid : int, flags : int, len : int, buf : opaque) */
     {
-      uint32_t pars[4];
+      uint32_t pars[6];
       char *bufp;
+      uint64_t seq;
       
       read_pars( state, pars, 4 );
       if( pars[3] > 0 ) {
@@ -839,8 +840,10 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	bufp = NULL;
 	pars[3] = 0;
       }
-      
-      dmb_publish( pars[0], pars[1], bufp, pars[3] );
+
+      dmb_publish( pars[0], pars[1], bufp, pars[3], &seq );
+      fvm_write_u32( state, pars[4], seq >> 32 );
+      fvm_write_u32( state, pars[5], seq & 0xffffffff );
     }
     break;
   case 33:
@@ -875,6 +878,21 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       }
     }
     break;
+  case 35:
+    /* DmbHostInfo(hostH : int, hostL : int, var seqH : int, var seqL : int) */
+    {
+      uint32_t pars[4];
+      uint64_t hostid, seq;
+      
+      read_pars( state, pars, 4 );
+      hostid = (((uint64_t)pars[0]) << 32) | (uint64_t)pars[1];
+
+      dmb_host_info( hostid, NULL, &seq );
+
+      fvm_write_u32( state, pars[2], (uint32_t)((seq >> 32) & 0xffffffff) );
+      fvm_write_u32( state, pars[3], (uint32_t)(seq & 0xffffffff) );
+    }
+    break;    
   case 0xffff:
     fvm_xcall( state );
     break;

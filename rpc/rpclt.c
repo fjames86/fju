@@ -74,7 +74,7 @@ static void fvm_reload_results( struct xdr_s *xdr );
 static void fvm_reload_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void dmb_invoke_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr );
-
+static void dmb_publish_results( struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
@@ -99,8 +99,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
-    { DMB_RPC_PROG, 1, 1, dmb_invoke_args, NULL, "dmb.invoke", "msgid=* [flags=*] [buf=base64]" },
-    { DMB_RPC_PROG, 1, 3, dmb_publish_args, NULL, "dmb.publish", "msgid=* [flags=*] [buf=base64]" },    
+    { DMB_RPC_PROG, 1, 1, dmb_invoke_args, NULL, "dmb.invoke", "msgid=* [seq=*] [flags=*] [buf=base64]" },
+    { DMB_RPC_PROG, 1, 3, dmb_publish_args, dmb_publish_results, "dmb.publish", "msgid=* [flags=*] [buf=base64]" },    
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1320,18 +1320,22 @@ static void dmb_invoke_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   uint32_t msgid, flags;
   char *buf;
   int len, sts;
-
+  uint64_t seq;
+  
   msgid = 0;
   flags = 0;
   buf = NULL;
   len = 0;
-
+  seq = 0;
+  
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "msgid" ) == 0 ) {
       msgid = strtoul( argval, NULL, 0 );
     } else if( strcmp( argname, "flags" ) == 0 ) {
       flags = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "seq" ) == 0 ) {
+      seq = strtoull( argval, NULL, 0 );      
     } else if( strcmp( argname, "buf" ) == 0 ) {
       buf = malloc( DMB_MAX_MSG );
       len = DMB_MAX_MSG;
@@ -1346,9 +1350,19 @@ static void dmb_invoke_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   if( !msgid ) usage( "Need msgid" );
 
   xdr_encode_uint64( xdr, hostreg_localid() );
+  xdr_encode_uint64( xdr, seq );  
   xdr_encode_uint32( xdr, msgid );
   xdr_encode_uint32( xdr, flags );
   xdr_encode_opaque( xdr, (uint8_t *)buf, len );
+}
+
+static void dmb_publish_results( struct xdr_s *xdr ) {
+  int sts;
+  uint64_t seq;
+  
+  sts = xdr_decode_uint64( xdr, &seq );
+  if( sts ) usage( "XDR error" );
+  printf( "%"PRIu64"\n", seq );
 }
 
 static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr ) {

@@ -9,7 +9,9 @@ Begin
    { procedures }
    Procedure Publish(msgid : int, flags : int, len : int, buf : opaque)
    Begin
-	Syscall DmbPublish(msgid,flags,len,buf);
+	var seqH, seqL : int;
+	
+	Syscall DmbPublish(msgid,flags,len,buf,seqH,seqL);
    End;
 
 End.

@@ -11,7 +11,10 @@ Begin
    Include "xdr.pas";
    
    { constants }
-
+   Const MsgPing = 0x1;
+   Const MsgPong = 0x2;
+   Const MsgLogVals = 0x3;
+   
    { declarations }
       
    { globals }
@@ -23,7 +26,7 @@ Begin
    Begin
 	{ Register to receive all messages }
 	Syscall DmbSubscribe("DmbTest","MsgHandler",0);
-	Syscall DmbSubscribe("DmbTest","MsgHandler2",0x3);
+	Syscall DmbSubscribe("DmbTest","MsgHandler2",MsgLogVals);
    End;
 
    { Exit routine - called when module unloaded }
@@ -42,10 +45,10 @@ Begin
 	Syscall DmbMsgInfo(hostH,hostL,seqH,seqL,msgid,lenp);
 	Call LogWritef(LogLvlInfo,"DmbTest Host %x%x Msgid %x Len %u", hostH, hostL, msgid, len);
 
-	If msgid = 0x00000001 Then Begin
+	If msgid = MsgPing Then Begin
 	   Call LogWritef(LogLvlInfo, "DmbTest Sending reply message", 0,0,0,0 );
-	   Syscall DmbPublish(0x00000002, DmbRemote, 0, 0, seqH, seqL);
-	End Else If msgid = 0x00000002 Then Begin
+	   Syscall DmbPublish(MsgPong, DmbRemote, 0, 0, seqH, seqL);
+	End Else If msgid = MsgPong Then Begin
 	   { Write an freg entry }
 	   Syscall FregWriteString("/dmbtest","DmbTest Received Reply");
 	End;
@@ -62,7 +65,7 @@ Begin
 	{ Clear an freg entry }
 	Syscall FregWriteString("/dmbtest","");
 	
-	Syscall DmbPublish(0x00000001,DmbRemote,0,0,seqH, seqL);
+	Syscall DmbPublish(MsgPing,DmbRemote,0,0,seqH, seqL);
    End;
 
    Procedure MsgHandler2(intval : int, str : string)
@@ -86,6 +89,6 @@ Begin
 	Call XdrEncodeU32(bufp,offset,intval);
 	Call XdrEncodeString(bufp,offset,strval);
 
-	Syscall DmbPublish(0x3,0,offset,buf,seqH,seqL);
+	Syscall DmbPublish(MsgLogVals,0,offset,buf,seqH,seqL);
    End;
 End.

@@ -169,7 +169,7 @@ static void dmb_iter_cb( struct rpc_iterator *iter ) {
     if( sts || !ne ) {
       //dmb_log( LOG_LVL_ERROR, "dmb failed to read next entry lastid=%"PRIx64"", glob.host[i].lastid );
       /* check this is even a known entry in the log, if not then reset to first entry */
-      if( log_read_buf( &glob.log, glob.host[i].lastid, NULL, 0, NULL ) ) {
+      if( glob.host[i].lastid && log_read_buf( &glob.log, glob.host[i].lastid, NULL, 0, NULL ) ) {
 	dmb_log( LOG_LVL_ERROR, "dmb unknown entry %"PRIx64" resetting to start", glob.host[i].lastid );
 	glob.host[i].lastid = 0;
 	glob.host[i].sent = 0;

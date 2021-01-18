@@ -6,6 +6,7 @@ fvmprogs += fvm/test/test1.fvm
 fvmprogs += fvm/test/test.fvm
 fvmprogs += ${BINDIR}/dmb.fvm
 fvmprogs += fvm/test/test-dmb.fvm
+fvmprogs += fvm/test/hello-world.fvm
 
 fvm: ${LIBDIR}/libfvm.a fvm/test/test1.fvm ${fvmprogs}
 
@@ -27,6 +28,8 @@ ${BINDIR}/log.fvm: fvm/modules/log.pas ${BINDIR}/fju fvm/stdlib/syscall.pas
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/modules/log.pas
 ${BINDIR}/dmb.fvm: fvm/modules/dmb.pas ${BINDIR}/fju fvm/stdlib/syscall.pas
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/modules/dmb.pas
+${BINDIR}/hello-world.fvm: fvm/test/hello-world.pas ${BINDIR}/fju fvm/stdlib/syscall.pas
+	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/test/hello-world.pas
 
 LIBRARIES+=fvm
 

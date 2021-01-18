@@ -230,11 +230,11 @@ Begin
         Call TestAdd();
 	Call TestFreg();
 	Call TestXCall();
-	Call TestFvmClRun();
+	{ Call TestFvmClRun(); }
 	Call TestLoop();
 	Call TestStrcpy();
 	Call TestMemcmp();
-        Call TestLogProp();
+        { Call TestLogProp(); } 
 	
 	Syscall Puts("Done");
    End;

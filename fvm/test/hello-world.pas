@@ -4,8 +4,7 @@
 Program HelloWorld(0,0,Hello);
 Begin
 
-	Include "syscall.pas";
-
+   Include "syscall.pas";
 
    Procedure Hello()
    Begin	

@@ -83,6 +83,7 @@ static void invoke_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	glob.host[i].lastid = entryid;
 	glob.host[i].sent = 0;
 
+	memset( &entry, 0, sizeof(entry) );
 	sts = log_read_entry( &glob.log, entryid, &entry );	
 	dmb_set_lastid( glob.host[i].hkey, entryid, sts ? 0 : entry.seq );
 	dmb_iter.timeout = 0;
@@ -180,7 +181,7 @@ static void dmb_iter_cb( struct rpc_iterator *iter ) {
 	if( !(hdr.flags & DMB_LOCAL) ) {
 	  dmb_log( LOG_LVL_INFO, "dmb call invoke hostid=%"PRIx64" entryid=%"PRIx64" msgid=%x len=%u", glob.host[i].hostid, entry.id, hdr.msgid, iov[1].len );
 	  
-	  sts = dmb_call_invoke( glob.host[i].hostid, entry.id, entry.seq, hdr.msgid, hdr.flags, msgbuf, iov[1].len );
+	  sts = dmb_call_invoke( glob.host[i].hostid, entry.seq, entry.id, hdr.msgid, hdr.flags, msgbuf, iov[1].len );
 	  if( !sts ) glob.host[i].sent = 1;
 	} else {
 	  dmb_log( LOG_LVL_INFO, "dmb skipping local entryid %"PRIx64"", entry.id );

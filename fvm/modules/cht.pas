@@ -6,12 +6,26 @@
  * invoked from e.g. raft commands.
 }
 
-Program Cht(0,0,ChtRead,ChtWrite,ChtDelete,ChtList);
+Program Cht(0,0,Init,Exit,ChtRead,ChtWrite,ChtDelete,ChtList);
 Begin
 
 Include "syscall.pas";
 Include "string.pas";
 Include "log.pas";
+Include "dmb.pas";
+
+Const ChtMsgWrite = 0x00010001;
+Const ChtMsgDelete = 0x00010002;
+
+Procedure Init()
+Begin
+	Syscall DmbSubscribe("Cht","ChtWrite",ChtMsgWrite);
+End;
+
+Procedure Exit()
+Begin
+	Syscall DmbUnsubscribe("Cht","ChtWrite");
+End;
 
 Procedure ChtRead(keylen : int, keybuf : opaque, var datalen : int, var databuf : opaque)
 Begin

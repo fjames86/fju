@@ -19,6 +19,10 @@ sleep 0.2
 
 fju reg /dmbtest
 
+echo "----- TestDmb2 --------------"
+
+fju rpc fvm.run modname=DmbTest procname=TestMsg2
+
 echo "--------- Done -------------"
 
 

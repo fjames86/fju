@@ -42,20 +42,17 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size, uint64_t *
 /* register a subscriber, optionally filtered on category */
 struct dmb_subscriber {
   struct dmb_subscriber *next;
-  uint32_t category; /* message category. if non-zero only invoked on matching category, otehrwise receives all messges */
+  uint32_t msgid; /* message filter. if zero then subscriber receives all messages, otherwise only this message */
   void (*cb)( uint64_t hostid, uint64_t seq, uint32_t msgid, char *buf, int size );
 };
 int dmb_subscribe( struct dmb_subscriber *sc );
 
 /*
- * Register a subscriber that is implemented as an fvm procedure.
- * A given modname/procname may only be registered once. Subsequent fvm_subscribe_fvm calls 
- * with the same procname will only change the category filter.
- * MUST have signature Proc(hostHigh : int, hostLow : int, msgid : int, len : int, buf : opaque) 
- * Subscriptions MUST be unsubscribed before a module is unloaded. It is advisable to unsubscribe 
- * from an exit routine.
+ * Register an fvm procedure to receive messages. If msgid is zero thne the procedure
+ * has signature Proc(len : int, buf : opaque) and receives all messages. 
+ * If non-zero the procedure receives the buffer as its args directly, and only that specific message.
 */
-int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category );
+int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid );
 
 /* 
  * Unsubscribe an fvm subscriber
@@ -63,6 +60,7 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t category );
 int dmb_unsubscribe_fvm( char *modname, char *procname );
 
 int dmb_host_info( uint64_t hostid, uint64_t *lastid, uint64_t *seq );
+void dmb_msginfo( uint64_t *hostid, uint64_t *seq, uint32_t *msgid, uint32_t *len );
 
 #endif
 

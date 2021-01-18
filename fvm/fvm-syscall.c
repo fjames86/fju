@@ -830,24 +830,26 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     {
       uint32_t pars[6];
       char *bufp;
+      int len;
       uint64_t seq;
       
       read_pars( state, pars, 6 );
+      len = pars[2];
       if( pars[3] > 0 ) {
-	bufp = fvm_getptr( state, pars[2], pars[3], 0 );
-	if( !bufp ) pars[3] = 0;
+	bufp = fvm_getptr( state, pars[3], len, 0 );
+	if( !bufp ) len = 0;
       } else {
 	bufp = NULL;
-	pars[3] = 0;
+	len = 0;
       }
 
-      dmb_publish( pars[0], pars[1], bufp, pars[3], &seq );
+      dmb_publish( pars[0], pars[1], bufp, len, &seq );
       fvm_write_u32( state, pars[4], seq >> 32 );
       fvm_write_u32( state, pars[5], seq & 0xffffffff );
     }
     break;
   case 33:
-    /* DmbSubscribe(modname: string, procname : string, category : int) */
+    /* DmbSubscribe(modname: string, procname : string, msgid : int) */
     {
       uint32_t pars[3];
       char *modname, *procname;
@@ -891,6 +893,24 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 
       fvm_write_u32( state, pars[2], (uint32_t)((seq >> 32) & 0xffffffff) );
       fvm_write_u32( state, pars[3], (uint32_t)(seq & 0xffffffff) );
+    }
+    break;
+  case 36:
+    /* DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int, var msgid : Int) */
+    {
+      uint32_t pars[6];
+      uint64_t hostid, seq;
+      uint32_t msgid, len;
+
+      read_pars( state, pars, 6 );
+      dmb_msginfo( &hostid, &seq, &msgid, &len );
+
+      fvm_write_u32( state, pars[0], hostid >> 32 );
+      fvm_write_u32( state, pars[1], hostid & 0xffffffff );
+      fvm_write_u32( state, pars[2], seq >> 32 );
+      fvm_write_u32( state, pars[3], seq & 0xffffffff );
+      fvm_write_u32( state, pars[4], msgid );
+      fvm_write_u32( state, pars[5], len );
     }
     break;    
   case 0xffff:

@@ -57,4 +57,5 @@ Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque, va
 Declare Syscall DmbSubscribe(modname : string, procname : string, category : int) : 33;
 Declare Syscall DmbUnsubscribe(modname : string, procname : string) : 34;
 Declare Syscall DmbHostInfo(hostH : int, hostL : int, var seqH : int, var seqL : int) : 35;
+Declare Syscall DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int, var msgid : int, var len : int) : 36;
 

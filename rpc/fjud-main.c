@@ -5,6 +5,10 @@
  * 
  */
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 
 #include <fju/rpcd.h>
 #include <fju/shauth.h>

@@ -1,4 +1,8 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <fju/freg.h>
 #include <fju/rpc.h>
 #include <fju/hrauth.h>

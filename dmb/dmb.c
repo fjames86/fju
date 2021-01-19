@@ -231,6 +231,7 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint64_t seq, uint32_t msgi
       } else {
 	/* if filtering on all messages then pass buffer as opaque */
 	xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+	xdr_encode_uint32( &args, msgid );
 	xdr_encode_opaque( &args, (uint8_t *)buf, len );
       }
       args.offset = 0;
@@ -347,7 +348,6 @@ int dmb_open( void ) {
   struct log_opts opts;
   uint64_t hkey, hhosts;
   struct log_prop prop;
-  char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
   
   if( glob.ocount > 0 ) {
     glob.ocount++;
@@ -384,34 +384,6 @@ int dmb_open( void ) {
       }
     }
     
-    sts = freg_next( NULL, hhosts, entry.id, &entry );
-  }
-
-  /* read fvm subscribers */
-  sts = freg_subkey( NULL, hkey, "fvm", FREG_CREATE, &hhosts );
-  if( sts ) return sts;
-  sts = freg_next( NULL, hhosts, 0, &entry );
-  while( !sts ) {
-    if( ((entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY) && (glob.nfvmsc < DMB_MAX_FVMSC) ) {
-      glob.fvmsc[glob.nfvmsc].msgid = 0;
-      sts = freg_get_by_name( NULL, entry.id, "modname", FREG_TYPE_STRING, modname, FREG_MAX_NAME, NULL );
-      if( !sts ) sts = freg_get_by_name( NULL, entry.id, "procname", FREG_TYPE_STRING, procname, FREG_MAX_NAME, NULL );
-      if( !sts ) freg_get_by_name( NULL, entry.id, "msgid", FREG_TYPE_UINT32, (char *)&glob.fvmsc[glob.nfvmsc].msgid, sizeof(uint32_t), NULL );      
-      if( !sts ) {
-	sts = fvm_handle_by_name( modname, procname, &glob.fvmsc[glob.nfvmsc].phandle );
-	if( sts ) {
-	  dmb_log( LOG_LVL_ERROR, "Unknown proc %s/%s", modname, procname );
-	} else {
-	  dmb_log( LOG_LVL_INFO, "dmb init modname=%s/%s (%u) msgid=%u",
-		   modname,
-		   procname,
-		   glob.fvmsc[glob.nfvmsc].phandle,
-		   glob.fvmsc[glob.nfvmsc].msgid );
-	    glob.nfvmsc++;
-	}
-      }
-    }
-   
     sts = freg_next( NULL, hhosts, entry.id, &entry );
   }
 

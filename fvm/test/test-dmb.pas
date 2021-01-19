@@ -37,12 +37,11 @@ Begin
    End;
    
    { Message handler }
-   Procedure MsgHandler(len : int, buf : opaque)
+   Procedure MsgHandler(msgid : int, len : int, buf : opaque)
    Begin
-	var hostH, hostL, seqH, seqL, msgid : int;
-	var lenp : int;
+	var hostH, hostL, seqH, seqL : int;
 	
-	Syscall DmbMsgInfo(hostH,hostL,seqH,seqL,msgid,lenp);
+	Syscall DmbMsgInfo(hostH,hostL,seqH,seqL);
 	Call LogWritef(LogLvlInfo,"DmbTest Host %x%x Msgid %x Len %u", hostH, hostL, msgid, len);
 
 	If msgid = MsgPing Then Begin

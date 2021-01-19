@@ -54,8 +54,18 @@ Declare Syscall ChtList(startkey : opaque,keybuf : opaque, nkeybuf : int, var nk
 Const DmbLocal = 0x1;   { Not published remotely }
 Const DmbRemote = 0x2;  { Not published locally }
 Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque, var seqH : int, var seqL : int) : 32;
-Declare Syscall DmbSubscribe(modname : string, procname : string, category : int) : 33;
+
+{ 
+  * Subscribe to a specific message or all messages if msgid=0. When subscribing to a specific message 
+  * the procedure is invoked as if the message buffer were the procedure args. 
+  * if subscrining to all messages the proc is passed args (msgid : int, len : int, buf : opaque) 
+}
+Declare Syscall DmbSubscribe(modname : string, procname : string, msgid : int) : 33;
 Declare Syscall DmbUnsubscribe(modname : string, procname : string) : 34;
+
+{ Get Info about the registered host. seq is the message seq last acked by host }
 Declare Syscall DmbHostInfo(hostH : int, hostL : int, var seqH : int, var seqL : int) : 35;
-Declare Syscall DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int, var msgid : int, var len : int) : 36;
+
+{ Get info about currently invoked dmb message. Only valid when called from a dmb msg handler }
+Declare Syscall DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int) : 36;
 

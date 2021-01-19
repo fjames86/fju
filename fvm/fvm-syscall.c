@@ -223,6 +223,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       entry.iov = iov;
       entry.niov = 1;
       entry.flags = pars[1];
+      strncpy( (char *)&entry.ltag, "FVMS", 4 );
       log_write( logp, &entry );
     }
     break;
@@ -896,21 +897,19 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 36:
-    /* DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int, var msgid : Int) */
+    /* DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int) */
     {
-      uint32_t pars[6];
+      uint32_t pars[4];
       uint64_t hostid, seq;
       uint32_t msgid, len;
 
-      read_pars( state, pars, 6 );
+      read_pars( state, pars, 4 );
       dmb_msginfo( &hostid, &seq, &msgid, &len );
 
       fvm_write_u32( state, pars[0], hostid >> 32 );
       fvm_write_u32( state, pars[1], hostid & 0xffffffff );
       fvm_write_u32( state, pars[2], seq >> 32 );
       fvm_write_u32( state, pars[3], seq & 0xffffffff );
-      fvm_write_u32( state, pars[4], msgid );
-      fvm_write_u32( state, pars[5], len );
     }
     break;    
   case 0xffff:

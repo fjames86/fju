@@ -16,7 +16,7 @@
   * "subscribe" by monitoring the log for new messages.
 }
 
-Program Nls(0x2FFF7773,1,ProcNull,ProcList,Init,Service,Command);
+Program Nls(0x2FFF7773,1,ProcNull,ProcList,Init,Exit,Service,NlsMsgWrite);
 Begin
 
    { includes }
@@ -24,9 +24,11 @@ Begin
    Include "string.pas";
    Include "xdr.pas";
    Include "log.pas";
+   Include "dmb.pas";
    
    { constants }
    Const MaxLog = 32;
+   Const NlsMsgIdWrite = 0x00020000;
    
    { declarations }
    
@@ -103,15 +105,16 @@ Begin
 	var argbuf : opaque[4096];
 	var offset : int;
 	var hosth, hostl : int;
-
+	var seqH, seqL : int;
+	
 	Call LogWritef(LogLvlTrace,"NlsPublishCommand len=%u",len,0,0,0);
 	
 	offset = 0;
 	Call XdrEncodeString(argbuf,offset,logname);
 	Call XdrEncodeU32(argbuf,offset,flags);
 	Call XdrEncodeOpaque(argbuf,offset,buf,len);
-	
-	Syscall FvmClRunOthers(0,0,"Nls","Command",offset,argbuf);
+
+	Syscall DmbPublish(NlsMsgIdWrite,DmbRemote,offset,argbuf,seqH,seqL);
 End;
 
 Procedure CheckLogId(logname : string)
@@ -132,8 +135,7 @@ Begin
 		If len Then Begin
 		    Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",logname,idhigh,idlow,0);
 
-		    { Looks like this can cause an infinite loop where nodes keep attempting to write the same entry back to the cluster }
-		    { Call PublishCommand(logname,flags,len,buf); } { temporarily disable this to stop it from doing anything } 
+		    Call PublishCommand(logname,flags,len,buf); 
 		End Else Begin
 		     high = idhigh;
 		     low = idlow;
@@ -167,6 +169,13 @@ Begin
 	    Syscall FregNext("/fju/nls/logs",ename,ename,etype,result);	
 	End;
 	nlogs = i;
+
+	Syscall DmbSubscribe("Nls","NlsMsgWrite",NlsMsgIdWrite);
+End;
+
+Procedure Exit()
+Begin
+	Syscall DmbUnsubscribe("Nls","NlsMsgWrite");
 End;
 
 { Service routine - periodically check logs for new messages } 
@@ -185,12 +194,12 @@ Begin
 End;
 
 { Command procedure - invoked to replicate log entries }
-Procedure Command(logname : string, flags : int, len : int, buf : opaque)
+Procedure NlsMsgWrite(logname : string, flags : int, len : int, buf : opaque)
 Begin
 	var high, low : int;
 	var hostidh, hostidl : int;
 
-	Call LogWritef(LogLvlTrace,"NlsCommand Logname=%s len=%u", logname, len,0,0);
+	Call LogWritef(LogLvlTrace,"NlsMsgWrite Logname=%s len=%u", logname, len,0,0);
 
 	Syscall LogWrite(logname,flags,len,buf);
 	Syscall LogLastId(logname,high,low);

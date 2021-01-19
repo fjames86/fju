@@ -15,7 +15,7 @@
 static void dmb_iter_cb( struct rpc_iterator *iter );
 static RPC_ITERATOR(dmb_iter,1000,dmb_iter_cb);
 
-log_deflogger(dmb_log,"DMB")
+static log_deflogger(dmb_log,"DMB")
 
 static void dmb_invoke_subscribers( uint64_t hostid, uint64_t seq, uint32_t msgid, uint32_t flags, char *buf, int len );
 
@@ -218,7 +218,15 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint64_t seq, uint32_t msgi
   sc = glob.sc;
   while( sc ) {
     if( (sc->msgid == 0) || (sc->msgid == msgid) ) {
+      glob.curhostid = hostid;
+      glob.curseq = seq;
+      glob.curmsgid = msgid;
+      glob.curlen = len;      
       sc->cb( hostid, seq, msgid, buf, len );
+      glob.curhostid = 0;
+      glob.curseq = 0;
+      glob.curmsgid = 0;
+      glob.curlen = 0;      
     }
     sc = sc->next;
   }

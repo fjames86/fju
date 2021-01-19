@@ -15,7 +15,7 @@
 #include <fju/log.h>
 #include <fju/sec.h>
 
-static log_deflogger(raft_log, RAFT_RPC_PROG)
+static log_deflogger(raft_log, "RAFT")
   
 struct raft_file {
   struct raft_prop prop;

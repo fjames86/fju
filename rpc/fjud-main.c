@@ -149,7 +149,7 @@ int main( int argc, char **argv ) {
   if( sts ) printf( "Warning: failed to open default log file\n" );
   else { 
     logger_open = 1;
-    logger.ltag = RPC_LOG_LTAG;
+    strncpy( (char *)&logger.ltag, "RPC", 4 );
     rpcd_loggers[0].cb = rpcd_logger_cb;
     rpc_add_logger( &rpcd_loggers[0] );
   }

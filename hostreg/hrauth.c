@@ -31,26 +31,9 @@
 #include <fju/freg.h>
 #include <fju/events.h>
 
-static void hrauth_conn_init( void );
-
-static void hrauth_log( int lvl, char *fmt, ... ) {
-  static struct log_s log;
-  static int initialized = 0;
-  int sts;
-  va_list args;
-
-  if( !initialized ) {
-    sts = log_open( NULL, NULL, &log );
-    if( sts ) return;
-    log.ltag = HRAUTH_RPC_PROG;
-    initialized = 1;
-  }
+log_deflogger(hrauth_log,"HRAU")
   
-  va_start( args, fmt );
-  log_writev( &log, lvl, fmt, args );
-  va_end( args );
-}
-
+static void hrauth_conn_init( void );
 
 
 static int hrauth_common( uint64_t remoteid, uint8_t *common ) {

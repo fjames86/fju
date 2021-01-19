@@ -15,7 +15,7 @@
 static void dmb_iter_cb( struct rpc_iterator *iter );
 static RPC_ITERATOR(dmb_iter,1000,dmb_iter_cb);
 
-log_deflogger(dmb_log,DMB_RPC_PROG)
+log_deflogger(dmb_log,"DMB")
 
 static void dmb_invoke_subscribers( uint64_t hostid, uint64_t seq, uint32_t msgid, uint32_t flags, char *buf, int len );
 

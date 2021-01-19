@@ -25,7 +25,7 @@
 
 #include "fvm-private.h"
 
-log_deflogger(fvm_log,FVM_RPC_PROG)
+log_deflogger(fvm_log,"FVM");
 
 static int fvm_unregister_program( char *modname );
 static void fvm_unregister_iterator( char *modname );

@@ -165,7 +165,7 @@ int log_main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-T" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      fju.ltag = strtol( argv[i], NULL, 16 );
+      strncpy( (char *)&fju.ltag, argv[i], 4 );
     } else if( strcmp( argv[i], "-S" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -306,11 +306,15 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 #endif
 	  }
     } else {
+      char tagstr[5];
+      memcpy( tagstr, (char *)&entry.ltag, 4 );
+      tagstr[4] = 0;
+      
       sec_timestr( entry.timestamp, timestr );
       
       if( entry.flags & LOG_BINARY ) {
 	int i;
-	printf( "%s %-8x %4u:%s %"PRIx64"\n", timestr, entry.ltag, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
+	printf( "%s %-4s %4u:%s %"PRIx64"\n", timestr, tagstr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
 	if( !fju.print_quiet ) {
 	  printf( "  0000  " );
 	  for( i = 0; i < entry.msglen; i++ ) {
@@ -323,8 +327,8 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 	}
       } else {
 	if( !fju.print_quiet ) {
-	  printf( "%s %-8x %4u:%s %"PRIx64" %s\n",
-		  timestr, entry.ltag, entry.pid,
+	  printf( "%s %-4s %4u:%s %"PRIx64" %s\n",
+		  timestr, tagstr, entry.pid,
 		  lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, msg );
 	}
       }

@@ -129,9 +129,11 @@ int log_set_lvl( struct log_s *log, int lvl );
 /* set log cookie */
 int log_set_cookie( struct log_s *log, char *cookie, int size );
 
+#define _ltag_by_name(place,name) 
 #define log_deflogger(_name,_tag) \
 int _name( int lvl, char *fmt, ... ) {\
   va_list args;\
+  char *tstr;\
   struct log_entry entry;\
   struct log_iov iov[1];\
   char buf[1024];\
@@ -145,7 +147,8 @@ int _name( int lvl, char *fmt, ... ) {\
   entry.iov = iov;\
   entry.niov = 1;\
   entry.flags = lvl & (~LOG_BINARY);\
-  entry.ltag = _tag;\
+  tstr = _tag;\
+  strncpy( (char *)&entry.ltag, tstr, 4 );\
   return log_write( NULL, &entry );  \
 }
 

@@ -106,7 +106,7 @@ int fjui_log_addentry( uint64_t hostid, uint64_t msgid, uint32_t flags, uint64_t
 void fjui_init_bitmaps( void );
 HBITMAP fjui_get_bitmap( char *name );
 HICON fjui_get_icon( char *name );
-HIMAGELIST fjui_create_imagelist( char **images, int nimages, int bitwidth );
+HIMAGELIST fjui_create_imagelist( int bitwidth, char *images, ... );
 
 void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid );
 void fjui_call_regput( uint64_t hostid, uint64_t parentid, char *name, uint32_t flags, char *buf, int len );

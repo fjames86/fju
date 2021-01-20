@@ -322,7 +322,8 @@ void fjui_fvm_setcallres( struct xdr_s *xdr ) {
 static LRESULT CALLBACK fvm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam ) {
 	HWND h;
 	LVCOLUMNA lvc;
-
+	HIMAGELIST himl;
+	  
 	switch( msg ) {
 	case WM_CREATE:
 		h = CreateWindowExA( WS_EX_CLIENTEDGE, WC_LISTVIEWA, NULL, WS_VISIBLE|WS_CHILD|LVS_SINGLESEL|LVS_REPORT|LVS_SHOWSELALWAYS|LVS_NOSORTHEADER, 
@@ -330,6 +331,9 @@ static LRESULT CALLBACK fvm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		fjui_hwnd_register( "fvm_lv", h );
 		ListView_SetExtendedListViewStyle( h, LVS_EX_FULLROWSELECT );
 
+		himl = fjui_create_imagelist( 16, "class", "method", NULL );
+		ListView_SetImageList( h, himl, LVSIL_SMALL );
+		
 		/* add columns */
 		memset( &lvc, 0, sizeof(lvc) );
 		lvc.pszText = "Module";
@@ -337,6 +341,7 @@ static LRESULT CALLBACK fvm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		lvc.mask = LVCF_TEXT|LVCF_SUBITEM|LVCF_WIDTH;
 		lvc.cx = 300;
 		lvc.iSubItem = 0;
+		lvc.iImage = 0;
 		ListView_InsertColumn( h, 0, &lvc );
 
 		lvc.pszText = "ProgID";
@@ -412,10 +417,12 @@ void fjui_fvm_setinfo( struct fjui_hostinfo *info ) {
 	ListView_DeleteAllItems( hwnd );
 	for( i = 0; i < info->nmodule; i++ ) {
 		memset( &lvi, 0, sizeof(lvi) );
-		lvi.mask = LVIF_TEXT|LVIF_PARAM;
+		lvi.mask = LVIF_TEXT|LVIF_PARAM|LVIF_IMAGE|LVIF_INDENT;
 		lvi.iItem = 0x7ffffffe;
 		lvi.iSubItem = 0;
 		lvi.lParam = i;
+		lvi.iImage = 0;
+		lvi.iIndent = 0;
 		sprintf( str, "%s", info->modules[i].name );
 		lvi.pszText = str;			
 		idx = (int)SendMessageA( hwnd, LVM_INSERTITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
@@ -450,10 +457,12 @@ void fjui_fvm_setinfo( struct fjui_hostinfo *info ) {
 
 		for( j = 0; j < info->modules[i].nprocs; j++ ) {
 			memset( &lvi, 0, sizeof(lvi) );
-			lvi.mask = LVIF_TEXT|LVIF_PARAM;
+			lvi.mask = LVIF_TEXT|LVIF_PARAM|LVIF_IMAGE|LVIF_INDENT;
 			lvi.iItem = 0x7ffffffe;
 			lvi.iSubItem = 0;
 			lvi.lParam = (j << 16) | i;
+			lvi.iImage = 1;
+			lvi.iIndent = 1;
 			sprintf( str, "%s/%s(", info->modules[i].name, info->modules[i].procs[j].name );
 			for( k = 0; k < FVM_SIGINFO_NARGS(info->modules[i].procs[j].siginfo); k++ ) {
 				if( k > 0 ) sprintf( str + strlen( str ), ", " );

@@ -91,10 +91,15 @@ void reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, int len
 	h = fjui_get_hwnd( "reg_lv" );
 
 	memset( &lvi,0,sizeof( lvi ) );
-	lvi.mask = LVIF_TEXT|LVIF_PARAM;
+	lvi.mask = LVIF_TEXT|LVIF_PARAM|LVIF_IMAGE;
 	lvi.iItem = 0x7ffffffe;
 	lvi.iSubItem = 0;
 	lvi.lParam = itemid;
+	lvi.iImage = (flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ? 0 :
+		(flags & FREG_TYPE_MASK) == FREG_TYPE_UINT64 ? 1 :
+		(flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ? 2 :
+		(flags & FREG_TYPE_MASK) == FREG_TYPE_OPAQUE ? 3 :
+		0; // set image depending on type 
 	sprintf( str,"%s", txt );
 	lvi.pszText = str;
 	idx = (int)SendMessageA( h,LVM_INSERTITEMA,0,(LPARAM)(const LV_ITEMA *)(&lvi) );
@@ -288,7 +293,7 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		/* create a treeview */
 		h = CreateWindowA( WC_TREEVIEWA, NULL, WS_VISIBLE|WS_CHILD|TVS_HASLINES|TVS_LINESATROOT|TVS_HASBUTTONS|TVS_SHOWSELALWAYS, 0, 0, 0, 0, hwnd, 0, 0, NULL );
 		fjui_hwnd_register( "reg_tv", h );
-		//himl = fjui_create_imagelist( images, 2, 16 );
+		//himl = fjui_create_imagelist( 16, "reg", NULL );
 		//TreeView_SetImageList( h, himl, TVSIL_NORMAL );
 		reg_additem( "/", 0, FREG_TYPE_KEY, NULL, 0, TVI_ROOT );
 
@@ -297,6 +302,10 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		fjui_hwnd_register( "reg_lv", h );
 		ListView_SetExtendedListViewStyle( h, LVS_EX_FULLROWSELECT );
 
+		// TODO: add images for u32,u64,string,opaque
+		himl = fjui_create_imagelist( 16, "reg_value", "reg_value", "reg_value", "reg_value", NULL );
+		ListView_SetImageList( h, himl, LVSIL_SMALL );
+		
 		/* add columns */
 		memset( &lvc, 0, sizeof(lvc) );
 		lvc.pszText = "Name";

@@ -235,7 +235,7 @@ static void print_entry( struct cht_entry *e, int printinfo ) {
     printf( "%02x", (uint32_t)e->key[i] );
   }
   if( printinfo ) {
-    printf( " Seq %-4u Size %-4u Flags 0x%08x %s%s",
+    printf( " Seq %-4u Size %-4u Flags 0x%08x (%s%s) ",
 	    e->seq,
 	    e->flags & CHT_SIZE_MASK,
 	    e->flags & ~CHT_SIZE_MASK,
@@ -248,7 +248,7 @@ static void print_entry( struct cht_entry *e, int printinfo ) {
       }
       printf( " (" );
       for( i = 0; i < CHT_MAX_COOKIE; i++ ) {
-	printf( "%c", e->cookie[i] );
+	printf( "%c", (e->cookie[i] >= 'a' && e->cookie[i] <= 'z') || (e->cookie[i] >= 'A' && e->cookie[i] <= 'Z') || (e->cookie[i] >= '0' && e->cookie[i] <= '9') ? e->cookie[i] : '?' );
       }
       printf( ")" );
     }

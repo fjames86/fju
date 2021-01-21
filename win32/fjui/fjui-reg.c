@@ -95,11 +95,11 @@ void reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, int len
 	lvi.iItem = 0x7ffffffe;
 	lvi.iSubItem = 0;
 	lvi.lParam = itemid;
-	lvi.iImage = (flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ? 0 :
+	lvi.iImage = (flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ? 1 :
 		(flags & FREG_TYPE_MASK) == FREG_TYPE_UINT64 ? 1 :
-		(flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ? 2 :
-		(flags & FREG_TYPE_MASK) == FREG_TYPE_OPAQUE ? 3 :
-		0; // set image depending on type 
+		(flags & FREG_TYPE_MASK) == FREG_TYPE_STRING ? 0 :
+		(flags & FREG_TYPE_MASK) == FREG_TYPE_OPAQUE ? 1 :
+		1; // set image depending on type 
 	sprintf( str,"%s", txt );
 	lvi.pszText = str;
 	idx = (int)SendMessageA( h,LVM_INSERTITEMA,0,(LPARAM)(const LV_ITEMA *)(&lvi) );
@@ -119,6 +119,13 @@ void reg_additem( char *txt, uint64_t itemid, uint32_t flags, char *buf, int len
 	lvi.iItem = idx;
 	lvi.mask = LVIF_TEXT;
 	lvi.iSubItem = 2;
+	sprintf( str,"%d", len );
+	lvi.pszText = str;
+	SendMessageA( h,LVM_SETITEMA,0,(LPARAM)(const LV_ITEMA *)(&lvi) );
+
+	lvi.iItem = idx;
+	lvi.mask = LVIF_TEXT;
+	lvi.iSubItem = 3;
 	switch( flags & FREG_TYPE_MASK ) {
 	case FREG_TYPE_UINT32:
 		sprintf( str, "%u (0x%08x)", *((uint32_t *)buf), *((uint32_t *)buf) );
@@ -181,7 +188,7 @@ static void reg_notify( HWND hwnd, NMHDR *nmhdr ) {
 		lvi.pszText = str;
 		lvi.cchTextMax = sizeof(str);
 		lvi.iItem = idx;
-		lvi.iSubItem = 2;
+		lvi.iSubItem = 3;
 		ListView_GetItem( h, &lvi );
 		SetWindowTextA( fjui_get_hwnd( "reg_value" ), str );
 	    }
@@ -303,7 +310,7 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		ListView_SetExtendedListViewStyle( h, LVS_EX_FULLROWSELECT );
 
 		// TODO: add images for u32,u64,string,opaque
-		himl = fjui_create_imagelist( 16, "reg_value", "reg_value", "reg_value", "reg_value", NULL );
+		himl = fjui_create_imagelist( 16, "reg_string", "reg_binary", NULL );
 		ListView_SetImageList( h, himl, LVSIL_SMALL );
 		
 		/* add columns */
@@ -322,12 +329,19 @@ static LRESULT CALLBACK reg_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		lvc.iSubItem = 1;
 		ListView_InsertColumn(h, 1, &lvc );
 
+		lvc.pszText = "Size";
+		lvc.cchTextMax = (int)strlen( lvc.pszText );
+		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
+		lvc.cx = 80;
+		lvc.iSubItem = 2;
+		ListView_InsertColumn(h, 2, &lvc );
+
 		lvc.pszText = "Value";
 		lvc.cchTextMax = (int)strlen( lvc.pszText );
 		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
 		lvc.cx = 300;
-		lvc.iSubItem = 2;
-		ListView_InsertColumn(h, 2, &lvc );
+		lvc.iSubItem = 3;
+		ListView_InsertColumn(h, 3, &lvc );
 
 		h = CreateWindowA( WC_BUTTON, "Put", WS_VISIBLE|WS_CHILD|BS_PUSHBUTTON, 0, 0, 0, 0, hwnd, CMD_ADD, 0, 0 );
 		fjui_set_font( h );

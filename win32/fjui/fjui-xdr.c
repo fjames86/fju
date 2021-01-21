@@ -386,6 +386,7 @@ static void xdr_command_decode( HWND hwnd, HWND hargs, HWND hb64 ) {
 	GetWindowTextA( hargs, fmtstr, sizeof(fmtstr) );
 
 	strcpy( b64str, "" );
+	printed = 0;
 	if( decodevalue( hwnd, &xdr, fmtstr, b64str ) ) {
 		SetWindowTextA( hb64, b64str );
 	}

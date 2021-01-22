@@ -43,5 +43,8 @@
 #define DMB_RPC_PROG (FJU_BASE_PROG + 11)
 #define DMB_RPC_VERS 1
 
+#define DLM_RPC_PROG (FJU_BASE_PROG + 12)
+#define DLM_RPC_VERS 1
+
 #endif
 

@@ -22,6 +22,7 @@
 #include <fju/lic.h>
 #include <fju/raft.h>
 #include <fju/dmb.h>
+#include <fju/dlm.h>
 
 #include "rpc-private.h"
 
@@ -66,6 +67,7 @@ static void init_cb( void ) {
   raft_register();
   rex_register();
   dmb_open();
+  dlm_open();
   
   //rpc_iterator_register( &rusage_iter );
 }

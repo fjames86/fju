@@ -15,6 +15,7 @@ PROJECTS += freg
 PROJECTS += fvm
 PROJECTS += cht
 PROJECTS += dmb
+PROJECTS += dlm
 PROGRAMS=
 LIBRARIES=
 

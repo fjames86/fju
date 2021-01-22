@@ -24,13 +24,6 @@
 #include <dlfcn.h>
 #endif
 
-struct rpcd_event_subscriber {
-  uint32_t eventid;
-  rpcd_event_cb_t cb;
-  void *cxt;
-};
-#define RPCD_MAX_SUBSCRIBER 32  
-
 static struct {
 	int foreground;
 	int no_rpcregister;
@@ -60,9 +53,6 @@ static struct {
 	uint8_t buftab[RPC_MAX_CONN][RPC_MAX_BUF];
 
 	uint64_t connid;
-  
-        struct rpcd_event_subscriber subc[RPCD_MAX_SUBSCRIBER];
-	int nsubc;
   
         struct rpcd_active_conn aconn;
 } rpc;
@@ -692,8 +682,6 @@ void rpc_poll( int timeout ) {
 					xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
 					c->inc.xdr.count = c->cdata.count;
 
-					//rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
-
 					memcpy( &c->inc.raddr, &c->addr, c->addrlen );
 					c->inc.raddr_len = c->addrlen;
 					rpc.aconn.listen = NULL;
@@ -945,8 +933,6 @@ static void rpc_accept( struct rpc_listen *lis ) {
       rpc_log( RPC_LOG_DEBUG, "UDP Incoming %s count=%d", ipstr, c->cdata.count );
       rpc.flist = rpc.flist->next;
 
-      //rpcd_event_publish( RPCD_EVENT_RPCCALL, NULL );
-	
       rpc.aconn.listen = lis;
       rpc.aconn.conn = NULL;
       sts = rpc_process_incoming( &c->inc );
@@ -1518,39 +1504,6 @@ void rpcd_stop( void ) {
     rpc.exiting = 1;
 }
 
-
-void rpcd_event_publish( uint32_t eventid, struct xdr_s *args ) {
-  int i;
-
-  for( i = 0; i < rpc.nsubc; i++ ) {
-    if( rpc.subc[i].eventid == 0 || rpc.subc[i].eventid == eventid ) {
-      rpc.subc[i].cb( eventid, args, rpc.subc[i].cxt );
-    }
-  }
-}
-
-void rpcd_event_subscribe( uint32_t eventid, rpcd_event_cb_t cb, void *cxt ) {
-  if( rpc.nsubc >= RPCD_MAX_SUBSCRIBER ) {
-    rpc_log( RPC_LOG_ERROR, "Out of event subscriber descriptors" );
-  } else {
-    rpc.subc[rpc.nsubc].eventid = eventid;
-    rpc.subc[rpc.nsubc].cb = cb;
-    rpc.subc[rpc.nsubc].cxt = cxt;
-    rpc.nsubc++;
-  }
-}
-
-int rpcd_event_unsubscribe( rpcd_event_cb_t cb ) {
-  int i;
-  for( i = 0; i < rpc.nsubc; i++ ) {
-    if( rpc.subc[i].cb == cb ) {
-      if( i != rpc.nsubc ) rpc.subc[i] = rpc.subc[rpc.nsubc - 1];
-      rpc.nsubc--;
-      return 0;
-    }
-  }
-  return -1;
-}
 
 int rpcd_active_conn( struct rpcd_active_conn *aconn ) {
     *aconn = rpc.aconn;

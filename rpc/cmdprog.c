@@ -31,25 +31,6 @@ static int cmdprog_proc_stop( struct rpc_inc *inc ) {
   return 0;
 }
 
-static int cmdprog_proc_event( struct rpc_inc *inc ) {
-  int handle, sts, lenp;
-  uint32_t eventid;
-  char *bufp = NULL;
-  struct xdr_s args;
-  
-  sts = xdr_decode_uint32( &inc->xdr, &eventid );
-  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
-
-  xdr_init( &args, (uint8_t *)bufp, lenp );
-  rpcd_event_publish( eventid, &args );
-  
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  rpc_complete_accept_reply( inc, handle );
-  
-  return 0;
-}
-
 static int cmdprog_proc_licinfo( struct rpc_inc *inc ) {
   int handle, sts;
   struct lic_s lic;
@@ -109,7 +90,6 @@ static int cmdprog_proc_connlist( struct rpc_inc *inc ) {
 static struct rpc_proc cmdprog_procs[] = {
   { 0, cmdprog_proc_null },
   { 1, cmdprog_proc_stop },
-  { 2, cmdprog_proc_event },
   { 3, cmdprog_proc_licinfo },
   { 4, cmdprog_proc_connlist },
   { 0, NULL }

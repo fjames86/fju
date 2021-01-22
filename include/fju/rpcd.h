@@ -159,11 +159,6 @@ int rpcdp( void );
 int rpcd_get_default_port( void );
 
 
-typedef void (*rpcd_event_cb_t)( uint32_t eventid, struct xdr_s *args, void *cxt );
-void rpcd_event_publish( uint32_t eventid, struct xdr_s *args );
-void rpcd_event_subscribe( uint32_t eventid, rpcd_event_cb_t cb, void *cxt );
-int rpcd_event_unsubscribe( rpcd_event_cb_t cb );
-
 struct rpcd_active_conn {
     struct rpc_listen *listen;
     struct rpc_conn *conn;

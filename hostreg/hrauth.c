@@ -959,15 +959,6 @@ static void hrauth_conncb( rpc_conn_event_t evt, struct rpc_conn *conn ) {
     hc->connid = 0;
     hc->state = HRAUTH_CONN_DISCONNECTED;
 
-    /* publish disconnect event */
-    {
-      struct xdr_s evtxdr;
-      uint8_t evtxdrbuf[32];
-      xdr_init( &evtxdr, evtxdrbuf, sizeof(evtxdrbuf) );
-      xdr_encode_uint64( &evtxdr, hc->hostid );
-      rpcd_event_publish( HRAUTH_EVENT_DISCONNECT, &evtxdr );
-    }
-    
 #if 0
     {
       int sts;

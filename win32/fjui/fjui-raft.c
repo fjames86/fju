@@ -58,6 +58,13 @@ static LRESULT CALLBACK raft_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
 		lvc.iSubItem = 4;
 		ListView_InsertColumn(h, 4, &lvc );
 
+		lvc.pszText = "Term";
+		lvc.cchTextMax = (int)strlen( lvc.pszText );
+		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
+		lvc.cx = 120;
+		lvc.iSubItem = 5;
+		ListView_InsertColumn(h, 5, &lvc );
+		
 		break;	
 	case WM_COMMAND:
 		break;
@@ -124,6 +131,13 @@ void fjui_raft_setinfo( struct fjui_hostinfo *info ) {
 		sprintf( str, "%"PRIu64"", info->raft[i].commitseq );
 		lvi.pszText = str;			
 		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
+
+		lvi.iItem = idx;
+		lvi.mask = LVIF_TEXT;
+		lvi.iSubItem = 5;
+		sprintf( str, "%"PRIu64"", info->raft[i].term );
+		lvi.pszText = str;			
+		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );		
 	}
 
 }

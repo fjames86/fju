@@ -177,9 +177,6 @@ rpcdp
 freg_id_by_name
 mmf_open2
 rpcd_get_default_port;
-rpcd_event_publish
-rpcd_event_subscribe
-rpcd_event_unsubscribe
 rpcd_active_conn
 fvm_rpc_register
 fvm_run
@@ -203,6 +200,7 @@ raft_cluster_by_clid
 raft_command_list
 raft_command_seq
 raft_snapshot_info
+raft_command
 rpc_errmsg
 freg_next
 raft_app_register

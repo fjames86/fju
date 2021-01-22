@@ -25,6 +25,7 @@
 #include <fju/rpcd.h>
 #include <fju/raft.h>
 #include <fju/freg.h>
+#include <fju/dlm.h>
 
 #include "resource.h"
 
@@ -63,6 +64,9 @@ struct fjui_hostinfo {
 
 	struct raft_cluster raft[32];
 	int nraft;
+
+	int nlock;
+	struct dlm_lock lock[256];
 };
 struct fjui_hostinfo *fjui_hostinfo_by_name( char *name );
 struct fjui_hostinfo *fjui_hostinfo_by_id( uint64_t hostid );
@@ -122,6 +126,9 @@ void fjui_dialog_unregister( char *name );
 HWND fjui_get_dialog( char *name );
 
 void fjui_summary_register( void );
+
+void fjui_dlm_refresh( uint64_t hostid );
+void fjui_dlm_register( void );
 
 #endif
 

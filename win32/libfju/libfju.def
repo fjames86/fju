@@ -233,3 +233,8 @@ dmb_publish
 dmb_subscribe
 dmb_subscribe_fvm
 dmb_host_info
+dlm_open
+dlm_close
+dlm_acquire
+dlm_renew
+dlm_release

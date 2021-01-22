@@ -140,6 +140,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	fjui_log_register();
 	fjui_reg_register();
 	fjui_xdr_register();
+	fjui_dlm_register();
 
 	glob.showxdr = 1;
 
@@ -286,6 +287,13 @@ static void fjui_main_create( HWND hwnd ) {
 	h = CreateWindowA( "FJUIRAFT", NULL, WS_CHILD, 0, 0, 0, 0, tabh, 0, 0, NULL );
 	fjui_hwnd_register( "raft", h );
 
+	memset( &tci, 0, sizeof(tci) );
+	tci.mask = TCIF_TEXT;
+	tci.pszText = "Locks";
+	TabCtrl_InsertItem( tabh, 5, &tci );
+	h = CreateWindowA( "FJUIDLM", NULL, WS_CHILD, 0, 0, 0, 0, tabh, 0, 0, NULL );
+	fjui_hwnd_register( "dlm", h );
+
 	h = CreateWindowA( STATUSCLASSNAMEA, NULL, WS_VISIBLE|WS_CHILD|SBARS_SIZEGRIP, 0, 0, 0, 0, hwnd, 0, 0, NULL );
 	fjui_set_font( h );
 	fjui_hwnd_register( "statusbar", h );
@@ -371,6 +379,7 @@ static void fjui_main_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 				fjui_log_refresh( glob.hostid );
 				fjui_raft_refresh( glob.hostid );
 				fjui_reg_refresh( glob.hostid );
+				fjui_dlm_refresh( glob.hostid );
 			}
 		}
 	}
@@ -436,6 +445,8 @@ static void fjui_main_size( HWND hwnd, int width, int height ) {
 	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - (offset + 70), 0 );
 	h = fjui_get_hwnd( "reg" );
 	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - (offset + 70), 0 );
+	h = fjui_get_hwnd( "dlm" );
+	SetWindowPos( h, HWND_TOP, 10, 30, width - 130, height - (offset + 70), 0 );
 
 	h = fjui_get_hwnd( "hostlb" );
 	SetWindowPos( h, HWND_TOP, 5, 5, 95, height - (offset + 30), 0 );
@@ -462,6 +473,8 @@ static void fjui_main_notify( HWND hwnd, NMHDR *nmhdr ) {
 			ShowWindow( h, page == 3 ? SW_SHOW : SW_HIDE );
 			h = fjui_get_hwnd( "raft" );
 			ShowWindow( h, page == 4 ? SW_SHOW : SW_HIDE );
+			h = fjui_get_hwnd( "dlm" );
+			ShowWindow( h, page == 5 ? SW_SHOW : SW_HIDE );
 		}
 		break;
 	}

@@ -747,3 +747,53 @@ void fjui_call_fvmunload( uint64_t hostid, char *modname ) {
     fjui_set_statusbar( 1, "FvmUnload failed" );    
   }
 }
+
+static void dlmlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
+  int sts, b, i;
+  struct fjui_hostinfo *info;
+
+  info = fjui_hostinfo_by_id( hcallp->hostid );
+
+  fjui_set_statusbar( 1, "DlmList %s", xdr ? "Success" : "Timeout" );
+  if( !xdr ) return;
+
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) return;
+  i = 0;
+  while( b ) {
+    sts = xdr_decode_uint64( xdr, &info->lock[i].lockid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &info->lock[i].resid );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &info->lock[i].mode );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &info->lock[i].seq );    
+    if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)info->lock[i].cookie, DLM_MAX_COOKIE );
+    if( sts ) return;
+
+	i++;
+
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) return;
+  }
+  info->nlock = i;
+
+  fjui_dlm_refresh( hcallp->hostid );
+}
+
+void fjui_call_dlmlist( uint64_t hostid ) {
+	struct hrauth_call hcall;
+	int sts;
+
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = DLM_RPC_PROG;
+  hcall.vers = DLM_RPC_VERS;
+  hcall.proc = 1; 
+  hcall.donecb = dlmlist_cb;
+  hcall.cxt = NULL;
+  hcall.timeout = 200;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+
+  sts = hrauth_call_tcp_async( &hcall, NULL, 0 );
+  if( sts ) {
+    fjui_set_statusbar( 1, "DlmList failed" );    
+  }
+}

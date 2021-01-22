@@ -492,6 +492,21 @@ void fjui_fvm_setinfo( struct fjui_hostinfo *info ) {
 			sprintf( str, "%x", info->modules[i].procs[j].address );
 			lvi.pszText = str;			
 			SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
+
+			lvi.iItem = idx;
+			lvi.mask = LVIF_TEXT;
+			lvi.iSubItem = 2;
+			sprintf( str, "%"PRIu64"", info->modules[i].procs[j].rcount );
+			lvi.pszText = str;			
+			SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
+
+			lvi.iItem = idx;
+			lvi.mask = LVIF_TEXT;
+			lvi.iSubItem = 3;
+			sprintf( str, "%"PRIu64"", info->modules[i].procs[j].nsteps );
+			lvi.pszText = str;			
+			SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
+			
 		}
 
 	}

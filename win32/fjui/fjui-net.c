@@ -216,6 +216,8 @@ static void fvmlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 			xdr_decode_string( xdr, info->modules[info->nmodule].procs[i].name, sizeof(info->modules[info->nmodule].procs[i].name) ); 
 			xdr_decode_uint32( xdr, &info->modules[info->nmodule].procs[i].address );     
 			xdr_decode_uint64( xdr, &info->modules[info->nmodule].procs[i].siginfo );
+			xdr_decode_uint64( xdr, &info->modules[info->nmodule].procs[i].nsteps );
+			xdr_decode_uint64( xdr, &info->modules[info->nmodule].procs[i].rcount );			
 		}
 
 		info->nmodule++;

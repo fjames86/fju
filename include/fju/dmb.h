@@ -25,10 +25,9 @@
 #define DMB_MAX_MSG (16*1024)
 
 /* 
- * Message ids are composed of a category (high 16 bits) and identifier (low 16 bits) 
- * Subscribers may filter on a given category.
+ * Message ids are composed of a category (high 24 bits) and identifier (low 8 bits) 
  */
-#define DMB_MSGID(category,msgid) (uint32_t)((((category) & 0xffff) << 16) | ((msgid) & 0x0000ffff))
+#define DMB_MSGID(category,msgid) (uint32_t)((((category) & 0x00ffffff) << 8) | ((msgid) & 0x000000ff))
 
 /* open/close. Call open before any other functions. */
 int dmb_open( void );
@@ -39,18 +38,18 @@ int dmb_close( void );
 #define DMB_REMOTE 0x0002 /* Do not publish locally */
 int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size, uint64_t *seq );
 
-/* register a subscriber, optionally filtered on category */
+/* register a subscriber, optionally filtered  */
 struct dmb_subscriber {
   struct dmb_subscriber *next;
-  uint32_t msgid; /* message filter. if zero then subscriber receives all messages, otherwise only this message */
+  uint32_t mask; /* if msgid & mask then invoke callback. typically mask is msg category. 0 is interpreted as matching all msgs */
   void (*cb)( uint64_t hostid, uint64_t seq, uint32_t msgid, char *buf, int size );
 };
 int dmb_subscribe( struct dmb_subscriber *sc );
 
 /*
- * Register an fvm procedure to receive messages. If msgid is zero thne the procedure
- * has signature Proc(len : int, buf : opaque) and receives all messages. 
- * If non-zero the procedure receives the buffer as its args directly, and only that specific message.
+ * Register an fvm procedure to receive messages. If msgid is zero the the procedure
+ * has signature Proc(msgid : int, len : int, buf : opaque) and receives all messages. 
+ * If non-zero the procedure receives the buffer as its args directly, and only for that specific message.
 */
 int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid );
 
@@ -60,7 +59,7 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid );
 int dmb_unsubscribe_fvm( char *modname, char *procname );
 
 int dmb_host_info( uint64_t hostid, uint64_t *lastid, uint64_t *seq );
-void dmb_msginfo( uint64_t *hostid, uint64_t *seq, uint32_t *msgid, uint32_t *len );
+void dmb_msginfo( uint64_t *hostid, uint64_t *seq, uint32_t *msgid, char **buf, uint32_t *len );
 
 #endif
 

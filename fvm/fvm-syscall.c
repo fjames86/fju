@@ -901,10 +901,9 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     {
       uint32_t pars[4];
       uint64_t hostid, seq;
-      uint32_t msgid, len;
 
       read_pars( state, pars, 4 );
-      dmb_msginfo( &hostid, &seq, &msgid, &len );
+      dmb_msginfo( &hostid, &seq, NULL, NULL, NULL );
 
       fvm_write_u32( state, pars[0], hostid >> 32 );
       fvm_write_u32( state, pars[1], hostid & 0xffffffff );

@@ -50,6 +50,7 @@ static struct {
   uint64_t curhostid;
   uint64_t curseq;
   uint32_t curmsgid;
+  char *curbuf;
   uint32_t curlen;
 } glob;
 
@@ -217,15 +218,17 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint64_t seq, uint32_t msgi
   
   sc = glob.sc;
   while( sc ) {
-    if( (sc->msgid == 0) || (sc->msgid == msgid) ) {
+    if( (sc->mask == 0) || (sc->mask & msgid) ) {
       glob.curhostid = hostid;
       glob.curseq = seq;
       glob.curmsgid = msgid;
+      glob.curbuf = buf;
       glob.curlen = len;      
       sc->cb( hostid, seq, msgid, buf, len );
       glob.curhostid = 0;
       glob.curseq = 0;
       glob.curmsgid = 0;
+      glob.curbuf = NULL;
       glob.curlen = 0;      
     }
     sc = sc->next;
@@ -262,10 +265,11 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint64_t seq, uint32_t msgi
 
 }
 
-void dmb_msginfo( uint64_t *hostid, uint64_t *seq, uint32_t *msgid, uint32_t *len ) {
+void dmb_msginfo( uint64_t *hostid, uint64_t *seq, uint32_t *msgid, char **buf, uint32_t *len ) {
   if( hostid ) *hostid = glob.curhostid;
   if( seq ) *seq = glob.curseq;
   if( msgid ) *msgid = glob.curmsgid;
+  if( buf ) *buf = glob.curbuf;
   if( len ) *len = glob.curlen;
 }
 

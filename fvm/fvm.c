@@ -871,7 +871,8 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
       fvm_log( LOG_LVL_ERROR, "fvm_run step failed" );
       return -1;
     }
-
+    state.nsteps++;
+    
     if( (state.nsteps % 1000) == 0 ) {
       if( state.nsteps > glob.max_steps ) {
 	fvm_log( LOG_LVL_WARN, "fvm_run exited due to max steps %u", state.nsteps, glob.max_steps );
@@ -885,7 +886,10 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
       }
     }
   }
-  
+
+  module->procs[procid].perfdata.rcount++;
+  module->procs[procid].perfdata.nsteps += state.nsteps;
+
   /* decode results */
   if( !resbuf ) return 0;
 
@@ -1259,6 +1263,8 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
       xdr_encode_string( &inc->xdr, m->procs[i].name ); 
       xdr_encode_uint32( &inc->xdr, m->procs[i].address );     
       xdr_encode_uint64( &inc->xdr, m->procs[i].siginfo );
+      xdr_encode_uint64( &inc->xdr, m->procs[i].perfdata.nsteps );
+      xdr_encode_uint64( &inc->xdr, m->procs[i].perfdata.rcount );
     }
     
     m = m->next;

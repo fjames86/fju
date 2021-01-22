@@ -20,6 +20,11 @@
 #define FVM_MAX_TEXT    0x8000
 #define FVM_MAX_STACK   0x4000
 
+struct fvm_perfdata {
+  uint64_t nsteps;
+  uint64_t rcount;
+};
+
 struct fvm_module {
   struct fvm_module *next;
 
@@ -31,6 +36,7 @@ struct fvm_module {
     char name[FVM_MAX_NAME];
     uint32_t address;
     uint64_t siginfo;
+    struct fvm_perfdata perfdata;
   } procs[FVM_MAX_PROC];
 
   char *data;

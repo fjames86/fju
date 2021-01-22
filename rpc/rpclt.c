@@ -50,7 +50,6 @@ static void freg_put_results( struct xdr_s *xdr );
 static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void freg_rem_results( struct xdr_s *xdr );
 static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void cmdprog_licinfo_results( struct xdr_s *xdr );
 static void cmdprog_connlist_results( struct xdr_s *xdr );
 static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr );
@@ -87,7 +86,6 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS [u32=*] [u64=*] [str=*] [opaque-file=*]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
-    { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "eventid=* parm=*" },
     { FJUD_RPC_PROG, 1, 3, NULL, cmdprog_licinfo_results, "fjud.licinfo", "" },
     { FJUD_RPC_PROG, 1, 4, NULL, cmdprog_connlist_results, "fjud.connlist", "" },        
     { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
@@ -778,37 +776,6 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_uint64( xdr, id );  
 }
 
-static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  uint32_t eventid;
-  uint8_t parm[1024];
-  int parmlen, j;
-  char tmp[4];
-  
-  eventid = 0;
-  parmlen = 0;
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "eventid" ) == 0 ) {
-      if( !argval ) usage( "Need eventid" );
-      eventid = strtoul( argval, NULL, 10 );
-    } else if( strcmp( argname, "parm" ) == 0 ) {
-	parmlen = strlen( argval ) / 2;
-	memset( tmp, 0, 4 );
-	for( j = 0; j < parmlen; j++ ) {
-	    tmp[0] = argval[2*j];
-	    tmp[1] = argval[2*j + 1];
-	    parm[j] = (uint8_t)strtoul( tmp, NULL, 16 );
-	}
-    } else usage( "Unknown arg \"%s\"", argname );
-    i++;
-  }
-
-  xdr_encode_uint32( xdr, eventid );
-  xdr_encode_opaque( xdr, parm, parmlen );
-}
-
-
 static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
   
@@ -1086,7 +1053,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
   int sts, b, i;
   char name[64];
   uint32_t progid, versid, datasize, textsize, nprocs, address;
-  uint64_t siginfo, timestamp;
+  uint64_t siginfo, timestamp, nsteps, rcount;
   int vartype, isvar, nargs, j;
   char timestr[64];
   
@@ -1105,6 +1072,9 @@ static void fvm_list_results( struct xdr_s *xdr ) {
       xdr_decode_string( xdr, name, sizeof(name) ); 
       xdr_decode_uint32( xdr, &address );     
       xdr_decode_uint64( xdr, &siginfo );
+      xdr_decode_uint64( xdr, &nsteps );
+      xdr_decode_uint64( xdr, &rcount );      
+      
       printf( "    [%d] %s(", i, name );
       nargs = FVM_SIGINFO_NARGS(siginfo);
       for( j = 0; j < nargs; j++ ) {
@@ -1116,7 +1086,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
 		vartype == 2 ? "Opaque" : 
 		"Other" );
       }
-      printf( ")\n" );
+      printf( ") RCount=%"PRIu64" NSteps=%"PRIu64"\n", rcount, nsteps );
     }
     printf( "\n" );
     

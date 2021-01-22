@@ -27,7 +27,6 @@
 #endif
 
 #include <fju/rpc.h>
-#include <fju/events.h>
 
 #define RPC_MAX_BUF (1024*1024)
 #define RPC_MAX_CONN 32 

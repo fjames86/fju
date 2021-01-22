@@ -29,7 +29,6 @@
 #include <fju/rpcd.h>
 #include <fju/log.h>
 #include <fju/freg.h>
-#include <fju/events.h>
 
 log_deflogger(hrauth_log,"HRAU")
   

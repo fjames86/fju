@@ -131,7 +131,7 @@ int raft_app_register( struct raft_app *app );
  * - when quorum of nodes has received the command, command is commited and app->command 
  * is called on all nodes
  */
-int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
+int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
 
 /* get last command stored */
 int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq );

@@ -1408,7 +1408,7 @@ static int raft_proc_command( struct rpc_inc *inc ) {
     raft_log( LOG_LVL_TRACE, "Not leader" );
     sts = -1;
   } else {
-    sts = raft_cluster_command( clid, bufp, len, &cseq );
+    sts = raft_command( clid, bufp, len, &cseq );
     if( sts ) raft_log( LOG_LVL_TRACE, "raft_proc_command failure" );
   }
   
@@ -1582,7 +1582,7 @@ static int raft_proc_change( struct rpc_inc *inc ) {
   if( bappid ) xdr_encode_uint32( &xdr, appid );
   xdr_encode_boolean( &xdr, breset );
   
-  raft_cluster_command( rclid, cmdbuf, xdr.offset, NULL );
+  raft_command( rclid, cmdbuf, xdr.offset, NULL );
 
 
  done:
@@ -1818,12 +1818,12 @@ static int raft_call_command( struct raft_cluster *cl, char *buf, int len ) {
   return 0;
 }
 
-int raft_cluster_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
+int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   struct raft_cluster *cl;
   int sts, i;
   uint64_t seq;
 
-  raft_log( LOG_LVL_TRACE, "raft_cluster_command clid=%"PRIx64" len=%u", clid, len );
+  raft_log( LOG_LVL_TRACE, "raft_command clid=%"PRIx64" len=%u", clid, len );
   
   if( cseq ) *cseq = 0;
 

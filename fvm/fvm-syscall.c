@@ -687,7 +687,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       read_pars( state, pars, 4 );
       id = (((uint64_t)(pars[0])) << 32) | pars[1];
       buf = fvm_getptr( state, pars[3], 0, 0 );
-      raft_cluster_command( id, buf, buf ? pars[2] : 0, NULL );
+      raft_command( id, buf, buf ? pars[2] : 0, NULL );
     }
     break;
   case 27:

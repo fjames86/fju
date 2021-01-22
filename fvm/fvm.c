@@ -1077,7 +1077,7 @@ int fvm_cluster_run2( uint64_t clid, char *modname, char *procname, char *args, 
   xdr_encode_uint64( &buf, excl_hostid ); /* exclude hostid */  
   xdr_encode_string( &buf, procname );
   xdr_encode_opaque( &buf, (uint8_t *)args, len );
-  sts = raft_cluster_command( clid, (char *)buf.buf, buf.offset, NULL );
+  sts = raft_command( clid, (char *)buf.buf, buf.offset, NULL );
   
   rpc_conn_release( c );
   
@@ -1105,7 +1105,7 @@ int fvm_cluster_updatestate( uint64_t clid, char *modname ) {
   xdr_encode_string( &buf, modname );
   xdr_encode_uint32( &buf, FVM_MODE_UPDATESTATE );
   xdr_encode_opaque( &buf, (uint8_t *)m->data, m->datasize );
-  sts = raft_cluster_command( clid, (char *)buf.buf, buf.offset, NULL );
+  sts = raft_command( clid, (char *)buf.buf, buf.offset, NULL );
 
   rpc_conn_release( c );
   

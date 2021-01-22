@@ -1762,31 +1762,37 @@ static int parsestatement( FILE *f ) {
 
       if( params->isvar ) {
 	/* var type param requires a variable name */
-	if( glob.tok.type != TOK_NAME ) usage( "Param %s expected a var name", params->name );
-	v = getlocal( glob.currentproc, glob.tok.val );
-	if( v ) {
-	  /* local var - push address */
-	  emit_leasp( v->offset + glob.stackoffset );
-	} else {
-	  v = getglobal( glob.tok.val );
+	if( (glob.tok.type == TOK_U32) && (glob.tok.u32 == 0) ) {
+	  /* push constant address 0 i.e. don't pass a pointer */
+	  emit_ldi32( 0 );
+	  expecttok( f, TOK_U32 );
+	} else if( glob.tok.type != TOK_NAME ) usage( "Param %s expected a var name", params->name );
+	else {
+	  v = getlocal( glob.currentproc, glob.tok.val );
 	  if( v ) {
-	    /* global var - push address */
-	    emit_ldi32( v->address );	    
+	    /* local var - push address */
+	    emit_leasp( v->offset + glob.stackoffset );
 	  } else {
-	    struct param *p = getparam( glob.currentproc, glob.tok.val );
-	    if( !p ) usage( "Unknown variable or parameter %s", glob.tok.val );
-	    if( p->isvar ) {
-	      /* var type parameter - value on stack is already an address */
-	      emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	    v = getglobal( glob.tok.val );
+	    if( v ) {
+	      /* global var - push address */
+	      emit_ldi32( v->address );	    
 	    } else {
-	      /* get address of parameter */
-	      emit_leasp( p->offset + glob.currentproc->localsize + glob.stackoffset );
-	    }
+	      struct param *p = getparam( glob.currentproc, glob.tok.val );
+	      if( !p ) usage( "Unknown variable or parameter %s", glob.tok.val );
+	      if( p->isvar ) {
+		/* var type parameter - value on stack is already an address */
+		emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	      } else {
+		/* get address of parameter */
+		emit_leasp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	      }
+	    }	    
 	  }
-
+	  
+	  expecttok( f, TOK_NAME );
 	}
 	
-	expecttok( f, TOK_NAME );
       } else {
 	parseexpr( f );
       }

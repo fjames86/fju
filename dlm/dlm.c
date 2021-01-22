@@ -25,7 +25,6 @@ struct dlm_lockcxt {
 static struct {
   uint32_t ocount;
   uint64_t raftclid;
-  struct mmf_s mmf;
   int nlock;
   struct dlm_lockcxt lock[DLM_MAX_LOCK];
 } glob;
@@ -140,6 +139,12 @@ int dlm_acquire( uint64_t resid, uint32_t mode, char *cookie, uint64_t *lockid, 
   char cmdbuf[64];
   uint64_t lid;
   struct dlm_command cmd;
+
+  if( (mode != DLM_EX) && (mode != DLM_SH) ) return -1;
+  
+  dlm_log( LOG_LVL_TRACE, "Acquire resid %"PRIx64" %s", resid, mode == DLM_EX ? "EX" : "SH" );
+  
+  if( lockid ) *lockid = 0;
   
   if( !glob.ocount ) return -1;
   if( (mode != DLM_EX) && (mode != DLM_SH) ) return -1;
@@ -158,7 +163,6 @@ int dlm_acquire( uint64_t resid, uint32_t mode, char *cookie, uint64_t *lockid, 
   memset( &glob.lock[i], 0, sizeof(glob.lock[i]) );
   sec_rand( (char *)&lid, sizeof(lid) );
   glob.lock[i].lock.lockid = lid;
-  glob.lock[i].lock.hostid = hostreg_localid();
   glob.lock[i].lock.mode = DLM_WAIT;
   glob.lock[i].cb = cb;
   glob.lock[i].cxt = cxt;
@@ -186,9 +190,11 @@ int dlm_renew( uint64_t lockid ) {
   char cmdbuf[64];
   struct dlm_command cmd;
   struct dlm_lockcxt *lcxt;
-  
+
   if( !glob.ocount ) return -1;
 
+  dlm_log( LOG_LVL_TRACE, "Renew %"PRIx64"", lockid );
+  
   lcxt = lock_by_lockid( lockid, NULL );
   if( !lcxt ) return -1;
   
@@ -214,6 +220,8 @@ int dlm_release( uint64_t lockid ) {
   
   if( !glob.ocount ) return -1;
 
+  dlm_log( LOG_LVL_TRACE, "Release %"PRIx64"", lockid );
+  
   lcxt = lock_by_lockid( lockid, NULL );
   if( !lcxt ) return -1;
   
@@ -227,6 +235,8 @@ int dlm_release( uint64_t lockid ) {
   dlm_encode_command( &xdr, &cmd );
   sts = raft_command( glob.raftclid, (char *)xdr.buf, xdr.offset, NULL );
 
+  if( !sts ) lcxt->lock.mode = DLM_RELEASE;
+  
   return sts;
 }
 
@@ -234,7 +244,7 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
   /* check seqnos have been incremented since last time */
   int i;
   for( i = 0; i < glob.nlock; i++ ) {
-    if( (glob.lock[i].prevseq == glob.lock[i].lock.seq) && (glob.lock[i].lock.mode != DLM_RELEASE) ) {
+    if( (glob.lock[i].prevseq == glob.lock[i].lock.seq) && (glob.lock[i].lock.mode != DLM_RELEASE) && (glob.lock[i].lock.mode != DLM_WAIT) ) {
       /* seqno unchanged - release lock? */
       dlm_log( LOG_LVL_ERROR, "lock %"PRIx64" seqno unchanged - releasing", glob.lock[i].lock.lockid );
       dlm_release( glob.lock[i].lock.lockid );
@@ -277,6 +287,15 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
     return;
   }
 
+  dlm_log( LOG_LVL_DEBUG, "Command %s LockID %"PRIx64" ResID %"PRIx64"",
+	   cmd.cmd == DLM_CMD_LOCKEX ? "LockEX" :
+	   cmd.cmd == DLM_CMD_LOCKSH ? "LockSH" :
+	   cmd.cmd == DLM_CMD_RENEW ? "Renew" :
+	   cmd.cmd == DLM_CMD_RELEASE ? "Release" :
+	   "Other",
+	   cmd.lockid,
+	   cmd.resid );
+  
   switch( cmd.cmd ) {
   case DLM_CMD_LOCKEX:
     /* lookup lock with this lockid, if found and state is wait then set state to lockex and invoke cb */
@@ -312,6 +331,7 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
     glob.lock[i].lock.resid = cmd.resid;
     glob.lock[i].lock.seq = 1;
     glob.lock[i].lock.mode = DLM_EX;
+    memcpy( glob.lock[i].lock.cookie, cmd.u.lock.cookie, DLM_MAX_COOKIE );
     glob.nlock++;
     break;
   case DLM_CMD_LOCKSH:
@@ -348,6 +368,7 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
     glob.lock[i].lock.resid = cmd.resid;
     glob.lock[i].lock.seq = 1;
     glob.lock[i].lock.mode = DLM_SH;
+    memcpy( glob.lock[i].lock.cookie, cmd.u.lock.cookie, DLM_MAX_COOKIE );    
     glob.nlock++;
     break;
   case DLM_CMD_RELEASE:
@@ -387,20 +408,31 @@ static void dlm_snapsave( struct raft_app *app, struct raft_cluster *cl, uint64_
 
 static void dlm_snapload( struct raft_app *app, struct raft_cluster *cl, char *buf, int len ) {
   uint32_t nlock;
+  int i;
   
   if( len != (4 + sizeof(glob.lock)) ) {
-    dlm_log( LOG_LVL_ERROR, "Bad snapshot size %u", len );
+    dlm_log( LOG_LVL_ERROR, "Snapload Bad snapshot size %u", len );
     return;
   }
 
   nlock = *((uint32_t *)buf);
   if( nlock > DLM_MAX_LOCK ) {
-    dlm_log( LOG_LVL_ERROR, "Bad nlock" );
+    dlm_log( LOG_LVL_ERROR, "Snapload Bad nlock" );
     return;
   }
 
   glob.nlock = nlock;
   memcpy( glob.lock, buf, sizeof(glob.lock) );
+  for( i = 0; i < glob.nlock; i++ ) {
+    dlm_log( LOG_LVL_DEBUG, "Snapload Lockid=%"PRIx64" Mode=%u ResID=%"PRIx64" Seq=%u",
+	     glob.lock[i].lock.lockid,
+	     glob.lock[i].lock.mode,
+	     glob.lock[i].lock.resid,
+	     glob.lock[i].lock.seq );
+    
+    glob.lock[i].cb = NULL;
+    glob.lock[i].cxt = NULL;
+  }
 }
 
 static int dlm_proc_null( struct rpc_inc *inc ) {
@@ -409,8 +441,68 @@ static int dlm_proc_null( struct rpc_inc *inc ) {
   rpc_complete_accept_reply( inc, handle );
   return 0;
 }
+
+static int dlm_proc_list( struct rpc_inc *inc ) {
+  int handle, i;
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+
+  for( i = 0; i < glob.nlock; i++ ) {
+    xdr_encode_boolean( &inc->xdr, 1 );
+    xdr_encode_uint64( &inc->xdr, glob.lock[i].lock.lockid );
+    xdr_encode_uint64( &inc->xdr, glob.lock[i].lock.resid );
+    xdr_encode_uint32( &inc->xdr, glob.lock[i].lock.mode );
+    xdr_encode_uint32( &inc->xdr, glob.lock[i].lock.seq );    
+    xdr_encode_fixed( &inc->xdr, (uint8_t *)glob.lock[i].lock.cookie, DLM_MAX_COOKIE );
+  }
+  xdr_encode_boolean( &inc->xdr, 0 );
+  
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int dlm_proc_acquire( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint64_t resid, lockid;
+  uint32_t mode;
+  char cookie[DLM_MAX_COOKIE];
+  
+  sts = xdr_decode_uint64( &inc->xdr, &resid );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &mode );
+  if( !sts ) sts = xdr_decode_fixed( &inc->xdr, (uint8_t *)cookie, DLM_MAX_COOKIE );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  dlm_acquire( resid, mode, cookie, &lockid, NULL, NULL );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_uint64( &inc->xdr, lockid );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int dlm_proc_release( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint64_t lockid;
+
+  
+  sts = xdr_decode_uint64( &inc->xdr, &lockid );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  dlm_release( lockid );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc dlm_procs[] = {
   { 0, dlm_proc_null },
+  { 1, dlm_proc_list },
+  { 2, dlm_proc_acquire },
+  { 3, dlm_proc_release },    
   { 0, NULL }
 };
 

@@ -8,7 +8,6 @@ int dlm_close( void );
 
 struct dlm_lock {
   uint64_t lockid; /* lock identifier */
-  uint64_t hostid; /* host that acquired the lock */
   uint32_t mode;   /* lock mode */
 #define DLM_WAIT 0 /* waiting to acquire lock */
 #define DLM_EX 1   /* lock acquired in exclusive mode */

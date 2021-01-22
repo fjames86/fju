@@ -26,6 +26,7 @@
 #include <fju/raft.h>
 #include <fju/fvm.h>
 #include <fju/dmb.h>
+#include <fju/dlm.h>
 
 struct clt_info {
     uint32_t prog;
@@ -74,6 +75,10 @@ static void fvm_reload_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void dmb_invoke_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void dmb_publish_results( struct xdr_s *xdr );
+static void dlm_list_results( struct xdr_s *xdr );
+static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void dlm_acquire_results( struct xdr_s *xdr );
+static void dlm_release_args( int argc, char **argv, int i, struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
@@ -98,7 +103,10 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
     { DMB_RPC_PROG, 1, 1, dmb_invoke_args, NULL, "dmb.invoke", "msgid=* [seq=*] [flags=*] [buf=base64]" },
-    { DMB_RPC_PROG, 1, 3, dmb_publish_args, dmb_publish_results, "dmb.publish", "msgid=* [flags=*] [buf=base64]" },    
+    { DMB_RPC_PROG, 1, 3, dmb_publish_args, dmb_publish_results, "dmb.publish", "msgid=* [flags=*] [buf=base64]" },
+    { DLM_RPC_PROG, 1, 1, NULL, dlm_list_results, "dlm.list", NULL },
+    { DLM_RPC_PROG, 1, 2, dlm_acquire_args, dlm_acquire_results, "dlm.acquire", "resid=* [shared] [cookie=*]" },
+    { DLM_RPC_PROG, 1, 3, dlm_release_args, NULL, "dlm.release", "lockid=*" },                
     
     { 0, 0, 0, NULL, NULL, NULL }
 };
@@ -1368,4 +1376,95 @@ static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   xdr_encode_uint32( xdr, msgid );
   xdr_encode_uint32( xdr, flags );
   xdr_encode_opaque( xdr, (uint8_t *)buf, len );
+}
+
+static void dlm_list_results( struct xdr_s *xdr ) {
+  int sts, b, i;
+  uint64_t lockid, resid;
+  uint32_t seq, mode;
+  char cookie[DLM_MAX_COOKIE];
+
+  printf( "%-16s %-16s %-10s %-8s %s\n", "LockID", "ResID", "Mode", "Seq", "Cookie" );
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  while( b ) {
+    sts = xdr_decode_uint64( xdr, &lockid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &resid );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &mode );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &seq );    
+    if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)cookie, DLM_MAX_COOKIE );
+    if( sts ) usage( "XDR error" );
+
+    printf( "%-16"PRIx64" %-16"PRIx64" %-10s %-8u ", lockid, resid,
+	    mode == DLM_WAIT ? "Wait" :
+	    mode == DLM_EX ? "Exclusive" :
+	    mode == DLM_SH ? "Shared" :
+	    mode == DLM_RELEASE ? "Release" :
+	    "Other",
+	    seq );
+    for( i = 0; i < DLM_MAX_COOKIE; i++ ) {
+      printf( "%02x", (uint32_t)(uint8_t)cookie[i] );
+    }
+    printf( "\n" );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "XDR error" );
+  }
+}
+
+static void dlm_acquire_results( struct xdr_s *xdr ) {
+  int sts;
+  uint64_t lockid;
+  sts = xdr_decode_uint64( xdr, &lockid );
+  if( sts ) usage( "XDR error" );
+  printf( "%"PRIx64"\n", lockid );
+}
+
+static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  uint64_t resid;
+  uint32_t mode;
+  char cookie[DLM_MAX_COOKIE];
+
+  resid = 0;
+  mode = DLM_EX;
+  memset( cookie, 0, sizeof(cookie) );
+    
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "resid" ) == 0 ) {
+      resid = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "shared" ) == 0 ) {
+      mode = DLM_SH;
+    } else if( strcmp( argname, "exclusive" ) == 0 ) {
+      mode = DLM_EX;
+    } else if( strcmp( argname, "cookie" ) == 0 ) {
+      strncpy( cookie, argval, DLM_MAX_COOKIE );
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  xdr_encode_uint64( xdr, resid );
+  xdr_encode_uint32( xdr, mode );  
+  xdr_encode_fixed( xdr, (uint8_t *)cookie, DLM_MAX_COOKIE );
+}
+
+static void dlm_release_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  uint64_t lockid;
+
+  lockid = 0;
+    
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "lockid" ) == 0 ) {
+      lockid = strtoull( argval, NULL, 16 );
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  xdr_encode_uint64( xdr, lockid );
 }

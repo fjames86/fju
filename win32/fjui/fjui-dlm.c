@@ -22,6 +22,7 @@ static LRESULT CALLBACK dlm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		fjui_hwnd_register( "dlm_lv", h );
 		ListView_SetExtendedListViewStyle( h, LVS_EX_FULLROWSELECT );
 
+		/* TODO: have differnt icons for locked/waiting/released */
 		himl = fjui_create_imagelist( 16, "class", "method", NULL );
 		ListView_SetImageList( h, himl, LVSIL_SMALL );
 		

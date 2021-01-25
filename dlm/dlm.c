@@ -87,7 +87,8 @@ struct dlm_host {
 static struct {
   uint32_t ocount;
   uint64_t raftclid;
-
+  uint64_t hbseq;
+  
   int nlock;
   struct dlm_lock lock[DLM_MAX_LOCK];   /* lock database */
   
@@ -240,6 +241,7 @@ static int dlm_encode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
   xdr_encode_uint32( xdr, cmd->cmd );
   switch( cmd->cmd ) {
   case DLM_CMD_RELEASE:
+  case DLM_CMD_RELEASEALL:
     break;
   case DLM_CMD_LOCKEX:
   case DLM_CMD_LOCKSH:
@@ -260,6 +262,7 @@ static int dlm_decode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
   if( sts ) return -1;
   switch( cmd->cmd ) {
   case DLM_CMD_RELEASE:
+  case DLM_CMD_RELEASEALL:
     break;
   case DLM_CMD_LOCKEX:
   case DLM_CMD_LOCKSH:
@@ -360,7 +363,7 @@ int dlm_release( uint64_t lockid ) {
   cmd.resid = lcxt->resid;
 
   sts = dlm_command_publish( &cmd );
-  if( !sts ) lcxt->state = DLM_RELEASE;
+  //  if( !sts ) lcxt->state = DLM_RELEASE;
 
   return sts;
 }
@@ -386,6 +389,7 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
       memset( &cmd, 0, sizeof(cmd) );
       cmd.cmd = DLM_CMD_HEARTBEAT;
       cmd.hostid = hostid;
+      cmd.u.hb.seq = ++glob.hbseq;
       dlm_command_publish( &cmd );
       break;
     }
@@ -482,6 +486,7 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
       if( lockp->lockid == cmd.lockid ) {
 	if( lockp->state == DLM_EX ) lockstate = 1;
 	else if( lockp->state == DLM_SH ) lockstate = 2;
+	dlm_log( LOG_LVL_TRACE, "Releasing lock %"PRIx64" lockstate=%u", cmd.lockid, lockstate );
 	
 	if( i != (glob.nlock - 1) ) glob.lock[i] = glob.lock[glob.nlock - 1];
 	glob.nlock--;

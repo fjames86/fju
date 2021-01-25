@@ -1384,7 +1384,7 @@ static void dlm_list_results( struct xdr_s *xdr ) {
   uint32_t state;
   char cookie[DLM_MAX_COOKIE];
 
-  printf( "%-16s %-16s %-16s %-12s %s\n", "LockID", "HostID", "ResID", "State", "Cookie" );
+  printf( "%-16s %-16s %-16s %-10s %s\n", "LockID", "HostID", "ResID", "State", "Cookie" );
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
@@ -1396,10 +1396,9 @@ static void dlm_list_results( struct xdr_s *xdr ) {
     if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)cookie, DLM_MAX_COOKIE );
     if( sts ) usage( "XDR error" );
 
-    printf( "%-16"PRIx64" %-16"PRIx64" %-16"PRIx64" %-12s", lockid, hostid, resid,
+    printf( "%-16"PRIx64" %-16"PRIx64" %-16"PRIx64" %-10s ", lockid, hostid, resid,
 	    state == DLM_EX ? "Exclusive" :
 	    state == DLM_SH ? "Shared" :
-	    state == DLM_RELEASE ? "Release" :
 	    state == DLM_BLOCKEX ? "BlockedEX" :
 	    state == DLM_BLOCKSH ? "BlockedSH" :	    
 	    "Other" );

@@ -13,9 +13,8 @@ struct dlm_lock {
   uint32_t state;       /* lock state */
 #define DLM_EX      1   /* lock acquired in exclusive mode */
 #define DLM_SH      2   /* lock acquired in shared mode */
-#define DLM_RELEASE 3   /* lock waiting to be released */
-#define DLM_BLOCKEX 4   /* blocked waiting to acqurie exclsively */
-#define DLM_BLOCKSH 5   /* blocked waiting to acquire shared */
+#define DLM_BLOCKEX 3   /* blocked waiting to acqurie exclsively */
+#define DLM_BLOCKSH 4   /* blocked waiting to acquire shared */
   
 #define DLM_MAX_COOKIE 8
   char cookie[DLM_MAX_COOKIE];  /* opaque private data associated with lock by application */

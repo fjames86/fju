@@ -1380,29 +1380,29 @@ static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
 
 static void dlm_list_results( struct xdr_s *xdr ) {
   int sts, b, i;
-  uint64_t lockid, resid;
-  uint32_t seq, mode;
+  uint64_t lockid, resid, hostid;
+  uint32_t state;
   char cookie[DLM_MAX_COOKIE];
 
-  printf( "%-16s %-16s %-10s %-8s %s\n", "LockID", "ResID", "Mode", "Seq", "Cookie" );
+  printf( "%-16s %-16s %-16s %-12s %s\n", "LockID", "HostID", "ResID", "State", "Cookie" );
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
   while( b ) {
     sts = xdr_decode_uint64( xdr, &lockid );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &resid );
-    if( !sts ) sts = xdr_decode_uint32( xdr, &mode );
-    if( !sts ) sts = xdr_decode_uint32( xdr, &seq );    
+    if( !sts ) sts = xdr_decode_uint64( xdr, &hostid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &resid );    
+    if( !sts ) sts = xdr_decode_uint32( xdr, &state );
     if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)cookie, DLM_MAX_COOKIE );
     if( sts ) usage( "XDR error" );
 
-    printf( "%-16"PRIx64" %-16"PRIx64" %-10s %-8u ", lockid, resid,
-	    mode == DLM_WAIT ? "Wait" :
-	    mode == DLM_EX ? "Exclusive" :
-	    mode == DLM_SH ? "Shared" :
-	    mode == DLM_RELEASE ? "Release" :
-	    "Other",
-	    seq );
+    printf( "%-16"PRIx64" %-16"PRIx64" %-16"PRIx64" %-12s", lockid, hostid, resid,
+	    state == DLM_EX ? "Exclusive" :
+	    state == DLM_SH ? "Shared" :
+	    state == DLM_RELEASE ? "Release" :
+	    state == DLM_BLOCKEX ? "BlockedEX" :
+	    state == DLM_BLOCKSH ? "BlockedSH" :	    
+	    "Other" );
     for( i = 0; i < DLM_MAX_COOKIE; i++ ) {
       printf( "%02x", (uint32_t)(uint8_t)cookie[i] );
     }
@@ -1424,11 +1424,11 @@ static void dlm_acquire_results( struct xdr_s *xdr ) {
 static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;  
   uint64_t resid;
-  uint32_t mode;
+  int shared;
   char cookie[DLM_MAX_COOKIE];
 
   resid = 0;
-  mode = DLM_EX;
+  shared = 0;
   memset( cookie, 0, sizeof(cookie) );
     
   while( i < argc ) {
@@ -1436,9 +1436,9 @@ static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
     if( strcmp( argname, "resid" ) == 0 ) {
       resid = strtoull( argval, NULL, 16 );
     } else if( strcmp( argname, "shared" ) == 0 ) {
-      mode = DLM_SH;
+      shared = 1;
     } else if( strcmp( argname, "exclusive" ) == 0 ) {
-      mode = DLM_EX;
+      shared = 0;
     } else if( strcmp( argname, "cookie" ) == 0 ) {
       strncpy( cookie, argval, DLM_MAX_COOKIE );
     } else usage( NULL );
@@ -1447,7 +1447,7 @@ static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   }
 
   xdr_encode_uint64( xdr, resid );
-  xdr_encode_uint32( xdr, mode );  
+  xdr_encode_boolean( xdr, shared );
   xdr_encode_fixed( xdr, (uint8_t *)cookie, DLM_MAX_COOKIE );
 }
 

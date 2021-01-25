@@ -36,26 +36,34 @@ static LRESULT CALLBACK dlm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		lvc.iImage = 0;
 		ListView_InsertColumn( h, 0, &lvc );
 
-		lvc.pszText = "ResID";
+		lvc.pszText = "HostID";
 		lvc.cchTextMax = (int)strlen( lvc.pszText );
 		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
 		lvc.cx = 80;
 		lvc.iSubItem = 1;
 		ListView_InsertColumn(h, 1, &lvc );
 
-		lvc.pszText = "Mode";
+
+		lvc.pszText = "ResID";
 		lvc.cchTextMax = (int)strlen( lvc.pszText );
 		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
 		lvc.cx = 80;
 		lvc.iSubItem = 2;
 		ListView_InsertColumn(h, 2, &lvc );
-
-		lvc.pszText = "Cookie";
+		
+		lvc.pszText = "State";
 		lvc.cchTextMax = (int)strlen( lvc.pszText );
 		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
 		lvc.cx = 80;
 		lvc.iSubItem = 3;
 		ListView_InsertColumn(h, 3, &lvc );
+
+		lvc.pszText = "Cookie";
+		lvc.cchTextMax = (int)strlen( lvc.pszText );
+		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
+		lvc.cx = 80;
+		lvc.iSubItem = 4;
+		ListView_InsertColumn(h, 4, &lvc );
 
 		break;	
 	case WM_COMMAND:
@@ -93,7 +101,7 @@ void fjui_dlm_register( void ) {
 
 void fjui_dlm_refresh( uint64_t hostid ) {	
 	HWND hwnd;
-	int i, idx;
+	int i, j, idx;
 	LVITEMA lvi;
 	char str[1024];
 	struct fjui_hostinfo *info;
@@ -110,7 +118,7 @@ void fjui_dlm_refresh( uint64_t hostid ) {
 		lvi.iItem = 0x7ffffffe;
 		lvi.iSubItem = 0;
 		lvi.lParam = i;
-		lvi.iImage = 0;
+		lvi.iImage = 0; // TODO: set image based on state 
 		sprintf( str, "%"PRIx64"", info->lock[i].lockid );
 		lvi.pszText = str;			
 		idx = (int)SendMessageA( hwnd, LVM_INSERTITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
@@ -118,21 +126,37 @@ void fjui_dlm_refresh( uint64_t hostid ) {
 		lvi.iItem = idx;
 		lvi.mask = LVIF_TEXT;
 		lvi.iSubItem = 1;
-		sprintf( str, "%"PRIx64"", info->lock[i].resid );
+		sprintf( str, "%"PRIx64"", info->lock[i].hostid );
 		lvi.pszText = str;			
 		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
 
 		lvi.iItem = idx;
 		lvi.mask = LVIF_TEXT;
 		lvi.iSubItem = 2;
-		sprintf( str, "%u", info->lock[i].mode );
+		sprintf( str, "%"PRIx64"", info->lock[i].resid );
+		lvi.pszText = str;			
+		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
+		
+		lvi.iItem = idx;
+		lvi.mask = LVIF_TEXT;
+		lvi.iSubItem = 3;
+		sprintf( str, "%s",
+			 info->lock[i].state == DLM_EX ? "Exclusive" :
+			 info->lock[i].state == DLM_EX ? "Shared" :
+			 info->lock[i].state == DLM_EX ? "BlockedEx" :
+			 info->lock[i].state == DLM_EX ? "BlockedSh" :
+			 "Other" );
+			 
 		lvi.pszText = str;			
 		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
 
 		lvi.iItem = idx;
 		lvi.mask = LVIF_TEXT;
-		lvi.iSubItem = 3;
-		sprintf( str, "%s", info->lock[i].cookie );
+		lvi.iSubItem = 4;
+		strcpy( str, "" );
+		for( j = 0; j < DLM_MAX_COOKIE; j++ ) {
+		  sprintf( str + strlen( str ), "%02x", (uint32_t)(uint8_t)info->lock[i].cookie[j] );
+		}
 		lvi.pszText = str;			
 		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
 

@@ -16,7 +16,7 @@ struct dlm_lock {
 #define DLM_BLOCKEX 3   /* blocked waiting to acqurie exclsively */
 #define DLM_BLOCKSH 4   /* blocked waiting to acquire shared */
   
-#define DLM_MAX_COOKIE 8
+#define DLM_MAX_COOKIE 16
   char cookie[DLM_MAX_COOKIE];  /* opaque private data associated with lock by application */
 };
 int dlm_list( struct dlm_lock *dl, int ndl );

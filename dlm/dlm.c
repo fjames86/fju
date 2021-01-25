@@ -1,5 +1,4 @@
 
-
 /*
  * Needs a rethink:
  * - Raft should only be needed to maintain a consistent view across the cluster 
@@ -374,14 +373,13 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
    * If leader then check seqnos of other hosts are being incremented. If not then
    * publish releaseall command
    */
-
   int i, sts;
   uint64_t hostid;
   struct dlm_lock *lcxt;
   struct dlm_host *host;
   struct dlm_command cmd;
   struct raft_cluster cl;
-  
+
   hostid = hostreg_localid();
   lcxt = glob.lock;
   for( i = 0; i < glob.nlock; i++ ) {
@@ -399,8 +397,8 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
   if( !sts && (cl.state == RAFT_STATE_LEADER) ) {
     /* check hosts are still heartbeating */
     host = glob.host;
-    for( i = 0; i < glob.nhost; i++ ) {
-      if( lock_by_hostid( host->hostid ) && (rpc_now() > (host->lasthb + DLM_HBTIMEOUT)) ) {
+    for( i = 0; i < glob.nhost; i++, host++ ) {
+      if( host->lasthb && lock_by_hostid( host->hostid ) && (rpc_now() > (host->lasthb + DLM_HBTIMEOUT)) ) {
 	dlm_log( LOG_LVL_INFO, "Host %"PRIx64" has locks and stopped heartbeating - releasing all locks", host->hostid );
 	memset( &cmd, 0, sizeof(cmd) );
 	cmd.cmd = DLM_CMD_RELEASEALL;
@@ -676,7 +674,9 @@ static int dlm_proc_acquire( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_fixed( &inc->xdr, (uint8_t *)cookie, DLM_MAX_COOKIE );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  dlm_acquire( resid, shared, cookie, &lockid, NULL, NULL );
+  sts = dlm_acquire( resid, shared, cookie, &lockid, NULL, NULL );
+  dlm_log( LOG_LVL_TRACE, "dlm_proc_acquire resid=%"PRIx64" %s lockid=%"PRIx64" %s",
+	   resid, shared ? "Shared" : "Exclusive", lockid, sts ? "Failed" : "Success" );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_uint64( &inc->xdr, lockid );

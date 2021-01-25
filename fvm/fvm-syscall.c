@@ -25,6 +25,7 @@
 #include <fju/sec.h>
 #include <fju/cht.h>
 #include <fju/dmb.h>
+#include <fju/dlm.h>
 
 #include "fvm-private.h"
 
@@ -910,7 +911,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, pars[2], seq >> 32 );
       fvm_write_u32( state, pars[3], seq & 0xffffffff );
     }
-    break;    
+    break;
   case 0xffff:
     fvm_xcall( state );
     break;

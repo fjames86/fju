@@ -155,5 +155,7 @@ int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len );
 
 int raft_change_config( uint64_t clid, uint64_t *members, int nmember, char *cookie );
 
+int raft_replay( uint64_t clid );
+
 #endif
 

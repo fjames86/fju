@@ -1440,6 +1440,7 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   raft_log( LOG_LVL_TRACE, "raft_proc_snapsave clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64" len=%u", clid, term, seq, len );
 
   cl = cl_by_id( clid );
+  // XXX: cl==null
   
   sts = raft_snapshot_save( clid, term, seq, offset, bufp, len );
   if( len == 0 ) {
@@ -2124,3 +2125,63 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
 }
 
 
+int raft_replay( uint64_t clid ) {
+  int sts, ne;
+  struct raft_cluster *cl;
+  struct raft_app *app;
+  struct mmf_s mmf;
+  char clstr[64];  
+  uint64_t seq;
+  struct log_s *log;
+  struct log_entry entry;
+  struct log_iov iov[2];
+  struct raft_cmd_header hdr;
+  
+  cl = cl_by_id( clid );
+  if( !cl ) return -1;
+  log = clog_by_id( clid );
+  if( !log ) return -1;
+
+  app = raft_app_by_appid( cl->appid );
+  if( !app ) return -1;
+
+  raft_log( LOG_LVL_TRACE, "Start Replay %"PRIx64"", clid );
+  
+  seq = 0;
+  sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
+  
+  sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
+  if( !sts ) {
+    sts = mmf_remap( &mmf, mmf.fsize );
+    if( app->snapload ) app->snapload( app, cl, (char *)mmf.file + sizeof(struct raft_snapshot_info), mmf.fsize - sizeof(struct raft_snapshot_info) );
+
+    seq = ((struct raft_snapshot_info *)mmf.file)->seq;
+    
+    mmf_close( &mmf );
+  }
+
+
+  memset( &entry, 0, sizeof(entry) );
+  entry.iov = iov;
+  iov[0].buf = (char *)&hdr;
+  iov[0].len = sizeof(hdr);
+  iov[1].buf = glob.buf;
+  iov[1].len = sizeof(glob.buf);
+  entry.niov = 2;
+
+  /* start at first entry */
+  sts = log_read( log, 0, &entry, 1, &ne );
+  if( sts || !ne ) return 0;
+  while( hdr.seq <= cl->commitseq ) {
+    if( hdr.seq > seq ) {
+      app->command( app, cl, hdr.seq, glob.buf, entry.msglen - sizeof(hdr) );
+    }
+    
+    sts = log_read( log, entry.id, &entry, 1, &ne );
+    if( sts || !ne ) break;  
+  }
+
+  raft_log( LOG_LVL_TRACE, "End Replay %"PRIx64"", clid );
+  
+  return 0;
+}

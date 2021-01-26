@@ -45,6 +45,7 @@ struct dmb_subscriber {
   void (*cb)( uint64_t hostid, uint64_t seq, uint32_t msgid, char *buf, int size );
 };
 int dmb_subscribe( struct dmb_subscriber *sc );
+#define DMB_SUBSCRIBER(name,cat,cb) struct dmb_subscriber name = { NULL, cat, cb }
 
 /*
  * Register an fvm procedure to receive messages. If msgid is zero the the procedure

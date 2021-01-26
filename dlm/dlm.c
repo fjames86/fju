@@ -1,54 +1,4 @@
 
-/*
- * Needs a rethink:
- * - Raft should only be needed to maintain a consistent view across the cluster 
- * of which hosts hold what locks. 
- * - Nodes need to be able to wait to acquire a lock 
- * - Does the cluster-wide view need to know about locks that are waiting to be 
- * acquired? 
- * - The cluster wide view provides the information for a finite state machine. 
- * So every node in the cluster should evaluate to the same states ie all state change 
- * info should come from the cluster.
- * 
- * - Submit request to acquire a lock. This includes the lockid, resid etc. The caller 
- * also provides a callback function, but this doesn't form part of the state change command.
- * So we must save this separately (volatile, local only). 
- * - When a lock command is processed, check if the lock can be immediately acquired. If 
- * so then set to locked state. If not then set blocked state. 
- * If we hold a notification callback then invoke it.
- * 
- * Q: how is this any different from what we already have? 
- * At the moment we have entries which are not yet processed by the state machine (WAIT)
- * and information which is not submitted as part of the command (cb/cxt) but this isn't really 
- * much different from holding them in a separate queue.
- *
- * - Submit lock command to raft.
- * - Add local entry in state wait with cb/cxt 
- * - When command processed change state to locked if possible or blocked otherwise. 
- * If changed to locked invoke callback.
- * - When command processed to release, check for existing lock in blocked state. If found 
- * then acquire that one, invoking callback it required.
- * - We do we need to ensure that ordering is the same across the cluster? Yes we do. 
- * But we can't ensure that if we start inserting things locally. This is the advantage of 
- * storing that info separately.
- * Under what conditions should a lock be released? There needs to be a mechanism to release 
- * locks which have been acquired by hosts which have later gone offline. 
- * So all we need is for each lock to know which host acquired it, and some mechanism to know 
- * if a host has gone offline or stopped responding. 
- * We can have a heartbeat command which keeps all locks held by that host alive. All hosts 
- * which think they have locks should be calling heartbeat commands until the lock is released.
- * Once heartbeats stop being received from that host then the leader will publish a command 
- * to release all locks held by that host.
- * 
- * Commands: 
- * acquire lock (lockid,hostid,resid,mode) -> allocate entry in state ex/sh/blocked depending on conditions 
- * release lock (lockid) -> delete entry 
- * heartbeat (hostid) -> increment host seq 
- * release all (hostid) -> delete all locks held by hostid
- *
- * Q: do we want a separate heartbeating service that is possibly part of raft? Maybe... but this is easier 
- */
-
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -64,12 +14,15 @@
 #include <fju/sec.h>
 #include <fju/rpcd.h>
 #include <fju/hrauth.h>
+#include <fju/dmb.h>
+#include <fju/dmb-category.h>
 
 static log_deflogger(dlm_log,"DLM")
 
 #define DLM_MAX_LOCK 512
 #define DLM_MAX_HOST RAFT_MAX_MEMBER
 #define DLM_HBTIMEOUT 5000
+#define DLM_MSGID_HEARTBEAT 0x00000201
   
 struct dlm_lockcxt {
   uint64_t lockid;
@@ -380,6 +333,9 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
   struct dlm_command cmd;
   struct raft_cluster cl;
 
+#if 1
+  dmb_publish( DLM_MSGID_HEARTBEAT, DMB_REMOTE, NULL, 0, NULL );
+#else
   hostid = hostreg_localid();
   lcxt = glob.lock;
   for( i = 0; i < glob.nlock; i++ ) {
@@ -392,13 +348,17 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
       break;
     }
   }
+#endif
   
   sts = raft_cluster_by_clid( glob.raftclid, &cl );
   if( !sts && (cl.state == RAFT_STATE_LEADER) ) {
     /* check hosts are still heartbeating */
     host = glob.host;
     for( i = 0; i < glob.nhost; i++, host++ ) {
-      if( host->lasthb && lock_by_hostid( host->hostid ) && (rpc_now() > (host->lasthb + DLM_HBTIMEOUT)) ) {
+      if( (host->hostid != hostreg_localid()) &&
+	  host->lasthb &&
+	  lock_by_hostid( host->hostid ) &&
+	  (rpc_now() > (host->lasthb + DLM_HBTIMEOUT)) ) {
 	dlm_log( LOG_LVL_INFO, "Host %"PRIx64" has locks and stopped heartbeating - releasing all locks", host->hostid );
 	memset( &cmd, 0, sizeof(cmd) );
 	cmd.cmd = DLM_CMD_RELEASEALL;
@@ -426,7 +386,8 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
     return;
   }
 
-  dlm_log( LOG_LVL_DEBUG, "Command %s LockID %"PRIx64" HostID %"PRIx64" ResID %"PRIx64"",
+  dlm_log( LOG_LVL_DEBUG, "Command Seq %"PRIu64" %s LockID %"PRIx64" HostID %"PRIx64" ResID %"PRIx64"",
+	   cmdseq,
 	   cmd.cmd == DLM_CMD_LOCKEX ? "LockEX" :
 	   cmd.cmd == DLM_CMD_LOCKSH ? "LockSH" :
 	   cmd.cmd == DLM_CMD_HEARTBEAT ? "Heartbeat" :
@@ -718,6 +679,36 @@ static struct rpc_program dlm_prog = {
     NULL, DLM_RPC_PROG, &dlm_vers, dlm_prog_auths
 };
 
+
+static void dlm_subscriber( uint64_t hostid, uint64_t seq, uint32_t msgid, char *buf, int size ) {
+  int i;
+  struct dlm_host *host;
+  
+  switch( msgid ) {
+  case DLM_MSGID_HEARTBEAT:
+    dlm_log( LOG_LVL_TRACE, "Heartbeat %"PRIx64"", hostid );
+    host = host_by_hostid( hostid );
+    if( host ) {
+      host->seq = seq;
+      host->lasthb = rpc_now();
+    } else {
+      i = glob.nhost;
+      if( i >= DLM_MAX_HOST ) {
+	dlm_log( LOG_LVL_ERROR, "Out of host descriptors" );
+      } else {
+	host = &glob.host[i];
+	host->hostid = hostid;
+	host->seq = seq;
+	host->lasthb = rpc_now();
+	glob.nhost++;
+      }
+    }
+    break;
+  }
+    
+}
+static DMB_SUBSCRIBER(dlm_sc,DLM_MSGID_HEARTBEAT,dlm_subscriber);
+
 int dlm_open( void ) {
   /* open database, register raft app etc */
 
@@ -730,12 +721,15 @@ int dlm_open( void ) {
   rpc_iterator_register( &dlm_iter );
   raft_app_register( &dlm_app );
   rpc_program_register( &dlm_prog );
+  dmb_subscribe( &dlm_sc );
   
   glob.raftclid = raft_clid_by_appid( DLM_RPC_PROG );
   if( !glob.raftclid ) {
     dlm_log( LOG_LVL_ERROR, "No DLM cluster" );
     return -1;
   }
+
+  raft_replay( glob.raftclid );
   
   glob.ocount = 1;
   return 0;

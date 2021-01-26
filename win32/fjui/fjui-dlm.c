@@ -99,18 +99,18 @@ void fjui_dlm_register( void ) {
 	RegisterClassExW( &cls );
 }
 
-void fjui_dlm_refresh( uint64_t hostid ) {	
+void fjui_dlm_refresh( uint64_t hostid ) {
+	fjui_call_dlmlist( hostid );
+}
+
+void fjui_dlm_setinfo( struct fjui_hostinfo *info ) {	
 	HWND hwnd;
 	int i, j, idx;
 	LVITEMA lvi;
 	char str[1024];
-	struct fjui_hostinfo *info;
 
 	hwnd = fjui_get_hwnd( "dlm_lv" );
 	ListView_DeleteAllItems( hwnd );
-
-	info = fjui_hostinfo_by_id( hostid );
-	if( !info ) return;
 
 	for( i = 0; i < info->nlock; i++ ) {
 		memset( &lvi, 0, sizeof(lvi) );
@@ -142,9 +142,9 @@ void fjui_dlm_refresh( uint64_t hostid ) {
 		lvi.iSubItem = 3;
 		sprintf( str, "%s",
 			 info->lock[i].state == DLM_EX ? "Exclusive" :
-			 info->lock[i].state == DLM_EX ? "Shared" :
-			 info->lock[i].state == DLM_EX ? "BlockedEx" :
-			 info->lock[i].state == DLM_EX ? "BlockedSh" :
+			 info->lock[i].state == DLM_SH ? "Shared" :
+			 info->lock[i].state == DLM_BLOCKEX ? "Blocked (Exclusive)" :
+			 info->lock[i].state == DLM_BLOCKSH ? "Blocked (Shared)" :
 			 "Other" );
 			 
 		lvi.pszText = str;			

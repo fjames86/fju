@@ -129,6 +129,7 @@ void fjui_summary_register( void );
 
 void fjui_dlm_refresh( uint64_t hostid );
 void fjui_dlm_register( void );
+void fjui_dlm_setinfo( struct fjui_hostinfo *info );
 
 #endif
 

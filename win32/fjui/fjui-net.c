@@ -775,7 +775,7 @@ static void dlmlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   }
   info->nlock = i;
 
-  fjui_dlm_refresh( hcallp->hostid );
+  fjui_dlm_setinfo( info );
 }
 
 void fjui_call_dlmlist( uint64_t hostid ) {

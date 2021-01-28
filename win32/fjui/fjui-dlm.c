@@ -58,13 +58,6 @@ static LRESULT CALLBACK dlm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		lvc.iSubItem = 3;
 		ListView_InsertColumn(h, 3, &lvc );
 
-		lvc.pszText = "Cookie";
-		lvc.cchTextMax = (int)strlen( lvc.pszText );
-		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
-		lvc.cx = 80;
-		lvc.iSubItem = 4;
-		ListView_InsertColumn(h, 4, &lvc );
-
 		break;	
 	case WM_COMMAND:
 		break;
@@ -150,15 +143,7 @@ void fjui_dlm_setinfo( struct fjui_hostinfo *info ) {
 		lvi.pszText = str;			
 		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
 
-		lvi.iItem = idx;
-		lvi.mask = LVIF_TEXT;
-		lvi.iSubItem = 4;
-		strcpy( str, "" );
-		for( j = 0; j < DLM_MAX_COOKIE; j++ ) {
-		  sprintf( str + strlen( str ), "%02x", (uint32_t)(uint8_t)info->lock[i].cookie[j] );
-		}
-		lvi.pszText = str;			
-		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
+
 
 	}
 

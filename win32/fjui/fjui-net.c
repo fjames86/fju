@@ -765,7 +765,6 @@ static void dlmlist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
     if( !sts ) sts = xdr_decode_uint64( xdr, &info->lock[i].hostid );
     if( !sts ) sts = xdr_decode_uint64( xdr, &info->lock[i].resid );    
     if( !sts ) sts = xdr_decode_uint32( xdr, &info->lock[i].state );
-    if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)info->lock[i].cookie, DLM_MAX_COOKIE );
     if( sts ) return;
 
 	i++;

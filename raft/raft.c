@@ -718,18 +718,38 @@ static void raft_call_ping( struct raft_cluster *cl, uint64_t hostid ) {
 }
 
 static void raft_send_pings( struct raft_cluster *cl ) {
-  int i;
+  int i, sts;
   uint64_t seq;
-
+  struct raft_snapshot_info sinfo;
+  
   raft_log( LOG_LVL_TRACE, "raft_send_pings cl=%"PRIx64" nmember %u", cl->clid, cl->nmember );
   
   raft_command_seq( cl->clid, NULL, &seq );
+  sts = raft_snapshot_info( cl->clid, &sinfo, NULL );
+  if( sts ) {
+    struct raft_app *app = raft_app_by_appid( cl->appid );
+    if( app && app->snapsave ) {
+      app->snapsave( app, cl, cl->term, cl->appliedseq );
+    }
+  }
+
+    
   for( i = 0; i < cl->nmember; i++ ) {
     raft_log( LOG_LVL_TRACE, "raft_send_pings cl=%"PRIx64" i=%u hostid=%"PRIx64"",
 	      cl->clid, i, cl->member[i].hostid );
     
     if( cl->member[i].storedseq < seq ) {
-      raft_call_putcmd( cl, cl->member[i].hostid, 0 );
+
+      /* 
+       * check if the target host's highest ack'ed seqno is lower 
+       * than our snapshot, if so then send that instead 
+       */
+      if( !sts && (sinfo.seq > cl->member[i].storedseq) ) {
+	raft_log( LOG_LVL_INFO, "Member %"PRIx64" storedseq %"PRIu64" older than our snapshot %"PRIu64" - sending snapshot", cl->member[i].hostid, cl->member[i].storedseq, sinfo.seq );
+	raft_call_snapsave( cl, cl->member[i].hostid, 0 );
+      } else {      
+	raft_call_putcmd( cl, cl->member[i].hostid, 0 );
+      }
     } else {
       raft_call_ping( cl, cl->member[i].hostid );
     }
@@ -923,6 +943,7 @@ static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t
   len = raft_command_by_seq( cl->clid, cseq, &cterm, glob.buf, sizeof(glob.buf), NULL );
   if( len < 0 ) {
     raft_log( LOG_LVL_ERROR, "raft_call_putcmd: failed to find command clid=%"PRIx64" seq=%"PRIu64"", cl->clid, cseq );
+    
     raft_call_ping( cl, hostid );
     return;
   }
@@ -1045,9 +1066,13 @@ static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid, uint32
   raft_log( LOG_LVL_TRACE, "raft_call_snapsave clid=%"PRIx64" hostid=%"PRIx64"", cl->clid, hostid );
   sts = raft_snapshot_info( cl->clid, &info, NULL );
   if( sts ) {
-    raft_log( LOG_LVL_ERROR, "Failed to find local snapshot - sending empty snapshot data" );
-    memset( &info, 0, sizeof(info) );
-    raft_command_seq( cl->clid, &info.term, &info.seq );
+    struct raft_app *app;
+    raft_log( LOG_LVL_ERROR, "Failed to find local snapshot - requesting snapshot" );
+    app = raft_app_by_appid( cl->appid );
+    if( app && app->snapsave ) app->snapsave( app, cl, cl->term, cl->appliedseq );
+    //memset( &info, 0, sizeof(info) );
+    //raft_command_seq( cl->clid, &info.term, &info.seq );
+    return;
   }
 
   if( offset == info.size ) {

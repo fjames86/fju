@@ -178,9 +178,6 @@ struct dlm_command {
 #define DLM_CMD_RELEASEALL 4
   union {
     struct {
-      char cookie[DLM_MAX_COOKIE];
-    } lock;
-    struct {
       uint64_t seq;
     } hb;
   } u;
@@ -197,7 +194,6 @@ static int dlm_encode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
     break;
   case DLM_CMD_LOCKEX:
   case DLM_CMD_LOCKSH:
-    xdr_encode_fixed( xdr, (uint8_t *)cmd->u.lock.cookie, DLM_MAX_COOKIE );
     break;
   case DLM_CMD_HEARTBEAT:
     xdr_encode_uint64( xdr, cmd->u.hb.seq );
@@ -218,7 +214,6 @@ static int dlm_decode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
     break;
   case DLM_CMD_LOCKEX:
   case DLM_CMD_LOCKSH:
-    sts = xdr_decode_fixed( xdr, (uint8_t *)cmd->u.lock.cookie, DLM_MAX_COOKIE );
     break;
   case DLM_CMD_HEARTBEAT:
     sts = xdr_decode_uint64( xdr, &cmd->u.hb.seq );
@@ -246,7 +241,7 @@ static int dlm_command_publish( struct dlm_command *cmd ) {
   return sts;
 }
 
-int dlm_acquire( uint64_t resid, int shared, char *cookie, uint64_t *lockid, dlm_donecb_t cb, void *cxt ) {
+int dlm_acquire( uint64_t resid, int shared, uint64_t *lockid, dlm_donecb_t cb, void *cxt ) {
   /* request to acquire lock */
   int sts, i;
   uint64_t lid;
@@ -282,7 +277,6 @@ int dlm_acquire( uint64_t resid, int shared, char *cookie, uint64_t *lockid, dlm
   cmd.lockid = lid;
   cmd.hostid = hostreg_localid();
   cmd.resid = resid;
-  if( cookie ) memcpy( cmd.u.lock.cookie, cookie, DLM_MAX_COOKIE );
 
   sts = dlm_command_publish( &cmd );
   if( sts ) {
@@ -327,8 +321,6 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
    * publish releaseall command
    */
   int i, sts;
-  uint64_t hostid;
-  struct dlm_lock *lcxt;
   struct dlm_host *host;
   struct dlm_command cmd;
   struct raft_cluster cl;
@@ -414,7 +406,6 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
 	lockp->hostid = cmd.hostid;
 	lockp->resid = cmd.resid;
 	lockp->state = (cmd.cmd == DLM_CMD_LOCKEX) ? DLM_BLOCKEX : DLM_BLOCKSH;
-	memcpy( lockp->cookie, cmd.u.lock.cookie, DLM_MAX_COOKIE );
 	glob.nlock++;	
       }
     } else {
@@ -429,9 +420,8 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
 	lockp->hostid = cmd.hostid;
 	lockp->resid = cmd.resid;
 	lockp->state = (cmd.cmd == DLM_CMD_LOCKEX) ? DLM_EX : DLM_SH;
-	memcpy( lockp->cookie, cmd.u.lock.cookie, DLM_MAX_COOKIE );
 	glob.nlock++;
-
+  
 	/* invoke callback if found */
 	lockcxt_invoke( cmd.lockid );
       }
@@ -586,6 +576,8 @@ static void dlm_snapload( struct raft_app *app, struct raft_cluster *cl, char *b
     return;
   }
 
+  dlm_log( LOG_LVL_TRACE, "dlm_snapload len=%u nlocks=%u/%u", len, nlock, (len - 4) / DLM_MAX_LOCK );
+
   glob.nlock = nlock;
   memcpy( glob.lock, buf, sizeof(glob.lock) );
   for( i = 0; i < glob.nlock; i++ ) {
@@ -615,7 +607,6 @@ static int dlm_proc_list( struct rpc_inc *inc ) {
     xdr_encode_uint64( &inc->xdr, glob.lock[i].hostid );
     xdr_encode_uint64( &inc->xdr, glob.lock[i].resid );
     xdr_encode_uint32( &inc->xdr, glob.lock[i].state );
-    xdr_encode_fixed( &inc->xdr, (uint8_t *)glob.lock[i].cookie, DLM_MAX_COOKIE );
   }
   xdr_encode_boolean( &inc->xdr, 0 );
   
@@ -628,14 +619,12 @@ static int dlm_proc_acquire( struct rpc_inc *inc ) {
   int handle, sts;
   uint64_t resid, lockid;
   int shared;
-  char cookie[DLM_MAX_COOKIE];
   
   sts = xdr_decode_uint64( &inc->xdr, &resid );
   if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &shared );
-  if( !sts ) sts = xdr_decode_fixed( &inc->xdr, (uint8_t *)cookie, DLM_MAX_COOKIE );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  sts = dlm_acquire( resid, shared, cookie, &lockid, NULL, NULL );
+  sts = dlm_acquire( resid, shared, &lockid, NULL, NULL );
   dlm_log( LOG_LVL_TRACE, "dlm_proc_acquire resid=%"PRIx64" %s lockid=%"PRIx64" %s",
 	   resid, shared ? "Shared" : "Exclusive", lockid, sts ? "Failed" : "Success" );
   

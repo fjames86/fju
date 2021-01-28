@@ -15,9 +15,7 @@ struct dlm_lock {
 #define DLM_SH      2   /* lock acquired in shared mode */
 #define DLM_BLOCKEX 3   /* blocked waiting to acqurie exclsively */
 #define DLM_BLOCKSH 4   /* blocked waiting to acquire shared */
-  
-#define DLM_MAX_COOKIE 16
-  char cookie[DLM_MAX_COOKIE];  /* opaque private data associated with lock by application */
+  uint32_t spare;
 };
 int dlm_list( struct dlm_lock *dl, int ndl );
 int dlm_lock_by_lockid( uint64_t lockid, struct dlm_lock *lock );
@@ -34,12 +32,11 @@ typedef void (*dlm_donecb_t)( uint64_t lockid, void *cxt );
  * Enqueue a request to acquire a lock. 
  * resid ::= resource id
  * shared ::= if true a shared lock is acquired, otherwise an exclusive lock 
- * cookie ::= if non-null, is an opaque buffer of size DLM_MAX_COOKIE 
  * lockid ::= receives the lockid allocated 
  * cb ::= callback invoked when lock acquired 
  * cxt ::= private data passed to cb 
  */
-int dlm_acquire( uint64_t resid, int shared, char *cookie, uint64_t *lockid, dlm_donecb_t cb, void *cxt );
+int dlm_acquire( uint64_t resid, int shared, uint64_t *lockid, dlm_donecb_t cb, void *cxt );
 
 /* release the lock */
 int dlm_release( uint64_t lockid );

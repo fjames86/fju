@@ -1027,8 +1027,8 @@ static void raft_snapsave_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   }
 
   if( !res ) {
-    raft_log( LOG_LVL_TRACE, "raft_snapsave_cb timeout - retrying" );
-    raft_call_snapsave( cl, hostid, 0 );
+    raft_log( LOG_LVL_TRACE, "raft_snapsave_cb timeout" );
+    //raft_call_snapsave( cl, hostid, 0 );
     return;
   }
 

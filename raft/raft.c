@@ -1472,7 +1472,7 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   raft_log( LOG_LVL_TRACE, "raft_proc_snapsave clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64" len=%u", clid, term, seq, len );
 
   cl = cl_by_id( clid );
-  // XXX: cl==null
+  // XXX: what if cl==null
   
   sts = raft_snapshot_save( clid, term, seq, offset, bufp, len );
   if( len == 0 ) {
@@ -1486,7 +1486,9 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
       sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
       
       sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
-      if( !sts ) {
+      if( sts ) {
+	raft_log( LOG_LVL_ERROR, "Failed to map snapshot %"PRIx64"", clid );
+      } else {
 	sts = mmf_remap( &mmf, mmf.fsize );
 	app->snapload( app, cl, (char *)mmf.file + sizeof(struct raft_snapshot_info), mmf.fsize - sizeof(struct raft_snapshot_info) );
 	mmf_close( &mmf );
@@ -1494,9 +1496,15 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
     }
 
     /* truncate log to here */
+    raft_log( LOG_LVL_TRACE, "Truncating log" );
+#if 0
     sts = raft_command_by_seq( clid, seq, &bterm, NULL, 0, &entryid );
     if( !sts && entryid ) log_truncate( clog_by_id( clid ), entryid, LOG_TRUNC_END );
-
+    else log_reset( clog_by_id( clid ) );
+#else
+    log_reset( clog_by_id( clid ) );
+#endif
+    
     sts = 0;
     offset = 0;
   } else {

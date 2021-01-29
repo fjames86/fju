@@ -45,6 +45,9 @@ static struct {
   int lvlflags;
   int logflags;
   char cookie[LOG_MAX_COOKIE];
+  uint32_t nfilter;
+#define LOG_MAX_FILTER 8
+  uint32_t filtertags[LOG_MAX_FILTER];
 } fju;
 
 static void usage( char *fmt, ... ) {
@@ -166,6 +169,10 @@ int log_main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       strncpy( (char *)&fju.ltag, argv[i], 4 );
+      if( fju.nfilter < (LOG_MAX_FILTER - 1) ) {
+	fju.filtertags[fju.nfilter] = fju.ltag;
+	fju.nfilter++;
+      }
     } else if( strcmp( argv[i], "-S" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -260,6 +267,14 @@ static char *lvlstr( int lvl ) {
   return "ERROR";
 }
 
+static int filtermatch( uint32_t ltag ) {
+  int i;
+  for( i = 0; i < fju.nfilter; i++ ) {
+    if( fju.filtertags[i] == ltag ) return 1;
+  }
+  return 0;
+}
+
 static void cmd_read( uint64_t id, uint64_t *newid ) {
   int sts, n;
   struct log_entry entry;
@@ -295,7 +310,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
     if( sts < 0 ) break;
     if( n == 0 ) break;
 
-    if( fju.ltag && (entry.ltag != fju.ltag) ) {
+    if( fju.ltag && !filtermatch( entry.ltag ) ) {
       /* do nothing if filtering on tag but wrong tag */
     } else if( fju.flags & LOG_BINARY ) {
       if( !fju.print_quiet ) {

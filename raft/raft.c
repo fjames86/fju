@@ -1456,11 +1456,13 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   int handle, sts;
   char *bufp = NULL;
   int len;
-  uint64_t clid, term, seq, bterm, entryid;
+  uint64_t clid, term, seq;
+  //uint64_t bterm, entryid;
   struct raft_cluster *cl;
   uint32_t offset;
   struct xdr_s res;
   char resbuf[64];
+  struct log_s *clog;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term );
@@ -1472,7 +1474,15 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   raft_log( LOG_LVL_TRACE, "raft_proc_snapsave clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64" len=%u", clid, term, seq, len );
 
   cl = cl_by_id( clid );
-  // XXX: what if cl==null
+  clog = clog_by_id( clid );
+  if( !cl ) {
+    raft_log( LOG_LVL_ERROR, "Unknown cluster %"PRIx64"", clid );
+    goto bad;
+  }
+  if( !clog ) {
+    raft_log( LOG_LVL_ERROR, "Unknown cluster log" );
+    goto bad;
+  }
   
   sts = raft_snapshot_save( clid, term, seq, offset, bufp, len );
   if( len == 0 ) {
@@ -1499,10 +1509,10 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
     raft_log( LOG_LVL_TRACE, "Truncating log" );
 #if 0
     sts = raft_command_by_seq( clid, seq, &bterm, NULL, 0, &entryid );
-    if( !sts && entryid ) log_truncate( clog_by_id( clid ), entryid, LOG_TRUNC_END );
-    else log_reset( clog_by_id( clid ) );
+    if( !sts && entryid ) log_truncate( clog, entryid, LOG_TRUNC_END );
+    else log_reset( clog );
 #else
-    log_reset( clog_by_id( clid ) );
+    log_reset( clog );
 #endif
 
     /* set appliedseq to the snapshot */
@@ -1519,6 +1529,13 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   xdr_encode_boolean( &res, sts ? 0 : 1 );
   xdr_encode_uint64( &res, cl->term );
   xdr_encode_uint32( &res, offset );
+  return hrauth_reply( inc, &res, 1 );
+
+ bad:
+  xdr_init( &res, (uint8_t *)resbuf, sizeof(resbuf) );
+  xdr_encode_boolean( &res, 0 );
+  xdr_encode_uint64( &res, 0 );
+  xdr_encode_uint32( &res, 0 );
   return hrauth_reply( inc, &res, 1 );
 }
 
@@ -1820,7 +1837,28 @@ static struct raft_app *raft_app_by_appid( uint32_t appid ) {
   return NULL;
 }
     
+
+
+static void call_command_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
+  uint64_t hostid, clid, seq;
+  int sts, b;
   
+  hostid = hcallp->hostid;
+  clid = hcallp->cxt2;
+
+  raft_log( LOG_LVL_TRACE, "call_command_cb hostid=%"PRIx64" clid=%"PRIx64" %s", hostid, clid, res ? "Success" : "Timeout" );
+  if( !res ) return;
+
+  b = 0;
+  seq = 0;
+  sts = xdr_decode_boolean( res, &b );
+  if( !sts ) sts = xdr_decode_uint64( res, &seq );
+
+  raft_log( LOG_LVL_TRACE, "call_command_cb %s Seq=%"PRIu64"", b ? "Success" : "Failure", seq );
+
+  /* TODO: if command not accepted then should somehow signal this back to caller, but we don't have any way to do that */
+}
+
 static int raft_call_command( struct raft_cluster *cl, char *buf, int len ) {
   struct hrauth_call hcall;
   struct xdr_s args[3];
@@ -1854,6 +1892,8 @@ static int raft_call_command( struct raft_cluster *cl, char *buf, int len ) {
   hcall.proc = 3; /* command */
   hcall.timeout = glob.prop.rpc_timeout;
   hcall.service = HRAUTH_SERVICE_PRIV;
+  hcall.donecb = call_command_cb;
+  hcall.cxt2 = cl->clid;
   sts = hrauth_call_async( &hcall, args, 3 );
   if( sts ) {
     raft_log( LOG_LVL_ERROR, "hrauth_call_async failed" );

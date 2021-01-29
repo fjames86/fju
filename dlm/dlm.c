@@ -280,6 +280,7 @@ int dlm_acquire( uint64_t resid, int shared, uint64_t *lockid, dlm_donecb_t cb, 
 
   sts = dlm_command_publish( &cmd );
   if( sts ) {
+    lid = 0;
     glob.nlockcxt--;
   }
   
@@ -719,7 +720,7 @@ int dlm_open( void ) {
   }
 
   raft_replay( glob.raftclid );
-  
+
   glob.ocount = 1;
   return 0;
 }

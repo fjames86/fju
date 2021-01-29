@@ -40,6 +40,7 @@ static struct {
   uint32_t ocount;
   uint64_t raftclid;
   uint64_t hbseq;
+  int releaseownlocks;
   
   int nlock;
   struct dlm_lock lock[DLM_MAX_LOCK];   /* lock database */
@@ -403,10 +404,17 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
     /* check hosts are still heartbeating */
     host = glob.host;
     for( i = 0; i < glob.nhost; i++, host++ ) {
-      if( (host->hostid != hostreg_localid()) &&
-	  host->lasthb &&
-	  lock_by_hostid( host->hostid ) &&
-	  (rpc_now() > (host->lasthb + DLM_HBTIMEOUT)) ) {
+      if( host->hostid == hostreg_localid() ) {
+	if( glob.releaseownlocks ) {
+	  dlm_log( LOG_LVL_INFO, "Releasing own locks" );
+	  memset( &cmd, 0, sizeof(cmd) );
+	  cmd.cmd = DLM_CMD_RELEASEALL;
+	  cmd.hostid = host->hostid;
+	  dlm_command_publish( &cmd );
+	  
+	  glob.releaseownlocks = 0;
+	}
+      } else if( host->lasthb && lock_by_hostid( host->hostid ) && (rpc_now() > (host->lasthb + DLM_HBTIMEOUT)) ) {
 	dlm_log( LOG_LVL_INFO, "Host %"PRIx64" has locks and stopped heartbeating - releasing all locks", host->hostid );
 	memset( &cmd, 0, sizeof(cmd) );
 	cmd.cmd = DLM_CMD_RELEASEALL;
@@ -765,7 +773,7 @@ static void dlm_subscriber( uint64_t hostid, uint64_t seq, uint32_t msgid, char 
 	if( !raft_cluster_by_clid( glob.raftclid, &cl ) && (cl.state == RAFT_STATE_LEADER) ) {
 	  struct dlm_command cmd;
 	  
-	  dlm_log( LOG_LVL_INFO, "Host %"PRIx64" seq changed %"PRIu64" -> "PRIu64"", hostid, host->seq, hseq );
+	  dlm_log( LOG_LVL_INFO, "Host %"PRIx64" seq changed %"PRIu64" -> %"PRIu64"", hostid, host->seq, hseq );
 	  memset( &cmd, 0, sizeof(cmd) );
 	  cmd.cmd = DLM_CMD_RELEASEALL;
 	  cmd.hostid = hostid;
@@ -817,6 +825,7 @@ int dlm_open( void ) {
 
   raft_replay( glob.raftclid );
 
+  glob.releaseownlocks = 1;
   glob.ocount = 1;
   return 0;
 }

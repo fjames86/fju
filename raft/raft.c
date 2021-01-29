@@ -1512,7 +1512,9 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
     if( !sts && entryid ) log_truncate( clog, entryid, LOG_TRUNC_END );
     else log_reset( clog );
 #else
-    log_reset( clog );
+    if( seq > cl->appliedseq ) {
+      log_reset( clog );
+    }
 #endif
 
     /* set appliedseq to the snapshot */

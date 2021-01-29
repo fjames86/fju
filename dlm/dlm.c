@@ -566,7 +566,7 @@ static void dlm_snapload( struct raft_app *app, struct raft_cluster *cl, char *b
   int i;
   
   if( len != (4 + sizeof(glob.lock)) ) {
-    dlm_log( LOG_LVL_ERROR, "Snapload Bad snapshot size %u", len );
+    dlm_log( LOG_LVL_ERROR, "Snapload Bad snapshot size %u != %u", len, sizeof(glob.lock) + 4 );
     return;
   }
 

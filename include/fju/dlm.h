@@ -26,7 +26,13 @@ int dlm_lock_by_lockid( uint64_t lockid, struct dlm_lock *lock );
  * When the lock is acquired the state is set to mode (EX or SH) and, if set, the donecb is invoked 
  */
 
-typedef void (*dlm_donecb_t)( uint64_t lockid, void *cxt );
+typedef enum {
+    DLM_LOCKSTAT_FAIL = 0,
+    DLM_LOCKSTAT_BLOCKED = 1,
+    DLM_LOCKSTAT_ACQUIRED = 2,
+} dlm_lockstat_t;
+
+typedef void (*dlm_donecb_t)( uint64_t lockid, dlm_lockstat_t stat, void *cxt );
 
 /*
  * Enqueue a request to acquire a lock. 

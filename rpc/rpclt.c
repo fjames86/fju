@@ -1382,7 +1382,7 @@ static void dlm_list_results( struct xdr_s *xdr ) {
   int sts, b;
   uint64_t lockid, resid, hostid;
   uint32_t state;
-  char tmpstr[64];
+  char tmpstr[64], hostnamestr[64];
   
   printf( "%-16s %-16s %-16s %-10s\n", "LockID", "HostID", "ResID", "State" );
   
@@ -1396,13 +1396,14 @@ static void dlm_list_results( struct xdr_s *xdr ) {
     if( sts ) usage( "XDR error" );
 
     sprintf( tmpstr, "Other (%u)", state );
-    printf( "%-16"PRIx64" %-16"PRIx64" %-16"PRIx64" %-10s\n", lockid, hostid, resid,
+    if( !hostreg_name_by_hostid( hostid, hostnamestr ) ) sprintf( hostnamestr, "%"PRIx64"", hostid );
+    
+    printf( "%-16"PRIx64" %-16s %-16"PRIx64" %-10s\n", lockid, hostnamestr, resid,
 	    state == DLM_EX ? "Exclusive" :
 	    state == DLM_SH ? "Shared" :
 	    state == DLM_BLOCKEX ? "BlockedEX" :
 	    state == DLM_BLOCKSH ? "BlockedSH" :	    
 	    tmpstr );
-    printf( "\n" );
     
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "XDR error" );
@@ -1424,7 +1425,7 @@ static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
 
   resid = 0;
   shared = 0;
-    
+  
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "resid" ) == 0 ) {

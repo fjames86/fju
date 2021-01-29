@@ -52,15 +52,17 @@ static struct {
 } glob;
 
 
-static void lockcxt_invoke( uint64_t lockid ) {
+static void lockcxt_invoke( uint64_t lockid, dlm_lockstat_t lockstat, int remove ) {
   int i;
   struct dlm_lockcxt *lcxt;
   lcxt = glob.lockcxt;
   for( i = 0; i < glob.nlockcxt; i++, lcxt++ ) {
     if( lcxt->lockid == lockid ) {
-      if( lcxt->cb ) lcxt->cb( lockid, lcxt->cxt );
-      if( i != (glob.nlockcxt - 1) ) glob.lockcxt[i] = glob.lockcxt[glob.nlockcxt - 1];
-      glob.nlockcxt--;
+      if( lcxt->cb ) lcxt->cb( lockid, lockstat, lcxt->cxt );
+      if( remove ) {
+	if( i != (glob.nlockcxt - 1) ) glob.lockcxt[i] = glob.lockcxt[glob.nlockcxt - 1];
+	glob.nlockcxt--;
+      }
       break;
     }
   }
@@ -174,7 +176,7 @@ struct dlm_command {
 #define DLM_CMD_RELEASE 0
 #define DLM_CMD_LOCKEX  1
 #define DLM_CMD_LOCKSH  2
-#define DLM_CMD_HEARTBEAT 3
+#define DLM_CMD_RESERVED 3
 #define DLM_CMD_RELEASEALL 4
   union {
     struct {
@@ -195,9 +197,6 @@ static int dlm_encode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
   case DLM_CMD_LOCKEX:
   case DLM_CMD_LOCKSH:
     break;
-  case DLM_CMD_HEARTBEAT:
-    xdr_encode_uint64( xdr, cmd->u.hb.seq );
-    break;
   }
   return 0;
 }
@@ -215,8 +214,7 @@ static int dlm_decode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
   case DLM_CMD_LOCKEX:
   case DLM_CMD_LOCKSH:
     break;
-  case DLM_CMD_HEARTBEAT:
-    sts = xdr_decode_uint64( xdr, &cmd->u.hb.seq );
+  case DLM_CMD_RESERVED:
     break;
   default:
     return -1;
@@ -241,50 +239,118 @@ static int dlm_command_publish( struct dlm_command *cmd ) {
   return sts;
 }
 
+static void call_acquire_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
+  uint64_t hostid, lockid;
+
+  hostid = hcallp->hostid;
+  lockid = hcallp->cxt2;
+  
+  if( !res ) {
+    dlm_log( LOG_LVL_ERROR, "call_acquire_cb timeout lockid=%"PRIx64"", lockid );
+    lockcxt_invoke( lockid, DLM_LOCKSTAT_FAIL, 1 );
+    return;
+  }
+
+}
+
+static int dlm_call_acquire( uint64_t hostid, uint64_t resid, int shared, uint64_t lid ) {
+  char argbuf[64];
+  struct xdr_s args;
+  struct hrauth_call hcall;
+  int sts;
+  
+  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+  xdr_encode_uint64( &args, resid );
+  xdr_encode_boolean( &args, shared );
+  xdr_encode_uint64( &args, lid );  
+  xdr_encode_uint64( &args, hostreg_localid() );
+  
+  memset( &hcall, 0, sizeof(hcall) );
+  hcall.hostid = hostid;
+  hcall.prog = DLM_RPC_PROG;
+  hcall.vers = DLM_RPC_VERS;
+  hcall.proc = 4; /* acquire_internal */
+  hcall.timeout = 500;
+  hcall.service = HRAUTH_SERVICE_PRIV;
+  hcall.donecb = call_acquire_cb;
+  hcall.cxt2 = lid;
+  sts = hrauth_call_async( &hcall, &args, 1 );
+  if( sts ) {
+    dlm_log( LOG_LVL_ERROR, "dlm_call_acquire failed" );
+    return -1;
+  }
+
+  return 0;
+}
+
+static int dlm_acquire2( uint64_t resid, int shared, uint64_t lid, uint64_t hostid, uint64_t *lockidp, dlm_donecb_t cb, void *cxt );
+
 int dlm_acquire( uint64_t resid, int shared, uint64_t *lockid, dlm_donecb_t cb, void *cxt ) {
+  return dlm_acquire2( resid, shared, 0, 0, lockid, cb, cxt );
+}
+
+static int dlm_acquire2( uint64_t resid, int shared, uint64_t lid, uint64_t hostid, uint64_t *lockidp, dlm_donecb_t cb, void *cxt ) {
   /* request to acquire lock */
   int sts, i;
-  uint64_t lid;
   struct dlm_command cmd;
+  struct raft_cluster cl;
 
+  if( lockidp ) *lockidp = 0;
+  
+  sts = raft_cluster_by_clid( glob.raftclid, &cl );
+  if( sts ) return -1;
+
+  if( cl.state == RAFT_STATE_CANDIDATE ) return -1;
+  
   dlm_log( LOG_LVL_TRACE, "Acquire resid %"PRIx64" %s", resid, shared ? "Shared" : "Exclusive" );
   
-  if( lockid ) *lockid = 0;
-  
   if( !glob.ocount ) return -1;
-
+  
   /* insert new entry in wait state */
   if( glob.nlockcxt >= DLM_MAX_LOCK ) {
     dlm_log( LOG_LVL_ERROR, "Out of lockcxt descriptors" );
     return -1;
   }
-  
+
+  /* choose a lockid */
   i = glob.nlockcxt;
   memset( &glob.lockcxt[i], 0, sizeof(glob.lockcxt[i]) );
-  sec_rand( (char *)&lid, sizeof(lid) );
-  while( lock_by_lockid( lid ) ) {
+    
+  if( lid ) {
+    if( lock_by_lockid( lid ) ) return -1;
+  } else {
     sec_rand( (char *)&lid, sizeof(lid) );
+    while( lock_by_lockid( lid ) ) {
+      sec_rand( (char *)&lid, sizeof(lid) );
+    }
   }
   
   glob.lockcxt[i].lockid = lid;
   glob.lockcxt[i].cb = cb;
   glob.lockcxt[i].cxt = cxt;
   glob.nlockcxt++;
-  
-  /* submit raft command to acquire lock */
-  memset( &cmd, 0, sizeof(cmd) );
-  cmd.cmd = shared ? DLM_CMD_LOCKSH : DLM_CMD_LOCKEX;
-  cmd.lockid = lid;
-  cmd.hostid = hostreg_localid();
-  cmd.resid = resid;
 
-  sts = dlm_command_publish( &cmd );
+  if( cl.state == RAFT_STATE_LEADER ) {
+  
+    /* submit raft command to acquire lock */
+    memset( &cmd, 0, sizeof(cmd) );
+    cmd.cmd = shared ? DLM_CMD_LOCKSH : DLM_CMD_LOCKEX;
+    cmd.lockid = lid;
+    cmd.hostid = hostid ? hostid : hostreg_localid();
+    cmd.resid = resid;
+    
+    sts = dlm_command_publish( &cmd );  
+  } else {
+    /* send rpc to leader */
+    sts = dlm_call_acquire( cl.leaderid, resid, shared, lid );
+  }
+  
   if( sts ) {
     lid = 0;
     glob.nlockcxt--;
-  }
-  
-  if( lockid ) *lockid = lid;
+  } 
+ 
+  if( lockidp ) *lockidp = lid;
   
   return sts;
 }
@@ -325,23 +391,12 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
   struct dlm_host *host;
   struct dlm_command cmd;
   struct raft_cluster cl;
+  struct xdr_s xdr;
+  char xdrbuf[8];
 
-#if 1
-  dmb_publish( DLM_MSGID_HEARTBEAT, DMB_REMOTE, NULL, 0, NULL );
-#else
-  hostid = hostreg_localid();
-  lcxt = glob.lock;
-  for( i = 0; i < glob.nlock; i++ ) {
-    if( (lcxt->hostid == hostid) && ((lcxt->state == DLM_EX) || (lcxt->state == DLM_SH)) ) {
-      memset( &cmd, 0, sizeof(cmd) );
-      cmd.cmd = DLM_CMD_HEARTBEAT;
-      cmd.hostid = hostid;
-      cmd.u.hb.seq = ++glob.hbseq;
-      dlm_command_publish( &cmd );
-      break;
-    }
-  }
-#endif
+  xdr_init( &xdr, (uint8_t *)xdrbuf, sizeof(xdrbuf) );
+  xdr_encode_uint64( &xdr, glob.hbseq );
+  dmb_publish( DLM_MSGID_HEARTBEAT, DMB_REMOTE, xdrbuf, xdr.offset, NULL );
   
   sts = raft_cluster_by_clid( glob.raftclid, &cl );
   if( !sts && (cl.state == RAFT_STATE_LEADER) ) {
@@ -364,13 +419,110 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
 }
 
 
+static void release_lock( uint64_t lockid ) {
+  int i, lockstate;
+  struct dlm_lock *lockp;
+  struct dlm_lockcxt *lcxt;
+  uint64_t resid;
+  
+  /* Lookup lock for this lockid and delete it */
+  lockp = glob.lock;
+  lockstate = 0;
+  resid = 0;
+  for( i = 0; i < glob.nlock; i++, lockp++ ) {
+    if( lockp->lockid == lockid ) {
+      if( lockp->state == DLM_EX ) lockstate = 1;
+      else if( lockp->state == DLM_SH ) lockstate = 2;
+      dlm_log( LOG_LVL_TRACE, "Releasing lock %"PRIx64" lockstate=%u", lockid, lockstate );
+      resid = lockp->resid;
+			     
+      if( i != (glob.nlock - 1) ) glob.lock[i] = glob.lock[glob.nlock - 1];
+      glob.nlock--;
+      break;
+    }
+  }
+  
+  lcxt = glob.lockcxt;
+  for( i = 0; i < glob.nlockcxt; i++, lcxt++ ) {
+    if( lcxt->lockid == lockid ) {
+      if( i != (glob.nlockcxt - 1) ) glob.lockcxt[i] = glob.lockcxt[glob.nlockcxt - 1];
+      glob.nlockcxt--;
+      break;
+    }
+  }
+
+  /* if resid=0 then we never found the corresponding lock */
+  if( !resid ) return;
+
+    
+  if( lockstate == 1 ) {
+    int lockacquired = 0;
+      
+    /* 
+     * released an exclusive lock - look for a pending exclusive lock. if found then acquire it.
+     * if not found, then look for a pending shared lock. if found then acquire it.
+     */
+    lockp = glob.lock;
+    for( i = 0; i < glob.nlock; i++, lockp++ ) {
+      if( (lockp->resid == resid) && (lockp->state == DLM_BLOCKEX) ) {
+	dlm_log( LOG_LVL_TRACE, "Acquiring blocked exclusive lock %"PRIx64"", lockp->lockid );
+	lockp->state = DLM_EX;
+	
+	lockcxt_invoke( lockp->lockid, DLM_LOCKSTAT_ACQUIRED, 1 );
+	lockacquired = 1;
+	break;
+      }
+    }
+
+    if( !lockacquired ) {
+      lockp = glob.lock;
+      for( i = 0; i < glob.nlock; i++, lockp++ ) {
+	if( (lockp->resid == resid) && (lockp->state == DLM_BLOCKSH) ) {
+	  dlm_log( LOG_LVL_TRACE, "Acquiring blocked shared lock %"PRIx64"", lockp->lockid );
+	  lockp->state = DLM_SH;
+	  lockcxt_invoke( lockp->lockid, DLM_LOCKSTAT_ACQUIRED, 1 );
+	}
+      }
+    }
+    
+    
+  } else if( lockstate == 2 ) {
+    struct dlm_lock *exlockp;
+    int foundp;
+    
+    /* 
+     * release a shared lock. Look for any other shared locks. If none found then 
+     * look for a pending exclusive lock. If found then acquire it.
+     */
+    
+    lockp = glob.lock;
+    foundp = 0;
+    exlockp = NULL;
+    for( i = 0; i < glob.nlock; i++, lockp++ ) {
+      if( lockp->resid == resid ) {
+	if( lockp->state == DLM_SH ) {
+	  foundp = 1;
+	} else if( lockp->state == DLM_BLOCKEX ) {
+	  if( !exlockp ) exlockp = lockp;
+	}
+      }
+    }
+    
+    if( !foundp && exlockp ) {
+      dlm_log( LOG_LVL_TRACE, "Acquiring blocked exclusive lock %"PRIx64"", exlockp->lockid );
+      exlockp->state = DLM_EX;
+      lockcxt_invoke( lockp->lockid, DLM_LOCKSTAT_ACQUIRED, 1 );
+    }
+    
+  }
+       
+}
+
 static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t cmdseq, char *buf, int len ) {
-  int sts, i, lockstate;
+  int sts, i;
   struct xdr_s xdr;
   struct dlm_command cmd;
-  struct dlm_lockcxt *lcxt;
   struct dlm_lock *lockp;
-  struct dlm_host *host;
   
   xdr_init( &xdr, (uint8_t *)buf, len );
   sts = dlm_decode_command( &xdr, &cmd );
@@ -383,7 +535,6 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
 	   cmdseq,
 	   cmd.cmd == DLM_CMD_LOCKEX ? "LockEX" :
 	   cmd.cmd == DLM_CMD_LOCKSH ? "LockSH" :
-	   cmd.cmd == DLM_CMD_HEARTBEAT ? "Heartbeat" :
 	   cmd.cmd == DLM_CMD_RELEASE ? "Release" :
 	   cmd.cmd == DLM_CMD_RELEASEALL ? "ReleaseAll" : 
 	   "Other",
@@ -407,7 +558,9 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
 	lockp->hostid = cmd.hostid;
 	lockp->resid = cmd.resid;
 	lockp->state = (cmd.cmd == DLM_CMD_LOCKEX) ? DLM_BLOCKEX : DLM_BLOCKSH;
-	glob.nlock++;	
+	glob.nlock++;
+
+	lockcxt_invoke( cmd.lockid, DLM_LOCKSTAT_BLOCKED, 0 );
       }
     } else {
       i = glob.nlock;
@@ -424,125 +577,23 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
 	glob.nlock++;
   
 	/* invoke callback if found */
-	lockcxt_invoke( cmd.lockid );
+	lockcxt_invoke( cmd.lockid, DLM_LOCKSTAT_ACQUIRED, 1 );
       }
     }
     break;
   case DLM_CMD_RELEASE:
-    /* Lookup lock for this lockid and delete it */
-    lockp = glob.lock;
-    lockstate = 0;
-    for( i = 0; i < glob.nlock; i++, lockp++ ) {
-      if( lockp->lockid == cmd.lockid ) {
-	if( lockp->state == DLM_EX ) lockstate = 1;
-	else if( lockp->state == DLM_SH ) lockstate = 2;
-	dlm_log( LOG_LVL_TRACE, "Releasing lock %"PRIx64" lockstate=%u", cmd.lockid, lockstate );
-	
-	if( i != (glob.nlock - 1) ) glob.lock[i] = glob.lock[glob.nlock - 1];
-	glob.nlock--;
-	break;
-      }
-    }
-
-    lcxt = glob.lockcxt;
-    for( i = 0; i < glob.nlockcxt; i++, lcxt++ ) {
-      if( lcxt->lockid == cmd.lockid ) {
-	if( i != (glob.nlockcxt - 1) ) glob.lockcxt[i] = glob.lockcxt[glob.nlockcxt - 1];
-	glob.nlockcxt--;
-	break;
-      }
-    }
-
-    if( lockstate == 1 ) {
-      int lockacquired = 0;
-      
-      /* 
-       * released an exclusive lock - look for a pending exclusive lock. if found then acquire it.
-       * if not found, then look for a pending shared lock. if found then acquire it.
-       */
-      lockp = glob.lock;
-      for( i = 0; i < glob.nlock; i++, lockp++ ) {
-	if( (lockp->resid == cmd.resid) && (lockp->state == DLM_BLOCKEX) ) {
-	  dlm_log( LOG_LVL_TRACE, "Acquiring blocked exclusive lock %"PRIx64"", lockp->lockid );
-	  lockp->state = DLM_EX;
-
-	  lockcxt_invoke( lockp->lockid );
-	  lockacquired = 1;
-	  break;
-	}
-      }
-
-      if( !lockacquired ) {
-	lockp = glob.lock;
-	for( i = 0; i < glob.nlock; i++, lockp++ ) {
-	  if( (lockp->resid == cmd.resid) && (lockp->state == DLM_BLOCKSH) ) {
-	    dlm_log( LOG_LVL_TRACE, "Acquiring blocked shared lock %"PRIx64"", lockp->lockid );
-	    lockp->state = DLM_SH;
-	    lockcxt_invoke( lockp->lockid );
-	  }
-	}
-      }
-	
-      
-    } else if( lockstate == 2 ) {
-      struct dlm_lock *exlockp;
-      int foundp;
-      
-      /* 
-       * release a shared lock. Look for any other shared locks. If none found then 
-       * look for a pending exclusive lock. If found then acquire it.
-       */
-
-      lockp = glob.lock;
-      foundp = 0;
-      exlockp = NULL;
-      for( i = 0; i < glob.nlock; i++, lockp++ ) {
-	if( lockp->resid == cmd.resid ) {
-	  if( lockp->state == DLM_SH ) {
-	    foundp = 1;
-	  } else if( lockp->state == DLM_BLOCKEX ) {
-	    if( !exlockp ) exlockp = lockp;
-	  }
-	}
-      }
-
-      if( !foundp && exlockp ) {
-	dlm_log( LOG_LVL_TRACE, "Acquring blocked exclusive lock %"PRIx64"", exlockp->lockid );
-	exlockp->state = DLM_EX;
-	lockcxt_invoke( lockp->lockid );
-      }
-      
-    }
-     
-    break;
-  case DLM_CMD_HEARTBEAT:
-    host = host_by_hostid( cmd.hostid );
-    if( host ) {
-      host->seq = cmd.u.hb.seq;
-      host->lasthb = rpc_now();
-    } else {
-      i = glob.nhost;
-      if( i >= DLM_MAX_HOST ) {
-	dlm_log( LOG_LVL_ERROR, "Out of host descriptors" );
-      } else {
-	host = &glob.host[i];
-	host->hostid = cmd.hostid;
-	host->seq = cmd.u.hb.seq;
-	host->lasthb = rpc_now();
-	glob.nhost++;
-      }
-    }
+    release_lock( cmd.lockid );
     break;
   case DLM_CMD_RELEASEALL:
     i = 0;
     while( i < glob.nlock ) {
       if( glob.lock[i].hostid == cmd.hostid ) {
-	if( i != (glob.nlock - 1) ) glob.lock[i] = glob.lock[glob.nlock - 1];
-	glob.nlock--;
+	release_lock( glob.lock[i].lockid );
       } else {
 	i++;
       }
     }
+
     break;
   default:
     dlm_log( LOG_LVL_ERROR, "Invalid command %u", cmd.cmd );
@@ -652,11 +703,35 @@ static int dlm_proc_release( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int dlm_proc_acquire_internal( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint64_t resid, lockid, hostid;
+  int shared;
+  struct xdr_s res;
+  uint8_t resbuf[16];
+  
+  sts = xdr_decode_uint64( &inc->xdr, &resid );
+  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &shared );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &lockid );
+  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &hostid );  
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
+
+  sts = dlm_acquire2( resid, shared, lockid, hostid, &lockid, NULL, NULL );
+  dlm_log( LOG_LVL_TRACE, "dlm_proc_acquire_internal resid=%"PRIx64" %s lockid=%"PRIx64" %s",
+	   resid, shared ? "Shared" : "Exclusive", lockid, sts ? "Failed" : "Success" );
+  
+  xdr_init( &res, resbuf, sizeof(resbuf) );
+  xdr_encode_uint64( &res, lockid );
+  return hrauth_reply( inc, &res, 1 );
+}
+
+
 static struct rpc_proc dlm_procs[] = {
   { 0, dlm_proc_null },
   { 1, dlm_proc_list },
   { 2, dlm_proc_acquire },
-  { 3, dlm_proc_release },    
+  { 3, dlm_proc_release },
+  { 4, dlm_proc_acquire_internal },      
   { 0, NULL }
 };
 
@@ -671,15 +746,34 @@ static struct rpc_program dlm_prog = {
 
 
 static void dlm_subscriber( uint64_t hostid, uint64_t seq, uint32_t msgid, char *buf, int size ) {
-  int i;
+  int i, sts;
   struct dlm_host *host;
+  uint64_t hseq;
+  struct xdr_s xdr;
   
   switch( msgid ) {
   case DLM_MSGID_HEARTBEAT:
-    dlm_log( LOG_LVL_TRACE, "Heartbeat %"PRIx64"", hostid );
+    xdr_init( &xdr, (uint8_t *)buf, size );
+    sts = xdr_decode_uint64( &xdr, &hseq );
+    if( sts ) hseq = 0;    
+    
+    dlm_log( LOG_LVL_TRACE, "Heartbeat %"PRIx64" Seq %"PRIu64"", hostid, hseq );
     host = host_by_hostid( hostid );
     if( host ) {
-      host->seq = seq;
+      if( host->seq != hseq ) {
+	struct raft_cluster cl;
+	if( !raft_cluster_by_clid( glob.raftclid, &cl ) && (cl.state == RAFT_STATE_LEADER) ) {
+	  struct dlm_command cmd;
+	  
+	  dlm_log( LOG_LVL_INFO, "Host %"PRIx64" seq changed %"PRIu64" -> "PRIu64"", hostid, host->seq, hseq );
+	  memset( &cmd, 0, sizeof(cmd) );
+	  cmd.cmd = DLM_CMD_RELEASEALL;
+	  cmd.hostid = hostid;
+	  dlm_command_publish( &cmd );
+	}
+      }
+      
+      host->seq = hseq;
       host->lasthb = rpc_now();
     } else {
       i = glob.nhost;
@@ -707,6 +801,8 @@ int dlm_open( void ) {
     return 0;
   }
 
+  glob.hbseq = time( NULL );
+  
   /* register raft etc */
   rpc_iterator_register( &dlm_iter );
   raft_app_register( &dlm_app );

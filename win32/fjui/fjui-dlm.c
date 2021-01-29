@@ -31,15 +31,15 @@ static LRESULT CALLBACK dlm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		lvc.pszText = "LockID";
 		lvc.cchTextMax = (int)strlen( lvc.pszText );
 		lvc.mask = LVCF_TEXT|LVCF_SUBITEM|LVCF_WIDTH;
-		lvc.cx = 300;
+		lvc.cx = 150;
 		lvc.iSubItem = 0;
 		lvc.iImage = 0;
 		ListView_InsertColumn( h, 0, &lvc );
 
-		lvc.pszText = "HostID";
+		lvc.pszText = "Host";
 		lvc.cchTextMax = (int)strlen( lvc.pszText );
 		lvc.mask = LVCF_TEXT|LVCF_WIDTH|LVCF_SUBITEM;
-		lvc.cx = 80;
+		lvc.cx = 150;
 		lvc.iSubItem = 1;
 		ListView_InsertColumn(h, 1, &lvc );
 
@@ -111,7 +111,7 @@ void fjui_dlm_setinfo( struct fjui_hostinfo *info ) {
 		lvi.iItem = 0x7ffffffe;
 		lvi.iSubItem = 0;
 		lvi.lParam = i;
-		lvi.iImage = 0; // TODO: set image based on state 
+		lvi.iImage = (info->lock[i].state == DLM_EX || info->lock[i].state == DLM_SH) ? 0 : 1; // TODO: set image based on state 
 		sprintf( str, "%"PRIx64"", info->lock[i].lockid );
 		lvi.pszText = str;			
 		idx = (int)SendMessageA( hwnd, LVM_INSERTITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
@@ -119,7 +119,7 @@ void fjui_dlm_setinfo( struct fjui_hostinfo *info ) {
 		lvi.iItem = idx;
 		lvi.mask = LVIF_TEXT;
 		lvi.iSubItem = 1;
-		sprintf( str, "%"PRIx64"", info->lock[i].hostid );
+		if( hostreg_name_by_hostid( info->lock[i].hostid, str ) == NULL ) sprintf( str, "%"PRIx64"", info->lock[i].hostid );
 		lvi.pszText = str;			
 		SendMessageA( hwnd, LVM_SETITEMA, 0, (LPARAM)(const LV_ITEMA *)(&lvi) );
 

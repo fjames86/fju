@@ -519,16 +519,23 @@ static int raft_cluster_quorum( struct raft_cluster *cl ) {
 }
 
 static int raft_highest_storedseq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
-  int sts;
   struct raft_snapshot_info info;
-  
-  sts = raft_command_seq( clid, term, seq );
-  if( sts ) {
-    sts = raft_snapshot_info( clid, &info, NULL );
-    if( sts ) return sts;
-    if( term) *term = info.term;
-    if( seq ) *seq = info.seq;
+  uint64_t ss, tt;
+
+  ss = 0;
+  tt = 0;
+  raft_command_seq( clid, &tt, &ss );
+
+  memset( &info, 0, sizeof(info) );
+  raft_snapshot_info( clid, &info, NULL );
+
+  if( info.seq > ss ) {
+    ss = info.seq;
+    tt = info.term;
   }
+
+  if( term ) *term = tt;
+  if( seq ) *seq = ss;
   
   return 0;  
 }
@@ -1004,8 +1011,6 @@ static void raft_snapsave_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   int i, success, sts;
   uint32_t offset;
   
-  raft_log( LOG_LVL_TRACE, "raft_snapsave_cb %s", res ? "Success" : "Timeout" );
-  
   clid = hcallp->cxt2;
   cl = cl_by_id( clid );
   if( !cl ) {
@@ -1027,11 +1032,13 @@ static void raft_snapsave_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   }
 
   if( !res ) {
-    raft_log( LOG_LVL_TRACE, "raft_snapsave_cb timeout" );
+    raft_log( LOG_LVL_TRACE, "raft_snapsave_cb timeout clid=%"PRIx64" hostid=%"PRIx64"", clid, hostid );
     //raft_call_snapsave( cl, hostid, 0 );
     return;
   }
-
+  
+  raft_log( LOG_LVL_TRACE, "raft_snapsave_cb success clid=%"PRIx64" hostid=%"PRIx64"", clid, hostid );
+  
   
   sts = xdr_decode_boolean( res, &success );
   if( !sts ) sts = xdr_decode_uint64( res, &term );

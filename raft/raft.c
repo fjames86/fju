@@ -1504,6 +1504,10 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
 #else
     log_reset( clog_by_id( clid ) );
 #endif
+
+    /* set appliedseq to the snapshot */
+    cl->appliedseq = seq;
+    raft_cluster_set( cl );
     
     sts = 0;
     offset = 0;

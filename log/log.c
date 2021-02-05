@@ -689,6 +689,19 @@ int log_truncate( struct log_s *log, uint64_t id, uint32_t flags ) {
    * if it is then reduce the hdr->count to point to this index
    */
 
+  if( !id ) {
+    if( flags & LOG_TRUNC_END ) {
+      id = hdr->last_id;
+    } else {
+      /* truncating to entry 0 means delete all entries */
+      hdr->start = 0;
+      hdr->count = 0;
+      hdr->last_id = 0;
+      sts = 0;
+      goto done;
+    }
+  }
+  
   idx = (uint32_t)(id & LOG_INDEX_MASK);
   if( idx >= hdr->lbacount ) goto done;
 
@@ -713,15 +726,21 @@ int log_truncate( struct log_s *log, uint64_t id, uint32_t flags ) {
       e = (struct _entry *)p;
       if( e->magic != LOG_MAGIC ) goto done;
       if( e->id != id ) goto done;
+    
+      ecount = 1 + (e->msglen / LOG_LBASIZE) + (e->msglen % LOG_LBASIZE ? 1 : 0);
+      idx = (idx + ecount) % hdr->lbacount;
+      
+      /* id is correct, truncate to here */
+      hdr->count = (idx - hdr->start + hdr->lbacount) % hdr->lbacount;
+      //hdr->seq++;
+      hdr->last_id = id;
+      
+    } else {
+      /* no prev */
+      hdr->start = 0;
+      hdr->count = 0;
+      hdr->last_id = 0;
     }
-    
-    ecount = 1 + (e->msglen / LOG_LBASIZE) + (e->msglen % LOG_LBASIZE ? 1 : 0);
-    idx = (idx + ecount) % hdr->lbacount;
-    
-    /* id is correct, truncate to here */
-    hdr->count = (idx - hdr->start + hdr->lbacount) % hdr->lbacount;
-    //hdr->seq++;
-    hdr->last_id = id;
   }
 
   sts = 0;

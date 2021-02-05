@@ -25,6 +25,7 @@ int ecdh_main( int argc, char **argv );
 int shamir_main( int argc, char **argv );
 int hostreg_main( int argc, char **argv );
 int dmb_main( int argc, char **argv );
+int fsm_main( int argc, char **argv );
 
 static struct {
   char *name;
@@ -36,12 +37,13 @@ static struct {
     { "raft", raft_main },
     { "reg", reg_main },
     { "cht", cht_main },
-    { "fvm", fvm_main },
+    { "fvm#", fvm_main },
     { "fvmc", fvmc_main },
     { "ecdh", ecdh_main },
     { "shamir", shamir_main },
     { "hostreg", hostreg_main },
-    { "dmb", dmb_main },    
+    { "dmb", dmb_main },
+    { "fsm", fsm_main },        
     { NULL, NULL }	       
 };
 

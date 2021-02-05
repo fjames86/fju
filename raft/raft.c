@@ -1,4 +1,30 @@
 
+/*
+ * Want:
+ * snapshot + log commands
+ * can reload state from snapshot and apply commands (aside: can this be spun off as a separate module? some form of state machine module)
+ * 
+ * Properties we need from the log:
+ * - Each entry has seqno, term and command buffer
+ * - Be able to lookup by entry by seqno 
+ * - Need highest stored seqno 
+ * 
+ */
+
+/*
+ *
+ * What do we want?
+ * - Leadership elections
+ * - Clients submit commands to leader
+ * - Commands are opaque buffers stored in a log
+ * - State may be saved to a file and reloaded later (snapshots)
+ * - 
+ * 
+ * Bugs:
+ * - It is possible for nodes to get behind then never sync up
+ * - 
+ */
+
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif

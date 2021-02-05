@@ -16,6 +16,7 @@ PROJECTS += fvm
 PROJECTS += cht
 PROJECTS += dmb
 PROJECTS += dlm
+PROJECTS += fsm
 PROGRAMS=
 LIBRARIES=
 
@@ -44,6 +45,8 @@ fju_files += fvm/fvmc.c
 fju_files += freg/freg-main.c
 fju_files += hostreg/hostreg-main.c
 fju_files += dmb/dmb-main.c
+fju_files += fsm/fsm-main.c
+
 ${BINDIR}/fju: ${LIBFJU} ${fju_files}
 	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c ${fju_files}
 

@@ -1,30 +1,4 @@
 
-/*
- * Want:
- * snapshot + log commands
- * can reload state from snapshot and apply commands (aside: can this be spun off as a separate module? some form of state machine module)
- * 
- * Properties we need from the log:
- * - Each entry has seqno, term and command buffer
- * - Be able to lookup by entry by seqno 
- * - Need highest stored seqno 
- * 
- */
-
-/*
- *
- * What do we want?
- * - Leadership elections
- * - Clients submit commands to leader
- * - Commands are opaque buffers stored in a log
- * - State may be saved to a file and reloaded later (snapshots)
- * - 
- * 
- * Bugs:
- * - It is possible for nodes to get behind then never sync up
- * - 
- */
-
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -40,17 +14,13 @@
 #include <fju/programs.h>
 #include <fju/log.h>
 #include <fju/sec.h>
+#include <fju/fsm.h>
 
 static log_deflogger(raft_log, "RAFT")
   
 struct raft_file {
   struct raft_prop prop;
   struct raft_cluster cluster[RAFT_MAX_CLUSTER];
-};
-
-struct raft_log {
-  uint64_t clid;
-  struct log_s log;
 };
 
 static struct {
@@ -60,7 +30,6 @@ static struct {
 
   struct raft_prop prop;
   struct raft_cluster cl[RAFT_MAX_CLUSTER];
-  struct raft_log clog[RAFT_MAX_CLUSTER];
   uint32_t ncl;
   struct raft_app *app;
 
@@ -112,6 +81,8 @@ int raft_open( void ) {
     glob.file->prop.rpc_timeout = 200;
     glob.file->prop.snapth = 90;
   }
+
+  fsm_open();
   
   glob.ocount = 1;
   return 0;
@@ -326,170 +297,69 @@ static struct raft_cluster *cl_by_id( uint64_t clid ) {
   }
   return NULL;
 }
-static struct log_s *clog_by_id( uint64_t clid ) {
-  int i, sts;
-  /* return already open log */
-  for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
-    if( glob.clog[i].clid == clid ) return &glob.clog[i].log;
-  }
-
-  /* open a new log descriptor */
-  for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
-    if( glob.clog[i].clid == 0 ) {
-      sts = raft_log_open( clid, &glob.clog[i].log );
-      if( sts ) return NULL;
-      
-      glob.clog[i].clid = clid;      
-      return &glob.clog[i].log;
-    }
-  }
-
-  /* close a log we don't need anymore */
-  for( i = 0; i < RAFT_MAX_CLUSTER; i++ ) {
-    if( !cl_by_id( glob.clog[i].clid ) ) {
-      log_close( &glob.clog[i].log );
-      glob.clog[i].clid = 0;
-      
-      sts = raft_log_open( clid, &glob.clog[i].log );
-      if( sts ) return NULL;
-      
-      glob.clog[i].clid = clid;      
-      return &glob.clog[i].log;
-    }
-  }
-
-  /* failed? "this should never happen" */
-  raft_log( LOG_LVL_ERROR, "Failed to open command log clid=%"PRIx64"", clid ); 
-  return NULL;    
-}
-
-struct raft_cmd_header {
-  uint64_t term;
-  uint64_t seq;
-};
 
 /* read command buffer. returns -1 on error or command buffer length on success */
-static int raft_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, char *buf, int len, uint64_t *entryid ) {
-  int sts, ne;
-  struct log_s *log;
-  struct log_entry entry;
+static int raft_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, char *buf, int len ) {
+  int sts;
   struct log_iov iov[2];
-  struct raft_cmd_header hdr;
-  
-  log = clog_by_id( clid );
-  if( !log ) return -1;
+  uint64_t tt;
 
-  /* 
-   * Read from most recently written entry until we find a matching entry
-   * Note that this is somewhat inefficient but hopefully we won't be looking too far 
-   * back in time very often so it should be acceptable. 
-   * It would be better to have a constant time lookup mapping seq => entry.id but this 
-   * is not easy to do using fjlogs (we'd need a custom logger)
-   */
-  
-  memset( &entry, 0, sizeof(entry) );
-  entry.iov = iov;
-  iov[0].buf = (char *)&hdr;
-  iov[0].len = sizeof(hdr);
+  iov[0].buf = (char *)&tt;
+  iov[0].len = sizeof(tt);
   iov[1].buf = buf;
   iov[1].len = len;
-  entry.niov = 2;
+  sts = fsm_command_load( clid, seq, iov, 2 );
+  if( sts ) return -1;
 
-  /* start at final entry */
-  sts = log_read_end( log, 0, &entry, 1, &ne );
-  if( sts || !ne ) return -1;
-
-  do {  
-    if( hdr.seq == seq ) {
-      /* found it */
-      if( term ) *term = hdr.term;
-      if( entryid ) *entryid = entry.id;
-      return entry.msglen - sizeof(hdr);
-    }
-
-    /* try previous entry, if any */
-    if( entry.prev_id == 0 ) return -1;
-
-    sts = log_read_entry( log, entry.prev_id, &entry );
-    if( sts ) return -1;
-  } while( 1 );
-
-  return -1;  
+  if( term ) *term = tt;
+  return iov[1].len;
 }
 
 /* get highest seq written */
 int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
-  int sts, ne;
-  struct log_s *log;
-  struct log_entry entry;
-  struct log_iov iov[1];
-  struct raft_cmd_header hdr;
-
+  struct fsm_command_info info;
+  int sts;
+  
   if( term ) *term = 0;
   if( seq ) *seq = 0;
 
-  log = clog_by_id( clid );
-  if( !log ) return -1;
-
-  memset( &entry, 0, sizeof(entry) );
-  iov[0].buf = (char *)&hdr;
-  iov[0].len = sizeof(hdr);
-  entry.iov = iov;
-  entry.niov = 1;
-  sts = log_read_end( log, 0, &entry, 1, &ne );
+  sts = fsm_command_info( clid, &info );
   if( sts ) return -1;
-  if( term ) *term = ne ? hdr.term : 0;
-  if( seq ) *seq = ne ? hdr.seq : 0;
-  return 0;    
+
+  sts = raft_command_by_seq( clid, info.seq, term, NULL, 0 );
+  return sts < 0 ? -1 : 0;
 }
 
 /* user function for listing stored commands */
 int raft_command_list( uint64_t clid, struct raft_command_info *clist, int n ) {
-  int sts, i, ne;
-  struct log_s log;
-  struct log_entry entry;
-  struct log_iov iov[1];
-  struct raft_cmd_header hdr;
-  uint64_t id;
-  
-  sts = raft_log_open( clid, &log );
-  if( sts ) return sts;
-  
-  i = 0;
-  id = 0;
-  memset( &entry, 0, sizeof(entry) );
-  entry.iov = iov;
-  entry.niov = 1;
-  iov[0].buf = (char *)&hdr;
-  iov[0].len = sizeof(hdr);
-  while( 1 ) {
-    sts = log_read( &log, id, &entry, 1, &ne );
-    if( sts || !ne ) break;
+  int sts, ncmd, i;
+  struct fsm_command_info *cmdlist;
 
+  ncmd = fsm_command_list( clid, NULL, 0 );
+  if( ncmd <= 0 ) return ncmd;
+
+  cmdlist = malloc( sizeof(*cmdlist) * ncmd );
+  sts = fsm_command_list( clid, cmdlist, ncmd );
+  if( sts < ncmd ) ncmd = sts;
+
+  for( i = 0; i < ncmd; i++ ) {
     if( i < n ) {
-      clist[i].term = hdr.term;
-      clist[i].seq = hdr.seq;
-      clist[i].stored = entry.timestamp;      
-      clist[i].len = entry.msglen - sizeof(hdr);
+      clist[i].seq = cmdlist[i].seq;
+      raft_command_by_seq( clid, clist[i].seq, &clist[i].term, NULL, 0 );
+      clist[i].when = cmdlist[i].when;
+      clist[i].len = cmdlist[i].len;
     }
-    i++;
-    
-    id = entry.id;
   }
 
-  log_close( &log );
-  return i;
+  free( cmdlist );
+  return ncmd;
 }
 
 /* store a command buffer */
 static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *buf, int len ) {
   int sts;
-  struct log_s *log;
-  struct log_entry entry;
   struct log_iov iov[2];
-  struct raft_cmd_header hdr;
   uint64_t nseq;
-  struct log_prop prop;
   
   if( len > RAFT_MAX_COMMAND ) return -1;
   
@@ -497,47 +367,16 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
   sts = raft_command_seq( clid, NULL, &nseq );
   if( sts ) return sts;
 
-  /* disallow writing entries out of order */
-  if( (nseq != 0) && (seq != (nseq + 1)) ) return -1;
+  /* check seqno */
+  if( seq > nseq ) return -1;
 
-  raft_log( LOG_LVL_TRACE, "raft_command_put nseq=%"PRIu64" seq=%"PRIu64"", nseq, seq );
-  
-  log = clog_by_id( clid );
-  if( !log ) return -1;
-
-  hdr.term = term;
-  hdr.seq = seq;
-  
-  memset( &entry, 0, sizeof(entry) );
-  entry.iov = iov;
-  entry.niov = 2;
-  iov[0].buf = (char *)&hdr;
-  iov[0].len = sizeof(hdr);
+  iov[0].buf = (char *)&term;
+  iov[0].len = sizeof(term);
   iov[1].buf = buf;
   iov[1].len = len;
-  entry.flags = LOG_BINARY;
-  log_write( log, &entry );
-  raft_log( LOG_LVL_TRACE, "raft_command_put entry.id=%"PRIx64" entry.prev_id=%"PRIx64"", entry.id, entry.prev_id );
-  
-  /* wait for command to be written to stable storage */
-  log_sync( log, MMF_SYNC_NOW );
+  sts = fsm_command_save( clid, iov, 2, &seq );
 
-  /* check log capacity */
-  log_prop( log, &prop );
-  if( ((100 * prop.count) / prop.lbacount) >= glob.prop.snapth ) {
-    struct raft_app *app;
-    struct raft_cluster *cl;
-    raft_log( LOG_LVL_INFO, "Requesting snapshot clid=%"PRIx64"", clid );
-    cl = cl_by_id( clid );
-    if( cl ) {
-      app = raft_app_by_appid( cl->appid );
-      if( app && app->snapsave ) {
-	app->snapsave( app, cl, term, seq );
-      }
-    }
-  }
-  
-  return 0;
+  return sts;
 }
 
 static int raft_cluster_quorum( struct raft_cluster *cl ) {
@@ -553,7 +392,7 @@ static int raft_highest_storedseq( uint64_t clid, uint64_t *term, uint64_t *seq 
   raft_command_seq( clid, &tt, &ss );
 
   memset( &info, 0, sizeof(info) );
-  raft_snapshot_info( clid, &info, NULL );
+  raft_snapshot_info( clid, &info );
 
   if( info.seq > ss ) {
     ss = info.seq;
@@ -614,7 +453,7 @@ static void raft_apply_commands( struct raft_cluster *cl ) {
     s = cl->appliedseq + 1;
     raft_log( LOG_LVL_INFO, "raft_apply_command seq=%"PRIu64"", s );
       
-    sts = raft_command_by_seq( cl->clid, s, NULL, glob.buf, sizeof(glob.buf), NULL );
+    sts = raft_command_by_seq( cl->clid, s, NULL, glob.buf, sizeof(glob.buf) );
     if( sts < 0 ) {
       raft_log( LOG_LVL_ERROR, "Failed to get command seq=%"PRIu64"", s );
       break;
@@ -758,7 +597,7 @@ static void raft_send_pings( struct raft_cluster *cl ) {
   raft_log( LOG_LVL_TRACE, "raft_send_pings cl=%"PRIx64" nmember %u", cl->clid, cl->nmember );
   
   raft_command_seq( cl->clid, NULL, &seq );
-  sts = raft_snapshot_info( cl->clid, &sinfo, NULL );
+  sts = raft_snapshot_info( cl->clid, &sinfo );
   if( sts ) {
     struct raft_app *app = raft_app_by_appid( cl->appid );
     if( app && app->snapsave ) {
@@ -973,7 +812,7 @@ static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t
     if( cseq == 0 ) return;
   }
 
-  len = raft_command_by_seq( cl->clid, cseq, &cterm, glob.buf, sizeof(glob.buf), NULL );
+  len = raft_command_by_seq( cl->clid, cseq, &cterm, glob.buf, sizeof(glob.buf) );
   if( len < 0 ) {
     raft_log( LOG_LVL_ERROR, "raft_call_putcmd: failed to find command clid=%"PRIx64" seq=%"PRIu64"", cl->clid, cseq );
     
@@ -982,8 +821,8 @@ static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t
   }
 
   pseq = cseq - 1;
-  sts = raft_command_by_seq( cl->clid, pseq, &pterm, NULL, 0, NULL );
-  if( sts ) {
+  sts = raft_command_by_seq( cl->clid, pseq, &pterm, NULL, 0 );
+  if( sts < 0 ) {
     raft_log( LOG_LVL_ERROR, "Failed to find previous entry seq=%"PRIu64"", pseq );
     pseq = 0;
     pterm = 0;
@@ -1097,7 +936,7 @@ static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid, uint32
   char *buf;
   
   raft_log( LOG_LVL_TRACE, "raft_call_snapsave clid=%"PRIx64" hostid=%"PRIx64"", cl->clid, hostid );
-  sts = raft_snapshot_info( cl->clid, &info, NULL );
+  sts = raft_snapshot_info( cl->clid, &info );
   if( sts ) {
     struct raft_app *app;
     raft_log( LOG_LVL_ERROR, "Failed to find local snapshot - requesting snapshot" );
@@ -1108,14 +947,14 @@ static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid, uint32
     return;
   }
 
-  if( offset == info.size ) {
+  if( offset == info.len ) {
     len = 0;
     buf = NULL;
-  } else if( offset > info.size ) {
+  } else if( offset > info.len ) {
     raft_log( LOG_LVL_ERROR, "snapshot offset too high" );
     return;
   } else {
-    len = raft_snapshot_load( cl->clid, offset, glob.buf, sizeof(glob.buf) );
+    len = raft_snapshot_load( cl->clid, glob.buf, sizeof(glob.buf), NULL );
     buf = glob.buf;
   }
 
@@ -1227,7 +1066,7 @@ static int raft_proc_null( struct rpc_inc *inc ) {
 static int raft_proc_append( struct rpc_inc *inc ) {
   int handle, sts, success, i;
   uint64_t clid, hostid, term, commitseq, s, storedseq;
-  uint64_t prevlogterm, prevlogseq, plogterm, entryid, pterm, pseq;
+  uint64_t prevlogterm, prevlogseq, plogterm, pterm, pseq;
   struct raft_cluster *clp;
   struct hrauth_context *hc;
   struct xdr_s res;
@@ -1292,7 +1131,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   
   /* check we have this entry */
   if( prevlogseq > 0 ) {
-    sts = raft_command_by_seq( clid, prevlogseq, &plogterm, NULL, 0, &entryid );
+    sts = raft_command_by_seq( clid, prevlogseq, &plogterm, NULL, 0 );
     if( sts < 0 ) {
       raft_log( LOG_LVL_ERROR, "Failed to find command at seq %"PRIu64"", prevlogseq );
 #if 0
@@ -1303,10 +1142,8 @@ static int raft_proc_append( struct rpc_inc *inc ) {
     }
 
     if( !sts && (plogterm != prevlogterm) ) {
-      struct log_s *logp;
       raft_log( LOG_LVL_WARN, "Conflicting log entry found" );
-      logp = clog_by_id( clid );
-      if( logp ) log_truncate( logp, entryid, 0 );
+      fsm_command_truncate( clid, prevlogseq );
     }
   }
 
@@ -1488,7 +1325,6 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   uint32_t offset;
   struct xdr_s res;
   char resbuf[64];
-  struct log_s *clog;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term );
@@ -1500,13 +1336,8 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   raft_log( LOG_LVL_TRACE, "raft_proc_snapsave clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64" len=%u", clid, term, seq, len );
 
   cl = cl_by_id( clid );
-  clog = clog_by_id( clid );
   if( !cl ) {
     raft_log( LOG_LVL_ERROR, "Unknown cluster %"PRIx64"", clid );
-    goto bad;
-  }
-  if( !clog ) {
-    raft_log( LOG_LVL_ERROR, "Unknown cluster log" );
     goto bad;
   }
   
@@ -1530,18 +1361,6 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
 	mmf_close( &mmf );
       }
     }
-
-    /* truncate log to here */
-    raft_log( LOG_LVL_TRACE, "Truncating log" );
-#if 0
-    sts = raft_command_by_seq( clid, seq, &bterm, NULL, 0, &entryid );
-    if( !sts && entryid ) log_truncate( clog, entryid, LOG_TRUNC_END );
-    else log_reset( clog );
-#else
-    if( seq > cl->appliedseq ) {
-      log_reset( clog );
-    }
-#endif
 
     /* set appliedseq to the snapshot */
     cl->appliedseq = seq;
@@ -1746,11 +1565,6 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
   raft_prop( &glob.prop );
   glob.ncl = raft_cluster_list( glob.cl, RAFT_MAX_CLUSTER );
 
-  /* open all logs */
-  for( i = 0; i < glob.ncl; i++ ) {
-    clog_by_id( glob.cl[i].clid );
-  }
-  
   /* ensure connections registered */
   for( i = 0; i < glob.ncl; i++ ) {
     for( j = 0; j < glob.cl[i].nmember; j++ ) {
@@ -2007,108 +1821,51 @@ int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
 /* ---- snapshots --- */
 
 int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t offset, char *buf, int len ) {
-  int sts;
-  struct mmf_s mmf;
-  char clstr[64];
-  char *path;
-  struct raft_snapshot_info info;
-  
-  sprintf( clstr, "%"PRIx64"-snapshot.dat.new", clid );
-  path = mmf_default_path( "raft", clstr, NULL );
+
   if( offset == 0 ) {
-    /* start new file */
-    mmf_delete_file( path );
-  }
-
-  sts = mmf_open2( path, &mmf, offset == 0 ? 0 : MMF_OPEN_EXISTING );
-  if( sts ) return sts;
-
-  /* offset==0 means new file so write header */
-  if( offset == 0 ) {
-    memset( &info, 0, sizeof(info) );
-    info.magic = RAFT_SNAPSHOT_MAGIC;
-    info.version = RAFT_SNAPSHOT_VERSION;
-    info.clid = clid;
-    info.term = term;
-    info.seq = seq;
-    mmf_write( &mmf, (char *)&info, sizeof(info), 0 );
+    fsm_snapshot_save( clid, seq, (char *)&term, sizeof(term), 0 );    
   }
   
-  if( len > 0 ) {
-    offset += sizeof(info);
-    mmf_write( &mmf, buf, len, offset );
-
-    mmf_read( &mmf, (char *)&info, sizeof(info), 0 );
-    info.size += len;
-    mmf_write( &mmf, (char *)&info, sizeof(info), 0 );    
-  } else if( len == 0 ) {
-    /* final block - mark as complete */
-    mmf_read( &mmf, (char *)&info, sizeof(info), 0 );
-    info.complete = 1;
-    mmf_write( &mmf, (char *)&info, sizeof(info), 0 );
-  }
+  fsm_snapshot_save( clid, seq, buf, len, offset + sizeof(term) );
   
-  mmf_close( &mmf );
-  
-  if( len == 0 ) {
-    /* this was final block - rename over the top of the old snapshot file */
-    char clstr2[64];
-    struct log_s *log;
-    struct log_entry entry;
-    int ne;
-    
-    sprintf( clstr2, "%"PRIx64"-snapshot.dat", clid );
-    mmf_rename( mmf_default_path( "raft", NULL ), clstr, clstr2 );
-
-    /* truncate log to free space */
-    log = clog_by_id( clid );
-    if( log ) {
-      memset( &entry, 0, sizeof(entry) );
-      sts = log_read_end( log, 0, &entry, 1, &ne );
-      if( !sts && ne ) log_truncate( log, entry.id, LOG_TRUNC_END );
-    }
-  }
-
   return 0;
 }
 
-int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info, struct raft_snapshot_info *newinfo ) {
+int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info ) {
+  struct log_iov iov[1];
+  uint64_t term;
+  struct fsm_snapshot_info sinfo;
   int sts;
-  struct mmf_s mmf;
-  char clstr[64];
+  
+  iov[0].buf = (char *)&term;
+  iov[0].len = sizeof(term);
+
+  sts = fsm_snapshot_load( clid, iov, 1, &sinfo );
+  if( sts ) return sts;
+
+  info->term = term;
+  info->seq = sinfo.seq;
+  info->len = sinfo.len - sizeof(term);
+  
+  return 0;
+}
+
+int raft_snapshot_load( uint64_t clid, char *buf, int len, struct raft_snapshot_info *info ) {
+  int sts;
+  struct log_iov iov[2];
+  uint64_t term;
 
   if( info ) {
-    sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
-    sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
-    if( sts ) return sts;
-    mmf_read( &mmf, (char *)info, sizeof(*info), 0 );
-    mmf_close( &mmf );
+    sts = raft_snapshot_info( clid, info );
+    if( sts < 0 ) return -1;
   }
   
-  if( newinfo ) {
-    sprintf( clstr, "%"PRIx64"-snapshot.dat.new", clid );
-    sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
-    if( sts ) return sts;    
-    mmf_read( &mmf, (char *)newinfo, sizeof(*newinfo), 0 );    
-    mmf_close( &mmf );    
-  }
+  iov[0].buf = (char *)&term;
+  iov[0].len = sizeof(term);
+  iov[1].buf = buf;
+  iov[1].len = len;
 
-  
-  return 0;
-}
-
-int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len ) {
-  int sts;
-  char clstr[64];
-  struct mmf_s mmf;
-
-  sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
-  sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
-  if( sts ) return sts;
-
-  sts = mmf_read( &mmf, buf, len, offset + sizeof(struct raft_snapshot_info) );
-  
-  mmf_close( &mmf );
+  sts = fsm_snapshot_load( clid, iov, 2, NULL );
   return sts;
 }
 
@@ -2211,9 +1968,6 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
   }
 
   if( breset ) {
-    struct log_s *logp;
-    char clstr[64];
-    char *path;
     
     clp->term = 1;
     clp->commitseq = 0;
@@ -2223,13 +1977,10 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
     clp->voteid = 0;
     
     /* delete log entries */
-    logp = clog_by_id( clp->clid );
-    if( logp ) log_reset( logp );
+    fsm_command_truncate( clid, 0 );
     
     /* delete snapshot */
-    sprintf( clstr, "%"PRIx64"-snapshot.dat.new", cl->clid );
-    path = mmf_default_path( "raft", clstr, NULL );
-    mmf_delete_file( path );
+    // TODO? 
   }
   
   raft_cluster_set( clp );
@@ -2238,59 +1989,34 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
 
 
 int raft_replay( uint64_t clid ) {
-  int sts, ne;
+  int sts;
   struct raft_cluster *cl;
   struct raft_app *app;
-  struct mmf_s mmf;
-  char clstr[64];  
-  uint64_t seq;
-  struct log_s *log;
-  struct log_entry entry;
-  struct log_iov iov[2];
-  struct raft_cmd_header hdr;
+  uint64_t seq, term;
+  struct raft_snapshot_info info;
   
   cl = cl_by_id( clid );
   if( !cl ) return -1;
-  log = clog_by_id( clid );
-  if( !log ) return -1;
 
   app = raft_app_by_appid( cl->appid );
   if( !app ) return -1;
 
   raft_log( LOG_LVL_TRACE, "Start Replay %"PRIx64"", clid );
-  
-  seq = 0;
-  sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
-  
-  sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
-  if( !sts ) {
-    sts = mmf_remap( &mmf, mmf.fsize );
-    if( app->snapload ) app->snapload( app, cl, (char *)mmf.file + sizeof(struct raft_snapshot_info), mmf.fsize - sizeof(struct raft_snapshot_info) );
 
-    seq = ((struct raft_snapshot_info *)mmf.file)->seq;
-    
-    mmf_close( &mmf );
+  seq = 0;
+  sts = raft_snapshot_load( clid, glob.buf, sizeof(glob.buf), &info );
+  if( !sts ) {
+    if( app->snapload ) app->snapload( app, cl, glob.buf, sts );
+    seq = info.seq;
   }
 
-
-  memset( &entry, 0, sizeof(entry) );
-  entry.iov = iov;
-  iov[0].buf = (char *)&hdr;
-  iov[0].len = sizeof(hdr);
-  iov[1].buf = glob.buf;
-  iov[1].len = sizeof(glob.buf);
-  entry.niov = 2;
-
-  /* start at first entry */
-  sts = log_read( log, 0, &entry, 1, &ne );
-  if( sts || !ne ) return 0;
-  while( hdr.seq <= cl->commitseq ) {
-    if( hdr.seq > seq ) {
-      app->command( app, cl, hdr.seq, glob.buf, entry.msglen - sizeof(hdr) );
-    }
+  while( 1 ) {
+    sts = raft_command_by_seq( clid, seq, &term, glob.buf, sizeof(glob.buf) );
+    if( sts < 0 ) break;
     
-    sts = log_read( log, entry.id, &entry, 1, &ne );
-    if( sts || !ne ) break;  
+    app->command( app, cl, seq, glob.buf, sts );
+    
+    seq++;
   }
 
   raft_log( LOG_LVL_TRACE, "End Replay %"PRIx64"", clid );

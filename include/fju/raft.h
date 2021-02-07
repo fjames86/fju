@@ -91,7 +91,7 @@ int raft_log_open( uint64_t clid, struct log_s *log );
 struct raft_command_info {
   uint64_t term;  /* term when command issued */
   uint64_t seq;   /* command seqno */
-  uint64_t stored; /* when command stored */
+  uint64_t when; /* when command stored */
   uint32_t len;  /* size of command buffer */
 };
 int raft_command_list( uint64_t clid, struct raft_command_info *clist, int n );
@@ -137,21 +137,14 @@ int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
 int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq );
 
 struct raft_snapshot_info {
-  uint32_t magic;
-#define RAFT_SNAPSHOT_MAGIC 0x2f55b097
-  uint32_t version;
-#define RAFT_SNAPSHOT_VERSION 1
-  uint64_t clid;
-  uint64_t term;
   uint64_t seq;
-  uint32_t complete;
-  uint32_t size;
-  
-  uint32_t spare[6];  
+  uint64_t when;
+  uint32_t len;
+  uint64_t term;
 };
 int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t offset, char *buf, int len );
-int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info, struct raft_snapshot_info *newinfo );
-int raft_snapshot_load( uint64_t clid, uint32_t offset, char *buf, int len );
+int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info );
+int raft_snapshot_load( uint64_t clid, char *buf, int len, struct raft_snapshot_info *info );
 
 int raft_change_config( uint64_t clid, uint64_t *members, int nmember, char *cookie );
 

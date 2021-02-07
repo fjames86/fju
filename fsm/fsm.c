@@ -222,6 +222,38 @@ int fsm_command_load( uint64_t fsmid, uint64_t seq, struct log_iov *iov, int nio
   return -1;
 }
 
+int fsm_command_info( uint64_t fsmid, struct fsm_command_info *info ) {
+  int sts;
+  struct fsm_s *fsm;
+  struct log_prop prop;
+  uint64_t ss;
+  struct log_iov iov[1];
+  struct log_entry entry;
+  
+  fsm = fsm_by_id( fsmid );
+  if( !fsm ) return -1;
+		      
+  log_prop( &fsm->log, &prop );
+  if( prop.last_id ) {
+    memset( &entry, 0, sizeof(entry) );
+    entry.iov = iov;
+    entry.niov = 1;
+    iov[0].buf = (char *)&ss;
+    iov[0].len = sizeof(ss);
+    sts = log_read_entry( &fsm->log, prop.last_id, &entry );
+    if( sts ) return -1;
+    info->seq = ss;
+    info->when = entry.timestamp;
+    info->len = entry.msglen;
+  } else {
+    info->seq = 0;
+    info->when = 0;
+    info->len = 0;    
+  }
+
+  return 0;
+}
+
 int fsm_command_list( uint64_t fsmid, struct fsm_command_info *clist, int n ) {
   struct log_entry entry;
   struct log_iov iov[1];

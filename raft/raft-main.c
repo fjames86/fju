@@ -118,7 +118,7 @@ int raft_main( int argc, char **argv ) {
 	printf( "  Command Term %"PRIu64" Seq %"PRIu64" Len %u When %s\n",
 		cmdlist[i].term, cmdlist[i].seq,
 		cmdlist[i].len,
-		sec_timestr( cmdlist[i].stored, timestr ) );
+		sec_timestr( cmdlist[i].when, timestr ) );
       }
       
     } else if( strcmp( argv[i], "add" ) == 0 ) {
@@ -370,16 +370,13 @@ static void print_cluster( struct raft_cluster *cluster ) {
   {
     struct raft_snapshot_info info;
     int sts;
-    sts = raft_snapshot_info( cluster->clid, &info, NULL );
+    sts = raft_snapshot_info( cluster->clid, &info );
     if( !sts ) {
-      printf( "    Snapshot Size=%u Term=%"PRIu64" Seq=%"PRIu64"\n", info.size, info.term, info.seq );
-    }
-    sts = raft_snapshot_info( cluster->clid, NULL, &info );
-    if( !sts ) {
-      printf( "    Snapshot Partial Term=%"PRIu64" Seq=%"PRIu64" Complete=%s\n", info.term, info.seq, info.complete ? "True" : "False" );
+      printf( "    Snapshot Size=%u Term=%"PRIu64" Seq=%"PRIu64"\n", info.len, info.term, info.seq );
     }
   }
 
+ 
 #if 0
   {
     struct raft_command_info *clist;

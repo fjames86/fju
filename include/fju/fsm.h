@@ -24,6 +24,7 @@ struct fsm_command_info {
   uint32_t len;
 };
 int fsm_command_list( uint64_t fsmid, struct fsm_command_info *clist, int n );
+int fsm_command_info( uint64_t fsmid, struct fsm_command_info *info );
 
 int fsm_command_truncate( uint64_t fsmid, uint64_t seq );
 

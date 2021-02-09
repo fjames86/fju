@@ -57,9 +57,8 @@ struct raft_prop {
   uint16_t term_low;
   uint16_t term_high;
   uint32_t rpc_timeout;
-  uint32_t snapth; /* snapshot threshold: take snapshot when log exceeds this percentage */
   
-  uint32_t spare[7];
+  uint32_t spare[8];
 };
 
 int raft_open( void );
@@ -72,7 +71,6 @@ int raft_prop( struct raft_prop *prop );
 #define RAFT_PROP_TERM_HIGH    0x0008
 #define RAFT_PROP_RPC_TIMEOUT  0x0010
 #define RAFT_PROP_FLAGS        0x0020
-#define RAFT_PROP_SNAPTH       0x0040
 int raft_prop_set( uint32_t mask, struct raft_prop *prop );
 
 /* database functions */
@@ -83,9 +81,6 @@ uint64_t raft_clid_by_appid( uint32_t appid );
 uint64_t raft_clid_by_cookie( char *cookie );
 int raft_cluster_set( struct raft_cluster *cl );
 int raft_cluster_rem( uint64_t clid );
-
-/* open command log */
-int raft_log_open( uint64_t clid, struct log_s *log );
 
 /* list info about the commands in the log */
 struct raft_command_info {

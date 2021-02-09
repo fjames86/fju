@@ -36,6 +36,8 @@ static struct {
   char buf[RAFT_MAX_COMMAND];
 } glob;
 
+static int raft_highest_storedseq( uint64_t clid, uint64_t *term, uint64_t *seq );
+
 static uint64_t raft_term_timeout( void ) {
   return rpc_now() + glob.prop.term_low +
     (sec_rand_uint32() % (glob.prop.term_high - glob.prop.term_low));
@@ -79,7 +81,6 @@ int raft_open( void ) {
     glob.file->prop.term_low = 3000;
     glob.file->prop.term_high = 8000;
     glob.file->prop.rpc_timeout = 200;
-    glob.file->prop.snapth = 90;
   }
 
   fsm_open();
@@ -124,9 +125,6 @@ int raft_prop_set( uint32_t mask, struct raft_prop *prop ) {
   }
   if( mask & RAFT_PROP_RPC_TIMEOUT ) {
     glob.file->prop.rpc_timeout = prop->rpc_timeout;
-  }
-  if( mask & RAFT_PROP_SNAPTH ) {
-    glob.file->prop.snapth = prop->snapth;
   }
   raft_unlock();
   return 0;
@@ -263,17 +261,6 @@ int raft_cluster_rem( uint64_t clid ) {
   return sts;    
 }
 
-int raft_log_open( uint64_t clid, struct log_s *log ) {
-  char clstr[64];
-  struct log_opts opts;
-  
-  sprintf( clstr, "%"PRIx64".log", clid );
-  memset( &opts, 0, sizeof(opts) );
-  opts.mask = LOG_OPT_COOKIE|LOG_OPT_FLAGS;
-  strcpy( opts.cookie, "raft" );
-  opts.flags = LOG_FLAG_FIXED;
-  return log_open( mmf_default_path( "raft", clstr, NULL ), &opts, log );
-}
 
 /* ------------ rpc -------------------- */
 
@@ -361,11 +348,14 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
   if( len > RAFT_MAX_COMMAND ) return -1;
   
   /* get highest seq written */
-  sts = raft_command_seq( clid, NULL, &nseq );
+  sts = raft_highest_storedseq( clid, NULL, &nseq );
   if( sts ) return sts;
 
-  /* check seqno */
-  if( seq > nseq ) return -1;
+  /* check seqno is next */
+  if( seq != (nseq + 1) ) {
+    raft_log( LOG_LVL_ERROR, "Attempt to store out of sequence command %"PRIu64" != %"PRIu64"", seq, nseq );
+    return -1;
+  }
 
   iov[0].buf = (char *)&term;
   iov[0].len = sizeof(term);

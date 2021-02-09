@@ -21,7 +21,7 @@
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
-	    "          set prop [elec_low=*] [elec_high=*] [term_low=*] [term_high=*] [rpc_timeout=*] [snapth=*]\n" 
+	    "          set prop [elec_low=*] [elec_high=*] [term_low=*] [term_high=*] [rpc_timeout=*]\n" 
             "          add cluster [clid=ID] [appid=APPID] [witness=true|false] [cookie=*]\n"
             "          set cluster ID [appid=APPID] [witness=true|false] [cookie=*]\n"
             "          rem cluster ID\n"
@@ -297,12 +297,6 @@ int raft_main( int argc, char **argv ) {
 		     prop.rpc_timeout = strtoul( argval, NULL, 10 );
 		     mask |= RAFT_PROP_RPC_TIMEOUT;
 		   }
-		 } else if( strcmp( argname, "snapth" ) == 0 ) {
-		   if( argval ) {
-		     prop.snapth = strtoul( argval, NULL, 10 );
-		     if( prop.snapth > 100 ) prop.snapth = 100;
-		     mask |= RAFT_PROP_SNAPTH;
-		   }
                  } else {
 		   printf( "Unknown field name %s\n", argname ); usage( NULL );
 		 }
@@ -319,11 +313,9 @@ int raft_main( int argc, char **argv ) {
 
 static void print_cluster( struct raft_cluster *cluster ) {
   char timestr[128], namestr[HOSTREG_MAX_NAME];
-  int j, sts;
+  int j;
   uint64_t cseq;
-  struct log_prop prop;
-  struct log_s log;
-  
+
   raft_command_seq( cluster->clid, NULL, &cseq );
   
   printf( "Cluster ID=%"PRIx64" State=%s Term=%"PRIu64" Leader=%"PRIx64" (%s)\n"
@@ -341,13 +333,6 @@ static void print_cluster( struct raft_cluster *cluster ) {
 	  cluster->voteid,
 	  cluster->cookie );
 
-  sts = raft_log_open( cluster->clid, &log );
-  if( !sts ) {
-    log_prop( &log, &prop );
-    printf( "    Command Log: %u/%u (%u%%)\n", prop.count, prop.lbacount, (100 * prop.count) / prop.lbacount );
-    log_close( &log );
-  }
-  
   for( j = 0; j < cluster->nmember; j++ ) {
     if( cluster->member[j].lastseen ) {
       sec_timestr( cluster->member[j].lastseen, timestr );
@@ -435,6 +420,5 @@ static void cmd_prop( void ) {
      printf( "Timeouts: election=[%d, %d] term=[%d, %d]\n",
 	     prop.elec_low, prop.elec_high, prop.term_low, prop.term_high );
      printf( "Cluster=%u/%u\n", prop.count, RAFT_MAX_CLUSTER );
-     printf( "Snapshot threshold: %u%%\n", prop.snapth );
 }
 

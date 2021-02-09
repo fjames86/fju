@@ -613,12 +613,15 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
 
 static void dlm_snapsave( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq ) {
   int sts;
-  sts = raft_snapshot_save( cl->clid, term, seq, 0, (char *)&glob.nlock, 4 );
-  if( sts ) dlm_log( LOG_LVL_ERROR, "Snapshot save failed offset=0" );
-  sts = raft_snapshot_save( cl->clid, term, seq, 4, (char *)glob.lock, sizeof(glob.lock) );
-  if( sts ) dlm_log( LOG_LVL_ERROR, "Snapshot save failed offset=4" );
-  sts = raft_snapshot_save( cl->clid, term, seq, -1, NULL, 0 );
-  if( sts ) dlm_log( LOG_LVL_ERROR, "Snapshot save failed final block" );
+  struct log_iov iov[2];
+
+  iov[0].buf = (char *)&glob.nlock;
+  iov[0].len = 4;
+  iov[1].buf = (char *)glob.lock;
+  iov[1].len = sizeof(glob.lock);
+  sts = raft_snapshot_save( cl->clid, term, seq, iov, 2 );
+  if( sts ) dlm_log( LOG_LVL_ERROR, "Snapshot save failed" );
+
 }
 
 static void dlm_snapload( struct raft_app *app, struct raft_cluster *cl, char *buf, int len ) {

@@ -234,6 +234,8 @@ int raft_cluster_set( struct raft_cluster *cl ) {
   glob.file->prop.count++;
   glob.file->prop.seq++;
   sts = 0;
+
+  fsm_create( NULL, &cl->clid );
   
  done:
   raft_unlock();
@@ -250,12 +252,7 @@ int raft_cluster_rem( uint64_t clid ) {
     if( glob.file->cluster[i].clid == clid ) {
       if( i != (glob.file->prop.count - 1) ) glob.file->cluster[i] = glob.file->cluster[glob.file->prop.count - 1];
 
-      /* delete the command log */
-      {
-	char clstr[64];
-	sprintf( clstr, "%"PRIx64".log", clid );
-	mmf_delete_file( mmf_default_path( "raft", clstr, NULL ) );
-      }
+      fsm_delete( clid );
       
       glob.file->prop.count--;
       sts = 0;
@@ -287,7 +284,7 @@ static void raft_set_iter_timeout( void );
 static struct raft_app *raft_app_by_appid( uint32_t appid );
 static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t cseq );
 static void raft_apply_commands( struct raft_cluster *cl );
-static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid, uint32_t offset );
+static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid );
 static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len );
 
 static struct raft_cluster *cl_by_id( uint64_t clid ) {
@@ -618,7 +615,7 @@ static void raft_send_pings( struct raft_cluster *cl ) {
        */
       if( !sts && (sinfo.seq > cl->member[i].storedseq) ) {
 	raft_log( LOG_LVL_INFO, "Member %"PRIx64" storedseq %"PRIu64" older than our snapshot %"PRIu64" - sending snapshot", cl->member[i].hostid, cl->member[i].storedseq, sinfo.seq );
-	raft_call_snapsave( cl, cl->member[i].hostid, 0 );
+	raft_call_snapsave( cl, cl->member[i].hostid );
       } else {      
 	raft_call_putcmd( cl, cl->member[i].hostid, 0 );
       }
@@ -787,7 +784,7 @@ static void raft_putcmd_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
 
   /* send next command if any */
   if( sendsnap ) {
-    raft_call_snapsave( cl, hostid, 0 );
+    raft_call_snapsave( cl, hostid );
   } else {
     raft_call_putcmd( cl, hostid, 0 );
   }
@@ -874,7 +871,6 @@ static void raft_snapsave_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   struct raft_cluster *cl;
   struct raft_member *mp;
   int i, success, sts;
-  uint32_t offset;
   
   clid = hcallp->cxt2;
   cl = cl_by_id( clid );
@@ -898,7 +894,6 @@ static void raft_snapsave_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
 
   if( !res ) {
     raft_log( LOG_LVL_TRACE, "raft_snapsave_cb timeout clid=%"PRIx64" hostid=%"PRIx64"", clid, hostid );
-    //raft_call_snapsave( cl, hostid, 0 );
     return;
   }
   
@@ -907,7 +902,6 @@ static void raft_snapsave_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   
   sts = xdr_decode_boolean( res, &success );
   if( !sts ) sts = xdr_decode_uint64( res, &term );
-  if( !sts ) sts = xdr_decode_uint32( res, &offset );
   if( sts ) {
     raft_log( LOG_LVL_ERROR, "Xdr decode error" );
     return;
@@ -921,13 +915,10 @@ static void raft_snapsave_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
     return;
   }
   
-  /* send next block of snapshot, if any */
-  if( offset > 0 ) raft_call_snapsave( cl, hostid, offset );
-  
   return;  
 }
 
-static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid, uint32_t offset ) {
+static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid ) {
   struct hrauth_call hcall;
   struct xdr_s args[2];
   char argbuf[256];
@@ -947,22 +938,13 @@ static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid, uint32
     return;
   }
 
-  if( offset == info.len ) {
-    len = 0;
-    buf = NULL;
-  } else if( offset > info.len ) {
-    raft_log( LOG_LVL_ERROR, "snapshot offset too high" );
-    return;
-  } else {
-    len = raft_snapshot_load( cl->clid, glob.buf, sizeof(glob.buf), NULL );
-    buf = glob.buf;
-  }
+  len = raft_snapshot_load( cl->clid, glob.buf, sizeof(glob.buf), NULL );
+  buf = glob.buf;
 
   xdr_init( &args[0], (uint8_t *)argbuf, sizeof(argbuf) );
   xdr_encode_uint64( &args[0], cl->clid );
   xdr_encode_uint64( &args[0], info.term );
   xdr_encode_uint64( &args[0], info.seq );
-  xdr_encode_uint32( &args[0], offset );
   xdr_encode_uint32( &args[0], len );
   xdr_init( &args[1], (uint8_t *)buf, len );
   args[1].offset = len;
@@ -1322,14 +1304,13 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
   uint64_t clid, term, seq;
   //uint64_t bterm, entryid;
   struct raft_cluster *cl;
-  uint32_t offset;
   struct xdr_s res;
   char resbuf[64];
+  struct log_iov iov;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &term );
   if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &seq );
-  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &offset );  
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
 
@@ -1340,26 +1321,17 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
     raft_log( LOG_LVL_ERROR, "Unknown cluster %"PRIx64"", clid );
     goto bad;
   }
+
+  iov.buf = bufp;
+  iov.len = len;
+  sts = raft_snapshot_save( clid, term, seq, &iov, 1 );
   
-  sts = raft_snapshot_save( clid, term, seq, offset, bufp, len );
-  if( len == 0 ) {
-    struct raft_app *app;
-    
+  {
+    struct raft_app *app;    
     raft_log( LOG_LVL_INFO, "reloading state from snapshot" );
     app = raft_app_by_appid( cl->appid );
     if( app && app->snapload ) {
-      struct mmf_s mmf;
-      char clstr[64];
-      sprintf( clstr, "%"PRIx64"-snapshot.dat", clid );
-      
-      sts = mmf_open2( mmf_default_path( "raft", clstr, NULL ), &mmf, MMF_OPEN_EXISTING );
-      if( sts ) {
-	raft_log( LOG_LVL_ERROR, "Failed to map snapshot %"PRIx64"", clid );
-      } else {
-	sts = mmf_remap( &mmf, mmf.fsize );
-	app->snapload( app, cl, (char *)mmf.file + sizeof(struct raft_snapshot_info), mmf.fsize - sizeof(struct raft_snapshot_info) );
-	mmf_close( &mmf );
-      }
+      app->snapload( app, cl, bufp, len );
     }
 
     /* set appliedseq to the snapshot */
@@ -1367,22 +1339,17 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
     raft_cluster_set( cl );
     
     sts = 0;
-    offset = 0;
-  } else {
-    offset += len;
   }
 
   xdr_init( &res, (uint8_t *)resbuf, sizeof(resbuf) );
   xdr_encode_boolean( &res, sts ? 0 : 1 );
   xdr_encode_uint64( &res, cl->term );
-  xdr_encode_uint32( &res, offset );
   return hrauth_reply( inc, &res, 1 );
 
  bad:
   xdr_init( &res, (uint8_t *)resbuf, sizeof(resbuf) );
   xdr_encode_boolean( &res, 0 );
   xdr_encode_uint64( &res, 0 );
-  xdr_encode_uint32( &res, 0 );
   return hrauth_reply( inc, &res, 1 );
 }
 
@@ -1820,13 +1787,19 @@ int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
 
 /* ---- snapshots --- */
 
-int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, uint32_t offset, char *buf, int len ) {
-
-  if( offset == 0 ) {
-    fsm_snapshot_save( clid, seq, (char *)&term, sizeof(term), 0 );    
-  }
+int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, struct log_iov *iov, int niov ) {
+  int offset;
+  int i;
   
-  fsm_snapshot_save( clid, seq, buf, len, offset + sizeof(term) );
+  fsm_snapshot_save( clid, seq, (char *)&term, sizeof(term), 0 );    
+
+  offset = sizeof(term);
+  for( i = 0; i < niov; i++ ) {
+    fsm_snapshot_save( clid, seq, iov[i].buf, iov[i].len, offset );
+    offset += iov[i].len;
+  }
+
+  fsm_snapshot_save( clid, seq, NULL, 0, -1 );
   
   return 0;
 }
@@ -1846,6 +1819,7 @@ int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info ) {
   info->term = term;
   info->seq = sinfo.seq;
   info->len = sinfo.len - sizeof(term);
+  info->when = sinfo.when;
   
   return 0;
 }
@@ -1977,10 +1951,7 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
     clp->voteid = 0;
     
     /* delete log entries */
-    fsm_command_truncate( clid, 0 );
-    
-    /* delete snapshot */
-    // TODO? 
+    fsm_command_truncate( clid, 0 );    
   }
   
   raft_cluster_set( clp );

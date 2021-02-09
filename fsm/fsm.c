@@ -133,12 +133,21 @@ int fsm_create( char *name, uint64_t *fsmidp ) {
 int fsm_delete( uint64_t fsmid ) {
   int i;
   struct fsm_s *fsm;
+  char idstr[64];
+  
   for( i = 0, fsm = glob.fsm; i < glob.nfsm; i++, fsm++ ) {
     if( fsm->fsmid == fsmid ) {
       log_close( &fsm->log );      
       mmf_delete_file( fsm_logpath( fsmid ) );
       freg_rem( NULL, glob.rootid, fsm->fregid );
 
+      /* delete snapshot files */
+      sprintf( idstr, "%"PRIx64"-snapshot.dat.new", fsmid );
+      mmf_delete_file( mmf_default_path( "fsm", idstr, NULL ) );
+      
+      sprintf( idstr, "%"PRIx64"-snapshot.dat", fsmid );
+      mmf_delete_file( mmf_default_path( "fsm", idstr, NULL ) );
+      
       if( i != (glob.nfsm - 1) ) glob.fsm[i] = glob.fsm[glob.nfsm - 1];
       glob.nfsm--;
       
@@ -324,7 +333,8 @@ struct snapshot_header {
   uint64_t seq;
   uint32_t len;
   int complete;
-  uint32_t spare[7];
+  uint64_t when;
+  uint32_t spare[5];
 };
 
 int fsm_snapshot_save( uint64_t fsmid, uint64_t seq, char *buf, int len, int offset ) {
@@ -366,6 +376,7 @@ int fsm_snapshot_save( uint64_t fsmid, uint64_t seq, char *buf, int len, int off
     /* final block - mark as complete */
     mmf_read( &mmf, (char *)&hdr, sizeof(hdr), 0 );
     hdr.complete = 1;
+    hdr.when = time( NULL );
     mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
   }
   
@@ -407,6 +418,7 @@ int fsm_snapshot_load( uint64_t fsmid, struct log_iov *iov, int niov, struct fsm
   if( info ) {
     info->seq = hdr.seq;
     info->len = hdr.len;
+    info->when = hdr.when;
   }
   
   offset = sizeof(hdr);

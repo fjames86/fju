@@ -2,6 +2,7 @@
 #include <fju/raft.h>
 #include <fju/log.h>
 #include <inttypes.h>
+#include <string.h>
 
 /*
  * Example raft application.
@@ -18,10 +19,13 @@ static void rex_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
 }
 
 static void rex_snapsave( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq ) {
+  struct log_iov iov;
+  
   log_writef( NULL, LOG_LVL_INFO, "rex_snapshot clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64"", cl->clid, term, seq );
 
-  raft_snapshot_save( cl->clid, term, seq, 0, "hello from rex", 15 );
-  raft_snapshot_save( cl->clid, term, seq, 15, NULL, 0 );
+  iov.buf = "hello from rex";
+  iov.len = strlen(iov.buf);
+  raft_snapshot_save( cl->clid, term, seq, &iov, 1 );
 }
 
 static void rex_snapload( struct raft_app *app, struct raft_cluster *cl, char *buf, int len ) {

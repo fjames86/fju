@@ -33,6 +33,7 @@ int fsm_snapshot_save( uint64_t fsmid, uint64_t seq, char *buf, int len, int off
 struct fsm_snapshot_info {
   uint64_t seq;
   uint32_t len;
+  uint64_t when;
 };
 int fsm_snapshot_load( uint64_t fsmid, struct log_iov *iov, int niov, struct fsm_snapshot_info *info );
 

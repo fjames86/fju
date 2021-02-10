@@ -3,6 +3,7 @@
 #define FSM_H
 
 #include <stdint.h>
+#include <fju/log.h>
 
 int fsm_open( void );
 
@@ -10,10 +11,12 @@ int fsm_open( void );
 struct fsm_info {
   char name[FSM_MAX_NAME];
   uint64_t fsmid;
+  struct log_prop logprop;
 };
 int fsm_list( struct fsm_info *info, int n );
 int fsm_create( char *name, uint64_t *fsmidp );
 int fsm_delete( uint64_t fsmid );
+int fsm_info( uint64_t fsmid, struct fsm_info *info );
 
 int fsm_command_save( uint64_t fsmid, struct log_iov *iov, int niov, uint64_t *seq );
 int fsm_command_load( uint64_t fsmid, uint64_t seq, struct log_iov *iov, int niov );

@@ -16,6 +16,8 @@
 #include <fju/sec.h>
 #include <fju/fsm.h>
 
+#define RAFT_SNAPSHOT_PERIOD 16
+
 static log_deflogger(raft_log, "RAFT")
   
 struct raft_file {
@@ -63,7 +65,7 @@ int raft_open( void ) {
     return 0;
   }
 
-  sts = mmf_open( mmf_default_path( "raft", "raft.dat", NULL ), &glob.mmf );
+  sts = mmf_open( mmf_default_path( "raft.dat", NULL ), &glob.mmf );
   if( sts ) return sts;
 
   sts = mmf_remap( &glob.mmf, sizeof(*glob.file) );
@@ -339,6 +341,22 @@ int raft_command_list( uint64_t clid, struct raft_command_info *clist, int n ) {
   return ncmd;
 }
 
+static int raft_request_snapshot( uint64_t clid ) {
+  struct raft_app *app;
+  struct raft_cluster *cl;
+
+  cl = cl_by_id( clid );
+  if( !cl ) return -1;
+  
+  app = raft_app_by_appid( cl->appid );
+  raft_log( LOG_LVL_TRACE, "Requesting snapshot %"PRIx64"", clid );
+  if( app && app->snapsave ) {
+    app->snapsave( app, cl, cl->term, cl->appliedseq );
+  }
+
+  return 0;
+}
+
 /* store a command buffer */
 static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *buf, int len ) {
   int sts;
@@ -362,8 +380,9 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
   iov[1].buf = buf;
   iov[1].len = len;
   sts = fsm_command_save( clid, iov, 2, &seq );
-
-  return sts;
+  if( sts ) return sts;
+  
+  return 0;
 }
 
 static int raft_cluster_quorum( struct raft_cluster *cl ) {
@@ -433,7 +452,8 @@ static void raft_apply_commands( struct raft_cluster *cl ) {
   struct raft_app *app;
   uint64_t s;
   int sts;
-  
+  struct fsm_info fsinfo;
+    
   /* apply any commands commited but not yet applied */
   app = raft_app_by_appid( cl->appid );
   while( (cl->appliedseq + 1) <= cl->commitseq ) {
@@ -453,6 +473,13 @@ static void raft_apply_commands( struct raft_cluster *cl ) {
     
     cl->appliedseq = s;
     raft_cluster_set( cl );
+
+    /* request snapshot if log has hit next snapshot point */
+    fsm_info( cl->clid, &fsinfo );
+    if( (fsinfo.logprop.seq % RAFT_SNAPSHOT_PERIOD) == 0 ) {
+      raft_request_snapshot( cl->clid );
+    }
+    
   }
   
 }
@@ -587,6 +614,7 @@ static void raft_send_pings( struct raft_cluster *cl ) {
   sts = raft_snapshot_info( cl->clid, &sinfo );
   if( sts ) {
     struct raft_app *app = raft_app_by_appid( cl->appid );
+    raft_log( LOG_LVL_TRACE, "Requesting snapshot" );
     if( app && app->snapsave ) {
       app->snapsave( app, cl, cl->term, cl->appliedseq );
     }

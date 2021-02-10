@@ -89,10 +89,12 @@ int fsm_open( void ) {
 
 int fsm_list( struct fsm_info *info, int n ) {
   int i;
+
   for( i = 0; i < glob.nfsm; i++ ) {
     if( i < n ) {
       info[i].fsmid = glob.fsm[i].fsmid;
       strncpy( info[i].name, glob.fsm[i].name, FSM_MAX_NAME - 1 );
+      log_prop( &glob.fsm[i].log, &info->logprop );
     }
   }
   return glob.nfsm;
@@ -156,6 +158,17 @@ int fsm_delete( uint64_t fsmid ) {
   }
 
   return -1;
+}
+
+int fsm_info( uint64_t fsmid, struct fsm_info *info ) {
+  struct fsm_s *fsm;
+  fsm = fsm_by_id( fsmid );
+  if( !fsm ) return -1;
+  
+  info->fsmid = fsmid;
+  strncpy( info->name, fsm->name, FSM_MAX_NAME - 1 );
+  log_prop( &fsm->log, &info->logprop );
+  return 0;
 }
 
 int fsm_command_save( uint64_t fsmid, struct log_iov *iov, int niov, uint64_t *seq ) {

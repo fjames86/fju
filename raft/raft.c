@@ -274,7 +274,12 @@ static struct raft_app *raft_app_by_appid( uint32_t appid );
 static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t cseq );
 static void raft_apply_commands( struct raft_cluster *cl );
 static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid );
-static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len );
+//static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len );
+
+static void cllist_refresh( void ) {
+  raft_prop( &glob.prop );
+  glob.ncl = raft_cluster_list( glob.cl, RAFT_MAX_CLUSTER );
+}
 
 static struct raft_cluster *cl_by_id( uint64_t clid ) {
   int i;
@@ -617,6 +622,9 @@ static void raft_send_pings( struct raft_cluster *cl ) {
     raft_log( LOG_LVL_TRACE, "Requesting snapshot" );
     if( app && app->snapsave ) {
       app->snapsave( app, cl, cl->term, cl->appliedseq );
+    } else {
+      raft_log( LOG_LVL_TRACE, "No snapshot procedure - generating empty snapshot" );
+      raft_snapshot_save( cl->clid, cl->term, cl->appliedseq, NULL, 0 );
     }
   }
 
@@ -1091,6 +1099,8 @@ static int raft_proc_append( struct rpc_inc *inc ) {
 
   raft_log( LOG_LVL_TRACE, "raft_proc_append clid=%"PRIx64" leaderid=%"PRIx64" term=%"PRIu64" commitseq=%"PRIu64"",
 	     clid, hostid, term, commitseq );
+
+  cllist_refresh();
   
   /* lookup cluster */
   clp = cl_by_id( clid );
@@ -1220,6 +1230,8 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
 
   raft_log( LOG_LVL_TRACE, "raft_proc_vote clid=%"PRIx64" candidateid=%"PRIx64" term=%"PRIu64" lastterm=%"PRIu64" lastseq=%"PRIu64"",
 	     clid, hostid, term, lastterm, lastseq );
+
+  cllist_refresh();
   
   clp = cl_by_id( clid );
   if( !clp ) {
@@ -1295,6 +1307,8 @@ static int raft_proc_command( struct rpc_inc *inc ) {
 
   raft_log( LOG_LVL_TRACE, "raft_proc_command clid=%"PRIx64" len=%u", clid, len );
 
+  cllist_refresh();
+  
   cl = cl_by_id( clid );
   if( !cl ) {
     raft_log( LOG_LVL_TRACE, "Unknown cluster" );
@@ -1334,6 +1348,8 @@ static int raft_proc_snapsave( struct rpc_inc *inc ) {
 
   raft_log( LOG_LVL_TRACE, "raft_proc_snapsave clid=%"PRIx64" term=%"PRIu64" seq=%"PRIu64" len=%u", clid, term, seq, len );
 
+  cllist_refresh();
+  
   cl = cl_by_id( clid );
   if( !cl ) {
     raft_log( LOG_LVL_ERROR, "Unknown cluster %"PRIx64"", clid );
@@ -1384,6 +1400,9 @@ static int raft_proc_snapshot( struct rpc_inc *inc ) {
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
   
   raft_log( LOG_LVL_TRACE, "raft_proc_snapshot clid=%"PRIx64"", clid );
+
+  cllist_refresh();
+  
   cl = cl_by_id( clid );
   if( cl ) {
     raft_log( LOG_LVL_INFO, "Requesting snapshot clid=%"PRIx64"", clid );
@@ -1392,7 +1411,7 @@ static int raft_proc_snapshot( struct rpc_inc *inc ) {
       app->snapsave( app, cl, cl->term, cl->appliedseq );
     }
   }
-  
+
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, cl ? 1 : 0 );
   rpc_complete_accept_reply( inc, handle );
@@ -1404,13 +1423,12 @@ static int raft_proc_snapshot( struct rpc_inc *inc ) {
  */
 static int raft_proc_change( struct rpc_inc *inc ) {
   int sts, handle;  
-  char cmdbuf[256];
-  struct xdr_s xdr;
-  int i, bmembers, bcookie, bappid, breset;
-  uint64_t rclid, clid;
+  int i, bmembers, bcookie, bappid;
+  uint64_t clid;
   char cookie[RAFT_MAX_COOKIE];
   uint64_t members[RAFT_MAX_MEMBER];
   uint32_t nmembers, appid;
+  struct raft_cluster cl;
   
   sts = xdr_decode_uint64( &inc->xdr, &clid );
   if( sts ) goto bad;
@@ -1441,45 +1459,42 @@ static int raft_proc_change( struct rpc_inc *inc ) {
     sts = xdr_decode_uint32( &inc->xdr, &appid );
     if( sts ) goto bad;
   }
-  sts = xdr_decode_boolean( &inc->xdr, &breset );
-  if( sts ) goto bad;
   
  bad:
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  raft_log( LOG_LVL_TRACE, "raft_proc_change clid=%"PRIx64" %s %s %s %s",
+  raft_log( LOG_LVL_TRACE, "raft_proc_change clid=%"PRIx64" %s %s %s ",
 	    clid,
 	    bcookie ? "cookie" : "",
 	    bmembers ? "members" : "",
-	    bappid ? "appid" : "",
-	    breset ? "reset" : "" );
-  
-  /* 
-   * Lookup first cluster with appid=RAFT_RPC_PROG. This is the raft metadata distributor cluster
-   * i.e. all nodes in that cluster get sent the change command 
-   */
-  rclid = raft_clid_by_appid( RAFT_RPC_PROG );
-  if( !rclid ) goto done;
-  
-  xdr_init( &xdr, (uint8_t *)cmdbuf, sizeof(cmdbuf) );
-  xdr_encode_uint64( &xdr, clid );
-  xdr_encode_boolean( &xdr, bcookie );
-  if( bcookie ) xdr_encode_fixed( &xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
-  xdr_encode_boolean( &xdr, bmembers );
+	    bappid ? "appid" : "" );
+
+
+  cllist_refresh();
+  sts = raft_cluster_by_clid( clid, &cl );
+  if( sts ) {
+    memset( &cl, 0, sizeof(cl) );
+    cl.clid = clid;
+  }
+
+  if( bcookie ) memcpy( cl.cookie, cookie, RAFT_MAX_COOKIE );
   if( bmembers ) {
-    xdr_encode_uint32( &xdr, nmembers );
+    cl.nmember = 0;
     for( i = 0; i < nmembers; i++ ) {
-      xdr_encode_uint64( &xdr, members[i] );
+      if( members[i] != hostreg_localid() ) {
+	raft_log( LOG_LVL_TRACE, "raft_proc_change member %u hostid=%"PRIx64"", i, members[i] );
+	
+	cl.member[cl.nmember].hostid = members[i];
+	cl.member[cl.nmember].lastseen = 0;
+	cl.member[cl.nmember].storedseq = 0;
+	cl.member[cl.nmember].flags = 0;
+	cl.nmember++;
+      }
     }
   }
-  xdr_encode_boolean( &xdr, bappid );
-  if( bappid ) xdr_encode_uint32( &xdr, appid );
-  xdr_encode_boolean( &xdr, breset );
-  
-  raft_command( rclid, cmdbuf, xdr.offset, NULL );
+  if( bappid ) cl.appid = appid;
+  raft_cluster_set( &cl );
 
-
- done:
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   rpc_complete_accept_reply( inc, handle );
   
@@ -1547,8 +1562,7 @@ static void raft_iter_cb( struct rpc_iterator *iter ) {
   int i, j;
   
   //raft_log( LOG_LVL_TRACE, "raft iterator" );
-  raft_prop( &glob.prop );
-  glob.ncl = raft_cluster_list( glob.cl, RAFT_MAX_CLUSTER );
+  cllist_refresh();
 
   /* ensure connections registered */
   for( i = 0; i < glob.ncl; i++ ) {
@@ -1615,12 +1629,14 @@ static void raft_set_iter_timeout( void ) {
   raft_iter.timeout = to;  
 }
 
+#if 0
 static struct raft_app raft_app =
 {
    NULL,
    RAFT_RPC_PROG,
    raft_app_command,
 };
+#endif
 
 
 void raft_register( void ) {
@@ -1639,7 +1655,7 @@ void raft_register( void ) {
 
   rpc_program_register( &raft_prog );
   rpc_iterator_register( &raft_iter );
-  raft_app_register( &raft_app );
+  //raft_app_register( &raft_app );
 }
 
 int raft_app_register( struct raft_app *app ) {
@@ -1870,6 +1886,7 @@ int raft_snapshot_load( uint64_t clid, char *buf, int len, struct raft_snapshot_
  * across clusters.
  */
 
+#if 0
 static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len ) {
   struct xdr_s xdr;
   int sts, i, bcookie, bmembers, bappid, breset;
@@ -1975,6 +1992,7 @@ static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uin
   raft_cluster_set( clp );
   
 }
+#endif
 
 
 int raft_replay( uint64_t clid ) {

@@ -94,7 +94,7 @@ int fsm_list( struct fsm_info *info, int n ) {
     if( i < n ) {
       info[i].fsmid = glob.fsm[i].fsmid;
       strncpy( info[i].name, glob.fsm[i].name, FSM_MAX_NAME - 1 );
-      log_prop( &glob.fsm[i].log, &info->logprop );
+      log_prop( &glob.fsm[i].log, &info[i].logprop );
     }
   }
   return glob.nfsm;

@@ -29,6 +29,10 @@ static void usage( char *fmt, ... ) {
             "          add member [clid=CLID] [hostid=HOSTID]\n"
             "          set member\n"
             "          rem member clid=CLID hostid=HOSTID\n"
+	    "\n"
+	    "WARNING: These commands operate directly on the raft database.\n"
+	    "Do not use these while the service is running. Use rpc change command instead.\n"
+	    "\n"
     );
 
     if( fmt ) {

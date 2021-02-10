@@ -95,7 +95,7 @@ static struct clt_info clt_procs[] = {
     { FJUD_RPC_PROG, 1, 4, NULL, cmdprog_connlist_results, "fjud.connlist", "" },        
     { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
     { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
-    { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*] [reset]" },
+    { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*] [distribute]" },
     { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
@@ -224,7 +224,8 @@ int rpc_main( int argc, char **argv ) {
 
     hostreg_open();
     freg_open( NULL, NULL );
-
+    raft_open();
+    
     glob.hostid = hostreg_localid();
     glob.port = 8000;
     sts = freg_ensure( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
@@ -1003,10 +1004,12 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   char argname[64], *argval;
   char *term;  
   uint64_t clid;
-  int bcookie, bmembers, bappid, breset;
+  int bcookie, bmembers, bappid, bdistribute;
   char cookie[RAFT_MAX_COOKIE];
   uint32_t nmember, appid;
   uint64_t members[RAFT_MAX_MEMBER];
+  struct raft_cluster cl;
+  int sts;
   
   bcookie = 0;
   bmembers = 0;
@@ -1015,7 +1018,7 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   nmember = 0;
   bappid = 0;
   appid = 0;
-  breset = 0;
+  bdistribute = 0;
   
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
@@ -1028,14 +1031,17 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
     } else if( strcmp( argname, "member" ) == 0 ) {
       if( nmember >= RAFT_MAX_MEMBER ) usage( "Max members" );
       members[nmember] = strtoull( argval, &term, 16 );
-      if( *term ) usage( "Failed to parse hostid" );
+      if( *term ) {
+	members[nmember] = hostreg_hostid_by_name( argval );
+	if( !members[nmember] ) usage( "Failed to parse hostid or lookup hostname \"%s\"", argval );
+      }
       nmember++;
       bmembers = 1;
     } else if( strcmp( argname, "appid" ) == 0 ) {
       appid = strtol( argval, NULL, 10 );
       bappid = 1;
-    } else if( strcmp( argname, "reset" ) == 0 ) {
-      breset = 1;
+    } else if( strcmp( argname, "distribute" ) == 0 ) {
+      bdistribute = 1;
     } else usage( NULL );
     
     i++;
@@ -1043,6 +1049,25 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
 
   if( !clid ) usage( "Need CLID" );
 
+  if( bdistribute ) {
+    sts = raft_cluster_by_clid( clid, &cl );
+    if( sts ) usage( "Failed to lookup cluster %"PRIx64"", clid );
+    
+    bcookie = 1;
+    memcpy( cookie, cl.cookie, RAFT_MAX_COOKIE );
+    bmembers = 1;
+    nmember = 0;
+    for( i = 0; i < cl.nmember; i++ ) {
+      members[i] = cl.member[i].hostid;
+      nmember++;
+    }
+    members[nmember] = hostreg_localid();
+    nmember++;
+    
+    bappid = 1;
+    appid = cl.appid;
+  }
+  
   xdr_encode_uint64( xdr, clid );
   xdr_encode_boolean( xdr, bcookie );
   if( bcookie ) xdr_encode_fixed( xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
@@ -1053,7 +1078,7 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   }
   xdr_encode_boolean( xdr, bappid );
   if( bappid ) xdr_encode_uint32( xdr, appid );
-  xdr_encode_boolean( xdr, breset );
+
 }
 
 

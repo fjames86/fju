@@ -100,12 +100,10 @@ int fsm_main( int argc, char **argv ) {
   for( i = 0; i < nfsm; i++ ) {
     fsmid = fslist[i].fsmid;
     sts = fsm_snapshot_load( fsmid, NULL, 0, &info );
-    printf( "Name %-16s ID %"PRIx64"", fslist[i].name, fsmid );
-    printf( "  Log Count=%u/%u Seq=%"PRIu64"\n",
+    printf( "Name %-16s ID %"PRIx64"\n", fslist[i].name, fsmid );
+    if( !sts ) printf( "  Snapshot Seq=%"PRIu64" Len=%u\n", info.seq, info.len );
+    printf( "  Log Count=%u/%u LogSeq=%"PRIu64"\n",
 	    fslist[i].logprop.count, fslist[i].logprop.lbacount, fslist[i].logprop.seq );
-    
-    if( !sts ) printf( "  Snapshot Seq=%"PRIu64" Len=%u", info.seq, info.len );
-    printf( "\n" );
     ncmd = fsm_command_list( fsmid, NULL, 0 );
     if( ncmd > 0 ) { 
       clist = malloc( sizeof(*clist) * ncmd );

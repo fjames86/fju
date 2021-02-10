@@ -205,6 +205,7 @@ int fsm_command_save( uint64_t fsmid, struct log_iov *iov, int niov, uint64_t *s
   iov2[0].len = sizeof(lastseq);
   entry.iov = iov2;
   entry.niov = niov + 1;
+  entry.flags = LOG_BINARY;
   sts = log_write( &fsm->log, &entry );
   
   if( !sts && seq ) *seq = lastseq;
@@ -234,8 +235,9 @@ int fsm_command_load( uint64_t fsmid, uint64_t seq, struct log_iov *iov, int nio
       memcpy( (char *)&iov2[1], iov, sizeof(*iov) * niov );
       iov2[0].buf = (char *)&ss;
       iov2[0].len = sizeof(ss);
+      entry.niov = niov + 1;
       log_read_entry( &fsm->log, entry.id, &entry );
-      return 0;
+      return entry.msglen - sizeof(ss);
     }
     
     sts = log_read( &fsm->log, entry.id, &entry, 1, &ne );
@@ -422,7 +424,7 @@ int fsm_snapshot_load( uint64_t fsmid, struct log_iov *iov, int niov, struct fsm
 
   sts = -1;
   if( mmf.fsize < sizeof(hdr) ) goto done;
-  memcpy( &hdr, mmf.file, sizeof(hdr) );
+  mmf_read( &mmf, (char *)&hdr, sizeof(hdr), 0 );
   if( hdr.magic != FSM_SNAPSHOT_MAGIC ) goto done;
   if( hdr.version != FSM_SNAPSHOT_VERSION ) goto done;
   if( hdr.fsmid != fsmid ) goto done;
@@ -438,7 +440,7 @@ int fsm_snapshot_load( uint64_t fsmid, struct log_iov *iov, int niov, struct fsm
   for( i = 0; i < niov; i++ ) {
     tocopy = iov[i].len;
     if( tocopy > (hdr.len - offset) ) tocopy = hdr.len - offset;
-    if( iov[i].buf ) memcpy( iov[i].buf, mmf.file + offset, tocopy );
+    if( iov[i].buf ) mmf_read( &mmf, iov[i].buf, tocopy, offset );
     iov[i].len = tocopy;
     offset += tocopy;
   }

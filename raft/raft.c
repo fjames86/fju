@@ -38,8 +38,6 @@ static struct {
   char buf[RAFT_MAX_COMMAND];
 } glob;
 
-static int raft_highest_storedseq( uint64_t clid, uint64_t *term, uint64_t *seq );
-
 static uint64_t raft_term_timeout( void ) {
   return rpc_now() + glob.prop.term_low +
     (sec_rand_uint32() % (glob.prop.term_high - glob.prop.term_low));
@@ -298,18 +296,22 @@ static int raft_command_by_seq( uint64_t clid, uint64_t seq, uint64_t *term, cha
   iov[0].buf = (char *)&tt;
   iov[0].len = sizeof(tt);
   iov[1].buf = buf;
-  iov[1].len = len;
+  iov[1].len = buf ? len : RAFT_MAX_COMMAND;
   sts = fsm_command_load( clid, seq, iov, 2 );
-  if( sts ) return -1;
+  if( sts < 0 ) return -1;
+
+  if( iov[0].len != sizeof(tt) ) return -1;
 
   if( term ) *term = tt;
-  return iov[1].len;
+  return sts - sizeof(tt);
 }
 
 /* get highest seq written */
 int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
   struct fsm_command_info info;
   int sts;
+  struct raft_snapshot_info sinfo;
+  uint64_t tt;
   
   if( term ) *term = 0;
   if( seq ) *seq = 0;
@@ -317,8 +319,23 @@ int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
   sts = fsm_command_info( clid, &info );
   if( sts ) return -1;
 
-  sts = raft_command_by_seq( clid, info.seq, term, NULL, 0 );
-  return sts < 0 ? -1 : 0;
+  if( info.seq == 0 ) return 0;
+    
+  sts = raft_command_by_seq( clid, info.seq, &tt, NULL, 0 );
+  if( sts < 0 ) return -1;
+  
+  memset( &sinfo, 0, sizeof(sinfo) );
+  raft_snapshot_info( clid, &sinfo );
+
+  if( sinfo.seq > info.seq ) {
+    info.seq = sinfo.seq;
+    tt = sinfo.term;
+  }
+
+  if( term ) *term = tt;
+  if( seq ) *seq = info.seq;
+  
+  return 0;
 }
 
 /* user function for listing stored commands */
@@ -336,9 +353,8 @@ int raft_command_list( uint64_t clid, struct raft_command_info *clist, int n ) {
   for( i = 0; i < ncmd; i++ ) {
     if( i < n ) {
       clist[i].seq = cmdlist[i].seq;
-      raft_command_by_seq( clid, clist[i].seq, &clist[i].term, NULL, 0 );
+      clist[i].len = raft_command_by_seq( clid, clist[i].seq, &clist[i].term, NULL, 0 );
       clist[i].when = cmdlist[i].when;
-      clist[i].len = cmdlist[i].len;
     }
   }
 
@@ -371,7 +387,7 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
   if( len > RAFT_MAX_COMMAND ) return -1;
   
   /* get highest seq written */
-  sts = raft_highest_storedseq( clid, NULL, &nseq );
+  sts = raft_command_seq( clid, NULL, &nseq );
   if( sts ) return sts;
 
   /* check seqno is next */
@@ -392,28 +408,6 @@ static int raft_command_put( uint64_t clid, uint64_t term, uint64_t seq, char *b
 
 static int raft_cluster_quorum( struct raft_cluster *cl ) {
   return ((1 + cl->nmember) / 2) + 1;
-}
-
-static int raft_highest_storedseq( uint64_t clid, uint64_t *term, uint64_t *seq ) {
-  struct raft_snapshot_info info;
-  uint64_t ss, tt;
-
-  ss = 0;
-  tt = 0;
-  raft_command_seq( clid, &tt, &ss );
-
-  memset( &info, 0, sizeof(info) );
-  raft_snapshot_info( clid, &info );
-
-  if( info.seq > ss ) {
-    ss = info.seq;
-    tt = info.term;
-  }
-
-  if( term ) *term = tt;
-  if( seq ) *seq = ss;
-  
-  return 0;  
 }
 
 /* find the highest storedseq confirmed on quorum of nodes */
@@ -721,7 +715,7 @@ static void raft_call_vote( struct raft_cluster *cl, uint64_t hostid ) {
   int sts;
   uint64_t lastterm, lastseq;
   
-  raft_highest_storedseq( cl->clid, &lastterm, &lastseq );
+  raft_command_seq( cl->clid, &lastterm, &lastseq );
   
   xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
   /* encode args */
@@ -1152,7 +1146,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
     }
 
     if( !sts && (plogterm != prevlogterm) ) {
-      raft_log( LOG_LVL_WARN, "Conflicting log entry found" );
+      raft_log( LOG_LVL_WARN, "Conflicting log entry found seq=%"PRIu64" plogterm=%"PRIu64" prevlogterm=%"PRIu64"", prevlogseq, plogterm, prevlogterm );
       fsm_command_truncate( clid, prevlogseq );
     }
   }
@@ -1168,6 +1162,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
     if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &len );
     if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
+    raft_log( LOG_LVL_INFO, "Storing command Seq=%"PRIu64" Term=%"PRIu64" Len=%u", pseq, pterm, len );
     sts = raft_command_put( clid, pterm, pseq, bufp, len );
     if( sts ) {
       raft_log( LOG_LVL_ERROR, "Failed to store command seq=%"PRIu64"", pseq );
@@ -1195,7 +1190,7 @@ static int raft_proc_append( struct rpc_inc *inc ) {
   raft_apply_commands( clp );
 
   /* reply with highest locally stored seq */
-  raft_highest_storedseq( clid, NULL, &storedseq );
+  raft_command_seq( clid, NULL, &storedseq );
   success = 1;
 
  done:
@@ -1262,7 +1257,7 @@ static int raft_proc_vote( struct rpc_inc *inc ) {
   }
 
   /* grant vote if not voted yet or voted for this host already AND the candidate is at least as up to date as us */
-  sts = raft_highest_storedseq( clp->clid, NULL, &seq );
+  sts = raft_command_seq( clp->clid, NULL, &seq );
   if( !sts && ((clp->voteid == 0) || (clp->voteid == hostid)) && (lastseq >= seq) ) {
     raft_log( LOG_LVL_DEBUG, "Granting vote" );
     clp->voteid = hostid;

@@ -78,7 +78,7 @@ int raft_open( void ) {
     glob.file->prop.flags = 0;
     glob.file->prop.elec_low = 1000;
     glob.file->prop.elec_high = 3000;
-    glob.file->prop.term_low = 3000;
+    glob.file->prop.term_low = 5000;
     glob.file->prop.term_high = 8000;
     glob.file->prop.rpc_timeout = 200;
   }

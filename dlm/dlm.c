@@ -318,7 +318,10 @@ static int dlm_acquire2( uint64_t resid, int shared, uint64_t lid, uint64_t host
   memset( &glob.lockcxt[i], 0, sizeof(glob.lockcxt[i]) );
     
   if( lid ) {
-    if( lock_by_lockid( lid ) ) return -1;
+    if( lock_by_lockid( lid ) ) {
+      dlm_log( LOG_LVL_ERROR, "Lock %"PRIx64" already exists", lid );
+      return -1;
+    }
   } else {
     sec_rand( (char *)&lid, sizeof(lid) );
     while( lock_by_lockid( lid ) ) {
@@ -340,10 +343,16 @@ static int dlm_acquire2( uint64_t resid, int shared, uint64_t lid, uint64_t host
     cmd.hostid = hostid ? hostid : hostreg_localid();
     cmd.resid = resid;
     
-    sts = dlm_command_publish( &cmd );  
+    sts = dlm_command_publish( &cmd );
+    if( sts ) {
+      dlm_log( LOG_LVL_ERROR, "dlm_command_publish failed" );
+    }
   } else {
     /* send rpc to leader */
     sts = dlm_call_acquire( cl.leaderid, resid, shared, lid );
+    if( sts ) {
+      dlm_log( LOG_LVL_ERROR, "dlm_call_acquire failed" );
+    }
   }
   
   if( sts ) {
@@ -822,8 +831,32 @@ int dlm_open( void ) {
   
   glob.raftclid = raft_clid_by_appid( DLM_RPC_PROG );
   if( !glob.raftclid ) {
+    uint64_t clid;
+    struct raft_cluster cl, dlmcl;
+    int i, sts;
+    
     dlm_log( LOG_LVL_ERROR, "No DLM cluster" );
-    return -1;
+
+    clid = raft_clid_by_appid( RAFT_RPC_PROG );
+    if( !clid ) {
+      dlm_log( LOG_LVL_ERROR, "No raft cluster to clone" );
+      return -1;
+    }
+
+    memset( &dlmcl, 0, sizeof(dlmcl) );
+    dlmcl.appid = DLM_RPC_PROG;
+    strcpy( dlmcl.cookie, "dlm" );
+    dlmcl.nmember = cl.nmember;
+    for( i = 0; i < cl.nmember; i++ ) {
+      dlmcl.member[i].hostid = cl.member[i].hostid;
+    }
+    sts = raft_cluster_set( &dlmcl );
+    if( sts ) {
+      dlm_log( LOG_LVL_ERROR, "Failed to add DLM cluster" );
+      return -1;
+    }
+
+    glob.raftclid = dlmcl.clid;
   }
 
   raft_replay( glob.raftclid );

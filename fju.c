@@ -37,7 +37,7 @@ static struct {
     { "raft", raft_main },
     { "reg", reg_main },
     { "cht", cht_main },
-    { "fvm#", fvm_main },
+    { "fvm", fvm_main },
     { "fvmc", fvmc_main },
     { "ecdh", ecdh_main },
     { "shamir", shamir_main },

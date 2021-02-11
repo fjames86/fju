@@ -1741,6 +1741,7 @@ static int raft_call_command( struct raft_cluster *cl, char *buf, int len ) {
   return 0;
 }
 
+/* TODO: take a callback and invoke it when command commited */
 int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   struct raft_cluster *cl;
   int sts, i;
@@ -1775,7 +1776,6 @@ int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
 
     return 0;
   }
-
   
   /* lookup cluster */
   cl = cl_by_id( clid );

@@ -842,7 +842,11 @@ int dlm_open( void ) {
       dlm_log( LOG_LVL_ERROR, "No raft cluster to clone" );
       return -1;
     }
-
+	sts = raft_cluster_by_clid( clid, &cl );
+	if( sts ) {
+		dlm_log( LOG_LVL_ERROR, "Unknown raft cluster" );
+		return -1;
+	}
     memset( &dlmcl, 0, sizeof(dlmcl) );
     dlmcl.appid = DLM_RPC_PROG;
     strcpy( dlmcl.cookie, "dlm" );

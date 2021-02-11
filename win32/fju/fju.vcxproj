@@ -149,10 +149,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\cht\cht-main.c" />
-    <ClCompile Include="..\..\dmb\dmb-main.c" />    
+    <ClCompile Include="..\..\dmb\dmb-main.c" />
     <ClCompile Include="..\..\dh\ecdh.c" />
     <ClCompile Include="..\..\fju.c" />
     <ClCompile Include="..\..\freg\freg-main.c" />
+    <ClCompile Include="..\..\fsm\fsm-main.c" />
     <ClCompile Include="..\..\fvm\fvm-main.c" />
     <ClCompile Include="..\..\fvm\fvmc.c" />
     <ClCompile Include="..\..\hostreg\hostreg-main.c" />
@@ -160,7 +161,7 @@
     <ClCompile Include="..\..\raft\raft-main.c" />
     <ClCompile Include="..\..\rpc\rpclt.c" />
     <ClCompile Include="..\..\rpc\xdru.c" />
-    <ClCompile Include="..\..\sec\shamir.c" />    
+    <ClCompile Include="..\..\sec\shamir.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

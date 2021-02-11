@@ -208,7 +208,6 @@ cht_set_flags
 raft_snapshot_save
 rpc_conn_list
 rex_register
-raft_log_open
 raft_clid_by_appid 
 cht_open
 cht_close
@@ -237,3 +236,11 @@ dlm_open
 dlm_close
 dlm_acquire
 dlm_release
+fsm_open
+fsm_list
+fsm_create
+fsm_delete
+fsm_command_save
+fsm_command_list
+fsm_command_truncate
+fsm_snapshot_load 

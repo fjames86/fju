@@ -18,6 +18,7 @@
 #include <fju/rpc.h>
 #include <fju/hostreg.h>
 #include <fju/hrauth.h>
+#include <fju/fsm.h>
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
@@ -95,6 +96,9 @@ int raft_main( int argc, char **argv ) {
       char timestr[64];
       struct raft_command_info *cmdlist;
       int ncmd, n;
+      int printcommands;
+
+      printcommands = 0;
       
       i++;
       if( i >= argc ) usage( NULL );
@@ -109,6 +113,13 @@ int raft_main( int argc, char **argv ) {
 	  if( !clid ) usage( "No cluster with appid %u", appid );
 	}	  
       }
+      i++;
+      while( i < argc ) {
+	if( strcmp( argv[i], "-v" ) == 0 ) {
+	  printcommands = 1;
+	} else usage( NULL );
+	i++;
+      }
 
       sts = raft_cluster_by_clid( clid, &cl );
       if( sts ) usage( "Failed to find cluster" );
@@ -119,10 +130,30 @@ int raft_main( int argc, char **argv ) {
       n = raft_command_list( clid, cmdlist, ncmd );
       if( n < ncmd ) ncmd = n;
       for( i = 0; i < ncmd; i++ ) {
+	int j;
+	char cmdbuf[RAFT_MAX_COMMAND];
+	uint64_t tt;
+	struct log_iov iov[2];
+	
 	printf( "  Command Term %"PRIu64" Seq %"PRIu64" Len %u When %s\n",
 		cmdlist[i].term, cmdlist[i].seq,
 		cmdlist[i].len,
 		sec_timestr( cmdlist[i].when, timestr ) );
+	
+	if( printcommands ) {
+	  iov[0].buf = (char *)&tt;
+	  iov[0].len = sizeof(tt);
+	  iov[1].buf = cmdbuf;
+	  iov[1].len = sizeof(cmdbuf);
+	  sts = fsm_command_load( clid, cmdlist[i].seq, iov, 2 );
+	  if( sts < 0 ) usage( "Failed to load command Seq=%"PRIu64"", cmdlist[i].seq );
+	  sts -= sizeof(tt);
+	  for( j = 0; j < sts; j++ ) {
+	    if( j && ((j % 16) == 0) ) printf( "\n" );
+	    printf( "%02x ", (uint32_t)(uint8_t)cmdbuf[j] );
+	  }
+	  printf( "\n" );
+	}
       }
       
     } else if( strcmp( argv[i], "add" ) == 0 ) {
@@ -364,23 +395,6 @@ static void print_cluster( struct raft_cluster *cluster ) {
       printf( "    Snapshot Size=%u Term=%"PRIu64" Seq=%"PRIu64"\n", info.len, info.term, info.seq );
     }
   }
-
- 
-#if 0
-  {
-    struct raft_command_info *clist;
-    int n;
-    n = raft_command_list( cluster->clid, NULL, 0 );
-    if( n > 0 ) {
-      clist = malloc( sizeof(*clist) * n );
-      raft_command_list( cluster->clid, clist, n );
-      for( j = 0; j < n; j++ ) {      
-	printf( "    Command Seq=%"PRIu64" Term=%"PRIu64" Len=%u Stored=%s\n", clist[j].seq, clist[j].term, clist[j].len, sec_timestr( clist[j].stored, timestr ) );
-      }
-      free( clist );
-    }
-  }
-  #endif
 
   printf( "\n" );
 }

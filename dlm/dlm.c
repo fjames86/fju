@@ -1,4 +1,3 @@
-
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -179,11 +178,6 @@ struct dlm_command {
 #define DLM_CMD_LOCKSH  2
 #define DLM_CMD_RESERVED 3
 #define DLM_CMD_RELEASEALL 4
-  union {
-    struct {
-      uint64_t seq;
-    } hb;
-  } u;
 };
 
 static int dlm_encode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
@@ -244,7 +238,7 @@ static void call_acquire_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   uint64_t hostid, lockid;
 
   hostid = hcallp->hostid;
-  lockid = hcallp->cxt2;
+  lockid = hcallp->cxt[0];
   
   if( !res ) {
     dlm_log( LOG_LVL_ERROR, "call_acquire_cb timeout lockid=%"PRIx64"", lockid );
@@ -274,7 +268,7 @@ static int dlm_call_acquire( uint64_t hostid, uint64_t resid, int shared, uint64
   hcall.timeout = 500;
   hcall.service = HRAUTH_SERVICE_PRIV;
   hcall.donecb = call_acquire_cb;
-  hcall.cxt2 = lid;
+  hcall.cxt[0] = lid;
   sts = hrauth_call_async( &hcall, &args, 1 );
   if( sts ) {
     dlm_log( LOG_LVL_ERROR, "dlm_call_acquire failed" );
@@ -407,22 +401,28 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
   xdr_init( &xdr, (uint8_t *)xdrbuf, sizeof(xdrbuf) );
   xdr_encode_uint64( &xdr, glob.hbseq );
   dmb_publish( DLM_MSGID_HEARTBEAT, DMB_REMOTE, xdrbuf, xdr.offset, NULL );
-  
+
   sts = raft_cluster_by_clid( glob.raftclid, &cl );
+  if( sts ) {
+    dlm_log( LOG_LVL_ERROR, "No dlm cluster" );
+    return;
+  }
+  
+  if( (cl.state != RAFT_STATE_CANDIDATE) && glob.releaseownlocks ) {
+    dlm_log( LOG_LVL_INFO, "Releasing own locks" );
+    memset( &cmd, 0, sizeof(cmd) );
+    cmd.cmd = DLM_CMD_RELEASEALL;
+    cmd.hostid = hostreg_localid();
+    sts = dlm_command_publish( &cmd );
+    if( !sts ) glob.releaseownlocks = 0;
+  }
+  
   if( !sts && (cl.state == RAFT_STATE_LEADER) ) {
     /* check hosts are still heartbeating */
     host = glob.host;
     for( i = 0; i < glob.nhost; i++, host++ ) {
       if( host->hostid == hostreg_localid() ) {
-	if( glob.releaseownlocks ) {
-	  dlm_log( LOG_LVL_INFO, "Releasing own locks" );
-	  memset( &cmd, 0, sizeof(cmd) );
-	  cmd.cmd = DLM_CMD_RELEASEALL;
-	  cmd.hostid = host->hostid;
-	  dlm_command_publish( &cmd );
-	  
-	  glob.releaseownlocks = 0;
-	}
+	
       } else if( host->lasthb && lock_by_hostid( host->hostid ) && (rpc_now() > (host->lasthb + DLM_HBTIMEOUT)) ) {
 	dlm_log( LOG_LVL_INFO, "Host %"PRIx64" has locks and stopped heartbeating - releasing all locks", host->hostid );
 	memset( &cmd, 0, sizeof(cmd) );
@@ -458,7 +458,8 @@ static void release_lock( uint64_t lockid ) {
       break;
     }
   }
-  
+
+  /* delete any lock context */
   lcxt = glob.lockcxt;
   for( i = 0; i < glob.nlockcxt; i++, lcxt++ ) {
     if( lcxt->lockid == lockid ) {
@@ -469,7 +470,10 @@ static void release_lock( uint64_t lockid ) {
   }
 
   /* if resid=0 then we never found the corresponding lock */
-  if( !resid ) return;
+  if( !resid ) {
+    dlm_log( LOG_LVL_ERROR, "release_lock unknown lock %"PRIx64"", lockid );
+    return;
+  }
 
     
   if( lockstate == 1 ) {
@@ -605,6 +609,7 @@ static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t
     i = 0;
     while( i < glob.nlock ) {
       if( glob.lock[i].hostid == cmd.hostid ) {
+	dlm_log( LOG_LVL_TRACE, "ReleaseAll releasing lock %"PRIx64"", glob.lock[i].lockid );
 	release_lock( glob.lock[i].lockid );
       } else {
 	i++;
@@ -691,12 +696,23 @@ static int dlm_proc_acquire( struct rpc_inc *inc ) {
   int handle, sts;
   uint64_t resid, lockid;
   int shared;
+  struct raft_cluster cl;
   
   sts = xdr_decode_uint64( &inc->xdr, &resid );
   if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &shared );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  sts = dlm_acquire( resid, shared, &lockid, NULL, NULL );
+  lockid = 0;
+  sts = -1;
+  sts = raft_cluster_by_clid( glob.raftclid, &cl );
+  if( sts ) {
+    dlm_log( LOG_LVL_ERROR, "dlm_proc_acquire No dlm cluster" );
+  } else if( cl.state != RAFT_STATE_LEADER ) {
+    dlm_log( LOG_LVL_ERROR, "dlm_proc_acquire not leader" );
+  } else {  
+    sts = dlm_acquire( resid, shared, &lockid, NULL, NULL );
+  }
+  
   dlm_log( LOG_LVL_TRACE, "dlm_proc_acquire resid=%"PRIx64" %s lockid=%"PRIx64" %s",
 	   resid, shared ? "Shared" : "Exclusive", lockid, sts ? "Failed" : "Success" );
   
@@ -863,6 +879,7 @@ int dlm_open( void ) {
     glob.raftclid = dlmcl.clid;
   }
 
+  dlm_log( LOG_LVL_INFO, "Replaying raft commands" );
   raft_replay( glob.raftclid );
 
   glob.releaseownlocks = 1;

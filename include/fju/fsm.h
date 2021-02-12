@@ -31,7 +31,7 @@ int fsm_command_info( uint64_t fsmid, struct fsm_command_info *info );
 
 int fsm_command_truncate( uint64_t fsmid, uint64_t seq );
 
-int fsm_snapshot_save( uint64_t fsmid, uint64_t seq, char *buf, int len, int offset );
+int fsm_snapshot_save( uint64_t fsmid, uint64_t seq, struct log_iov *iov, int niov );
 
 struct fsm_snapshot_info {
   uint64_t seq;

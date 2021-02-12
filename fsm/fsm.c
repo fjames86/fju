@@ -356,58 +356,49 @@ struct snapshot_header {
   uint32_t spare[5];
 };
 
-int fsm_snapshot_save( uint64_t fsmid, uint64_t seq, char *buf, int len, int offset ) {
-  int sts;
+int fsm_snapshot_save( uint64_t fsmid, uint64_t seq, struct log_iov *iov, int niov ) {
+  int sts, len, offset, i;
   struct mmf_s mmf;
-  char idstr[64];
+  char idstr[64], idstr2[64];
   char *path;
   struct snapshot_header hdr;
 
   sprintf( idstr, "%"PRIx64"-snapshot.dat.new", fsmid );
   path = mmf_default_path( "fsm", idstr, NULL );
-  if( offset == 0 ) {
-    /* start new file */
-    mmf_delete_file( path );
-  }
 
-  sts = mmf_open2( path, &mmf, offset == 0 ? 0 : MMF_OPEN_EXISTING );
+  /* start new file */
+  mmf_delete_file( path );
+
+  sts = mmf_open( path, &mmf );
   if( sts ) return sts;
 
-  /* offset==0 means new file so write header */
-  if( offset == 0 ) {
-    memset( &hdr, 0, sizeof(hdr) );
-    hdr.magic = FSM_SNAPSHOT_MAGIC;
-    hdr.version = FSM_SNAPSHOT_VERSION;
-    hdr.fsmid = fsmid;
-    hdr.seq = seq;
-    hdr.len = 0;
-    mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
-  }
+  len = 0;
+  for( i = 0; i < niov; i++ ) len += iov[i].len;
   
-  if( len > 0 ) {
-    offset += sizeof(hdr);
-    mmf_write( &mmf, buf, len, offset );
+  memset( &hdr, 0, sizeof(hdr) );
+  hdr.magic = FSM_SNAPSHOT_MAGIC;
+  hdr.version = FSM_SNAPSHOT_VERSION;
+  hdr.fsmid = fsmid;
+  hdr.seq = seq;
+  hdr.len = len;
+  mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
 
-    mmf_read( &mmf, (char *)&hdr, sizeof(hdr), 0 );
-    hdr.len += len;
-    mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );    
-  } else if( len == 0 ) {
-    /* final block - mark as complete */
-    mmf_read( &mmf, (char *)&hdr, sizeof(hdr), 0 );
-    hdr.complete = 1;
-    hdr.when = time( NULL );
-    mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
+  offset = sizeof(hdr);
+  for( i = 0; i < niov; i++ ) {
+    mmf_write( &mmf, iov[i].buf, iov[i].len, offset );
+    offset += iov[i].len;
   }
+
+  /* final block - mark as complete */
+  hdr.complete = 1;
+  hdr.when = time( NULL );
+  mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
   
   mmf_close( &mmf );
   
-  if( len == 0 ) {
-    /* this was final block - rename over the top of the old snapshot file */
-    char idstr2[64];
-    
-    sprintf( idstr2, "%"PRIx64"-snapshot.dat", fsmid );
-    mmf_rename( mmf_default_path( "fsm", NULL ), idstr, idstr2 );
-  }
+  /* rename over top of old */
+  sprintf( idstr2, "%"PRIx64"-snapshot.dat", fsmid );
+  mmf_rename( mmf_default_path( "fsm", NULL ), idstr, idstr2 );
 
   return 0;
 }

@@ -46,6 +46,7 @@ fju_files += freg/freg-main.c
 fju_files += hostreg/hostreg-main.c
 fju_files += dmb/dmb-main.c
 fju_files += fsm/fsm-main.c
+fju_files += dlm/dlm-main.c
 
 ${BINDIR}/fju: ${LIBFJU} ${fju_files}
 	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c ${fju_files}

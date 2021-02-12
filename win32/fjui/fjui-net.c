@@ -489,7 +489,7 @@ void fjui_call_logread( uint64_t hostid, char *name, uint64_t lastid ) {
   hcall.proc = 4; 
   hcall.donecb = logread_cb;
   hcall.cxt = NULL;
-  hcall.cxt2 = lastid;
+  hcall.cxt[0] = lastid;
   hcall.timeout = 1000;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -514,7 +514,7 @@ static void reglist_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	int len;
 	HTREEITEM hparent;
 
-	hparent = (HTREEITEM)hcallp->cxt2;
+	hparent = (HTREEITEM)hcallp->cxt[0];
 
 	if( !xdr ) {
 		fjui_set_statusbar( 1, "RegList Timeout " );
@@ -589,8 +589,7 @@ void fjui_call_reglist( uint64_t hostid, uint64_t hitem, HTREEITEM hparent ) {
   hcall.vers = FREG_RPC_VERS;
   hcall.proc = 1; 
   hcall.donecb = reglist_cb;
-  hcall.cxt = NULL;
-  hcall.cxt2 = hparent;
+  hcall.cxt[0] = hparent;
   hcall.timeout = 1000;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -622,8 +621,7 @@ void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid ) {
   hcall.vers = FREG_RPC_VERS;
   hcall.proc = 4; 
   hcall.donecb = regrem_cb;
-  hcall.cxt = NULL;
-  hcall.cxt2 = parentid;
+  hcall.cxt[0] = parentid;
   hcall.timeout = 1000;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -657,8 +655,7 @@ void fjui_call_regput( uint64_t hostid, uint64_t parentid, char *name, uint32_t 
   hcall.vers = FREG_RPC_VERS;
   hcall.proc = 3; 
   hcall.donecb = regput_cb;
-  hcall.cxt = NULL;
-  hcall.cxt2 = parentid;
+  hcall.cxt[0] = parentid;
   hcall.timeout = 1000;
   hcall.service = HRAUTH_SERVICE_PRIV;
 

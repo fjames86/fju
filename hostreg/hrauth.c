@@ -833,7 +833,7 @@ struct hrauth_proxy_cxt {
 };
 
 static void hrauth_proxy_udp_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
-  struct hrauth_proxy_cxt *pcxt = (struct hrauth_proxy_cxt *)hcallp->cxt;
+  struct hrauth_proxy_cxt *pcxt = (struct hrauth_proxy_cxt *)hcallp->cxt[0];
   struct rpc_listen *listen;
   int handle;
   struct rpc_inc inc;
@@ -878,7 +878,7 @@ int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *a
   hcall.vers = inc->msg.u.call.vers;
   hcall.proc = inc->msg.u.call.proc;
   hcall.donecb = hrauth_proxy_udp_cb;
-  hcall.cxt = pcxt;
+  hcall.cxt[0] = (uint64_t)pcxt;
   hcall.timeout = 500;
   hcall.service = HRAUTH_SERVICE_PRIV;
   sts = hrauth_call_udp_async( &hcall, args, nargs, NULL );
@@ -1259,7 +1259,6 @@ static void hrauth_send_ping( struct hrauth_conn *hc ) {
   hcall.vers = HRAUTH_RPC_VERS;
   hcall.proc = 3; /* nullping proc */
   hcall.donecb = hrauth_ping_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 100;
 
   sts = hrauth_call_tcp_async( &hcall, NULL, 0 );

@@ -80,7 +80,7 @@ static void invoke_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
   int i, sts;
   struct log_entry entry;
   
-  entryid = hcallp->cxt2;
+  entryid = hcallp->cxt[0];
   
   for( i = 0; i < glob.nhost; i++ ) {
     if( glob.host[i].hostid == hcallp->hostid ) {
@@ -124,7 +124,7 @@ static int dmb_call_invoke( uint64_t hostid, uint64_t seq, uint64_t entryid, uin
   hcall.proc = 2; /* invoke proc, using hrauth async calls */
   hcall.donecb = invoke_cb;
   hcall.timeout = 500;
-  hcall.cxt2 = entryid;
+  hcall.cxt[0] = entryid;
   hcall.service = HRAUTH_SERVICE_PRIV;
   sts = hrauth_call_async( &hcall, args, 2 );
   if( sts ) {

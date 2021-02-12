@@ -68,8 +68,7 @@ struct hrauth_call {
   uint32_t vers;
   uint32_t proc;
   void (*donecb)( struct xdr_s *res, struct hrauth_call *hcallp );
-  void *cxt;  /* private data */
-  uint64_t cxt2; /* more private data */
+  uint64_t cxt[8];  /* private data */
   int timeout;
   int service;
 };

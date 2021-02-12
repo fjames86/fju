@@ -8,6 +8,7 @@
 #define RAFT_MAX_MEMBER  8
 #define RAFT_MAX_CLUSTER 32
 #define RAFT_MAX_COOKIE  16  /* private data */
+#define RAFT_MAX_SNAPSHOT (64*1024)
 
 struct raft_member {
   uint64_t hostid;      /* host identifier */

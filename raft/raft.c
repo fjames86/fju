@@ -1309,7 +1309,10 @@ static int raft_proc_command( struct rpc_inc *inc ) {
     raft_log( LOG_LVL_TRACE, "Unknown cluster" );
     sts = -1;
   } else if( cl->state != RAFT_STATE_LEADER ) {
-    raft_log( LOG_LVL_TRACE, "Not leader" );
+    raft_log( LOG_LVL_TRACE, "raft_proc_command - local state %s not leader",
+	      cl->state == RAFT_STATE_FOLLOWER ? "Follower" :
+	      cl->state == RAFT_STATE_CANDIDATE ? "Candidate" :
+	      "Leader" );
     sts = -1;
   } else {
     sts = raft_command( clid, bufp, len, &cseq );
@@ -1680,6 +1683,7 @@ static struct raft_app *raft_app_by_appid( uint32_t appid ) {
 static void call_command_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   uint64_t hostid, clid, seq;
   int sts, b;
+  void (*donecb)( uint64_t, void *);
   
   hostid = hcallp->hostid;
   clid = hcallp->cxt[0];
@@ -1694,10 +1698,12 @@ static void call_command_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
 
   raft_log( LOG_LVL_TRACE, "call_command_cb %s Seq=%"PRIu64"", b ? "Success" : "Failure", seq );
 
-  /* TODO: if command not accepted then should somehow signal this back to caller, but we don't have any way to do that */
+  /* if command not accepted then should somehow signal this back to caller */
+  donecb = (void (*)(uint64_t,void *))hcallp->cxt[1];
+  if( donecb ) donecb( seq, (void *)hcallp->cxt[2] );
 }
 
-static int raft_call_command( struct raft_cluster *cl, char *buf, int len ) {
+static int raft_call_command( struct raft_cluster *cl, char *buf, int len, void (*donecb)(uint64_t seq, void *prv), void *prv ) {
   struct hrauth_call hcall;
   struct xdr_s args[3];
   char argbuf[256], tmpbuf[4];
@@ -1732,6 +1738,8 @@ static int raft_call_command( struct raft_cluster *cl, char *buf, int len ) {
   hcall.service = HRAUTH_SERVICE_PRIV;
   hcall.donecb = call_command_cb;
   hcall.cxt[0] = cl->clid;
+  hcall.cxt[1] = (uint64_t)donecb;
+  hcall.cxt[2] = (uint64_t)prv;
   sts = hrauth_call_async( &hcall, args, 3 );
   if( sts ) {
     raft_log( LOG_LVL_ERROR, "hrauth_call_async failed" );
@@ -1743,6 +1751,10 @@ static int raft_call_command( struct raft_cluster *cl, char *buf, int len ) {
 
 /* TODO: take a callback and invoke it when command commited */
 int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
+  return raft_command2( clid, buf, len, cseq, NULL, NULL );
+}
+  
+int raft_command2( uint64_t clid, char *buf, int len, uint64_t *cseq, void (*donecb)( uint64_t, void *), void *prv ) {
   struct raft_cluster *cl;
   int sts, i;
   uint64_t seq;
@@ -1787,7 +1799,7 @@ int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq ) {
   /* if not leader then send it */
   if( cl->state != RAFT_STATE_LEADER ) {
     raft_log( LOG_LVL_INFO, "Not leader - forwarding command" );
-    return raft_call_command( cl, buf, len );
+    return raft_call_command( cl, buf, len, donecb, prv ); 
   }
     
   /* save buffer locally */
@@ -2009,7 +2021,7 @@ int raft_replay( uint64_t clid ) {
   }
   seq++;
   
-  while( seq < cl->commitseq ) {
+  while( seq <= cl->commitseq ) {
     sts = raft_command_by_seq( clid, seq, &term, glob.buf, sizeof(glob.buf) );
     if( sts < 0 ) {
       raft_log( LOG_LVL_ERROR, "No command for seq=%"PRIu64"", seq );

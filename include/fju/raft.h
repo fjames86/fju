@@ -128,6 +128,7 @@ int raft_app_register( struct raft_app *app );
  * is called on all nodes
  */
 int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
+int raft_command2( uint64_t clid, char *buf, int len, uint64_t *cseq, void (*donecb)( uint64_t, void *), void *prv );
 
 /* get last command stored */
 int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq );

@@ -219,6 +219,10 @@ static int dlm_decode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
   return 0;
 }
 
+static void dlm_raftcmd_cb( uint64_t seq, void *prv ) {
+  dlm_log( LOG_LVL_TRACE, "dlm_raftcmd_cb seq=%"PRIu64"", seq );
+}
+
 static int dlm_command_publish( struct dlm_command *cmd ) {
   struct xdr_s xdr;
   char cmdbuf[64];
@@ -226,7 +230,7 @@ static int dlm_command_publish( struct dlm_command *cmd ) {
   
   xdr_init( &xdr, (uint8_t *)cmdbuf, sizeof(cmdbuf) );
   dlm_encode_command( &xdr, cmd );
-  sts = raft_command( glob.raftclid, (char *)xdr.buf, xdr.offset, NULL );
+  sts = raft_command2( glob.raftclid, (char *)xdr.buf, xdr.offset, NULL, dlm_raftcmd_cb, NULL );
   if( sts ) {
     dlm_log( LOG_LVL_ERROR, "Failed to publish command" );
   }
@@ -235,10 +239,13 @@ static int dlm_command_publish( struct dlm_command *cmd ) {
 }
 
 static void call_acquire_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
-  uint64_t hostid, lockid;
-
+  uint64_t hostid, lockid, lid;
+  void (*donecb)( uint64_t );
+  int sts;
+  
   hostid = hcallp->hostid;
   lockid = hcallp->cxt[0];
+  donecb = (void (*)(uint64_t))hcallp->cxt[1];
   
   if( !res ) {
     dlm_log( LOG_LVL_ERROR, "call_acquire_cb timeout lockid=%"PRIx64"", lockid );
@@ -246,9 +253,26 @@ static void call_acquire_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
     return;
   }
 
+  sts = xdr_decode_uint64( res, &lid );
+  if( sts ) {
+    dlm_log( LOG_LVL_ERROR, "call_acquire_cb xdr error" );
+    return;
+  }
+
+  if( lid != lockid ) {
+    dlm_log( LOG_LVL_ERROR, "call_acquire_cb lockid mismatch %"PRIx64" expected %"PRIx64"", lid, lockid );
+    donecb( 0 );
+    return;
+  }
+  
+  if( donecb ) {
+    donecb( lid );
+  }
+  
+
 }
 
-static int dlm_call_acquire( uint64_t hostid, uint64_t resid, int shared, uint64_t lid ) {
+static int dlm_call_acquire( uint64_t hostid, uint64_t resid, int shared, uint64_t lid, void (*donecb)( uint64_t ) ) {
   char argbuf[64];
   struct xdr_s args;
   struct hrauth_call hcall;
@@ -269,6 +293,7 @@ static int dlm_call_acquire( uint64_t hostid, uint64_t resid, int shared, uint64
   hcall.service = HRAUTH_SERVICE_PRIV;
   hcall.donecb = call_acquire_cb;
   hcall.cxt[0] = lid;
+  hcall.cxt[1] = (uint64_t)donecb;
   sts = hrauth_call_async( &hcall, &args, 1 );
   if( sts ) {
     dlm_log( LOG_LVL_ERROR, "dlm_call_acquire failed" );
@@ -282,6 +307,10 @@ static int dlm_acquire2( uint64_t resid, int shared, uint64_t lid, uint64_t host
 
 int dlm_acquire( uint64_t resid, int shared, uint64_t *lockid, dlm_donecb_t cb, void *cxt ) {
   return dlm_acquire2( resid, shared, 0, 0, lockid, cb, cxt );
+}
+
+static void acquire2_call_cb( uint64_t lid ) {
+  dlm_log( LOG_LVL_TRACE, "acquire2_call_cb lockid %"PRIx64"", lid );
 }
 
 static int dlm_acquire2( uint64_t resid, int shared, uint64_t lid, uint64_t hostid, uint64_t *lockidp, dlm_donecb_t cb, void *cxt ) {
@@ -343,7 +372,7 @@ static int dlm_acquire2( uint64_t resid, int shared, uint64_t lid, uint64_t host
     }
   } else {
     /* send rpc to leader */
-    sts = dlm_call_acquire( cl.leaderid, resid, shared, lid );
+    sts = dlm_call_acquire( cl.leaderid, resid, shared, lid, acquire2_call_cb );
     if( sts ) {
       dlm_log( LOG_LVL_ERROR, "dlm_call_acquire failed" );
     }
@@ -414,7 +443,8 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
     cmd.cmd = DLM_CMD_RELEASEALL;
     cmd.hostid = hostreg_localid();
     sts = dlm_command_publish( &cmd );
-    if( !sts ) glob.releaseownlocks = 0;
+    if( sts ) dlm_log( LOG_LVL_ERROR, "Failed to publish releaseownlock" );
+    else glob.releaseownlocks = 0;
   }
   
   if( !sts && (cl.state == RAFT_STATE_LEADER) ) {
@@ -793,7 +823,7 @@ static void dlm_subscriber( uint64_t hostid, uint64_t seq, uint32_t msgid, char 
     sts = xdr_decode_uint64( &xdr, &hseq );
     if( sts ) hseq = 0;    
     
-    dlm_log( LOG_LVL_TRACE, "Heartbeat %"PRIx64" Seq %"PRIu64"", hostid, hseq );
+    //dlm_log( LOG_LVL_TRACE, "Heartbeat %"PRIx64" Seq %"PRIu64"", hostid, hseq );
     host = host_by_hostid( hostid );
     if( host ) {
       if( host->seq != hseq ) {

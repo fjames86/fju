@@ -1,5 +1,4 @@
 
- 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #include <Winsock2.h>
@@ -104,10 +103,7 @@ int dlm_main( int argc, char **argv ) {
   if( n < ncmd ) ncmd = n;
 
   printf( "DLM Commands:\n" );
-  for( i = 0; i < ncmd; i++ ) {
-    if( sinfo.seq && (clist[i].seq < sinfo.seq) ) continue;    
-    if( sinfo.seq && (clist[i].seq == sinfo.seq) ) printf( "%-4"PRIu64" Snapshot\n", sinfo.seq );
-    
+  for( i = 0; i < ncmd; i++ ) {    
     iov[0].buf = (char *)&tt;
     iov[0].len = sizeof(tt);
     iov[1].buf = cmdbuf;
@@ -136,6 +132,8 @@ int dlm_main( int argc, char **argv ) {
       printf( "%-16s Host=%s\n", "ReleaseALL", hostname );
       break;
     }
+
+    if( sinfo.seq && (clist[i].seq == sinfo.seq) ) printf( "-- Snapshot --\n" );    
   }
   
   

@@ -1684,12 +1684,18 @@ static void call_command_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   uint64_t hostid, clid, seq;
   int sts, b;
   void (*donecb)( uint64_t, void *);
+  void *donecbcxt;
   
   hostid = hcallp->hostid;
   clid = hcallp->cxt[0];
-
+  donecb = (void (*)(uint64_t,void *))hcallp->cxt[1];
+  donecbcxt = (void *)hcallp->cxt[2];
+  
   raft_log( LOG_LVL_TRACE, "call_command_cb hostid=%"PRIx64" clid=%"PRIx64" %s", hostid, clid, res ? "Success" : "Timeout" );
-  if( !res ) return;
+  if( !res ) {
+    if( donecb ) donecb( 0, donecbcxt );
+    return;
+  }
 
   b = 0;
   seq = 0;
@@ -1699,8 +1705,7 @@ static void call_command_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   raft_log( LOG_LVL_TRACE, "call_command_cb %s Seq=%"PRIu64"", b ? "Success" : "Failure", seq );
 
   /* if command not accepted then should somehow signal this back to caller */
-  donecb = (void (*)(uint64_t,void *))hcallp->cxt[1];
-  if( donecb ) donecb( seq, (void *)hcallp->cxt[2] );
+  if( donecb ) donecb( seq, donecbcxt );
 }
 
 static int raft_call_command( struct raft_cluster *cl, char *buf, int len, void (*donecb)(uint64_t seq, void *prv), void *prv ) {
@@ -1821,6 +1826,7 @@ int raft_command2( uint64_t clid, char *buf, int len, uint64_t *cseq, void (*don
   }
     
   if( cseq ) *cseq = seq + 1;
+  if( donecb ) donecb( seq + 1, prv );
   
   return 0;
 }

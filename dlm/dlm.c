@@ -219,23 +219,34 @@ static int dlm_decode_command( struct xdr_s *xdr, struct dlm_command *cmd ) {
   return 0;
 }
 
+static int dlm_command_publish( struct dlm_command *cmd );
+
 static void dlm_raftcmd_cb( uint64_t seq, void *prv ) {
-  dlm_log( LOG_LVL_TRACE, "dlm_raftcmd_cb seq=%"PRIu64"", seq );
+
+  if( !seq ) {
+    dlm_log( LOG_LVL_ERROR, "dlm_raftcmd_cb failed - retrying" );
+  } else {  
+    dlm_log( LOG_LVL_TRACE, "dlm_raftcmd_cb seq=%"PRIu64"", seq );
+  }
+
 }
 
-static int dlm_command_publish( struct dlm_command *cmd ) {
+static int dlm_command_publish2( struct dlm_command *cmd, void (*donecb)(uint64_t,void*), void *prv ) {
   struct xdr_s xdr;
   char cmdbuf[64];
   int sts;
   
   xdr_init( &xdr, (uint8_t *)cmdbuf, sizeof(cmdbuf) );
   dlm_encode_command( &xdr, cmd );
-  sts = raft_command2( glob.raftclid, (char *)xdr.buf, xdr.offset, NULL, dlm_raftcmd_cb, NULL );
+  sts = raft_command2( glob.raftclid, (char *)xdr.buf, xdr.offset, NULL, donecb ? donecb : dlm_raftcmd_cb, prv );
   if( sts ) {
     dlm_log( LOG_LVL_ERROR, "Failed to publish command" );
   }
   
   return sts;
+}
+static int dlm_command_publish( struct dlm_command *cmd ) {
+  return dlm_command_publish2( cmd, NULL, NULL );
 }
 
 static void call_acquire_cb( struct xdr_s *res, struct hrauth_call *hcallp ) {
@@ -414,6 +425,15 @@ int dlm_release( uint64_t lockid ) {
   return sts;
 }
 
+static void releaseownlocks_cb( uint64_t seq, void *prv ) {
+  if( seq == 0 ) {
+    dlm_log( LOG_LVL_ERROR, "releaseownlocks_cb failed" );
+  } else {
+    dlm_log( LOG_LVL_TRACE, "releaseownlocks_cb success" );
+    glob.releaseownlocks = 0;
+  }
+}
+
 static void dlm_iter_cb( struct rpc_iterator *iter ) {
   /* 
    * If any locks held locally then publish heartbeat command. 
@@ -442,9 +462,8 @@ static void dlm_iter_cb( struct rpc_iterator *iter ) {
     memset( &cmd, 0, sizeof(cmd) );
     cmd.cmd = DLM_CMD_RELEASEALL;
     cmd.hostid = hostreg_localid();
-    sts = dlm_command_publish( &cmd );
+    sts = dlm_command_publish2( &cmd, releaseownlocks_cb, NULL );
     if( sts ) dlm_log( LOG_LVL_ERROR, "Failed to publish releaseownlock" );
-    else glob.releaseownlocks = 0;
   }
   
   if( !sts && (cl.state == RAFT_STATE_LEADER) ) {
@@ -686,7 +705,7 @@ static void dlm_snapload( struct raft_app *app, struct raft_cluster *cl, char *b
   dlm_log( LOG_LVL_TRACE, "dlm_snapload len=%u nlocks=%u/%u", len, nlock, (len - 4) / DLM_MAX_LOCK );
 
   glob.nlock = nlock;
-  memcpy( glob.lock, buf, sizeof(glob.lock) );
+  memcpy( glob.lock, buf + 4, sizeof(glob.lock) );
   for( i = 0; i < glob.nlock; i++ ) {
     dlm_log( LOG_LVL_DEBUG, "Snapload Lockid=%"PRIx64" HostID=%"PRIx64" State=%u ResID=%"PRIx64"",
 	     glob.lock[i].lockid,
@@ -737,8 +756,10 @@ static int dlm_proc_acquire( struct rpc_inc *inc ) {
   sts = raft_cluster_by_clid( glob.raftclid, &cl );
   if( sts ) {
     dlm_log( LOG_LVL_ERROR, "dlm_proc_acquire No dlm cluster" );
-  } else if( cl.state != RAFT_STATE_LEADER ) {
-    dlm_log( LOG_LVL_ERROR, "dlm_proc_acquire not leader" );
+  } else if( cl.state == RAFT_STATE_CANDIDATE ) {
+    dlm_log( LOG_LVL_ERROR, "dlm_proc_acquire election in progress" );
+    //  } else if( cl.state != RAFT_STATE_LEADER ) {
+    //dlm_log( LOG_LVL_ERROR, "dlm_proc_acquire not leader" );
   } else {  
     sts = dlm_acquire( resid, shared, &lockid, NULL, NULL );
   }

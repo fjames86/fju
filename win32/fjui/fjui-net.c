@@ -90,7 +90,6 @@ void fjui_call_getlicinfo( uint64_t hostid ) {
   hcall.vers = FJUD_RPC_VERS;
   hcall.proc = 3; /* nullping proc */
   hcall.donecb = getlicinfo_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 200;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -167,7 +166,6 @@ void fjui_call_connlist( uint64_t hostid ) {
   hcall.vers = FJUD_RPC_VERS;
   hcall.proc = 4; 
   hcall.donecb = connlist_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 200;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -242,7 +240,6 @@ void fjui_call_fvmlist( uint64_t hostid ) {
   hcall.vers = FVM_RPC_VERS;
   hcall.proc = 1; 
   hcall.donecb = fvmlist_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 200;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -307,7 +304,6 @@ void fjui_call_rpcbindlist( uint64_t hostid ) {
   hcall.vers = 2;
   hcall.proc = 4; 
   hcall.donecb = rpcbindlist_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 200;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -386,7 +382,6 @@ void fjui_call_raftlist( uint64_t hostid ) {
   hcall.vers = RAFT_RPC_VERS;
   hcall.proc = 7; 
   hcall.donecb = raftlist_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 200;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -423,7 +418,6 @@ void fjui_call_fvmrun( uint64_t hostid, char *modname, char *procname, struct xd
   hcall.vers = FVM_RPC_VERS;
   hcall.proc = 4; 
   hcall.donecb = fvmrun_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 1000;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -488,7 +482,6 @@ void fjui_call_logread( uint64_t hostid, char *name, uint64_t lastid ) {
   hcall.vers = LOG_RPC_VERS;
   hcall.proc = 4; 
   hcall.donecb = logread_cb;
-  hcall.cxt = NULL;
   hcall.cxt[0] = lastid;
   hcall.timeout = 1000;
   hcall.service = HRAUTH_SERVICE_PRIV;
@@ -693,7 +686,6 @@ void fjui_call_fvmload( uint64_t hostid, char *buf, int len, uint32_t flags, int
   hcall.vers = FVM_RPC_VERS;
   hcall.proc = 2; 
   hcall.donecb = fvmload_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 200;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -733,7 +725,6 @@ void fjui_call_fvmunload( uint64_t hostid, char *modname ) {
   hcall.vers = FVM_RPC_VERS;
   hcall.proc = 3; 
   hcall.donecb = fvmload_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 200;
   hcall.service = HRAUTH_SERVICE_PRIV;
 
@@ -784,7 +775,6 @@ void fjui_call_dlmlist( uint64_t hostid ) {
   hcall.vers = DLM_RPC_VERS;
   hcall.proc = 1; 
   hcall.donecb = dlmlist_cb;
-  hcall.cxt = NULL;
   hcall.timeout = 200;
   hcall.service = HRAUTH_SERVICE_PRIV;
 

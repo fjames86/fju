@@ -244,3 +244,4 @@ fsm_command_save
 fsm_command_list
 fsm_command_truncate
 fsm_snapshot_load 
+fsm_command_load

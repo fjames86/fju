@@ -149,6 +149,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\cht\cht-main.c" />
+    <ClCompile Include="..\..\dlm\dlm-main.c" />
     <ClCompile Include="..\..\dmb\dmb-main.c" />
     <ClCompile Include="..\..\dh\ecdh.c" />
     <ClCompile Include="..\..\fju.c" />

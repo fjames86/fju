@@ -87,6 +87,7 @@ int dlm_main( int argc, char **argv ) {
   struct dlm_command cmd;
   int sts;
   char hostname[64];
+  struct fsm_snapshot_info sinfo;
   
   raft_open();
   hostreg_open();
@@ -94,12 +95,19 @@ int dlm_main( int argc, char **argv ) {
   clid = raft_clid_by_appid( DLM_RPC_PROG );
   if( !clid ) usage( "No DLM cluster found" );
 
+  memset( &sinfo, 0, sizeof(sinfo) );
+  sts = fsm_snapshot_load( clid, NULL, 0, &sinfo );
+  
   ncmd = fsm_command_list( clid, NULL, 0 );
   clist = malloc( sizeof(*clist) * ncmd );
   n = fsm_command_list( clid, clist, ncmd );
   if( n < ncmd ) ncmd = n;
 
+  printf( "DLM Commands:\n" );
   for( i = 0; i < ncmd; i++ ) {
+    if( sinfo.seq && (clist[i].seq < sinfo.seq) ) continue;    
+    if( sinfo.seq && (clist[i].seq == sinfo.seq) ) printf( "%-4"PRIu64" Snapshot\n", sinfo.seq );
+    
     iov[0].buf = (char *)&tt;
     iov[0].len = sizeof(tt);
     iov[1].buf = cmdbuf;
@@ -108,24 +116,24 @@ int dlm_main( int argc, char **argv ) {
     if( sts < 0 ) usage( "Failed to load command Seq=%"PRIu64"", clist[i].seq );
     sts -= sizeof(tt);
 
-    printf( "[%"PRIu64"] ", clist[i].seq );
+    printf( "%-4"PRIu64" ", clist[i].seq );
     xdr_init( &xdr, (uint8_t *)cmdbuf, sts );
     dlm_decode_command( &xdr, &cmd );
     switch( cmd.cmd ) {
     case DLM_CMD_RELEASE:
-      printf( "%-16s LockID %"PRIx64"\n", "Release", cmd.lockid );
+      printf( "%-16s LockID=%"PRIx64"\n", "Release", cmd.lockid );
       break;
     case DLM_CMD_LOCKEX:
       hostreg_name_by_hostid( cmd.hostid, hostname );
-      printf( "%-16s LockID %"PRIx64" ResID %"PRIx64" Host %-16s\n", "LockEX", cmd.lockid, cmd.resid, hostname );
+      printf( "%-16s LockID=%"PRIx64" ResID=%"PRIx64" Host=%-16s\n", "LockEX", cmd.lockid, cmd.resid, hostname );
       break;
     case DLM_CMD_LOCKSH:
       hostreg_name_by_hostid( cmd.hostid, hostname );
-      printf( "%-16s LockID %"PRIx64" ResID %"PRIx64" Host %-16s\n", "LockEX", cmd.lockid, cmd.resid, hostname );
+      printf( "%-16s LockID=%"PRIx64" ResID=%"PRIx64" Host=%-16s\n", "LockEX", cmd.lockid, cmd.resid, hostname );
       break;
     case DLM_CMD_RELEASEALL:
       hostreg_name_by_hostid( cmd.hostid, hostname );
-      printf( "%-16s Host %s\n", "ReleaseALL", hostname );
+      printf( "%-16s Host=%s\n", "ReleaseALL", hostname );
       break;
     }
   }

@@ -79,6 +79,7 @@ static void dlm_list_results( struct xdr_s *xdr );
 static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void dlm_acquire_results( struct xdr_s *xdr );
 static void dlm_release_args( int argc, char **argv, int i, struct xdr_s *xdr );
+static void fvm_data_results( struct xdr_s *xdr );
 
 static struct clt_info clt_procs[] = {
     { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
@@ -102,6 +103,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
+    { FVM_RPC_PROG, 1, 7, fvm_reload_args, fvm_data_results, "fvm.data", "modname" },    
     { DMB_RPC_PROG, 1, 1, dmb_invoke_args, NULL, "dmb.invoke", "msgid=* [seq=*] [flags=*] [buf=base64]" },
     { DMB_RPC_PROG, 1, 3, dmb_publish_args, dmb_publish_results, "dmb.publish", "msgid=* [flags=*] [buf=base64]" },
     { DLM_RPC_PROG, 1, 1, NULL, dlm_list_results, "dlm.list", NULL },
@@ -1484,4 +1486,20 @@ static void dlm_release_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
   }
 
   xdr_encode_uint64( xdr, lockid );
+}
+
+static void fvm_data_results( struct xdr_s *xdr ) {
+  int sts, b, len, i;
+  char *buf;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  if( b ) {
+    sts = xdr_decode_opaque_ref( xdr, &buf, &len );
+    if( sts ) usage( "XDR error" );
+    for( i = 0; i < len; i++ ) {
+      if( (i % 16) == 0 ) printf( "\n%04x ", i );
+      printf( "%02x ", (uint32_t)(uint8_t)buf[i] );
+    }
+  } else printf( "Failure\n" );
 }

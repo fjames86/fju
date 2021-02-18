@@ -1405,6 +1405,24 @@ static int fvm_proc_reload( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_data( struct rpc_inc *inc ) {
+  int handle, sts;
+  struct fvm_module *m;
+  char modname[FVM_MAX_NAME];
+  
+  sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  m = fvm_module_by_name( modname );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, m ? 1 : 0 );
+  if( m ) xdr_encode_opaque( &inc->xdr, m->data, m->datasize );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_list },
@@ -1413,6 +1431,7 @@ static struct rpc_proc fvm_procs[] = {
   { 4, fvm_proc_run },
   { 5, fvm_proc_clrun },
   { 6, fvm_proc_reload },
+  { 7, fvm_proc_data },
   
   { 0, NULL }
 };

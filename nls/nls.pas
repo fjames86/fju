@@ -206,9 +206,6 @@ Begin
 	Call SetLogId(logname,high,low);
 End;
 
-
-
-
 End.
 
 

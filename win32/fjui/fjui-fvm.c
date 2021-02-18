@@ -4,7 +4,7 @@
 #define CMD_CALL 1
 #define CMD_LOAD 2
 #define CMD_UNLOAD 3
-
+#define CMD_EDIT 4
 
 static void fvm_size( HWND hwnd, int width, int height ) {
 	HWND h;
@@ -16,6 +16,8 @@ static void fvm_size( HWND hwnd, int width, int height ) {
 	SetWindowPos( h, HWND_TOP, 5, height - 90, 75, 25, 0 );
 	h = fjui_get_hwnd( "fvm_unloadbtn" );
 	SetWindowPos( h, HWND_TOP, 100, height - 90, 75, 25, 0 );
+	h = fjui_get_hwnd( "fvm_editbtn" );
+	SetWindowPos( h, HWND_TOP, 200, height - 90, 75, 25, 0 );
 
 	h = fjui_get_hwnd( "fvm_calltxt" );
 	SetWindowPos( h, HWND_TOP, 100, height - 50, width - 150, 25, 0 );
@@ -258,6 +260,9 @@ static void fvm_command( HWND hwnd, int id, int cmd, HWND hcmd ) {
 	    }
 	  }
 	  break;
+	case CMD_EDIT:
+	  /* TODO: launch dialog allowing to edit and compile a module */
+	  break;
 	}
 }
 
@@ -387,6 +392,9 @@ static LRESULT CALLBACK fvm_cb( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		h = CreateWindowA( WC_BUTTONA, "Unload", WS_VISIBLE|WS_CHILD|WS_BORDER, 5, 0, 75, 25, hwnd, CMD_UNLOAD, 0, NULL );
 		fjui_set_font( h );
 		fjui_hwnd_register( "fvm_unloadbtn", h );
+		h = CreateWindowA( WC_BUTTONA, "Edit...", WS_VISIBLE|WS_CHILD|WS_BORDER, 5, 0, 75, 25, hwnd, CMD_EDIT, 0, NULL );
+		fjui_set_font( h );
+		fjui_hwnd_register( "fvm_editbtn", h );
 
 		break;	
 	case WM_COMMAND:

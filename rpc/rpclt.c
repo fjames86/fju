@@ -1495,7 +1495,7 @@ static void fvm_data_results( struct xdr_s *xdr ) {
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
   if( b ) {
-    sts = xdr_decode_opaque_ref( xdr, &buf, &len );
+    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&buf, &len );
     if( sts ) usage( "XDR error" );
     for( i = 0; i < len; i++ ) {
       if( (i % 16) == 0 ) printf( "\n%04x ", i );

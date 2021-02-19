@@ -1417,7 +1417,7 @@ static int fvm_proc_data( struct rpc_inc *inc ) {
 
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, m ? 1 : 0 );
-  if( m ) xdr_encode_opaque( &inc->xdr, m->data, m->datasize );
+  if( m ) xdr_encode_opaque( &inc->xdr, (uint8_t *)m->data, m->datasize );
   rpc_complete_accept_reply( inc, handle );
   
   return 0;

@@ -75,5 +75,5 @@ End.
 
 
 { Local Variables: }
-{ fvm-output-path: "/opt/fju/fvm/cht.fvm" }
+{ fvm-output-path: "~/fju/bin/cht.fvm" }
 { End: }

@@ -25,7 +25,7 @@
 
 (defvar fvm-mode-map nil)
 
-(defvar fvm-compiler-path (expand-file-name "~/fju/bin/fvmc") "Path to fvmc compiler")
+(defvar fvm-compiler-path (expand-file-name "~/fju/bin/fju") "Path to fvmc compiler")
 (defvar fvm-include-path (expand-file-name "~/fju/fvm/stdlib") "Path to fvm stdlib include directory")
 
 (defvar fvm-output-path nil "Path to write compiled module or nil for default")
@@ -35,8 +35,8 @@
 (defun fvm-compile ()
   (interactive)
   (shell-command (if fvm-output-path
-		     (format "%s -o %s -I %s %s" fvm-compiler-path fvm-output-path fvm-include-path (buffer-file-name))
-		     (format "%s -I %s %s" fvm-compiler-path fvm-include-path (buffer-file-name)))))
+		     (format "%s fvmc -o %s -I %s %s" fvm-compiler-path fvm-output-path fvm-include-path (buffer-file-name))
+		     (format "%s fvmc -I %s %s" fvm-compiler-path fvm-include-path (buffer-file-name)))))
 
 (setq fvm-mode-map (make-sparse-keymap))
 (define-key fvm-mode-map (kbd "C-c C-c") 'fvm-compile)
@@ -47,10 +47,5 @@
   (setq-local comment-start "{")
   (setq-local comment-end "}")
   (setq-local fvm-output-path nil))
-
-
-
-
-
 
 (provide 'fvm-mode)

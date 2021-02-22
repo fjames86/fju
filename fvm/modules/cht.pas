@@ -14,8 +14,8 @@ Include "string.pas";
 Include "log.pas";
 Include "dmb.pas";
 
-Const ChtMsgWrite = 0x00010001;
-Const ChtMsgDelete = 0x00010002;
+Const ChtMsgWrite = DmbCatCht + 1;
+Const ChtMsgDelete = DmbCatCht + 2;
 
 Procedure Init()
 Begin

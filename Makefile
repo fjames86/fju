@@ -58,7 +58,7 @@ tar:
 	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}
 
 strip:
-	strip -s ${LIBFJU} ${BINDIR}/*
+	strip -s ${LIBFJU} ${BINDIR}/fju 
 
 .for proj in ${PROJECTS}
 .include "${proj}/${proj}.mk"

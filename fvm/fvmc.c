@@ -1472,7 +1472,7 @@ static void parseexpr( FILE *f ) {
 						      
 	  } else {
 	    struct constval *cl = getconstval( glob.tok.val );
-	    if( !cl ) usage( "Variable %s does not name a known local, global, param, const or contsval", glob.tok.val );
+	    if( !cl ) usage( "Variable %s does not name a known local, global, param, const or constval", glob.tok.val );
 
 	    vartype = cl->type;
 	    
@@ -2249,8 +2249,9 @@ static void parsedeclaration( FILE *f ) {
   expecttok( f, TOK_SEMICOLON );  
 }
 
+static uint32_t parseconstdefexpr( FILE *f );
 static uint32_t parseconstexprval( FILE *f ) {
-  struct constvar *cv;
+  struct constval *cv;
   uint32_t val;
   
   switch( glob.tok.type ) {
@@ -2259,11 +2260,17 @@ static uint32_t parseconstexprval( FILE *f ) {
     expecttok( f, TOK_U32 );
     return val;
   case TOK_NAME:
-    cv = getconst( glob.tok.val );
-    if( !cv ) usage( "Unknown const val %s", glob.tok.val );
+    cv = getconstval( glob.tok.val );
+    if( !cv ) usage( "Unknown const %s", glob.tok.val );
     if( cv->len != 4 ) usage( "Bad const %s", glob.tok.val );
     val = *((uint32_t *)cv->val);
     expecttok( f, TOK_NAME );
+    return val;
+    break;
+  case TOK_OPAREN:
+    accepttok( f, glob.tok.type );
+    val = parseconstdefexpr( f );
+    expecttok( f, TOK_CPAREN );
     return val;
     break;
   default:
@@ -2275,15 +2282,9 @@ static uint32_t parseconstexprval( FILE *f ) {
 static uint32_t parseconstdefexpr( FILE *f ) {
   /* u32 | name where name names another getconst 
    * (expr)
-   * expr || expr [+ - * / % & |] expr 
+   * expr || expr [+ - * / % & | ^ >> <<] expr 
    */
   uint32_t val;
-
-  if( glob.tok.type == TOK_OPAREN ) {
-    val = parseconstdefexpr( f );
-    expecttok( f, TOK_CPAREN );
-    return val;
-  }
 
   val = parseconstexprval( f );
   while( 1 ) {
@@ -2320,6 +2321,14 @@ static uint32_t parseconstdefexpr( FILE *f ) {
       accepttok( f, glob.tok.type );
       val ^= parseconstdefexpr( f );      
       break;
+    case TOK_SHL:
+      accepttok( f, glob.tok.type );
+      val <<= parseconstdefexpr( f );
+      break;
+    case TOK_SHR:
+      accepttok( f, glob.tok.type );
+      val >>= parseconstdefexpr( f );
+      break;
     default:
       goto done;
     }
@@ -2334,6 +2343,7 @@ static void parseconstdef( FILE *f ) {
   /* const name = value */
   char cname[FVM_MAX_NAME];
   void *ptr;
+  uint32_t u32;
   
   if( glob.tok.type != TOK_NAME ) usage( "const expects name not %s", gettokname( glob.tok.type ) );
   strncpy( cname, glob.tok.val, FVM_MAX_NAME - 1 );
@@ -2346,7 +2356,8 @@ static void parseconstdef( FILE *f ) {
     break;
   default:
     ptr = malloc( 4 );
-    *((uint32_t *)ptr) = parseconstdefexpr( f );
+    u32 = parseconstdefexpr( f );
+    *((uint32_t *)ptr) = u32;
     addconstval( cname, VAR_TYPE_U32, ptr, 4 );
     break;
   }

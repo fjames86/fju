@@ -13,7 +13,10 @@ Begin
    Include "string.pas";
 
    Declare Procedure Test/TestXCallCB(var s : string);
-   
+
+   Const testexpr1 = 0x11110000;
+   Const testexpr = (testexpr1 & 0xffff0000) | 0x0001;
+
    { procedures }
    Procedure TestAdd()
    Begin

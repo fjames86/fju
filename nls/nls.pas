@@ -28,14 +28,18 @@ Begin
    
    { constants }
    Const MaxLog = 32;
-   Const NlsMsgIdWrite = 0x00020000;
+   Const MaxLogName = 32;
+   Const LogBufferSize = MaxLog * MaxLogName;
+   Const LogIDBufferSize = MaxLog * 2;
    
+   Const NlsMsgIdWrite = (DmbCatNls + 0); { dmb message identifier } 
+
    { declarations }
    
    { globals }
    var nlogs : u32;
-   var lognames : string[1024]; { 32 byte name, 32 names max = 1024 }
-   var logids : u32[64];
+   var lognames : string[LogBufferSize]; { 32 byte name, 32 names max = 1024 }
+   var logids : u32[LogIDBufferSize];
    
 { procedures }
 

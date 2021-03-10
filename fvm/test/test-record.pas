@@ -16,7 +16,7 @@ Begin
 	  b : string;
 	  c : int[clen];
 	  d : opaque[3];
-	  End;
+    End;
 	  
    { globals }
 

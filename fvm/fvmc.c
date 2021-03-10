@@ -1000,8 +1000,6 @@ static struct constval *addconstval( char *name, var_t type, char *val, int len 
   return v;
 }
 
-
-
 static void addincludepath( char *path ) {
   struct includepath *p;
   p = malloc( sizeof(*p) );
@@ -1009,6 +1007,27 @@ static void addincludepath( char *path ) {
   p->path = path;
   glob.includepaths = p;
 }
+
+static struct record *getrecord( char *name ) {
+  struct record *r;
+  r = glob.records;
+  while( r ) {
+    if( strcasecmp( r->name, name ) == 0 ) return r;
+    r = r->next;
+  }
+  return NULL;
+}
+
+static struct var *getfieldname( struct record *r, char *name ) {
+  struct var *v;
+  v = r->fields;
+  while( v ) {
+    if( strcasecmp( v->name, name ) == 0 ) return v;
+    v = v->next;
+  }
+  return NULL;
+}
+
 
 static struct token *nexttok( FILE *f ) {
   int sts;

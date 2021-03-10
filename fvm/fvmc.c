@@ -2053,6 +2053,8 @@ static int parsestatement( FILE *f ) {
 	}
 	
 	expecttok( f, TOK_CARRAY );
+      } else if( accepttok( f, TOK_PERIOD ) ) {
+	usage( "assigning record field not implemented" );
       }
       
       expecttok( f, TOK_EQ );
@@ -2086,6 +2088,8 @@ static int parsestatement( FILE *f ) {
 	    emit_add();
 	  }
 	  expecttok( f, TOK_CARRAY );
+	} else if( accepttok( f, TOK_PERIOD ) ) {
+	  usage( "assigning record field not implemented" );
 	}
 	
 	expecttok( f, TOK_EQ );
@@ -2123,7 +2127,10 @@ static int parsestatement( FILE *f ) {
 	  }
 	  
 	  expecttok( f, TOK_CARRAY );
-	}	
+	} else if( accepttok( f, TOK_PERIOD ) ) {
+	  usage( "assigning record field not implemented" );
+	}
+	
 	expecttok( f, TOK_EQ );
 	parseexpr( f );
 

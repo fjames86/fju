@@ -24,7 +24,7 @@ Begin
    Procedure TestProc()
    Begin
    var a : fred[2];
-   a = a.b;
+   a.b = a.b;
    End;
 
    { constant values }

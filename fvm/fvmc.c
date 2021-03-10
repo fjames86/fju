@@ -1558,6 +1558,8 @@ static void parseexpr( FILE *f ) {
 	emit_ld8();
       }
       expecttok( f, TOK_CARRAY );
+    } else if( accepttok( f, TOK_PERIOD ) ) {
+      usage( "record field not implementd" );
     }
   } else usage( "Bad expr %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
   
@@ -2030,6 +2032,8 @@ static int parsestatement( FILE *f ) {
       
       return 1;
     }
+
+    /* TODO: support assigning record fields */
     
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {

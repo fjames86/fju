@@ -643,6 +643,14 @@ struct syscall {
   uint64_t siginfo;
 };
 
+struct record {
+  struct record *next;
+
+  char name[FVM_MAX_NAME];
+  struct var *fields;
+  int size;
+};
+
 
 /*
  * stack: 
@@ -673,6 +681,7 @@ static struct {
   struct constvar *consts;
   struct constval *constvals;
   struct syscall *syscalls;
+  struct record *records;
   
   struct token tok;
   uint32_t pc;
@@ -1970,7 +1979,7 @@ static int parsestatement( FILE *f ) {
     emit_jmp( addr );
     expecttok( f, TOK_NAME );
   } else if( glob.tok.type == TOK_NAME ) {
-    /* varname = expr */
+    /* varname = expr i.e. an assignment operation */
     struct var *v;
     struct param *p;
     int setarray8 = 0;
@@ -2456,6 +2465,56 @@ static void parseprocedure( FILE *f ) {
         
 }
 
+static void parserecord( FILE *f ) {
+  /* record <name> = fieldname : type; ... end; */
+  struct record *r;
+  struct var *v, *vp;
+  
+  r = malloc( sizeof(*r) );
+  memset( r, 0, sizeof(*r) );
+  vp = NULL;
+  
+  if( glob.tok.type != TOK_NAME ) usage( "Unexpected symbol %s - expected record name", gettokname( glob.tok.type ) );
+  strncpy( r->name, glob.tok.val, sizeof(r->name) - 1 );
+  expecttok( f, TOK_NAME );
+  expecttok( f, TOK_EQ );
+  while( !acceptkeyword( f, "end" ) ) {
+    v = malloc( sizeof(*v) );
+    memset( v, 0, sizeof(*v) );
+    if( glob.tok.type != TOK_NAME ) usage( "Unexpected symbol %s - expected field name", gettokname( glob.tok.type ) );
+    strncpy( v->name, glob.tok.val, sizeof(v->name) - 1 );
+    expecttok( f, TOK_NAME );
+    expecttok( f, TOK_COLON );
+    if( glob.tok.type != TOK_NAME ) usage( "Unexpected symbol %s - expected field type", gettokname( glob.tok.type ) );
+    parsevartype( f, &v->type, &v->arraylen );
+
+    if( vp ) v->offset = vp->offset + vp->size;
+    else v->offset = 0;
+    if( v->arraylen ) v->size = (v->type == VAR_TYPE_U32 ? 4 : 1) * v->arraylen;
+    else v->size = 4;
+    if( v->size % 4 ) v->size += 4 - (v->size % 4);
+    
+    if( glob.pass == 2 ) free( v );
+    else {
+      if( vp ) vp->next = v;
+      else r->fields = v;
+      vp = v;
+    }
+    
+    expecttok( f, TOK_SEMICOLON );
+  }
+  expecttok( f, TOK_SEMICOLON );
+
+  r->size = vp ? vp->offset + vp->size : 0;
+  
+  if( glob.pass == 2 ) free( r );
+  else {
+    r->next = glob.records;
+    glob.records = r;
+  }
+}
+
+
 static void parsefile( FILE *f ) {
   struct token *tok;
 
@@ -2496,6 +2555,8 @@ static void parsefile( FILE *f ) {
       parseconstdef( f );
     } else if( acceptkeyword( f, "declare" ) ) {
       parsedeclaration( f );
+    } else if( acceptkeyword( f, "record" ) ) {
+      parserecord( f );
     } else if( acceptkeyword( f, "include" ) ) {
       /* include string */
       uint32_t linecount;
@@ -2635,6 +2696,8 @@ static void processincludefile( char *path ) {
 	parseconstdef( f );
       } else if( acceptkeyword( f, "procedure" ) ) {
 	parseprocedure( f );
+      } else if( acceptkeyword( f, "record" ) ) {
+	parserecord( f );
       } else usage( "Invalid form % (%s) in include file", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
       if( glob.tok.type == TOK_PERIOD ) break;
     }
@@ -2912,7 +2975,31 @@ static void compile_file( char *path, char *outpath ) {
       v = v->next;
     }
   }
-      
+  {
+    struct record *r;
+    struct var *v;
+    r = glob.records;
+    while( r ) {
+      fvmc_printf( "[%u] Record %s = \n", r->size, r->name );
+      v = r->fields;
+      while( v ) {
+	fvmc_printf( "  [%u] %s : %s",
+		     v->offset,
+		     v->name,
+		     v->type == VAR_TYPE_U32 ? "Int" :
+		     v->type == VAR_TYPE_STRING ? "String" :
+		     v->type == VAR_TYPE_OPAQUE ? "Opaque" :
+		     "Other" );
+	if( v->arraylen ) {
+	  fvmc_printf( "[%u]", v->arraylen );
+	}
+	fvmc_printf( ";\n" );
+	v = v->next;
+      }
+      r = r->next;
+    }
+
+  }
 }
 
 static void disassemblefile( char *path ) {

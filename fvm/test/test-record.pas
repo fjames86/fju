@@ -23,7 +23,8 @@ Begin
    { procedures }
    Procedure TestProc()
    Begin
-
+   var a : fred[2];
+   a[1] = 1;
    End;
 
    { constant values }

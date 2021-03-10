@@ -578,6 +578,7 @@ struct var {
   uint32_t address; /* address if global, stack offset if local */
   uint32_t offset;
   uint32_t size; /* size of the variable. u32 is 4 */
+  struct record *record;
 };
 
 /* procedure parameter */
@@ -1323,29 +1324,41 @@ static void emitdata( void *data, int len ) {
 
 /* --------------- */
 
-static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen ) {
+static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen, struct record **rec ) {
+  struct record *r;
+  r = NULL;
+  
   if( glob.tok.type != TOK_NAME ) usage( "Unexpect symbol type %s - expected u32|string|opaque", gettokname( glob.tok.type ) );
   if( strcasecmp( glob.tok.val, "u32" ) == 0 ) *type = VAR_TYPE_U32;
   else if( strcasecmp( glob.tok.val, "int" ) == 0 ) *type = VAR_TYPE_U32;
   else if( strcasecmp( glob.tok.val, "integer" ) == 0 ) *type = VAR_TYPE_U32;    
   else if( strcasecmp( glob.tok.val, "string" ) == 0 ) *type = VAR_TYPE_STRING;
   else if( strcasecmp( glob.tok.val, "opaque" ) == 0 ) *type = VAR_TYPE_OPAQUE;
+  else {
+    r = getrecord( glob.tok.val );
+    if( !r ) usage( "Unexpected var type %s", glob.tok.val );
+    *type = VAR_TYPE_OPAQUE;
+    *arraylen = r->size;
+  }
+  
   expecttok( f, TOK_NAME );
   if( accepttok( f, TOK_OARRAY ) ) {
     if( glob.tok.type == TOK_U32 ) {
-      *arraylen = glob.tok.u32;
+      *arraylen = (r ? r->size : 1) * glob.tok.u32;
       expecttok( f, TOK_U32 );
     } else if( glob.tok.type == TOK_NAME ) {
       struct constval *cl = getconstval( glob.tok.val );
       if( !cl ) usage( "array len %s does not name a constant value", glob.tok.val );
       if( cl->type != VAR_TYPE_U32 ) usage( "Array len %s does not name a u32", glob.tok.val );
-      *arraylen = *((uint32_t *)cl->val);
+      *arraylen = (r ? r->size : 1) * (*((uint32_t *)cl->val));
       expecttok( f, TOK_NAME );
     } else usage( "Array length specifier" );
     expecttok( f, TOK_CARRAY );
   } else {
-    *arraylen = 0;
+    if( !r ) *arraylen = 0;
   }
+
+  *rec = r;
 }
 
 static void parseexpr( FILE *f ) {
@@ -2130,6 +2143,7 @@ static void parseproceduresig( FILE *f, struct param **params, int *nparams, uin
   uint32_t arraylen;
   struct param *p, *np, *tmpp;
   uint64_t siginfo;
+  struct record *r;
   
   nparam = 0;
   siginfo = 0;
@@ -2163,7 +2177,8 @@ static void parseproceduresig( FILE *f, struct param **params, int *nparams, uin
     p->isvar = isvar;
     expecttok( f, TOK_NAME );
     expecttok( f, TOK_COLON );
-    parsevartype( f, &p->type, &arraylen );
+    parsevartype( f, &p->type, &arraylen, &r );
+    if( r ) usage( "records not allowed in proc params" );
     if( arraylen ) usage( "array vars not allowed in proc params" );
     if( nparam <= FVM_MAX_PARAM ) siginfo |= ((p->type | (p->isvar ? 4 : 0)) << (nparam * 3));
 
@@ -2401,7 +2416,9 @@ static void parseprocedure( FILE *f ) {
   struct proc *proc;
   var_t vartype;
   uint32_t arraylen;
-      
+  struct record *r;
+  struct var *local;
+  
   /* reset stackoffset at start of new procedure */
   if( glob.stackoffset != 0 ) printf( "Invalid stack offset %04x?\n", glob.stackoffset );
   glob.stackoffset = 0;
@@ -2450,12 +2467,13 @@ static void parseprocedure( FILE *f ) {
     }
     
     expecttok( f, TOK_COLON );
-    parsevartype( f, &vartype, &arraylen );
+    parsevartype( f, &vartype, &arraylen, &r );
 
     nl = namelist;
     while( nl ) {
       nextnl = nl->next;
-      addlocal( proc, nl->name, vartype, arraylen );
+      local = addlocal( proc, nl->name, vartype, arraylen );
+      local->record = r;
       free( nl );
       nl = nextnl;
     }
@@ -2505,7 +2523,7 @@ static void parserecord( FILE *f ) {
     expecttok( f, TOK_NAME );
     expecttok( f, TOK_COLON );
     if( glob.tok.type != TOK_NAME ) usage( "Unexpected symbol %s - expected field type", gettokname( glob.tok.type ) );
-    parsevartype( f, &v->type, &v->arraylen );
+    parsevartype( f, &v->type, &v->arraylen, &v->record );
 
     if( vp ) v->offset = vp->offset + vp->size;
     else v->offset = 0;
@@ -2602,16 +2620,19 @@ static void parsefile( FILE *f ) {
     char varname[FVM_MAX_NAME];
     var_t vartype;
     uint32_t arraylen;
+    struct var *global;
+    struct record *rec;
     
     /* var name : type; */
     if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
     strncpy( varname, glob.tok.val, FVM_MAX_NAME - 1 );
     expecttok( f, TOK_NAME );
     expecttok( f, TOK_COLON );
-    parsevartype( f, &vartype, &arraylen );
+    parsevartype( f, &vartype, &arraylen, &rec );
     expecttok( f, TOK_SEMICOLON );
 
-    addglobal( varname, vartype, arraylen );
+    global = addglobal( varname, vartype, arraylen );
+    global->record = rec;
   }
 
   /* everything else following this is in the text segment */

@@ -16,15 +16,19 @@ Begin
 	  b : string;
 	  c : int[clen];
 	  d : opaque[3];
-    End;
+   End;
 	  
    { globals }
 
    { procedures }
    Procedure TestProc()
    Begin
-   var a : fred[2];
-   a.b = a.b;
+	var a : opaque[SizeOf(fred)];
+  	var b : int;
+
+	b = a + OffsetOf(fred.a);
+	*b = 123;	
+	b = *b;
    End;
 
    { constant values }

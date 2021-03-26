@@ -1019,6 +1019,7 @@ static struct record *getrecord( char *name ) {
   return NULL;
 }
 
+#if 0
 static struct var *getfieldname( struct record *r, char *name ) {
   struct var *v;
   v = r->fields;
@@ -1028,7 +1029,7 @@ static struct var *getfieldname( struct record *r, char *name ) {
   }
   return NULL;
 }
-
+#endif
 
 static struct token *nexttok( FILE *f ) {
   int sts;

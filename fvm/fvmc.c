@@ -1355,7 +1355,7 @@ static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen, struct recor
   *rec = r;
 }
 
-static void parsevariableexpr( FILE *f, var_t *vartypep ) {
+static void parsevariableexpr( FILE *f, var_t *vartypep, struct record **recordp ) {
   struct var *v;
   var_t vartype;
   struct param *p;
@@ -1368,6 +1368,8 @@ static void parsevariableexpr( FILE *f, var_t *vartypep ) {
     
     if( v->arraylen ) emit_leasp( v->offset + glob.stackoffset );
     else emit_ldsp( v->offset + glob.stackoffset );
+
+    *recordp = v->record;
   } else {
     v = getglobal( glob.tok.val );
     if( v ) {
@@ -1378,6 +1380,8 @@ static void parsevariableexpr( FILE *f, var_t *vartypep ) {
 	emit_ldi32( v->address );
 	emit_ld();
       }
+
+      *recordp = v->record;
     } else {
       p = getparam( glob.currentproc, glob.tok.val );
       if( p ) {
@@ -1387,6 +1391,7 @@ static void parsevariableexpr( FILE *f, var_t *vartypep ) {
 	if( p->isvar ) {
 	  emit_ld();
 	}
+
       } else {
 	cv = getconst( glob.tok.val );
 	if( cv ) {
@@ -1398,7 +1403,7 @@ static void parsevariableexpr( FILE *f, var_t *vartypep ) {
 	  } else if( cv->type == VAR_TYPE_STRING ) {
 	    emit_ldi32( cv->address );
 	  } else usage( "Bad const type" );
-	  
+
 	} else {
 	  cl = getconstval( glob.tok.val );
 	  if( !cl ) usage( "Variable %s does not name a known local, global, param, const or constval", glob.tok.val );
@@ -1565,11 +1570,12 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
     emit_ld();
   } else if( glob.tok.type == TOK_NAME ) {
     var_t vartype = VAR_TYPE_U32;
-
+    struct record *recordp = NULL;
+    
     // parse builtin function calls e.g. sizeof,offsetof etc */
     if( parsebuiltinfn( f, &vartype ) ) {
     } else {
-      parsevariableexpr( f, &vartype );
+      parsevariableexpr( f, &vartype, &recordp );
     }    
 
     if( accepttok( f, TOK_OARRAY ) ) {
@@ -1586,7 +1592,19 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
       }
       expecttok( f, TOK_CARRAY );
     } else if( accepttok( f, TOK_PERIOD ) ) {
-      usage( "record field not implementd" );
+      struct var *field;	
+      if( !recordp ) usage( "Variable not a record type" );
+
+      field = getrecordfield( recordp, glob.tok.val );
+      if( !field ) usage( "Record %s does not have a field %s", recordp->name, glob.tok.val );
+      
+      emit_ldi32( field->offset );
+      emit_add();  /* get address of the field */
+      if( !field->arraylen ) {
+	emit_ld();
+      }
+      
+      expecttok( f, TOK_NAME );
     }
   } else usage( "Bad expr %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
 
@@ -2046,55 +2064,16 @@ static int parsestatement( FILE *f ) {
     expecttok( f, TOK_NAME );
   } else if( accepttok( f, TOK_MUL ) ) {
     /* assign *varname = expr */
-    //    struct var *v;
-    //struct param *p;
-
     parseexpr2( f, 1 );
     expecttok( f, TOK_EQ );
     parseexpr( f );
-    emit_st();
-
-#if 0    
-    if( glob.tok.type != TOK_NAME ) usage( "Expected varname" );
-    
-    if( (v = getlocal( glob.currentproc, glob.tok.val )) ) {
-      emit_ldsp( v->offset + glob.stackoffset ); /* get value of variable */
-      expecttok( f, TOK_NAME );
-      expecttok( f, TOK_EQ );
-      parseexpr( f );      
-      emit_st();
-            
-    } else if( (v = getglobal( glob.tok.val )) ) {
-      emit_ldi32( v->address );
-      emit_ld(); /* get value of variable */
-      
-      expecttok( f, TOK_NAME );
-      expecttok( f, TOK_EQ );
-      parseexpr( f );
-      emit_st();
-	
-    } else if( (p = getparam( glob.currentproc, glob.tok.val )) ) {
-      if( p->isvar ) {
-	emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset ); /* var param so value on stack is address, just load it */
-      } else {
-	emit_leasp( p->offset + glob.currentproc->localsize +  glob.stackoffset ); /* get address of param */
-      }
-      emit_ld();
-      
-      expecttok( f, TOK_NAME );
-      expecttok( f, TOK_EQ );
-      parseexpr( f );
-
-      /* store value */
-      emit_st();
-    } else usage( "Unknown variable %s", glob.tok.val );
-#endif
-    
+    emit_st();    
   } else if( glob.tok.type == TOK_NAME ) {
     /* varname = expr i.e. an assignment operation */
     struct var *v;
     struct param *p;
     int setarray8 = 0;
+    int setfield = 0;
     
     if( glob.tok.val[strlen( glob.tok.val ) - 1] == ':' ) {
       char lname[64];
@@ -2132,7 +2111,19 @@ static int parsestatement( FILE *f ) {
 	
 	expecttok( f, TOK_CARRAY );
       } else if( accepttok( f, TOK_PERIOD ) ) {
-	usage( "assigning record field not implemented" );
+	struct var *field;
+	
+	if( !v->record ) usage( "Variable %s not a record type", v->name );
+
+	field = getrecordfield( v->record, glob.tok.val );
+	if( !field ) usage( "Record %s does not have a field %s", v->record->name, glob.tok.val );
+
+	emit_leasp( v->offset + glob.stackoffset );
+	emit_ldi32( field->offset );
+	emit_add();  /* get address of the field */
+
+	expecttok( f, TOK_NAME );
+	setfield = 1;
       }
       
       expecttok( f, TOK_EQ );
@@ -2144,6 +2135,8 @@ static int parsestatement( FILE *f ) {
 	} else {
 	  emit_st8();
 	}
+      } else if( setfield ) {
+	emit_st();
       } else {
 	emit_stsp( v->offset + glob.stackoffset );
       }
@@ -2167,7 +2160,16 @@ static int parsestatement( FILE *f ) {
 	  }
 	  expecttok( f, TOK_CARRAY );
 	} else if( accepttok( f, TOK_PERIOD ) ) {
-	  usage( "assigning record field not implemented" );
+	  struct var *field;
+	  
+	  if( !v->record ) usage( "Variable %s not a record type", v->name );
+	  
+	  field = getrecordfield( v->record, glob.tok.val );
+	  if( !field ) usage( "Record %s does not have a field %s", v->record->name, glob.tok.val );
+	  
+	  emit_ldi32( field->offset );
+	  emit_add(); /* get address of field */
+	  expecttok( f, TOK_NAME );
 	}
 	
 	expecttok( f, TOK_EQ );
@@ -2206,7 +2208,14 @@ static int parsestatement( FILE *f ) {
 	  
 	  expecttok( f, TOK_CARRAY );
 	} else if( accepttok( f, TOK_PERIOD ) ) {
-	  usage( "assigning record field not implemented" );
+	  struct var *field;	  
+	  if( !v->record ) usage( "Variable %s not a record type", v->name );
+	  
+	  field = getrecordfield( v->record, glob.tok.val );
+	  if( !field ) usage( "Record %s does not have a field %s", v->record->name, glob.tok.val );
+	  
+	  emit_ldi32( field->offset );
+	  emit_add(); /* get address of field */	  
 	}
 	
 	expecttok( f, TOK_EQ );

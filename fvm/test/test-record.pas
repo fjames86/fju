@@ -26,8 +26,9 @@ Begin
 	var b : fred;
 	var a : opaque[SizeOf(fred)];
 
-	*(a + OffsetOf(fred.d)) = 123;
-	b.d = 123;
+	{ *(a + OffsetOf(fred.d)) = 123; }
+	{ b.d = 123; }
+	b.a = b.a;
    End;
 
    { constant values }

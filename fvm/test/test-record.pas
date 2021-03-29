@@ -23,12 +23,11 @@ Begin
    { procedures }
    Procedure TestProc()
    Begin
+	var b : fred;
 	var a : opaque[SizeOf(fred)];
-  	var b : int;
 
-	b = a + OffsetOf(fred.a);
-	*b = 123;	
-	b = *b;
+	*(a + OffsetOf(fred.d)) = 123;
+	b.d = 123;
    End;
 
    { constant values }

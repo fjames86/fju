@@ -560,6 +560,9 @@ static struct var *getlocal( struct proc *proc, char *name );
 static struct constvar *getconst( char *name );
 static struct constval *getconstval( char *name );
 static void processincludefile( char *path );
+static uint32_t parseconstdefexpr( FILE *f );
+static uint32_t parsesizeof( FILE *f );
+static uint32_t parseoffsetof( FILE *f );
 
 struct includepath {
   struct includepath *next;
@@ -596,7 +599,7 @@ struct proc {
   struct proc *next;
   char name[FVM_MAX_NAME];
   uint32_t address;
-  struct param *params; /* TODO: make this a list */
+  struct param *params; 
   int nparams;
   struct var *locals;
   uint32_t localsize; /* total size of all locals */
@@ -1019,8 +1022,7 @@ static struct record *getrecord( char *name ) {
   return NULL;
 }
 
-#if 0
-static struct var *getfieldname( struct record *r, char *name ) {
+static struct var *getrecordfield( struct record *r, char *name ) {
   struct var *v;
   v = r->fields;
   while( v ) {
@@ -1029,7 +1031,6 @@ static struct var *getfieldname( struct record *r, char *name ) {
   }
   return NULL;
 }
-#endif
 
 static struct token *nexttok( FILE *f ) {
   int sts;
@@ -1344,16 +1345,8 @@ static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen, struct recor
   
   expecttok( f, TOK_NAME );
   if( accepttok( f, TOK_OARRAY ) ) {
-    if( glob.tok.type == TOK_U32 ) {
-      *arraylen = (r ? r->size : 1) * glob.tok.u32;
-      expecttok( f, TOK_U32 );
-    } else if( glob.tok.type == TOK_NAME ) {
-      struct constval *cl = getconstval( glob.tok.val );
-      if( !cl ) usage( "array len %s does not name a constant value", glob.tok.val );
-      if( cl->type != VAR_TYPE_U32 ) usage( "Array len %s does not name a u32", glob.tok.val );
-      *arraylen = (r ? r->size : 1) * (*((uint32_t *)cl->val));
-      expecttok( f, TOK_NAME );
-    } else usage( "Array length specifier" );
+    uint32_t u32 = parseconstdefexpr( f );
+    *arraylen = (r ? r->size : 1) * u32;
     expecttok( f, TOK_CARRAY );
   } else {
     if( !r ) *arraylen = 0;
@@ -1362,7 +1355,108 @@ static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen, struct recor
   *rec = r;
 }
 
-static void parseexpr( FILE *f ) {
+static void parsevariableexpr( FILE *f, var_t *vartypep ) {
+  struct var *v;
+  var_t vartype;
+  struct param *p;
+  struct constvar *cv;
+  struct constval *cl;
+  
+  v = getlocal( glob.currentproc, glob.tok.val );
+  if( v ) {
+    vartype = v->type;
+    
+    if( v->arraylen ) emit_leasp( v->offset + glob.stackoffset );
+    else emit_ldsp( v->offset + glob.stackoffset );
+  } else {
+    v = getglobal( glob.tok.val );
+    if( v ) {
+      vartype = v->type;
+      
+      if( v->arraylen ) emit_ldi32( v->address );
+      else {
+	emit_ldi32( v->address );
+	emit_ld();
+      }
+    } else {
+      p = getparam( glob.currentproc, glob.tok.val );
+      if( p ) {
+	vartype = p->type;
+	
+	emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	if( p->isvar ) {
+	  emit_ld();
+	}
+      } else {
+	cv = getconst( glob.tok.val );
+	if( cv ) {
+	  vartype = cv->type;
+	  
+	  if( cv->type == VAR_TYPE_U32 ) {
+	    emit_ldi32( cv->address );
+	    emit_ld();
+	  } else if( cv->type == VAR_TYPE_STRING ) {
+	    emit_ldi32( cv->address );
+	  } else usage( "Bad const type" );
+	  
+	} else {
+	  cl = getconstval( glob.tok.val );
+	  if( !cl ) usage( "Variable %s does not name a known local, global, param, const or constval", glob.tok.val );
+	  
+	  vartype = cl->type;
+	  
+	  if( cl->type == VAR_TYPE_U32 ) {
+	    emit_ldi32( *((uint32_t *)cl->val) );
+	  } else if( cl->type == VAR_TYPE_STRING ) {
+	    char lname[FVM_MAX_NAME];
+	    struct label *l;
+	    uint16_t startaddr;
+	    uint32_t addr;
+	    
+	    getlabelname( "STRING", lname );
+	    if( glob.pass == 1 ) l = NULL;
+	    else {
+	      l = getlabel( lname );
+	      if( !l ) usage( "Failed to get label" );
+	    }
+	    addr = l ? l->address : 0;
+	    emit_jmp( addr );
+	    startaddr = glob.pc;
+	    emitdata( glob.tok.val, strlen( cl->val ) + 1 );
+	    addlabel( lname );
+	    
+	    emit_lea( startaddr - glob.pc - 3 ); /* LEA opcode uses 3 bytes */
+	  }
+	}
+      }	  
+    }
+  }
+  expecttok( f, TOK_NAME );
+  
+  *vartypep = vartype;  
+}
+
+static int parsebuiltinfn( FILE *f, var_t *vartypep ) {
+  // TODO: parse builtn functions like sizeof, offset etc */
+  if( acceptkeyword( f, "sizeof" ) ) {
+    uint32_t u32;
+    u32 = parsesizeof( f );
+    emit_ldi32( u32 );
+    return 1;
+  }
+
+  if( acceptkeyword( f, "offsetof" ) ) {
+    uint32_t u32;
+    u32 = parseoffsetof( f );
+    emit_ldi32( u32 );
+    return 1;
+  }
+  
+  return 0;
+}
+
+static void parseexpr( FILE *f );
+static void parseexpr2( FILE *f, int nobinaryops ) {
   uint16_t addr;
   tok_t optype;
   
@@ -1470,81 +1564,13 @@ static void parseexpr( FILE *f ) {
     parseexpr( f );
     emit_ld();
   } else if( glob.tok.type == TOK_NAME ) {
-    struct var *v;
-    struct param *p;
     var_t vartype = VAR_TYPE_U32;
 
-    v = getlocal( glob.currentproc, glob.tok.val );
-    if( v ) {
-      vartype = v->type;
-      
-      if( v->arraylen ) emit_leasp( v->offset + glob.stackoffset );
-      else emit_ldsp( v->offset + glob.stackoffset );
+    // parse builtin function calls e.g. sizeof,offsetof etc */
+    if( parsebuiltinfn( f, &vartype ) ) {
     } else {
-      v = getglobal( glob.tok.val );
-      if( v ) {
-	vartype = v->type;
-	
-	if( v->arraylen ) emit_ldi32( v->address );
-	else {
-	  emit_ldi32( v->address );
-	  emit_ld();
-	}
-      } else {
-	p = getparam( glob.currentproc, glob.tok.val );
-	if( p ) {
-	  vartype = p->type;
-
-	  emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
-	  if( p->isvar ) {
-	    emit_ld();
-	  }
-	} else {
-	  struct constvar *cv;
-	  cv = getconst( glob.tok.val );
-	  if( cv ) {
-	    vartype = cv->type;
-	    
-	    if( cv->type == VAR_TYPE_U32 ) {
-	      emit_ldi32( cv->address );
-	      emit_ld();
-	    } else if( cv->type == VAR_TYPE_STRING ) {
-	      emit_ldi32( cv->address );
-	    } else usage( "Bad const type" );
-						      
-	  } else {
-	    struct constval *cl = getconstval( glob.tok.val );
-	    if( !cl ) usage( "Variable %s does not name a known local, global, param, const or constval", glob.tok.val );
-
-	    vartype = cl->type;
-	    
-	    if( cl->type == VAR_TYPE_U32 ) {
-	      emit_ldi32( *((uint32_t *)cl->val) );
-	    } else if( cl->type == VAR_TYPE_STRING ) {
-	      char lname[FVM_MAX_NAME];
-	      struct label *l;
-	      uint16_t startaddr;
-	      
-	      getlabelname( "STRING", lname );
-	      if( glob.pass == 1 ) l = NULL;
-	      else {
-		l = getlabel( lname );
-		if( !l ) usage( "Failed to get label" );
-	      }
-	      addr = l ? l->address : 0;
-	      emit_jmp( addr );
-	      startaddr = glob.pc;
-	      emitdata( glob.tok.val, strlen( cl->val ) + 1 );
-	      addlabel( lname );
-	      
-	      emit_lea( startaddr - glob.pc - 3 ); /* LEA opcode uses 3 bytes */
-	    }
-	  }
-	}	  
-      }
-    }
-    
-    expecttok( f, TOK_NAME );
+      parsevariableexpr( f, &vartype );
+    }    
 
     if( accepttok( f, TOK_OARRAY ) ) {
       /* name[expr] */
@@ -1563,6 +1589,8 @@ static void parseexpr( FILE *f ) {
       usage( "record field not implementd" );
     }
   } else usage( "Bad expr %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
+
+  if( nobinaryops ) return;
   
   optype = glob.tok.type;
   if( glob.tok.type == TOK_SEMICOLON ) {
@@ -1752,6 +1780,9 @@ static void parseexpr( FILE *f ) {
   
 }
       
+static void parseexpr( FILE *f ) {
+  parseexpr2( f, 0 );
+}
 
 static int parsestatement( FILE *f ) {
   int kw;
@@ -2013,6 +2044,52 @@ static int parsestatement( FILE *f ) {
     
     emit_jmp( addr );
     expecttok( f, TOK_NAME );
+  } else if( accepttok( f, TOK_MUL ) ) {
+    /* assign *varname = expr */
+    //    struct var *v;
+    //struct param *p;
+
+    parseexpr2( f, 1 );
+    expecttok( f, TOK_EQ );
+    parseexpr( f );
+    emit_st();
+
+#if 0    
+    if( glob.tok.type != TOK_NAME ) usage( "Expected varname" );
+    
+    if( (v = getlocal( glob.currentproc, glob.tok.val )) ) {
+      emit_ldsp( v->offset + glob.stackoffset ); /* get value of variable */
+      expecttok( f, TOK_NAME );
+      expecttok( f, TOK_EQ );
+      parseexpr( f );      
+      emit_st();
+            
+    } else if( (v = getglobal( glob.tok.val )) ) {
+      emit_ldi32( v->address );
+      emit_ld(); /* get value of variable */
+      
+      expecttok( f, TOK_NAME );
+      expecttok( f, TOK_EQ );
+      parseexpr( f );
+      emit_st();
+	
+    } else if( (p = getparam( glob.currentproc, glob.tok.val )) ) {
+      if( p->isvar ) {
+	emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset ); /* var param so value on stack is address, just load it */
+      } else {
+	emit_leasp( p->offset + glob.currentproc->localsize +  glob.stackoffset ); /* get address of param */
+      }
+      emit_ld();
+      
+      expecttok( f, TOK_NAME );
+      expecttok( f, TOK_EQ );
+      parseexpr( f );
+
+      /* store value */
+      emit_st();
+    } else usage( "Unknown variable %s", glob.tok.val );
+#endif
+    
   } else if( glob.tok.type == TOK_NAME ) {
     /* varname = expr i.e. an assignment operation */
     struct var *v;
@@ -2304,7 +2381,82 @@ static void parsedeclaration( FILE *f ) {
   expecttok( f, TOK_SEMICOLON );  
 }
 
-static uint32_t parseconstdefexpr( FILE *f );
+static uint32_t parsesizeof( FILE *f ) {
+  char name[FVM_MAX_NAME];
+  struct var *v;
+  struct param *param;
+  struct constvar *cvar;
+  struct record *record;
+  uint32_t val;
+  
+  val = 0;
+  
+  /* Sizeof(identifier) where identifier names a record type or variable (local,global,const) */
+  expecttok( f, TOK_OPAREN );
+  if( glob.tok.type != TOK_NAME ) usage( "SizeOf expected identifier" );
+  strncpy( name, glob.tok.val, FVM_MAX_NAME - 1 );
+  
+  v = getlocal( glob.currentproc, name );
+  if( v ) val = v->size;
+  else {
+    param = getparam( glob.currentproc, name );
+    if( param ) val = param->size;
+    else {
+      v = getglobal( name );
+      if( v ) val = v->size;
+      else {
+	cvar = getconst( name );
+	if( cvar ) val = cvar->len;
+	else {
+	  record = getrecord( name );
+	  if( record ) val = record->size;
+	  else if( accepttok( f, TOK_PERIOD ) ) {
+	    /* record.field */
+	    if( glob.tok.type != TOK_NAME ) usage( "Expected record.field" );
+	    record = getrecord( name );
+	    if( !record ) usage( "Unknown record %s", name );
+	    v = getrecordfield( record, glob.tok.val );
+	    if( !v ) usage( "Unknown field %s.%s", name, glob.tok.val );
+	    val = v->size;
+	    expecttok( f, TOK_NAME );
+	  } else usage( "Unknown identifier %s", name );
+	}
+      }
+    }
+  }
+  
+  expecttok( f, TOK_NAME );
+  expecttok( f, TOK_CPAREN );
+  
+  return val;
+}
+
+static uint32_t parseoffsetof( FILE *f ) {
+  /* OffsetOf(recordname.fieldname) */
+  struct record *record;
+  struct var *field;
+  uint32_t val;
+  
+  expecttok( f, TOK_OPAREN );
+  if( glob.tok.type != TOK_NAME ) usage( "Expected record name" );
+  
+  record = getrecord( glob.tok.val );
+  if( !record ) usage( "Unknown record %s", glob.tok.val );
+  
+  expecttok( f, TOK_NAME );
+  expecttok( f, TOK_PERIOD );
+  if( glob.tok.type != TOK_NAME ) usage( "Expected record field name" );
+  
+  field = getrecordfield( record, glob.tok.val );
+  if( !field ) usage( "Unknown field %s", glob.tok.val );
+  val = field->offset;
+  
+  expecttok( f, TOK_NAME );
+  expecttok( f, TOK_CPAREN );
+
+  return val;
+}
+
 static uint32_t parseconstexprval( FILE *f ) {
   struct constval *cv;
   uint32_t val;
@@ -2315,6 +2467,14 @@ static uint32_t parseconstexprval( FILE *f ) {
     expecttok( f, TOK_U32 );
     return val;
   case TOK_NAME:
+    if( acceptkeyword( f, "sizeof" ) ) {
+      val = parsesizeof( f );
+      return val;
+    } else if( acceptkeyword( f, "offsetof" ) ) {
+      val = parseoffsetof( f );
+      return val;
+    }
+    
     cv = getconstval( glob.tok.val );
     if( !cv ) usage( "Unknown const %s", glob.tok.val );
     if( cv->len != 4 ) usage( "Bad const %s", glob.tok.val );

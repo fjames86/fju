@@ -1578,6 +1578,23 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
       parsevariableexpr( f, &vartype, &recordp );
     }    
 
+    if( accepttok( f, TOK_PERIOD ) ) {
+      struct var *field;	
+      if( !recordp ) usage( "Variable not a record type" );
+      
+      field = getrecordfield( recordp, glob.tok.val );
+      if( !field ) usage( "Record %s does not have a field %s", recordp->name, glob.tok.val );
+      
+      emit_ldi32( field->offset );
+      emit_add();  /* get address of the field */
+      if( !field->arraylen ) {
+	emit_ld();
+      }
+      
+      expecttok( f, TOK_NAME );
+      vartype = field->type;
+    }
+    
     if( accepttok( f, TOK_OARRAY ) ) {
       /* name[expr] */
       parseexpr( f );
@@ -1591,21 +1608,8 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	emit_ld8();
       }
       expecttok( f, TOK_CARRAY );
-    } else if( accepttok( f, TOK_PERIOD ) ) {
-      struct var *field;	
-      if( !recordp ) usage( "Variable not a record type" );
-
-      field = getrecordfield( recordp, glob.tok.val );
-      if( !field ) usage( "Record %s does not have a field %s", recordp->name, glob.tok.val );
-      
-      emit_ldi32( field->offset );
-      emit_add();  /* get address of the field */
-      if( !field->arraylen ) {
-	emit_ld();
-      }
-      
-      expecttok( f, TOK_NAME );
     }
+    
   } else usage( "Bad expr %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
 
   if( nobinaryops ) return;
@@ -2063,11 +2067,23 @@ static int parsestatement( FILE *f ) {
     emit_jmp( addr );
     expecttok( f, TOK_NAME );
   } else if( accepttok( f, TOK_MUL ) ) {
-    /* assign *varname = expr */
-    parseexpr2( f, 1 );
+    /* assign dereference expression: *expr = expr */
+    int setarray8 = 0;
+    
+    parseexpr2( f, 1 );  /* special call to parse an expression without binary operators */
+    
+    if( accepttok( f, TOK_OARRAY ) ) {
+      parseexpr( f );
+      emit_add();
+      expecttok( f, TOK_CARRAY );
+      setarray8 = 1;
+    }
+    
     expecttok( f, TOK_EQ );
     parseexpr( f );
-    emit_st();    
+    
+    if( setarray8 ) emit_st8();
+    else emit_st();    
   } else if( glob.tok.type == TOK_NAME ) {
     /* varname = expr i.e. an assignment operation */
     struct var *v;
@@ -2090,29 +2106,13 @@ static int parsestatement( FILE *f ) {
       return 1;
     }
 
-    /* TODO: support assigning record fields */
-    
     v = getlocal( glob.currentproc, glob.tok.val );
     if( v ) {
+      struct var *field = NULL;
+      
       expecttok( f, TOK_NAME );
-      if( accepttok( f, TOK_OARRAY ) ) {
-	/* name[expr] = expr */
-	setarray8 = 1;
-	parseexpr( f );
-	if( v->type == VAR_TYPE_U32 ) {
-	  emit_ldi32( 4 );
-	  emit_mul();
-	  emit_leasp( v->offset + glob.stackoffset );
-	  emit_add();
-	} else {
-	  emit_leasp( v->offset + glob.stackoffset );
-	  emit_add();
-	}
-	
-	expecttok( f, TOK_CARRAY );
-      } else if( accepttok( f, TOK_PERIOD ) ) {
-	struct var *field;
-	
+
+      if( accepttok( f, TOK_PERIOD ) ) {
 	if( !v->record ) usage( "Variable %s not a record type", v->name );
 
 	field = getrecordfield( v->record, glob.tok.val );
@@ -2124,6 +2124,35 @@ static int parsestatement( FILE *f ) {
 
 	expecttok( f, TOK_NAME );
 	setfield = 1;
+      }
+      
+      if( accepttok( f, TOK_OARRAY ) ) {
+	/* name[expr] = expr */
+	setarray8 = 1;
+	parseexpr( f );
+	if( setfield ) {
+	  if( field->type == VAR_TYPE_U32 ) {
+	    emit_ldi32( 4 );
+	    emit_mul();
+	    emit_add();
+	    setarray8 = 0;
+	  } else {
+	    emit_add();
+	  }
+
+	} else {
+	  if( v->type == VAR_TYPE_U32 ) {
+	    emit_ldi32( 4 );
+	    emit_mul();
+	    emit_leasp( v->offset + glob.stackoffset );
+	    emit_add();
+	  } else {
+	    emit_leasp( v->offset + glob.stackoffset );
+	    emit_add();
+	  }
+	}
+	
+	expecttok( f, TOK_CARRAY );
       }
       
       expecttok( f, TOK_EQ );

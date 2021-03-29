@@ -16,7 +16,7 @@
 			   "Goto" "GoTo" "goto" "Call" "call" "Syscall" "syscall"
 			   "Begin" "begin" "Declare" "declare" "Include" "include"
 			   "Return" "return" "break" "Break" "Continue" "continue"
-			   "Record" "record"))
+			   "Record" "record" "SizeOf" "sizeof" "OffsetOf" "offsetof"))
 	     (x-types '("u32" "U32" "int" "Int" "Integer" "opaque" "Opaque" "string" "String"))
 	     (x-keywords-regexp (regexp-opt x-keywords 'words))
 	     (x-types-regexp (regexp-opt x-types 'words)))

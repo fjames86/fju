@@ -903,7 +903,6 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
 	} else {
 	  /* get result */
 	  u = fvm_read_u32( &state, u32[i] );
-	  printf( "Extracted %u\n", u );
 	  sts = xdr_encode_uint32( resbuf, u );
 	  if( sts ) {
 	    fvm_log( LOG_LVL_ERROR, "fvm_run xdr error decoding result" );	    

@@ -21,14 +21,28 @@ Begin
    { globals }
 
    { procedures }
-   Procedure TestProc()
+   Procedure TestProc(var result : int)
    Begin
 	var b : fred;
-	var a : opaque[SizeOf(fred)];
 
-	{ *(a + OffsetOf(fred.d)) = 123; }
-	{ b.d = 123; }
-	b.a = b.a;
+	{ 
+          * Assign to a specific offset into an opaque array. 
+  	  * This always assigns a full word i.e. a u32 assignment.
+	}
+	{ *(b + OffsetOf(fred.d)) = 123; }
+
+	{ Assign to a record field }
+	{ b.d[2] = 123;} 
+	{ b.c[2] = 321;}
+	
+	{ Assign to a record field from a record field }
+	{ 	b.a = b.a; }
+
+	b.a = 123;
+	b.b = "fred";
+	b.c[0] = b.a;
+	b.d[1] = 321;
+	result = b.a;
    End;
 
    { constant values }

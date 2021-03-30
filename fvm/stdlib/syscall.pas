@@ -31,8 +31,8 @@ Declare Syscall FregSubkey(path : string) : 12;
 Declare Syscall FregReadU64(path : string, var resultHigh : u32, var resultLow : u32) : 13;
 Declare Syscall FregWriteU64(path : string, valHigh : u32, valLow : u32) : 14;
 Declare Syscall HostregLocalId(var idHigh : u32, var idLow : u32) : 15;
-Declare Syscall HostregNameById(idHigh : u32, idLow : u32, var name : string) : 16;
-Declare Syscall HostregIdByName(name : string, var idHigh : u32, idLow : u32 ) : 17;
+Declare Syscall HostregNameById(idHigh : u32, idLow : u32, name : string) : 16;
+Declare Syscall HostregIdByName(name : string, var idHigh : u32, var idLow : u32 ) : 17;
 Declare Syscall RpcNow(var nowHigh : u32, var nowLow : u32) : 18;
 Declare Syscall SecRandU32(var r : u32) : 19;
 Declare Syscall Sprintf(dest : string, fmt : string, arg1 : u32, arg2 : u32, arg3 : u32, arg4 : u32) : 20;
@@ -69,3 +69,5 @@ Declare Syscall DmbHostInfo(hostH : int, hostL : int, var seqH : int, var seqL :
 { Get info about currently invoked dmb message. Only valid when called from a dmb msg handler }
 Declare Syscall DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int) : 36;
 
+{ Send an RPC call to another host. HostH/HostL names the host. Prog/vers/proc names the procedure. len/buf names the args. resultproc names a procedure called when reply received }
+Declare Syscall RpcCall(hostH : int, hostL : int, prog : int, vers : int, proc : int, len : int, buf : opaque, resultproc : string) : 37;

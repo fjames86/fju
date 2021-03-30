@@ -1,11 +1,13 @@
 
 { -*- mode:fvm -*- }
 
-Program TestProgram(0,0,TestProc);
+Program TestProgram(0,0,TestProc,rpcbindResult,TestRpcCall);
 
 Begin
 
 Include "syscall.pas";
+Include "string.pas";
+Include "log.pas";
 
 Declare Procedure TestProc2(var a :  u32);
 
@@ -26,6 +28,23 @@ Begin
 	b = &a;
 	a = *b;
 	a = 123 * 321 & 321;
+End;
+
+Procedure rpcbindResult(len : int, buf : opaque)
+Begin
+	Call LogWritef(LogLvlInfo,"rpcbindResult len=%u",len,0,0,0);
+End;
+
+Procedure TestRpcCall()
+Begin
+	var idh, idl : int;
+
+	Syscall HostregIdByName("hemlock",idh,idl);
+	Call LogWritef(LogLvlInfo,"rpcbind Hemlock=%x%x", idh,idl,0,0);
+	
+	Syscall RpcCall(idh,idl,100000,2,4,0,0,"rpcbindResult");
+	
+	Call LogWritef(LogLvlInfo,"rpcbindCall",0,0,0,0);
 End;
 
 End.		      

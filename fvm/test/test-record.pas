@@ -51,7 +51,7 @@ Begin
 	result = b.a;
 }
 
-	Syscall RpcCall(hostH,hostL,argbuf,len,"resultproc");
+	Syscall RpcCall(12,12,10000,2,1,0,0,"resultproc");
    End;
 
 

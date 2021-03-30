@@ -26,6 +26,8 @@
 #include <fju/cht.h>
 #include <fju/dmb.h>
 #include <fju/dlm.h>
+#include <fju/hrauth.h>
+#include <fju/hostreg.h>
 
 #include "fvm-private.h"
 
@@ -202,6 +204,37 @@ static void fvm_xcall( struct fvm_state *state ) {
   if( conn ) rpc_conn_release( conn );
   if( !rpcdp() ) free( tmpbufp );
 }
+
+static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) {
+  uint32_t resulthandle;
+  int sts;
+  struct fvm_module *m;
+  int procid;
+  struct xdr_s xdr;
+  
+  fvm_log( LOG_LVL_INFO, "fvm_rpccall_donecb %s", res ? "success" : "failure" );
+  if( !res ) return;
+  
+  resulthandle = (uint32_t)hcallp->cxt[0];
+  if( !resulthandle ) return;
+  
+  sts = fvm_proc_by_handle( resulthandle, &m, &procid );
+  if( sts ) return;
+
+  if( (res->count + 4) >= res->buf_size ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_rpccall_donecb out of buffer space" );
+    return;
+  }
+
+  memmove( res->buf + res->offset + 4, res->buf + res->offset, res->count - res->offset );
+
+  xdr_init( &xdr, res->buf + res->offset, 4 );
+  xdr_encode_uint32( &xdr, res->count - res->offset );
+  res->count += 4;
+  
+  fvm_run( m, procid, res, NULL );
+}
+
 
 int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   switch( syscallid ) {
@@ -493,12 +526,32 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 16:
-    /* HostRegNameById */
-    /* TODO */
+    /* HostregNameById(idHigh : u32, idLow : u32, name : string) */
+    {
+      uint32_t pars[3];
+      char *name;
+      uint64_t hostid;
+      
+      read_pars( state, pars, 3 );
+      hostid = (((uint64_t)pars[0]) << 32) | (uint64_t)pars[1];
+      name = fvm_getptr( state, pars[2], HOSTREG_MAX_NAME, 1 );
+      hostreg_name_by_hostid( hostid, name );
+    }
     break;
   case 17:
-    /* HostregIdByName */
-    /* TODO */
+    /* Declare Syscall HostregIdByName(name : string, var idHigh : u32, idLow : u32 ) */
+    {
+      uint32_t pars[3];
+      char *name;
+      uint64_t hostid;
+      
+      read_pars( state, pars, 3 );
+      name = fvm_getstr( state, pars[0] );
+      if( name ) hostid = hostreg_hostid_by_name( name );
+      else hostid = 0;
+      fvm_write_u32( state, pars[1], hostid >> 32 );
+      fvm_write_u32( state, pars[2], hostid & 0xffffffff );
+    }
     break;
   case 18:
     {
@@ -910,6 +963,45 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, pars[1], hostid & 0xffffffff );
       fvm_write_u32( state, pars[2], seq >> 32 );
       fvm_write_u32( state, pars[3], seq & 0xffffffff );
+    }
+    break;
+  case 37:
+    /* RpcCall(hostH,hostL,prog,vers,proc,len,buf,resultproc) */
+    {
+      uint32_t pars[8];
+      uint64_t hostid;
+      uint32_t len, progid,versid,procid, resulthandle, bufaddr;
+      char *resultproc, *bufp;
+      struct hrauth_call hcall;
+      struct xdr_s args;
+      int sts;
+      
+      read_pars( state, pars, 8 );
+      hostid = (((uint64_t)pars[0]) << 32) | (uint64_t)pars[1];
+      progid = pars[2];
+      versid = pars[3];
+      procid = pars[4];
+      len = pars[5];
+      bufaddr = pars[6];
+      bufp = len ? fvm_getptr( state, bufaddr, len, 0 ) : NULL;
+      resultproc = fvm_getstr( state, pars[7] );
+
+      memset( &hcall, 0, sizeof(hcall) );
+      hcall.hostid = hostid;
+      hcall.prog = progid;
+      hcall.vers = versid;
+      hcall.proc = procid;
+      if( resultproc ) {
+	hcall.donecb = fvm_rpccall_donecb;
+	sts = fvm_handle_by_name( state->module->name, resultproc, &resulthandle );
+	hcall.cxt[0] = sts ? 0 : resulthandle;
+      }
+      
+      memset( &args, 0, sizeof(args) );
+      xdr_init( &args, (uint8_t *)bufp, len );
+      args.offset = len;
+      
+      hrauth_call_async( &hcall, &args, 1 );
     }
     break;
   case 0xffff:

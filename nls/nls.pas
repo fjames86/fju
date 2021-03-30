@@ -35,13 +35,20 @@ Begin
    Const NlsMsgIdWrite = (DmbCatNls + 0); { dmb message identifier } 
 
    { declarations }
+   Record LogEntry =
+   	  Name : string[MaxLogName];
+	  IDHigh : int;
+	  IDLow : int;
+   End;
+
+   Declare Procedure GetLogEntry(index : int, var name : string, var idHigh : int, var idLow : int);
    
    { globals }
    var nlogs : u32;
-   var lognames : string[LogBufferSize]; { 32 byte name, 32 names max = 1024 }
-   var logids : u32[LogIDBufferSize];
-   
-{ procedures }
+   var logentries : LogEntry[MaxLog];
+
+   { procedures }
+
 
 { ---------------- RPC interface -------------------- }
 
@@ -52,7 +59,9 @@ End;
 
 Procedure ProcList(var lenp : int, var bufp : opaque) 
 Begin
-	var offset, i : int;
+	var offset, i, idh, idl : int;
+	var name : string;
+	var p : opaque;
 	var buf : opaque[256];
 
 	Call LogWritef(LogLvlTrace,"NlsProcList",0,0,0,0);
@@ -61,8 +70,9 @@ Begin
 	Call XdrEncodeU32(buf,offset,nlogs);
 	i = 0;
 	While i < nlogs Do Begin
-	      Call XdrEncodeString(buf,offset,lognames + (i*32));
-	      Call XdrEncodeU64(buf,offset,logids[2*i], logids[(2*i) + 1]);
+	      Call GetLogEntry(i,name,idh,idl);
+	      Call XdrEncodeString(buf,offset, name);
+	      Call XdrEncodeU64(buf,offset, idh, idl);
 	      i = i + 1;
 	End;
 
@@ -72,16 +82,29 @@ End;
 
 { -------------------- Utility functions ------------------------- }
 
+Procedure GetLogEntry(index : int, var name : string, var idHigh : int, var idLow : int)
+Begin
+	var p : opaque;
+	p = LogEntries + (SizeOf(LogEntry) * index);
+	name = p + OffsetOf(LogEntry.Name);
+	idHigh = *(p + OffsetOf(LogEntry.IDHigh));
+	idLow = *(p + OffsetOf(LogEntry.IDLow));
+End;
+
 Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)
 Begin
 	var i, result : int;
+	var idh, idl : int;
+	var name : string;
+	
 	i = 0;
 	While i < nlogs Do
 	Begin
-		Call Strcmp(lognames + (i*32), logname, result);
+		Call GetLogEntry(i,name,idh,idl);
+		Call Strcmp(name, logname, result);
 		If result Then Begin
-		   logidhigh = logids[2*i];
-		   logidlow = logids[(2*i) + 1];
+		   logidhigh = idh;
+		   logidlow = idl;
 		   Return;
 		End;
 		i = i + 1;
@@ -91,13 +114,19 @@ End;
 Procedure SetLogId(logname : string, logidHigh : u32, logidLow : u32)
 Begin
 	var i, result : int;
+	var idh, idl : int;
+	var p : opaque;
+	var name : string;
+
 	i = 0;
 	While i < nlogs Do
 	Begin
-		Call Strcmp(lognames + (i*32), logname, result);
+		Call GetLogEntry(i,name,idh,idl);
+		Call Strcmp(name, logname, result);
 		If result Then Begin
-		   logids[2*i] = logidHigh;
-		   logids[(2*i) + 1] = logidLow;
+		   p = LogEntries + (SizeOf(LogEntry) * i);
+		   *(p + OffsetOf(LogEntry.IDHigh)) = logidHigh;
+		   *(p + OffsetOf(LogEntry.IDLow)) = logidLow;
 		   Return;
 		End;
 		i = i + 1;
@@ -157,16 +186,19 @@ Begin
 	var ename : string[32];
 	var i, etype, result : int;
 	var idhigh, idlow : int;
+	var p : opaque;
 	
 	Syscall FregNext("/fju/nls/logs","",ename,etype,result);
 	i = 0;
 	While ename[0] Do Begin
 	    If etype = FregTypeString Then
 	    Begin
-  	        Call Strcpy(lognames + (i*32), ename);
-		Syscall LogLastId(lognames + (i*32), idhigh,idlow);
-		logids[2*i] = idhigh;
-		logids[(2*i) + 1] = idlow;
+		p = LogEntries + (SizeOf(LogEntry) * i);
+  	        Call Strcpy(p + OffsetOf(LogEntry.Name), ename);
+		Syscall LogLastId(p + OffsetOf(LogEntry.Name), idhigh,idlow);
+
+		*(p + OffsetOf(LogEntry.IDHigh)) = idhigh;
+		*(p + OffsetOf(LogEntry.IDLow)) = idlow;
 	        i = i + 1;
 		If i > MaxLog Then Break;
             End;
@@ -192,7 +224,7 @@ Begin
 	i = 0;
 	While i < nlogs Do
 	Begin
-		Call CheckLogId(lognames + (i*32));
+		Call CheckLogId(LogEntries + (SizeOf(LogEntry) * i) + OffsetOf(LogEntry.Name));
 		i = i + 1;
 	End;
 End;

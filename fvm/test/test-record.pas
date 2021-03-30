@@ -24,7 +24,12 @@ Begin
    Procedure TestProc(var result : int)
    Begin
 	var b : fred;
+	var bp : opaque;
+	var a : int;
 
+	bp = b;
+	*(bp + OffsetOf(fred.a)) = *(bp + OffsetOf(fred.a));
+	
 	{ 
           * Assign to a specific offset into an opaque array. 
   	  * This always assigns a full word i.e. a u32 assignment.
@@ -38,12 +43,17 @@ Begin
 	{ Assign to a record field from a record field }
 	{ 	b.a = b.a; }
 
+{
 	b.a = 123;
 	b.b = "fred";
 	b.c[0] = b.a;
 	b.d[1] = 321;
 	result = b.a;
+}
+
+	Syscall RpcCall(hostH,hostL,argbuf,len,"resultproc");
    End;
+
 
    { constant values }
 

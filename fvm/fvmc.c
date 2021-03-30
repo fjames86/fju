@@ -1603,11 +1603,32 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	emit_mul();
 	emit_add();
 	emit_ld();
+      } else if( recordp ) {
+	emit_ldi32( recordp->size );
+	emit_mul();
+	emit_add();
       } else {
 	emit_add();
 	emit_ld8();
       }
       expecttok( f, TOK_CARRAY );
+    }
+
+    if( accepttok( f, TOK_PERIOD ) ) {
+      struct var *field;
+      
+      if( !recordp ) usage( "Expected variable of record type" );
+      field = getrecordfield( recordp, glob.tok.val );
+      if( !field ) usage( "Record %s does not have a field %s", recordp->name, glob.tok.val );
+      
+      emit_ldi32( field->offset );
+      emit_add();  /* get address of the field */
+      if( !field->arraylen ) {
+	emit_ld();
+      }
+      
+      expecttok( f, TOK_NAME );
+      vartype = field->type;      
     }
     
   } else usage( "Bad expr %s (%s)", gettokname( glob.tok.type ), glob.tok.val ? glob.tok.val : "" );
@@ -1805,6 +1826,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 static void parseexpr( FILE *f ) {
   parseexpr2( f, 0 );
 }
+
 
 static int parsestatement( FILE *f ) {
   int kw;
@@ -2068,22 +2090,11 @@ static int parsestatement( FILE *f ) {
     expecttok( f, TOK_NAME );
   } else if( accepttok( f, TOK_MUL ) ) {
     /* assign dereference expression: *expr = expr */
-    int setarray8 = 0;
-    
-    parseexpr2( f, 1 );  /* special call to parse an expression without binary operators */
-    
-    if( accepttok( f, TOK_OARRAY ) ) {
-      parseexpr( f );
-      emit_add();
-      expecttok( f, TOK_CARRAY );
-      setarray8 = 1;
-    }
-    
+    parseexpr2( f, 1 );  /* special call to parse an expression without binary operators */    
     expecttok( f, TOK_EQ );
     parseexpr( f );
     
-    if( setarray8 ) emit_st8();
-    else emit_st();    
+    emit_st();    
   } else if( glob.tok.type == TOK_NAME ) {
     /* varname = expr i.e. an assignment operation */
     struct var *v;
@@ -2143,6 +2154,11 @@ static int parsestatement( FILE *f ) {
 	} else {
 	  if( v->type == VAR_TYPE_U32 ) {
 	    emit_ldi32( 4 );
+	    emit_mul();
+	    emit_leasp( v->offset + glob.stackoffset );
+	    emit_add();
+	  } else if( v->record ) {
+	    emit_ldi32( v->record->size );
 	    emit_mul();
 	    emit_leasp( v->offset + glob.stackoffset );
 	    emit_add();

@@ -435,6 +435,8 @@ static int getnexttok( FILE *f, struct token *tok ) {
     tok->type = TOK_CARRAY;
   } else if( c == '!' ) {
     tok->type = TOK_NOT;
+  } else if( c == '^' ) {
+    tok->type = TOK_XOR;
   } else if( c == '\'' ) {
     c2 = fgetc( f );
     if( c2 == '\\' ) {
@@ -1330,6 +1332,19 @@ static void emitdata( void *data, int len ) {
 static void parsevartype( FILE *f, var_t *type, uint32_t *arraylen, struct record **rec ) {
   struct record *r;
   r = NULL;
+
+  /* special case for pointer to record. same as opaque but has extra record descriptor */
+  if( accepttok( f, TOK_XOR ) ) {
+    /* ^ recordname */
+    if( glob.tok.type != TOK_NAME ) usage( "Expected record name" );
+    r = getrecord( glob.tok.val );
+    if( !r ) usage( "Unknown record type %s", glob.tok.val );
+    *type = VAR_TYPE_OPAQUE;
+    *arraylen = 0;
+    *rec = r;
+    expecttok( f, TOK_NAME );
+    return;
+  }
   
   if( glob.tok.type != TOK_NAME ) usage( "Unexpect symbol type %s - expected u32|string|opaque", gettokname( glob.tok.type ) );
   if( strcasecmp( glob.tok.val, "u32" ) == 0 ) *type = VAR_TYPE_U32;
@@ -2160,7 +2175,9 @@ static int parsestatement( FILE *f ) {
 	field = getrecordfield( v->record, glob.tok.val );
 	if( !field ) usage( "Record %s does not have a field %s", v->record->name, glob.tok.val );
 
-	emit_leasp( v->offset + glob.stackoffset );
+	if( v->arraylen ) emit_leasp( v->offset + glob.stackoffset );
+	else emit_ldsp( v->offset + glob.stackoffset );
+	
 	emit_ldi32( field->offset );
 	emit_add();  /* get address of the field */
 
@@ -2242,6 +2259,9 @@ static int parsestatement( FILE *f ) {
 	  
 	  field = getrecordfield( v->record, glob.tok.val );
 	  if( !field ) usage( "Record %s does not have a field %s", v->record->name, glob.tok.val );
+
+	  /* if arraylen=0 this implies the variable is a pointer to a record, not a record itself, hence we dereference the pointer */
+	  if( v->arraylen == 0 ) emit_ld();
 	  
 	  emit_ldi32( field->offset );
 	  emit_add(); /* get address of field */

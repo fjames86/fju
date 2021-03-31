@@ -23,13 +23,21 @@ Begin
    { procedures }
    Procedure TestProc(var result : int)
    Begin
+	var b : fred[2];
+	var bp : ^fred;
+
+	bp = b[1];
+	bp.a = 123;
+	result = bp.a;
+	
+   {
 	var b : fred;
 	var bp : opaque;
 	var a : int;
 
 	bp = b;
 	*(bp + OffsetOf(fred.a)) = *(bp + OffsetOf(fred.a));
-	
+}	
 	{ 
           * Assign to a specific offset into an opaque array. 
   	  * This always assigns a full word i.e. a u32 assignment.
@@ -50,8 +58,9 @@ Begin
 	b.d[1] = 321;
 	result = b.a;
 }
-
+{
 	Syscall RpcCall(12,12,10000,2,1,0,0,"resultproc");
+}
    End;
 
 

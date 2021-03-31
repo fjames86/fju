@@ -2798,7 +2798,6 @@ static void parserecord( FILE *f ) {
     strncpy( v->name, glob.tok.val, sizeof(v->name) - 1 );
     expecttok( f, TOK_NAME );
     expecttok( f, TOK_COLON );
-    if( glob.tok.type != TOK_NAME ) usage( "Unexpected symbol %s - expected field type", gettokname( glob.tok.type ) );
     parsevartype( f, &v->type, &v->arraylen, &v->record );
 
     if( vp ) v->offset = vp->offset + vp->size;

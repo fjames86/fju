@@ -10,12 +10,19 @@ Begin
 
    { declarations }
    Const clen = 12;
+
+   Record Pair =
+   	  x : int;
+	  y : int;
+   End;
    
    Record fred =
    	  a : int;
 	  b : string;
 	  c : int[clen];
 	  d : opaque[3];
+	  pair : Pair;
+	  ppair : ^Pair;
    End;
 	  
    { globals }
@@ -25,11 +32,20 @@ Begin
    Begin
 	var b : fred[2];
 	var bp : ^fred;
-
+	var pp : ^Pair;
+	
 	bp = b[1];
 	bp.a = 123;
-	result = bp.a;
+
+	bp.ppair = bp.pair;
+	pp = bp.ppair;
 	
+	pp.x = 123;
+	pp.y = 321;
+	
+	result = pp.x + pp.y;
+
+
    {
 	var b : fred;
 	var bp : opaque;

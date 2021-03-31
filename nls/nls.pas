@@ -86,7 +86,8 @@ Procedure GetLogEntry(index : int, var name : string, var idHigh : int, var idLo
 Begin
 	var p : opaque;
 	p = LogEntries + (SizeOf(LogEntry) * index);
-	name = p + OffsetOf(LogEntry.Name);
+	{name = p + OffsetOf(LogEntry.Name); }
+	name = Field(p,LogEntry.Name);
 	idHigh = *(p + OffsetOf(LogEntry.IDHigh));
 	idLow = *(p + OffsetOf(LogEntry.IDLow));
 End;

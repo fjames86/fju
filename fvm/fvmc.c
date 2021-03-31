@@ -563,6 +563,7 @@ static void processincludefile( char *path );
 static uint32_t parseconstdefexpr( FILE *f );
 static uint32_t parsesizeof( FILE *f );
 static uint32_t parseoffsetof( FILE *f );
+static void parseexpr( FILE *f );
 
 struct includepath {
   struct includepath *next;
@@ -1456,11 +1457,41 @@ static int parsebuiltinfn( FILE *f, var_t *vartypep ) {
     emit_ldi32( u32 );
     return 1;
   }
+
+  if( acceptkeyword( f, "field" ) ) {
+    /* Field(expr,record.field) equivalent to expr + OffsetOf(record.field) */
+    struct record *record;
+    struct var *field;
+    
+    expecttok( f, TOK_OPAREN );
+    parseexpr( f );
+    expecttok( f, TOK_COMMA );
+
+    if( glob.tok.type != TOK_NAME ) usage( "Expected record name" );  
+    record = getrecord( glob.tok.val );
+    if( !record ) usage( "Unknown record %s", glob.tok.val );  
+    expecttok( f, TOK_NAME );
+    expecttok( f, TOK_PERIOD );
+    if( glob.tok.type != TOK_NAME ) usage( "Expected record field name" );    
+    field = getrecordfield( record, glob.tok.val );
+    if( !field ) usage( "Unknown field %s", glob.tok.val );
+    
+    emit_ldi32( field->offset );
+    emit_add();
+
+    if( !field->arraylen ) emit_ld();
+
+    expecttok( f, TOK_NAME );
+    expecttok( f, TOK_CPAREN );
+
+    *vartypep = field->type;
+    
+    return 1;
+  }
   
   return 0;
 }
 
-static void parseexpr( FILE *f );
 static void parseexpr2( FILE *f, int nobinaryops ) {
   uint16_t addr;
   tok_t optype;
@@ -2472,7 +2503,6 @@ static uint32_t parsesizeof( FILE *f ) {
 	    v = getrecordfield( record, glob.tok.val );
 	    if( !v ) usage( "Unknown field %s.%s", name, glob.tok.val );
 	    val = v->size;
-	    expecttok( f, TOK_NAME );
 	  } else usage( "Unknown identifier %s", name );
 	}
       }

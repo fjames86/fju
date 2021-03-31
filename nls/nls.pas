@@ -29,8 +29,6 @@ Begin
    { constants }
    Const MaxLog = 32;
    Const MaxLogName = 32;
-   Const LogBufferSize = MaxLog * MaxLogName;
-   Const LogIDBufferSize = MaxLog * 2;
    
    Const NlsMsgIdWrite = (DmbCatNls + 0); { dmb message identifier } 
 

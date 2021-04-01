@@ -238,7 +238,7 @@ static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) 
   xdr_encode_uint32( &xdr, hcallp->cxt[2] );
   res->count += 4;
   
-  /* Siginature is always proc(len : int, buf : opaque, private : int) */
+  /* Signature is always proc(len : int, buf : opaque, private : int) */
   siginfo = 0;
   FVM_SIGINFO_SETPARAM(siginfo,0,VAR_TYPE_U32,0);
   FVM_SIGINFO_SETPARAM(siginfo,1,VAR_TYPE_OPAQUE,0);

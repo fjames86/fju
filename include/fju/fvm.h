@@ -72,9 +72,6 @@ int fvm_proc_by_handle( uint32_t phandle, struct fvm_module **m, int *procid );
 /* run the given proc with args receiving results */
 int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf );
 
-/* low level routine to run a procedure directly from starting address */
-int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t siginfo, struct xdr_s *argbuf , struct xdr_s *resbuf, uint32_t *nsteps );
-
 /* register rpc interface */
 void fvm_rpc_register( void );
 

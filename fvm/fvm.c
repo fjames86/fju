@@ -775,32 +775,30 @@ static int fvm_step( struct fvm_state *state ) {
 }
 
 
-int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf ) {
+int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t siginfo, struct xdr_s *argbuf , struct xdr_s *resbuf, uint32_t *nsteps ) {
   struct fvm_state state;
   uint64_t start, now;
   int sts;
   uint32_t isvar[FVM_MAX_PARAM], vartype[FVM_MAX_PARAM], u32[FVM_MAX_PARAM];
-  uint64_t siginfo;
   uint32_t u;
   int i, nargs, len;
   char *str, *buf;
   
-  if( (procid < 0) || (procid >= module->nprocs) ) {
-    fvm_log( LOG_LVL_ERROR, "fvm_run bad procid" );
+  if( (procaddr < FVM_ADDR_TEXT) || (procaddr >= (FVM_ADDR_TEXT + module->textsize)) ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_run bad procaddr %x", procaddr );
     return -1;
   }
   
   memset( &state, 0, sizeof(state) );
   state.module = module;
   state.sp = 0;
-  state.pc = module->procs[procid].address;
+  state.pc = procaddr;
 
   /* 
    * prepare args on stack:
    * <string/opaque buffers><u32 args and pointers to the string/opaque args><dummy return address> 
    */
 
-  siginfo = module->procs[procid].siginfo;
   nargs = FVM_SIGINFO_NARGS(siginfo);
 
   for( i = 0; i < nargs; i++ ) {
@@ -887,9 +885,8 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
     }
   }
 
-  module->procs[procid].perfdata.rcount++;
-  module->procs[procid].perfdata.nsteps += state.nsteps;
-
+  if( nsteps ) *nsteps = state.nsteps;
+  
   /* decode results */
   if( !resbuf ) return 0;
 
@@ -943,6 +940,24 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
   return 0;
   
 }
+
+int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf ) {
+  uint32_t nsteps;
+  int sts;
+  
+  if( (procid < 0) || (procid >= module->nprocs) ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_run bad procid" );
+    return -1;
+  }
+
+  sts = fvm_run_proc( module, module->procs[procid].address, module->procs[procid].siginfo, argbuf, resbuf, &nsteps );
+  module->procs[procid].perfdata.rcount++;
+  module->procs[procid].perfdata.nsteps += nsteps;
+
+  return sts;
+}
+
+
 
 /* -------------------- clustering ---------------- */
 

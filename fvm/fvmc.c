@@ -1604,7 +1604,12 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	  if( cv ) {
 	    emit_ldi32( cv->address );
 	  } else {
-	    usage( "Unknown variable %s", glob.tok.val );
+	    struct proc *proc = getproc( glob.tok.val );
+	    if( proc ) {
+	      emit_ldi32( proc->address );
+	    } else {
+	      usage( "Unknown variable %s", glob.tok.val );
+	    }
 	  }
 	}
       }

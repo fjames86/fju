@@ -206,33 +206,49 @@ static void fvm_xcall( struct fvm_state *state ) {
 }
 
 static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) {
-  uint32_t resulthandle;
+  uint32_t resultprocaddr;
   int sts;
   struct fvm_module *m;
-  int procid;
   struct xdr_s xdr;
+  uint64_t siginfo;
   
   fvm_log( LOG_LVL_INFO, "fvm_rpccall_donecb %s", res ? "success" : "failure" );
   if( !res ) return;
-  
-  resulthandle = (uint32_t)hcallp->cxt[0];
-  if( !resulthandle ) return;
-  
-  sts = fvm_proc_by_handle( resulthandle, &m, &procid );
-  if( sts ) return;
 
-  if( (res->count + 4) >= res->buf_size ) {
+  m = fvm_module_by_tag( hcallp->cxt[0] );
+  if( !m ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_rpccall_donecb unknown module" );
+    return;
+  }
+  
+  resultprocaddr = (uint32_t)hcallp->cxt[1];
+  if( !resultprocaddr ) return;
+  
+  if( (res->count + 8) >= res->buf_size ) {
     fvm_log( LOG_LVL_ERROR, "fvm_rpccall_donecb out of buffer space" );
     return;
   }
 
   memmove( res->buf + res->offset + 4, res->buf + res->offset, res->count - res->offset );
-
+  
   xdr_init( &xdr, res->buf + res->offset, 4 );
   xdr_encode_uint32( &xdr, res->count - res->offset );
   res->count += 4;
+  xdr_init( &xdr, res->buf + res->count, 4 );
+  xdr_encode_uint32( &xdr, hcallp->cxt[2] );
+  res->count += 4;
   
-  fvm_run( m, procid, res, NULL );
+  /* Siginature is always proc(len : int, buf : opaque, private : int) */
+  siginfo = 0;
+  FVM_SIGINFO_SETPARAM(siginfo,0,VAR_TYPE_U32,0);
+  FVM_SIGINFO_SETPARAM(siginfo,1,VAR_TYPE_OPAQUE,0);
+  FVM_SIGINFO_SETPARAM(siginfo,2,VAR_TYPE_U32,0);
+  FVM_SIGINFO_SETNPARS(siginfo,3);
+
+  sts = fvm_run_proc( m, resultprocaddr, siginfo, res, NULL, NULL );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_rpccall_donecb failed to run callback" );
+  }
 }
 
 
@@ -966,17 +982,16 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 37:
-    /* RpcCall(hostH,hostL,prog,vers,proc,len,buf,resultproc) */
+    /* RpcCall(hostH,hostL,prog,vers,proc,len,buf,resultproc,private) */
     {
-      uint32_t pars[8];
+      uint32_t pars[9];
       uint64_t hostid;
-      uint32_t len, progid,versid,procid, resulthandle, bufaddr;
-      char *resultproc, *bufp;
+      uint32_t len, progid,versid,procid, bufaddr;
+      char *bufp;
       struct hrauth_call hcall;
       struct xdr_s args;
-      int sts;
       
-      read_pars( state, pars, 8 );
+      read_pars( state, pars, 9 );
       hostid = (((uint64_t)pars[0]) << 32) | (uint64_t)pars[1];
       progid = pars[2];
       versid = pars[3];
@@ -984,17 +999,17 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       len = pars[5];
       bufaddr = pars[6];
       bufp = len ? fvm_getptr( state, bufaddr, len, 0 ) : NULL;
-      resultproc = fvm_getstr( state, pars[7] );
 
       memset( &hcall, 0, sizeof(hcall) );
       hcall.hostid = hostid;
       hcall.prog = progid;
       hcall.vers = versid;
       hcall.proc = procid;
-      if( resultproc ) {
+      if( pars[7] ) {
 	hcall.donecb = fvm_rpccall_donecb;
-	sts = fvm_handle_by_name( state->module->name, resultproc, &resulthandle );
-	hcall.cxt[0] = sts ? 0 : resulthandle;
+	hcall.cxt[0] = state->module->tag;
+	hcall.cxt[1] = pars[7];
+	hcall.cxt[2] = pars[8];
       }
       
       memset( &args, 0, sizeof(args) );

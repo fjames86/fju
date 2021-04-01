@@ -51,6 +51,9 @@ typedef enum {
     VAR_TYPE_SPARE = 3,
 } var_t;
 
+#define FVM_SIGINFO_SETPARAM(siginfo,index,type,isvar) (siginfo |= ((((uint64_t)(type)) | (isvar ? 0x4ULL : 0)) << (3 * (index))))
+#define FVM_SIGINFO_SETNPARS(siginfo,npars) (siginfo |= (((uint64_t)(npars)) << 57))
+
 struct fvm_headerinfo {
   uint32_t magic;
 #define FVM_MAGIC 0x13fd54ec

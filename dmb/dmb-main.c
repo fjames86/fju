@@ -45,7 +45,8 @@ int dmb_main( int argc, char **argv ) {
   uint64_t hkey, hhosts, hostid, lastid, seq;
   char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
   uint32_t category;
-
+  char hostname[HOSTREG_MAX_NAME];
+  
   sts = freg_open( NULL, NULL );
   i = 1;
   
@@ -66,8 +67,9 @@ int dmb_main( int argc, char **argv ) {
       if( !sts ) {
 	sts = freg_get_by_name( NULL, entry.id, "lastid", FREG_TYPE_UINT64, (char *)&lastid, sizeof(uint64_t), NULL );
 	sts = freg_get_by_name( NULL, entry.id, "seq", FREG_TYPE_UINT64, (char *)&seq, sizeof(uint64_t), NULL );
-	
-	printf( "Host %"PRIx64" LastID %"PRIx64" Seq %"PRIu64"\n", hostid, lastid, seq );
+
+	hostreg_name_by_hostid( hostid, hostname );
+	printf( "Host %s (%"PRIx64") LastID %"PRIx64" Seq %"PRIu64"\n", hostname, hostid, lastid, seq );
       }
     }
     

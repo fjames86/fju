@@ -71,3 +71,5 @@ Declare Syscall DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var
 
 { Send an RPC call to another host. HostH/HostL names the host. Prog/vers/proc names the procedure. len/buf names the args. resultprocaddr is optional and is address of a procedure called when reply received }
 Declare Syscall RpcCall(hostH : int, hostL : int, prog : int, vers : int, proc : int, len : int, buf : opaque, resultprocaddr : int, private : int) : 37;
+
+Declare Syscall Sleep(timeout : int, cbaddr : int, private : int) : 38;

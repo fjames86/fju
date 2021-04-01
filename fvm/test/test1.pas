@@ -31,6 +31,11 @@ Begin
 	a = 123 * 321 & 321;
 End;
 
+Procedure sleeptest(private : int)
+Begin
+	Call LogWritef(LogLvlInfo,"sleeptest private=%u", private, 0,0,0);
+End;
+
 { private rpc completion routine - receives rpccall result }
 Procedure rpcbindResult(len : int, buf : opaque, private : int)
 Begin
@@ -52,6 +57,8 @@ Begin
 
 		Call XdrDecodeU32(buf,offset,b);
 	End;
+
+	Syscall Sleep(5000,&sleeptest,123);
 
 End;
 

@@ -205,6 +205,40 @@ static void fvm_xcall( struct fvm_state *state ) {
   if( !rpcdp() ) free( tmpbufp );
 }
 
+struct fvm_sc_iterator {
+  struct rpc_iterator iter;
+  uint32_t modtag;
+  uint32_t procaddr;
+  uint32_t private;
+};
+
+static void fvm_syscall_iter_cb( struct rpc_iterator *iter ) {
+  struct fvm_sc_iterator *sciter;
+  struct fvm_module *m;
+  uint64_t siginfo;
+  struct xdr_s args;
+  uint8_t argbuf[4];
+  
+  sciter = (struct fvm_sc_iterator *)iter;
+
+  m = fvm_module_by_tag( sciter->modtag );
+  if( m ) {
+    siginfo = 0;
+    FVM_SIGINFO_SETPARAM( siginfo, 0, VAR_TYPE_U32, 0 );
+    FVM_SIGINFO_SETNPARS( siginfo, 1 );
+
+    xdr_init( &args, argbuf, sizeof(argbuf) );
+    xdr_encode_uint32( &args, sciter->private );
+    args.offset = 0;
+    fvm_run_proc( m, sciter->procaddr, siginfo, &args, NULL, NULL );
+  }
+
+  rpc_iterator_unregister( iter );
+  free( iter );  
+}
+  
+  
+  
 static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) {
   uint32_t resultprocaddr;
   int sts;
@@ -1017,6 +1051,26 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       args.offset = len;
       
       hrauth_call_async( &hcall, &args, 1 );
+    }
+    break;
+  case 38:
+    /* Sleep(milliseconds : int, cb : int, private : int) */
+    {
+      uint32_t pars[3];
+      struct fvm_sc_iterator *iter;
+      
+      read_pars( state, pars, 3 );
+
+      iter = malloc( sizeof(*iter) );
+      memset( iter, 0, sizeof(*iter) );
+      iter->iter.timeout = rpc_now() + pars[0];
+      iter->iter.period = pars[0];
+      iter->iter.cb = fvm_syscall_iter_cb;
+      iter->modtag = state->module->tag;
+      iter->procaddr = pars[1];
+      iter->private = pars[2];
+      
+      rpc_iterator_register( (struct rpc_iterator *)iter );
     }
     break;
   case 0xffff:

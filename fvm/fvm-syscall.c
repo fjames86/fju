@@ -208,14 +208,13 @@ static void fvm_xcall( struct fvm_state *state ) {
 struct fvm_sc_iterator {
   struct rpc_iterator iter;
   uint32_t modtag;
-  uint32_t procaddr;
+  int procid;
   uint32_t private;
 };
 
 static void fvm_syscall_iter_cb( struct rpc_iterator *iter ) {
   struct fvm_sc_iterator *sciter;
   struct fvm_module *m;
-  uint64_t siginfo;
   struct xdr_s args;
   uint8_t argbuf[4];
   
@@ -223,14 +222,11 @@ static void fvm_syscall_iter_cb( struct rpc_iterator *iter ) {
 
   m = fvm_module_by_tag( sciter->modtag );
   if( m ) {
-    siginfo = 0;
-    FVM_SIGINFO_SETPARAM( siginfo, 0, VAR_TYPE_U32, 0 );
-    FVM_SIGINFO_SETNPARS( siginfo, 1 );
-
     xdr_init( &args, argbuf, sizeof(argbuf) );
     xdr_encode_uint32( &args, sciter->private );
     args.offset = 0;
-    fvm_run_proc( m, sciter->procaddr, siginfo, &args, NULL, NULL );
+
+    fvm_run( m, sciter->procid, &args, NULL );
   }
 
   rpc_iterator_unregister( iter );
@@ -240,11 +236,10 @@ static void fvm_syscall_iter_cb( struct rpc_iterator *iter ) {
   
   
 static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) {
-  uint32_t resultprocaddr;
+  uint32_t resultprocid;
   int sts;
   struct fvm_module *m;
   struct xdr_s xdr;
-  uint64_t siginfo;
   
   fvm_log( LOG_LVL_INFO, "fvm_rpccall_donecb %s", res ? "success" : "failure" );
   if( !res ) return;
@@ -255,8 +250,7 @@ static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) 
     return;
   }
   
-  resultprocaddr = (uint32_t)hcallp->cxt[1];
-  if( !resultprocaddr ) return;
+  resultprocid = (uint32_t)hcallp->cxt[1];
   
   if( (res->count + 8) >= res->buf_size ) {
     fvm_log( LOG_LVL_ERROR, "fvm_rpccall_donecb out of buffer space" );
@@ -273,13 +267,7 @@ static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) 
   res->count += 4;
   
   /* Signature is always proc(len : int, buf : opaque, private : int) */
-  siginfo = 0;
-  FVM_SIGINFO_SETPARAM(siginfo,0,VAR_TYPE_U32,0);
-  FVM_SIGINFO_SETPARAM(siginfo,1,VAR_TYPE_OPAQUE,0);
-  FVM_SIGINFO_SETPARAM(siginfo,2,VAR_TYPE_U32,0);
-  FVM_SIGINFO_SETNPARS(siginfo,3);
-
-  sts = fvm_run_proc( m, resultprocaddr, siginfo, res, NULL, NULL );
+  sts = fvm_run( m, resultprocid, res, NULL );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "fvm_rpccall_donecb failed to run callback" );
   }
@@ -1020,6 +1008,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *bufp;
       struct hrauth_call hcall;
       struct xdr_s args;
+      int mprocid;
       
       read_pars( state, pars, 9 );
       hostid = (((uint64_t)pars[0]) << 32) | (uint64_t)pars[1];
@@ -1038,7 +1027,20 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( pars[7] ) {
 	hcall.donecb = fvm_rpccall_donecb;
 	hcall.cxt[0] = state->module->tag;
-	hcall.cxt[1] = pars[7];
+	mprocid = fvm_procid_by_addr( state->module, pars[7] );
+	if( mprocid < 0 ) {
+	  fvm_log( LOG_LVL_ERROR, "Bad procid %x for RpcCall", pars[7] );
+	} else {
+	  uint64_t siginfo = 0;
+	  FVM_SIGINFO_SETPARAM(siginfo,0,VAR_TYPE_U32,0);
+	  FVM_SIGINFO_SETPARAM(siginfo,1,VAR_TYPE_OPAQUE,0);
+	  FVM_SIGINFO_SETPARAM(siginfo,2,VAR_TYPE_U32,0);
+	  FVM_SIGINFO_SETNPARS(siginfo,3);
+	  if( state->module->procs[mprocid].siginfo != siginfo ) {
+	    fvm_log( LOG_LVL_ERROR, "Bad proc signature for RpcCall" );
+	  }
+	}
+	hcall.cxt[1] = mprocid;
 	hcall.cxt[2] = pars[8];
       }
       
@@ -1054,6 +1056,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     {
       uint32_t pars[3];
       struct fvm_sc_iterator *iter;
+      uint64_t siginfo;
       
       read_pars( state, pars, 3 );
 
@@ -1063,7 +1066,19 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       iter->iter.period = pars[0];
       iter->iter.cb = fvm_syscall_iter_cb;
       iter->modtag = state->module->tag;
-      iter->procaddr = pars[1];
+      iter->procid = fvm_procid_by_addr( state->module, pars[1] );
+      if( iter->procid < 0 ) {
+	fvm_log( LOG_LVL_ERROR, "Bad procaddr %x", pars[1] );
+	return -1;
+      }
+
+      siginfo = 0;
+      FVM_SIGINFO_SETPARAM(siginfo,0,VAR_TYPE_U32,0);
+      FVM_SIGINFO_SETNPARS(siginfo,1);
+      if( state->module->procs[iter->procid].siginfo != siginfo ) {
+	fvm_log( LOG_LVL_WARN, "Bad sleep signature" );
+      }
+      
       iter->private = pars[2];
       
       rpc_iterator_register( (struct rpc_iterator *)iter );

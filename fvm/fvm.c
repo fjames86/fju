@@ -341,6 +341,14 @@ int fvm_procid_by_name( struct fvm_module *module, char *procname ) {
   return -1;
 }
 
+int fvm_procid_by_addr( struct fvm_module *module, int address ) {
+  int i;
+  for( i = 0; i < module->nprocs; i++ ) {
+    if( module->procs[i].address == address ) return i;
+  }
+  return -1;
+}
+
 int fvm_handle_by_name( char *modname, char *procname, uint32_t *phandle ) {
   struct fvm_module *m;
   int procid;
@@ -775,7 +783,7 @@ static int fvm_step( struct fvm_state *state ) {
 }
 
 
-int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t siginfo, struct xdr_s *argbuf , struct xdr_s *resbuf, uint32_t *nsteps ) {
+static int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t siginfo, struct xdr_s *argbuf , struct xdr_s *resbuf, uint32_t *nsteps ) {
   struct fvm_state state;
   uint64_t start, now;
   int sts;

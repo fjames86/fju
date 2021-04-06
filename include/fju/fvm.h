@@ -57,6 +57,7 @@ struct fvm_module *fvm_module_by_name( char *name ); /* lookup by name */
 struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid );  /* lookup by rpc prog */
 struct fvm_module *fvm_module_by_tag( int tag ); /* lookup by tag */
 int fvm_procid_by_name( struct fvm_module *module, char *procname ); /* lookup proc by name */
+int fvm_procid_by_addr( struct fvm_module *module, int address );
 
 /*
  * get a handle to a proc so it can be called later without saving the full modname/procname strings 

@@ -942,6 +942,16 @@ static void addexport( char *name ) {
   *ep = e;
 }
 
+static struct export *getexport( char *name ) {
+  struct export *e;
+  e = glob.exports;
+  while( e ) {
+    if( strcasecmp( e->name, name ) == 0 ) return e;
+    e = e->next;
+  }
+  return NULL;
+}
+
 static struct constvar *getconst( char *name ) {
   struct constvar *v;
   v = glob.consts;
@@ -1606,6 +1616,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	  } else {
 	    struct proc *proc = getproc( glob.tok.val );
 	    if( proc ) {
+	      if( !getexport( glob.tok.val ) ) usage( "Procedure %s not exported - may only take address of exported procedure", glob.tok.val );
 	      emit_ldi32( proc->address );
 	    } else {
 	      usage( "Unknown variable %s", glob.tok.val );

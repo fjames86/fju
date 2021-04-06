@@ -1,7 +1,7 @@
 
 { -*- mode:fvm -*- }
 
-Program TestProgram(0,0,TestProc,TestRpcCall);
+Program TestProgram(0,0,TestProc,TestRpcCall,sleeptest,rpcbindResult);
 
 Begin
 

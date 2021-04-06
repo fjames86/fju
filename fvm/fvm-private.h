@@ -93,9 +93,5 @@ char *fvm_getstr( struct fvm_state *state, uint32_t addr );
 void fvm_setdebug( int debugmode );
 int fvm_log( int lvl, char *fmt, ... );
 
-/* low level routine to run a procedure directly from starting address */
-int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t siginfo, struct xdr_s *argbuf , struct xdr_s *resbuf, uint32_t *nsteps );
-
-
 #endif
 

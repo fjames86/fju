@@ -190,12 +190,12 @@ Begin
 	End;
 	nlogs = i;
 
-	Syscall DmbSubscribe("Nls","NlsMsgWrite",NlsMsgIdWrite);
+	Syscall DmbSubscribe("NlsMsgWrite",NlsMsgIdWrite);
 End;
 
 Procedure Exit()
 Begin
-	Syscall DmbUnsubscribe("Nls","NlsMsgWrite");
+	Syscall DmbUnsubscribe("NlsMsgWrite");
 End;
 
 { Service routine - periodically check logs for new messages } 

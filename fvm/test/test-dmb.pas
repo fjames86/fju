@@ -25,15 +25,15 @@ Begin
    Procedure Init()
    Begin
 	{ Register to receive all messages }
-	Syscall DmbSubscribe("DmbTest","MsgHandler",0);
-	Syscall DmbSubscribe("DmbTest","MsgHandler2",MsgLogVals);
+	Syscall DmbSubscribe("MsgHandler",0);
+	Syscall DmbSubscribe("MsgHandler2",MsgLogVals);
    End;
 
    { Exit routine - called when module unloaded }
    Procedure Exit()
    Begin
-	Syscall DmbUnsubscribe("DmbTest","MsgHandle");
-	Syscall DmbUnsubscribe("DmbTest","MsgHandler2");
+	Syscall DmbUnsubscribe("MsgHandler");
+	Syscall DmbUnsubscribe("MsgHandler2");
    End;
    
    { Message handler }

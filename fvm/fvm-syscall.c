@@ -954,34 +954,30 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 33:
-    /* DmbSubscribe(modname: string, procname : string, msgid : int) */
+    /* DmbSubscribe(procname : string, msgid : int) */
     {
-      uint32_t pars[3];
-      char *modname, *procname;
+      uint32_t pars[2];
+      char *procname;
       
-      read_pars( state, pars, 3 );
-      modname = fvm_getptr( state, pars[0], 0, 0 );
-      procname = fvm_getptr( state, pars[1], 0, 0 );
+      read_pars( state, pars, 2 );
+      procname = fvm_getptr( state, pars[0], 0, 0 );
       
-      if( modname && (strlen( modname ) < FVM_MAX_NAME) &&
-	  procname && (strlen( procname ) < FVM_MAX_NAME) ) {
-	dmb_subscribe_fvm( modname, procname, pars[2] );
+      if( procname && (strlen( procname ) < FVM_MAX_NAME) ) {
+	dmb_subscribe_fvm( state->module->name, procname, pars[1] );
       }
     }    
     break;
   case 34:
-    /* DmbUnsubscribe(modname: string, procname : string) */
+    /* DmbUnsubscribe(procname : string) */
     {
-      uint32_t pars[2];
-      char *modname, *procname;
+      uint32_t pars[1];
+      char *procname;
       
-      read_pars( state, pars, 3 );
-      modname = fvm_getptr( state, pars[0], 0, 0 );
-      procname = fvm_getptr( state, pars[1], 0, 0 );
+      read_pars( state, pars, 1 );
+      procname = fvm_getptr( state, pars[0], 0, 0 );
       
-      if( modname && (strlen( modname ) < FVM_MAX_NAME) &&
-	  procname && (strlen( procname ) < FVM_MAX_NAME) ) {
-	dmb_unsubscribe_fvm( modname, procname );
+      if( procname && (strlen( procname ) < FVM_MAX_NAME) ) {
+	dmb_unsubscribe_fvm( state->module->name, procname );
       }
     }
     break;

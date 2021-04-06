@@ -16,7 +16,9 @@ Begin
    Const MsgLogVals = 0x3;
    
    { declarations }
-      
+   Declare Procedure MsgHandler(msgid : int, len : int, buf : opaque);
+   Declare Procedure MsgHandler2(intval : int, str : string);
+   
    { globals }
 
    { procedures }
@@ -25,15 +27,15 @@ Begin
    Procedure Init()
    Begin
 	{ Register to receive all messages }
-	Syscall DmbSubscribe("MsgHandler",0);
-	Syscall DmbSubscribe("MsgHandler2",MsgLogVals);
+	Syscall DmbSubscribe(&MsgHandler,0);
+	Syscall DmbSubscribe(&MsgHandler2,MsgLogVals);
    End;
 
    { Exit routine - called when module unloaded }
    Procedure Exit()
    Begin
-	Syscall DmbUnsubscribe("MsgHandler");
-	Syscall DmbUnsubscribe("MsgHandler2");
+	Syscall DmbUnsubscribe(&MsgHandler);
+	Syscall DmbUnsubscribe(&MsgHandler2);
    End;
    
    { Message handler }

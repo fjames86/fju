@@ -15,7 +15,7 @@ fju reg rem /dmbtest > /dev/null
 fju rpc fvm.load filename=fvm/test/test-dmb.fvm reload > /dev/null
 fju rpc hemlock fvm.load filename=fvm/test/test-dmb.fvm reload > /dev/null
 fju rpc fvm.run modname=DmbTest procname=TestMsg > /dev/null
-sleep 0.2
+sleep 1
 
 fju reg /dmbtest
 

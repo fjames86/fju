@@ -17,14 +17,16 @@ Include "dmb.pas";
 Const ChtMsgWrite = DmbCatCht + 1;
 Const ChtMsgDelete = DmbCatCht + 2;
 
+Declare Procedure ChtWrite(keylen : int, keybuf : opaque, datalen : int, databuf : opaque);
+
 Procedure Init()
 Begin
-	Syscall DmbSubscribe("ChtWrite",ChtMsgWrite);
+	Syscall DmbSubscribe(&ChtWrite,ChtMsgWrite);
 End;
 
 Procedure Exit()
 Begin
-	Syscall DmbUnsubscribe("ChtWrite");
+	Syscall DmbUnsubscribe(&ChtWrite);
 End;
 
 Procedure ChtRead(keylen : int, keybuf : opaque, var datalen : int, var databuf : opaque)

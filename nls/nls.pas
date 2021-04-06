@@ -39,6 +39,8 @@ Begin
 	  IDLow : int;
    End;
 
+   Declare Procedure NlsMsgWrite(logname : string, flags : int, len : int, buf : opaque);
+   
    { globals }
    var nlogs : u32;
    var logentries : LogEntry[MaxLog];
@@ -190,12 +192,12 @@ Begin
 	End;
 	nlogs = i;
 
-	Syscall DmbSubscribe("NlsMsgWrite",NlsMsgIdWrite);
+	Syscall DmbSubscribe(&NlsMsgWrite,NlsMsgIdWrite);
 End;
 
 Procedure Exit()
 Begin
-	Syscall DmbUnsubscribe("NlsMsgWrite");
+	Syscall DmbUnsubscribe(&NlsMsgWrite);
 End;
 
 { Service routine - periodically check logs for new messages } 

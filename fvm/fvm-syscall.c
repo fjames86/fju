@@ -942,29 +942,31 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 33:
-    /* DmbSubscribe(procname : string, msgid : int) */
+    /* DmbSubscribe(procaddr : int, msgid : int) */
     {
       uint32_t pars[2];
       char *procname;
+      int procid;
       
       read_pars( state, pars, 2 );
-      procname = fvm_getptr( state, pars[0], 0, 0 );
-      
-      if( procname && (strlen( procname ) < FVM_MAX_NAME) ) {
+      procid = fvm_procid_by_addr( state->module, pars[0] );      
+      if( procid >= 0 ) {
+	procname = state->module->procs[procid].name;
 	dmb_subscribe_fvm( state->module->name, procname, pars[1] );
       }
     }    
     break;
   case 34:
-    /* DmbUnsubscribe(procname : string) */
+    /* DmbUnsubscribe(procaddr : int) */
     {
       uint32_t pars[1];
+      int procid;
       char *procname;
       
       read_pars( state, pars, 1 );
-      procname = fvm_getptr( state, pars[0], 0, 0 );
-      
-      if( procname && (strlen( procname ) < FVM_MAX_NAME) ) {
+      procid = fvm_procid_by_addr( state->module, pars[0] );
+      if( procid >= 0 ) {
+	procname = state->module->procs[procid].name;
 	dmb_unsubscribe_fvm( state->module->name, procname );
       }
     }

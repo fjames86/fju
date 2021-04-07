@@ -46,15 +46,12 @@ Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf
 Declare Syscall RaftCommand(idHigh : int, idLow : int, len : int, buf : opaque) : 26;
 Declare Syscall FvmClRun(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 27;
 Declare Syscall FvmClRunOthers(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 28;
-
 Declare Syscall LogReadInfo(logname : string, idHigh : int, idLow : int, var len : int, var flags : int, var timestampHigh : int, var timestampLow : int ) : 29;
 Declare Syscall LogPrev(logname : string, idHigh : int, idLow : int, var high : int, var low : int ) : 30;
 Declare Syscall ChtList(startkey : opaque,keybuf : opaque, nkeybuf : int, var nkeys : int) : 31;
-
 Const DmbLocal = 0x1;   { Not published remotely }
 Const DmbRemote = 0x2;  { Not published locally }
 Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque, var seqH : int, var seqL : int) : 32;
-
 { 
   * Subscribe to a specific message or all messages if msgid=0. When subscribing to a specific message 
   * the procedure is invoked as if the message buffer were the procedure args. 
@@ -62,14 +59,17 @@ Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque, va
 }
 Declare Syscall DmbSubscribe(procaddr : int, msgid : int) : 33;
 Declare Syscall DmbUnsubscribe(procaddr : int) : 34;
-
 { Get Info about the registered host. seq is the message seq last acked by host }
 Declare Syscall DmbHostInfo(hostH : int, hostL : int, var seqH : int, var seqL : int) : 35;
-
 { Get info about currently invoked dmb message. Only valid when called from a dmb msg handler }
 Declare Syscall DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int) : 36;
-
 { Send an RPC call to another host. HostH/HostL names the host. Prog/vers/proc names the procedure. len/buf names the args. resultprocaddr is optional and is address of a procedure called when reply received }
 Declare Syscall RpcCall(hostH : int, hostL : int, prog : int, vers : int, proc : int, len : int, buf : opaque, resultprocaddr : int, private : int) : 37;
-
 Declare Syscall Sleep(timeout : int, cbaddr : int, private : int) : 38;
+
+Const SHA1HashSize = 20;
+Declare Syscall SHA1(len : int, buf : opaque, hash : opaque) : 39;
+
+Const AesKeySize = 16;
+Declare Syscall AesEncrypt(len : int, buf : opaque, key : opaque) : 40;
+Declare Syscall AesDecrypt(len : int, buf : opaque, key : opaque) : 41;

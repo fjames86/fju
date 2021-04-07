@@ -1086,6 +1086,57 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       rpc_iterator_register( (struct rpc_iterator *)iter );
     }
     break;
+  case 39:
+    /* sha1(len,buf,hash) */
+    {
+      uint32_t pars[3];
+      char *buf, *hash;
+      struct sec_buf iov;
+      
+      read_pars( state, pars, 3 );
+      buf = fvm_getptr( state, pars[1], pars[0], 0 );
+      hash = fvm_getptr( state, pars[2], SEC_SHA1_MAX_HASH, 1 );
+
+      if( buf && hash ) {
+	iov.buf = buf;
+	iov.len = pars[0];
+	sha1( (uint8_t *)hash, &iov, 1 );
+      }
+    }
+    break;
+  case 40:
+    /* aesencrypt( len, buf, key ) */
+    {
+      uint32_t pars[3];
+      char *buf, *key;
+
+      read_pars( state, pars, 3 );
+      
+      buf = fvm_getptr( state, pars[1], pars[0], 1 );
+      key = fvm_getptr( state, pars[2], SEC_AES_MAX_KEY, 0 );
+
+      if( buf && key ) {
+	aes_encrypt( (uint8_t *)key, (uint8_t *)buf, pars[0] );
+      }
+    }
+    break;
+  case 41:
+    /* aesdecrypt( len, buf, key ) */
+    {
+      uint32_t pars[3];
+      char *buf, *key;
+
+      read_pars( state, pars, 3 );
+
+      buf = fvm_getptr( state, pars[1], pars[0], 1 );
+      key = fvm_getptr( state, pars[2], SEC_AES_MAX_KEY, 0 );
+
+      if( buf && key ) {
+	aes_decrypt( (uint8_t *)key, (uint8_t *)buf, pars[0] );
+      }
+      
+    }
+    break;
   case 0xffff:
     fvm_xcall( state );
     break;

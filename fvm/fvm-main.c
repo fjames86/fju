@@ -88,24 +88,28 @@ int fvm_main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       xdr_encode_uint32( &argxdr, strtoul( argv[i], NULL, 0 ) );
+      FVM_SIGINFO_SETPARAM(siginfo,nargs,VAR_TYPE_U32,0);
       nargs++;
     } else if( strcmp( argv[i], "--str" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
       xdr_encode_string( &argxdr, argv[i] );
+      FVM_SIGINFO_SETPARAM(siginfo,nargs,VAR_TYPE_STRING,0);
       nargs++;
-      siginfo |= (1ULL << (3*nargs));
     } else if( strcmp( argv[i], "--opaque" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      sts = base64_decode( (char *)argxdr.buf + argxdr.offset + 4, argxdr.count - argxdr.offset - 4, argv[i] );
+      sts = base64_decode( (char *)argxdr.buf + argxdr.offset + 4, (argxdr.count - argxdr.offset) - 4, argv[i] );
       if( sts < 0 ) usage( "Failed to decode base64" );
       xdr_encode_uint32( &argxdr, sts );
       argxdr.offset += sts;
-      if( sts % 4 ) argxdr.offset += 4;
+      if( sts % 4 ) argxdr.offset += 4 - (sts % 4);
 
+      FVM_SIGINFO_SETPARAM(siginfo,nargs,VAR_TYPE_U32,0);
       nargs++;
-      siginfo |= (2ULL << (3*nargs));
+      FVM_SIGINFO_SETPARAM(siginfo,nargs,VAR_TYPE_OPAQUE,0);
+      nargs++;
+
     } else break;
     
     i++;

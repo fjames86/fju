@@ -185,6 +185,10 @@ int mmf_rename( char *dirpath, char *oldname, char *newname ) {
   return 0;
 }
 
+int mmf_fsize( struct mmf_s *mmf ) {
+  return (int)GetFileSize( mmf->fd, NULL );
+}
+
 #else
 int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 	memset( mmf, 0, sizeof(*mmf) );
@@ -302,6 +306,10 @@ int mmf_rename( char *dirpath, char *oldname, char *newname ) {
   sprintf( newpath, "%s/%s", dirpath, newname );
   rename( oldpath, newpath );
   return 0;
+}
+
+int mmf_fsize( struct mmf_s *mmf ) {
+  return lseek( mmf->fd, 0, SEEK_END );
 }
 
 #endif

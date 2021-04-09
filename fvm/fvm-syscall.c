@@ -1206,9 +1206,12 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       
       read_pars( state, pars, 2 );
       path = fvm_getptr( state, pars[0], 0, 0 );
-
-      fvmfd = fvmfd_open( path );
-      fvm_write_u32( state, pars[1], fvmfd ? fvmfd->fd : 0 );
+      if( path ) {
+	fvmfd = fvmfd_open( path );
+	fvm_write_u32( state, pars[1], fvmfd ? fvmfd->fd : 0 );
+      } else {
+	fvm_write_u32( state, pars[1], 0 );
+      }
     }
     break;
   case 43:
@@ -1253,7 +1256,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 46:
-    /* fstat(fd, var len) */
+    /* filesize(fd, var len) */
     {
       uint32_t pars[2];
       struct fvm_fd *fvmfd;
@@ -1261,10 +1264,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       read_pars( state, pars, 2 );
 
       fvmfd = fvmfd_get( pars[0] );
-      if( fvmfd ) {
-	fvm_write_u32( state, pars[1], fvmfd->mmf.fsize );
-      }
-
+      fvm_write_u32( state, pars[1], fvmfd ? mmf_fsize( &fvmfd->mmf ) : 0 );
     }
     break;
   case 0xffff:

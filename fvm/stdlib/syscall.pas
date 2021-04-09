@@ -78,4 +78,4 @@ Declare Syscall Open(filename : string, var fd : int) : 42;
 Declare Syscall Close(fd : int) : 43;
 Declare Syscall Read(fd : int, len : int, buf : opaque, offset : int) : 44;
 Declare Syscall Write(fd : int, len : int, buf : opaque, offset : int) : 45;
-Declare Syscall FStat(fd : int, var len : int) : 46;
+Declare Syscall FileSize(fd : int, var len : int) : 46;

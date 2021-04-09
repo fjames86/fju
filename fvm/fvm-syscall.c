@@ -69,6 +69,66 @@ static struct log_s *openlogfile( struct fvm_state *state, uint32_t addr ) {
   return &logp;
 }
 
+
+#define FVM_MAX_FD 256
+struct fvm_fd {
+  int fd;
+  uint32_t refcount;
+  char path[256];
+  struct mmf_s mmf;
+};
+static struct fvm_fd filehandles[FVM_MAX_FD];
+static struct fvm_fd *fvmfd_open( char *path ) {
+  int i, sts;
+
+  for( i = 0; i < FVM_MAX_FD; i++ ) {
+    if( strcmp( filehandles[i].path, path ) == 0 ) {
+      filehandles[i].refcount++;
+      return &filehandles[i];
+    }
+  }
+
+  for( i = 0; i < FVM_MAX_FD; i++ ) {
+    if( filehandles[i].fd == 0 ) {
+      sts = mmf_open( mmf_default_path( path, NULL ), &filehandles[i].mmf );
+      if( sts ) return NULL;
+
+      do {
+	filehandles[i].fd = sec_rand_uint32();
+      } while( filehandles[i].fd == 0 );
+      
+      filehandles[i].refcount = 1;
+      strncpy( filehandles[i].path, path, sizeof(filehandles[i].path) - 1 );
+      return &filehandles[i];
+    }
+  }
+  
+  return NULL;
+}
+static void fvmfd_close( int fd ) {
+  int i;
+
+  if( fd == 0 ) return;
+
+  for( i = 0; i < FVM_MAX_FD; i++ ) {
+    if( filehandles[i].fd == fd ) {
+      filehandles[i].refcount--;
+      if( filehandles[i].refcount == 0 ) {
+	mmf_close( &filehandles[i].mmf );
+	filehandles[i].fd = 0;
+	return;
+      }
+    }
+  }
+}
+static struct fvm_fd *fvmfd_get( int fd ) {
+  int i;
+  for( i = 0; i < FVM_MAX_FD; i++ ) {
+    if( filehandles[i].fd == fd ) return &filehandles[i];
+  }
+  return NULL;
+}
+
 static void read_pars( struct fvm_state *state, uint32_t *pars, int n ) {
   int i;
   for( i = 0; i < n; i++ ) {
@@ -1135,6 +1195,76 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	aes_decrypt( (uint8_t *)key, (uint8_t *)buf, pars[0] );
       }
       
+    }
+    break;
+  case 42:
+    /* open(path,var fd) */
+    {
+      uint32_t pars[2];
+      struct fvm_fd *fvmfd;
+      char *path;
+      
+      read_pars( state, pars, 2 );
+      path = fvm_getptr( state, pars[0], 0, 0 );
+
+      fvmfd = fvmfd_open( path );
+      fvm_write_u32( state, pars[1], fvmfd ? fvmfd->fd : 0 );
+    }
+    break;
+  case 43:
+    /* close(fd) */
+    {
+      uint32_t pars[1];
+
+      read_pars( state, pars, 1 );
+      fvmfd_close( pars[0] );
+    }
+    break;
+  case 44:
+    /* read(fd,len,buf,offset) */
+    {
+      uint32_t pars[4];
+      char *buf;
+      struct fvm_fd *fvmfd;
+      
+      read_pars( state, pars, 4 );
+
+      fvmfd = fvmfd_get( pars[0] );
+      if( fvmfd ) {
+	buf = fvm_getptr( state, pars[2], pars[1], 1 );
+	if( buf ) mmf_read( &fvmfd->mmf, buf, pars[1], pars[3] );
+      }
+    }
+    break;
+  case 45:
+    /* write(fd,len,buf,offset) */
+    {
+      uint32_t pars[4];
+      char *buf;
+      struct fvm_fd *fvmfd;
+      
+      read_pars( state, pars, 4 );
+
+      fvmfd = fvmfd_get( pars[0] );
+      if( fvmfd ) {
+	buf = fvm_getptr( state, pars[2], pars[1], 0 );
+	if( buf ) mmf_write( &fvmfd->mmf, buf, pars[1], pars[3] );
+      }
+    }
+    break;
+  case 46:
+    /* fstat(fd, var len) */
+    {
+      uint32_t pars[2];
+      struct fvm_fd *fvmfd;
+      
+      read_pars( state, pars, 2 );
+
+      fvmfd = fvmfd_get( pars[0] );
+      if( fvmfd ) {
+	fvm_write_u32( state, pars[1], fvmfd->mmf.fsize );
+      }
+
     }
     break;
   case 0xffff:

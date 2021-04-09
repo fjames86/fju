@@ -467,11 +467,11 @@ static uint16_t fvm_read_pcu16( struct fvm_state *state ) {
 
 int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
 
-  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize - 4)) ) {
+  if( (addr >= FVM_ADDR_DATA) && (addr <= (FVM_ADDR_DATA + state->module->datasize - 4)) ) {
     memcpy( &state->module->data[addr - FVM_ADDR_DATA], &u, 4 );
     return 0;
   }
-  if( (addr >= FVM_ADDR_STACK) && (addr < (FVM_ADDR_STACK + FVM_MAX_STACK - 4)) ) {
+  if( (addr >= FVM_ADDR_STACK) && (addr <= (FVM_ADDR_STACK + FVM_MAX_STACK - 4)) ) {
     memcpy( &state->stack[addr - FVM_ADDR_STACK], &u, 4 );
     return 0;
   }

@@ -1608,7 +1608,11 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
       } else {
 	p = getparam( glob.currentproc, glob.tok.val );
 	if( p ) {
-	  emit_leasp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	  if( p->isvar ) {
+	    emit_ldsp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	  } else {
+	    emit_leasp( p->offset + glob.currentproc->localsize + glob.stackoffset );
+	  }
 	} else {
 	  cv = getconst( glob.tok.val );
 	  if( cv ) {

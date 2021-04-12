@@ -42,6 +42,9 @@ Begin
    Procedure MsgHandler(msgid : int, len : int, buf : opaque)
    Begin
 	var hostH, hostL, seqH, seqL : int;
+	var timestr : string[64];
+	var valstr : string[128];
+	var nowh, nowl : int;
 	
 	Syscall DmbMsgInfo(hostH,hostL,seqH,seqL);
 	Call LogWritef(LogLvlInfo,"DmbTest Host %x%x Msgid %x Len %u", hostH, hostL, msgid, len);
@@ -51,7 +54,10 @@ Begin
 	   Syscall DmbPublish(MsgPong, DmbRemote, 0, 0, seqH, seqL);
 	End Else If msgid = MsgPong Then Begin
 	   { Write an freg entry }
-	   Syscall FregWriteString("/dmbtest","DmbTest Received Reply");
+	   Syscall TimeNow(nowh,nowl);
+	   Syscall Timestr(nowh,nowl,timestr);
+	   Syscall Sprintf(valstr,"DmbTest Received reply %s", timestr,0,0,0);
+	   Syscall FregWriteString("/dmbtest",valstr);
 	End;
 
    End;

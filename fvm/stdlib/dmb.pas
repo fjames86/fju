@@ -1,6 +1,6 @@
 
 { -*- mode: fvm -*- }
 
-Const DmbCatCht = 0x0001;
-Const DmbCatNls = 0x0002;
+Const DmbCatCht = 0x00000100;
+Const DmbCatNls = 0x00000200;
 

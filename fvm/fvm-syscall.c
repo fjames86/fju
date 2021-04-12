@@ -44,6 +44,9 @@ static struct fvmlog loghandles[FVM_MAX_LOGHANDLE];
 
 static struct fvmlog *fvmlog_get( int handle ) {
   int i;
+  
+  if( handle == 0 ) return NULL;
+  
   for( i = 0; i < FVM_MAX_LOGHANDLE; i++ ) {
     if( loghandles[i].handle == handle ) return &loghandles[i];
   }
@@ -675,14 +678,14 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   case 18:
     {
       /* RpcNow(var high:int,var low :int ) */
+      uint32_t pars[2];
       uint64_t now;
-      uint32_t haddr, laddr;
 
-      laddr = fvm_stack_read( state, 4 );
-      haddr = fvm_stack_read( state, 8 );      
+      read_pars( state, pars, 2 );
+      
       now = rpc_now();
-      fvm_write_u32( state, laddr, now & 0xffffffff );
-      fvm_write_u32( state, haddr, now >> 32 );
+      fvm_write_u32( state, pars[1], now & 0xffffffff );
+      fvm_write_u32( state, pars[0], now >> 32 );
     }
     break;    
   case 19:    
@@ -1306,6 +1309,28 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t pars[1];
       read_pars( state, pars, 1 );
       fvmlog_close( pars[0] );
+    }
+    break;
+  case 49:
+    /* Timestr(high,low,str) */
+    {
+      uint32_t pars[3];
+      char *str;
+      read_pars( state, pars, 3 );
+      str = fvm_getptr( state, pars[2], 64, 1 );
+      if( str ) sec_timestr( (((uint64_t)pars[0]) << 32) | (uint64_t)pars[1], str );
+    }
+    break;
+  case 50:
+    /* TimeNow(high,low) */
+    {
+      uint32_t pars[2];
+      uint64_t now;
+      
+      read_pars( state, pars, 2 );
+      now = time( NULL );
+      fvm_write_u32( state, pars[0], now >> 32 );
+      fvm_write_u32( state, pars[1], now & 0xffffffff );
     }
     break;
   case 0xffff:

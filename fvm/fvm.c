@@ -831,7 +831,7 @@ static int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t 
 	} else {
 	  sts = xdr_decode_uint32( argbuf, &u32[i] );
 	  if( sts ) {
-	    fvm_log( LOG_LVL_ERROR, "fvm_run xdr error u32" );
+	    fvm_log( LOG_LVL_ERROR, "fvm_run xdr error u32 i=%d", i );
 	    return sts;
 	  }
 	}
@@ -839,7 +839,7 @@ static int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t 
       case VAR_TYPE_STRING:
 	sts = xdr_decode_string( argbuf, state.stack + state.sp, FVM_MAX_STACK - state.sp );
 	if( sts ) {
-	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error string" );
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error string i=%d argbuf=%d/%d", i, argbuf->offset, argbuf->count );
 	  return sts;
 	}
 	u32[i] = FVM_ADDR_STACK + state.sp;
@@ -851,7 +851,7 @@ static int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t 
 	len = FVM_MAX_STACK - state.sp;
 	sts = xdr_decode_opaque( argbuf, (uint8_t *)state.stack + state.sp, &len );
 	if( sts ) {
-	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error opaque i=%d argbuf=%d/%d", i, argbuf->offset,argbuf->count );
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error opaque i=%d argbuf=%d/%d", i, argbuf->offset, argbuf->count );
 	  return sts;
 	}
 	u32[i - 1] = len;

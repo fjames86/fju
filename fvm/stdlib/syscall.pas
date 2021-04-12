@@ -81,3 +81,5 @@ Declare Syscall Write(fd : int, len : int, buf : opaque, offset : int) : 45;
 Declare Syscall FileSize(fd : int, var len : int) : 46;
 Declare Syscall LogOpen(name : string, var handle : int) : 47;
 Declare Syscall LogClose(handle : int) : 48;
+Declare Syscall Timestr(timeh : int, timel : int, str : string) : 49;
+Declare Syscall TimeNow(var high : int, var low : int) : 50;

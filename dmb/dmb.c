@@ -249,16 +249,21 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint64_t seq, uint32_t msgi
       
       sts = fvm_proc_by_handle( glob.fvmsc[i].phandle, &m, &procid );
       if( !sts ) {
+	dmb_log( LOG_LVL_TRACE, "dmb_invoke_subscribers %s/%s msgid=%08x scmsgid=%08x",
+		 m->name, m->procs[procid].name, msgid, glob.fvmsc[i].msgid );
+		 
 	glob.curhostid = hostid;
 	glob.curseq = seq;
 	glob.curmsgid = msgid;
 	glob.curlen = len;
 	sts = fvm_run( m, procid, &args, NULL );
-	if( sts ) dmb_log( LOG_LVL_ERROR, "dmb invoke subscriber failed %s/%s", m->name, m->procs[procid].name );
+	if( sts ) dmb_log( LOG_LVL_ERROR, "dmb invoke subscriber failed %s/%s arglen=%u", m->name, m->procs[procid].name, args.count );
 	glob.curhostid = 0;
 	glob.curseq = 0;
 	glob.curmsgid = 0;
 	glob.curlen = 0;
+      } else {
+	dmb_log( LOG_LVL_ERROR, "dmb invoke subscriber invalid method handle %x", glob.fvmsc[i].phandle );
       }
     }
   }
@@ -297,7 +302,7 @@ static int dmb_proc_invoke( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  dmb_log( LOG_LVL_INFO, "dmb_proc_invoke hostid=%"PRIx64" msgid=%x flags=%x len=%u", hostid, msgid, flags, lenp );
+  dmb_log( LOG_LVL_INFO, "dmb_proc_invoke hostid=%"PRIx64" msgid=%08x flags=%x len=%u", hostid, msgid, flags, lenp );
   dmb_invoke_subscribers( hostid, seq, msgid, flags, bufp, lenp );
   
   if( replyp ) {

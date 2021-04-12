@@ -199,20 +199,23 @@ Begin
 	var idh, idl : int;
 	var idh2, idl2 : int;
 	var flags, lenp : int;
+	var logh : int;
 	var buf : opaque[1024];
 
-	Syscall LogLastId(MyLogName,idh,idl);
+	Syscall LogOpen(MyLogName,logh);
+	
+	Syscall LogLastId(logh,idh,idl);
 	Call Printf("%s LastId %x%x", MyLogName,idh,idl,0);
 	
 	idh = 0;
 	idl = 0;
 	Do
 	Begin
-		Syscall LogNext(MyLogName,idh,idl,idh2,idl2);
+		Syscall LogNext(logh,idh,idl,idh2,idl2);
 		If (idh2 | idl2) Then
 		Begin
 
-			Syscall LogRead(MyLogName,idh2,idl2,1024,buf,flags,lenp);
+			Syscall LogRead(logh,idh2,idl2,1024,buf,flags,lenp);
 			Call Printf("%x%x %s", idh2,idl2,buf,0);		
 		End Else Begin
 		    Call Printf("Failed to get next log entry for %x%x", idh,idl,0,0);
@@ -223,6 +226,7 @@ Begin
 		idl = idl2;
 	End While (idh | idl);
 
+	Syscall LogClose(logh);
    End;
    
    Procedure Main()

@@ -33,42 +33,62 @@
 
 int cht_entry_by_index( struct cht_s *cht, int idx, uint32_t seq, struct cht_entry *entry );
 
-/* 
- * TODO: this can be quite expensive to keep opening and closingthe log file. Would be better 
- * to at least save a handle to the last opened log and reuse it if the name is the same 
- */
-static struct log_s *openlogfile( struct fvm_state *state, uint32_t addr ) {
-  static struct log_s logp;
-  static char logname[64];
+struct fvmlog {
+  int handle;
+  int refcount;
+  char name[64];  
+  struct log_s log;
+};
+#define FVM_MAX_LOGHANDLE 16 
+static struct fvmlog loghandles[FVM_MAX_LOGHANDLE];
 
-  char *strp;
-  char path[256];
-  int sts;
-  
-  if( !addr ) return NULL;
-  strp = fvm_getstr( state, addr );
-  if( !strp ) return NULL;
-  if( logp.mmf.fd && (strcmp( strp, logname ) == 0) ) {
-    return &logp;
+static struct fvmlog *fvmlog_get( int handle ) {
+  int i;
+  for( i = 0; i < FVM_MAX_LOGHANDLE; i++ ) {
+    if( loghandles[i].handle == handle ) return &loghandles[i];
   }
-
-  if( logp.mmf.fd ) {
-    log_close( &logp );
-    memset( &logp, 0, sizeof(logp) );
-  }
-  
-  strncpy( logname, strp, sizeof(logname) - 1 );
-  sprintf( path, "%s.log", strp );
-  sts = log_open( mmf_default_path( path, NULL ), NULL, &logp );
-  if( sts ) {
-    memset( &logp, 0, sizeof(logp) );
-    strcpy( logname, "" );
-    return NULL;
-  }
-
-  return &logp;
+  return NULL;
 }
 
+static struct fvmlog *fvmlog_open( char *name ) {
+  int i;
+  for( i = 0; i < FVM_MAX_LOGHANDLE; i++ ) {
+    if( strcmp( loghandles[i].name, name ) == 0 ) {
+      loghandles[i].refcount++;
+      return &loghandles[i];
+    }
+  }
+  for( i = 0; i < FVM_MAX_LOGHANDLE; i++ ) {
+    if( loghandles[i].handle == 0 ) {
+      char path[256];
+      int sts;
+  
+      sprintf( path, "%s.log", name );
+      sts = log_open( mmf_default_path( path, NULL ), NULL, &loghandles[i].log );
+      if( sts ) return NULL;
+
+      loghandles[i].refcount = 1;
+      loghandles[i].handle = sec_rand_uint32();
+      strncpy( loghandles[i].name, name, sizeof(loghandles[i].name) - 1 );
+      return &loghandles[i];
+    }
+  }
+  return NULL;
+}
+static void fvmlog_close( int handle ) {
+  int i;
+  for( i = 0; i < FVM_MAX_LOGHANDLE; i++ ) {
+    if( loghandles[i].handle == handle ) {
+      loghandles[i].refcount--;
+      if( loghandles[i].refcount == 0 ) {
+	log_close( &loghandles[i].log );
+	memset( &loghandles[i], 0, sizeof(loghandles[i]) );
+	return;
+      }
+    }
+  }
+}
+	
 
 #define FVM_MAX_FD 256
 struct fvm_fd {
@@ -337,18 +357,18 @@ static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) 
 int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   switch( syscallid ) {
   case 1:
-    /* LogWrite(name,flags,len,buf) */
+    /* LogWrite(handle,flags,len,buf) */
     {
       char *buf;
-      struct log_s *logp;
       struct log_entry entry;
       struct log_iov iov[1];
       uint32_t pars[4];
-
-      read_pars( state, pars, 4 );
-      logp = openlogfile( state, pars[0] );
-      buf = fvm_getptr( state, pars[3], pars[2], 0 );
+      struct fvmlog *logp;
       
+      read_pars( state, pars, 4 );
+      logp = fvmlog_get( pars[0] );
+      buf = fvm_getptr( state, pars[3], pars[2], 0 );
+
       memset( &entry, 0, sizeof(entry) );
       iov[0].buf = buf;
       iov[0].len = buf ? pars[2] : 0;
@@ -356,24 +376,24 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       entry.niov = 1;
       entry.flags = pars[1];
       strncpy( (char *)&entry.ltag, "FVMS", 4 );
-      log_write( logp, &entry );
+      log_write( logp ? &logp->log : NULL, &entry );
     }
     break;
   case 2:
-    /* LogNext(name,prevHigh,prevLow,var high,var low); */
+    /* LogNext(handle,prevHigh,prevLow,var high,var low); */
     {
-      struct log_s *logp;
+      struct fvmlog *logp;
       struct log_entry entry;
       uint64_t id;
       int ne, sts;
       uint32_t pars[5];
 
       read_pars( state, pars, 5 );
-      logp = openlogfile( state, pars[0] );      
+      logp = fvmlog_get( pars[0] );
       id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
-      
+
       memset( &entry, 0, sizeof(entry) );
-      sts = log_read( logp, id, &entry, 1, &ne );
+      sts = log_read( logp ? &logp->log : NULL, id, &entry, 1, &ne );
       if( sts || !ne ) {
 	fvm_write_u32( state, pars[4], 0 );
 	fvm_write_u32( state, pars[3], 0 );
@@ -381,12 +401,13 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	fvm_write_u32( state, pars[4], entry.id & 0xffffffff );
 	fvm_write_u32( state, pars[3], (entry.id >> 32) & 0xffffffff );
       }
+
     }
     break;
   case 3:
-    /* LogRead(logname,idhigh,idlow,len,buf, var flags, var lenp) */
+    /* LogRead(handle,idhigh,idlow,len,buf, var flags, var lenp) */
     {
-      struct log_s *logp;
+      struct fvmlog *logp;
       uint64_t id;
       int sts;
       char *bufp;
@@ -395,7 +416,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       struct log_iov iov[1];
       
       read_pars( state, pars, 7 );
-      logp = openlogfile( state, pars[0] );
+      logp = fvmlog_get( pars[0] );
       id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
 
       bufp = fvm_getptr( state, pars[4], pars[3], 0 );
@@ -405,7 +426,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       iov[0].len = bufp && (pars[3] > 0) ? pars[3] : 0;
       entry.iov = iov;
       entry.niov = 1;	
-      sts = log_read_entry( logp, id, &entry );
+      sts = log_read_entry( logp ? &logp->log : NULL, id, &entry );
       fvm_write_u32( state, pars[5], sts ? 0 : entry.flags );
       fvm_write_u32( state, pars[6], sts ? 0 : entry.msglen );
     }
@@ -413,14 +434,14 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   case 4:
     /* LogLastId(logname,var idHigh,var idLow) */
     {
-      struct log_s *logp;
+      struct fvmlog *logp;
       uint32_t pars[3];
       struct log_prop prop;
 
       read_pars( state, pars, 3 );
-      logp = openlogfile( state, pars[0] );
+      logp = fvmlog_get( pars[0] );
 
-      log_prop( logp, &prop );
+      log_prop( logp ? &logp->log : NULL, &prop );
       fvm_write_u32( state, pars[2], prop.last_id & 0xffffffff );
       fvm_write_u32( state, pars[1], prop.last_id >> 32 );
     }
@@ -880,19 +901,19 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   case 29:
     /* LogReadInfo(logname,idhigh,idlow,var len,var flags,var timestampHIgh, var timestampLow) */
     {
-      struct log_s *logp;
+      struct fvmlog *logp;
       uint64_t id;
       int sts;
       uint32_t pars[7];
       struct log_entry entry;
       
       read_pars( state, pars, 7 );
-      logp = openlogfile( state, pars[0] );
+      logp = fvmlog_get( pars[0] );
       id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
 
       memset( &entry, 0, sizeof(entry) );
       entry.niov = 0;
-      sts = log_read_entry( logp, id, &entry );
+      sts = log_read_entry( logp ? &logp->log : NULL, id, &entry );
       fvm_write_u32( state, pars[3], sts ? 0 : entry.msglen );
       fvm_write_u32( state, pars[4], sts ? 0 : entry.flags );
       fvm_write_u32( state, pars[5], sts ? 0 : (uint32_t)(entry.timestamp >> 32) );
@@ -902,27 +923,26 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   case 30:
     /* LogPrev(logname,idhigh,idlow,var high, var low) */
     {
-      struct log_s *logp;
+      struct fvmlog *logp;
       struct log_entry entry;
       struct log_prop prop;
       uint64_t id;
       uint32_t pars[5];
 
       read_pars( state, pars, 5 );
-      logp = openlogfile( state, pars[0] );      
+      logp = fvmlog_get( pars[0] );
       id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
 
       if( id == 0 ) {
 	/* get last id written */
-	log_prop( logp, &prop );
+	log_prop( logp ? &logp->log : NULL, &prop );
 	id = prop.last_id;
       } else {
 	/* get prev id of this entry */
 	memset( &entry, 0, sizeof(entry) );
-	log_read_entry( logp, id, &entry );
+	log_read_entry( logp ? &logp->log : NULL, id, &entry );
 	id = entry.prev_id;
       }
-
       fvm_write_u32( state, pars[4], id & 0xffffffff );
       fvm_write_u32( state, pars[3], (id >> 32) & 0xffffffff );
     }
@@ -1265,6 +1285,27 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 
       fvmfd = fvmfd_get( pars[0] );
       fvm_write_u32( state, pars[1], fvmfd ? mmf_fsize( &fvmfd->mmf ) : 0 );
+    }
+    break;
+  case 47:
+    /* LogOpen(name,var handle) */
+    {
+      uint32_t pars[2];
+      char *name;
+      struct fvmlog *logp;
+      
+      read_pars( state, pars, 2 );
+      name = fvm_getstr( state, pars[0] );
+      logp = fvmlog_open( name );
+      fvm_write_u32( state, pars[1], logp ? logp->handle : 0 );
+    }
+    break;
+  case 48:
+    /* LogClose(handle) */
+    {
+      uint32_t pars[1];
+      read_pars( state, pars, 1 );
+      fvmlog_close( pars[0] );
     }
     break;
   case 0xffff:

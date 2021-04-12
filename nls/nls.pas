@@ -142,15 +142,18 @@ Begin
 	var high, low, pub : int;
 	var len, flags : int;
 	var buf : opaque[4096];
+	var logh : int;
+
+	Syscall LogOpen(logname,logh);
 	
-	Syscall LogLastId(logname,idhigh,idlow);
+	Syscall LogLastId(logh,idhigh,idlow);
 	Call GetLogId(logname,high,low);
 
 	{ read entries until we get to the last one, if any }
 	While (idhigh <> high) || (idlow <> low) Do
 	Begin
-		Syscall LogNext(logname,high,low,high,low);
-		Syscall LogRead(logname,high,low,4096,buf,flags,len);
+		Syscall LogNext(logh,high,low,high,low);
+		Syscall LogRead(logh,high,low,4096,buf,flags,len);
 		If len Then Begin
 		    Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",logname,idhigh,idlow,0);
 
@@ -162,6 +165,7 @@ Begin
 	End;
 	Call SetLogId(logname,idhigh,idlow);
 
+	Syscall LogClose(logh);
 End;
 
 { -------------------------- Public procedures ----------------------- }
@@ -173,6 +177,7 @@ Begin
 	var i, etype, result : int;
 	var idhigh, idlow : int;
 	var p : ^LogEntry;
+	var logh : int;
 	
 	Syscall FregNext("/fju/nls/logs","",ename,etype,result);
 	i = 0;
@@ -181,8 +186,11 @@ Begin
 	    Begin
 		p = LogEntries[i];
   	        Call Strcpy(p.Name, ename);
-		Syscall LogLastId(p.Name, idhigh, idlow);
 
+		Syscall LogOpen(p.Name,logh);
+		Syscall LogLastId(logh, idhigh, idlow);
+		Syscall LogClose(logh);
+		
 		p.IDHigh = idhigh;
 		p.IDLow = idlow;
 	        i = i + 1;
@@ -222,12 +230,17 @@ Procedure NlsMsgWrite(logname : string, flags : int, len : int, buf : opaque)
 Begin
 	var high, low : int;
 	var hostidh, hostidl : int;
-
+	var logh : int;
+	
 	Call LogWritef(LogLvlTrace,"NlsMsgWrite Logname=%s len=%u", logname, len,0,0);
 
-	Syscall LogWrite(logname,flags,len,buf);
-	Syscall LogLastId(logname,high,low);
+	Syscall LogOpen(logname, logh);
+	
+	Syscall LogWrite(logh,flags,len,buf);
+	Syscall LogLastId(logh,high,low);	
 	Call SetLogId(logname,high,low);
+
+	Syscall LogClose(logh);
 End;
 
 End.

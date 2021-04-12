@@ -21,12 +21,15 @@ Begin
 	var flags, len, offset, ne : int;
 	var timeH, timeL, l, f : int;
 	var p : opaque;
+	var logh : int;
 	var xdr : opaque[2048];
 
+	Syscall LogOpen(logname,logh);
+	
 	offset = 0;
 	ne = 0;
-	If fromend Then Syscall LogPrev(logname,idhigh,idlow,idhigh,idlow)
-	Else Syscall LogNext(logname,idhigh,idlow,idhigh,idlow);
+	If fromend Then Syscall LogPrev(logh,idhigh,idlow,idhigh,idlow)
+	Else Syscall LogNext(logh,idhigh,idlow,idhigh,idlow);
 	
 	While (idhigh|idlow) Do
 	Begin
@@ -35,7 +38,7 @@ Begin
 		flags = 0;
 		len = 0;
 		p = xdr + offset + LogEntryHeader;
-		Syscall LogRead(logname,idhigh,idlow,2048 - (offset + LogEntryHeader),p,flags,len);
+		Syscall LogRead(logh,idhigh,idlow,2048 - (offset + LogEntryHeader),p,flags,len);
 		If len > 2048 - (offset + LogEntryHeader) Then Begin
 		   { the entry was larger than space left in buffer so break here }
 		   Break;
@@ -44,7 +47,7 @@ Begin
 		Call XdrEncodeU64(xdr,offset,idhigh,idlow);		
 		Call XdrEncodeU32(xdr,offset,flags);
 
-		Syscall LogReadInfo(logname,idhigh,idlow,l,f,timeH,timeL);
+		Syscall LogReadInfo(logh,idhigh,idlow,l,f,timeH,timeL);
 		Call XdrEncodeU64(xdr,offset,timeH,timeL);
 		
 		Call XdrEncodeU32(xdr,offset,len);
@@ -53,9 +56,11 @@ Begin
 		ne = ne + 1;
 		If ne >= n Then Break;
 
-		If fromend Then Syscall LogPrev(logname,idhigh,idlow,idhigh,idlow)
-		Else Syscall LogNext(logname,idhigh,idlow,idhigh,idlow);
+		If fromend Then Syscall LogPrev(logh,idhigh,idlow,idhigh,idlow)
+		Else Syscall LogNext(logh,idhigh,idlow,idhigh,idlow);
 	End;
+
+	Syscall LogClose(logh);
 	
 	nentries = ne;
 	elen = offset;
@@ -71,14 +76,21 @@ End;
 { procedure to write into log }
 Procedure ProcWrite(logname : string, flags : int, len : int, buf : opaque, var idhigh : int, var idlow : int)
 Begin
+	var logh : int;
+	
+	Syscall LogOpen(logname,logh);
 	Syscall LogWrite(logname,flags,len,buf);
 	Syscall LogLastId(logname,idhigh,idlow);
+	Syscall LogClose(logh);
 End;
 
 { procedure to get last id }
 Procedure ProcLastId(logname : string, var idhigh : int, var idlow : int)
 Begin
+	var logh : int;
+	Syscall LogOpen(logname,logh);
 	Syscall LogLastId(logname,idhigh,idlow);
+	Syscall LogClose(logh);
 End;
 
 { read entries from end }
@@ -92,16 +104,22 @@ End;
 Procedure LogRead(logname : string, idHigh : int, idLow : int, var flags : int, var lenp : int, var bufp : opaque)
 Begin
 	var len : int;
+	var logh : int;
 	var buf : opaque[2048];
-	
+
+	Syscall LogOpen(logname,logh);
 	Syscall LogRead(logname,idhigh,idlow,2048,buf,flags,len);
+	Syscall LogClose(logh);
 	bufp = buf;
 	lenp = len;
 End;
 
 Procedure LogWrite(logname : string, flags : int, len : int, buf : opaque)
 Begin
+	var logh : int;
+	Syscall LogOpen(logname,logh);
 	Syscall LogWrite(logname,flags,len,buf);
+	Syscall LogClose(logh);
 End;
 
 End.

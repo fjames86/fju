@@ -8,11 +8,11 @@ Const LogLvlWarn = 0x03;
 Const LogLvlError = 0x04;
 Const LogLvlFatal = 0x05;
 Const LogBinary = 0x10;
-Declare Syscall LogWrite(logname : string, flags : u32, len : u32, buf : opaque) : 1;
+Declare Syscall LogWrite(handle : int, flags : u32, len : u32, buf : opaque) : 1;
 
-Declare Syscall LogNext(logname : string, previdHigh : u32, previdLow : u32, var idHigh : u32, var IdLow : u32) : 2;
-Declare Syscall LogRead(logname : string, idHigh : u32, idLow : u32, len : u32, buf : opaque, var flags : int, var lenp : u32 ) : 3;
-Declare Syscall LogLastId(logname : string, var idHigh : int, var idLow : int) : 4;
+Declare Syscall LogNext(handle : int, previdHigh : u32, previdLow : u32, var idHigh : u32, var IdLow : u32) : 2;
+Declare Syscall LogRead(handle : int, idHigh : u32, idLow : u32, len : u32, buf : opaque, var flags : int, var lenp : u32 ) : 3;
+Declare Syscall LogLastId(handle : int, var idHigh : int, var idLow : int) : 4;
 
 Const FregTypeOpaque = 0;
 Const FregTypeU32 = 1;
@@ -46,8 +46,8 @@ Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf
 Declare Syscall RaftCommand(idHigh : int, idLow : int, len : int, buf : opaque) : 26;
 Declare Syscall FvmClRun(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 27;
 Declare Syscall FvmClRunOthers(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 28;
-Declare Syscall LogReadInfo(logname : string, idHigh : int, idLow : int, var len : int, var flags : int, var timestampHigh : int, var timestampLow : int ) : 29;
-Declare Syscall LogPrev(logname : string, idHigh : int, idLow : int, var high : int, var low : int ) : 30;
+Declare Syscall LogReadInfo(handle : int, idHigh : int, idLow : int, var len : int, var flags : int, var timestampHigh : int, var timestampLow : int ) : 29;
+Declare Syscall LogPrev(handle : int, idHigh : int, idLow : int, var high : int, var low : int ) : 30;
 Declare Syscall ChtList(startkey : opaque,keybuf : opaque, nkeybuf : int, var nkeys : int) : 31;
 Const DmbLocal = 0x1;   { Not published remotely }
 Const DmbRemote = 0x2;  { Not published locally }
@@ -79,3 +79,5 @@ Declare Syscall Close(fd : int) : 43;
 Declare Syscall Read(fd : int, len : int, buf : opaque, offset : int) : 44;
 Declare Syscall Write(fd : int, len : int, buf : opaque, offset : int) : 45;
 Declare Syscall FileSize(fd : int, var len : int) : 46;
+Declare Syscall LogOpen(name : string, var handle : int) : 47;
+Declare Syscall LogClose(handle : int) : 48;

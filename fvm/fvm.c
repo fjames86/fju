@@ -402,17 +402,17 @@ static uint32_t fvm_pop( struct fvm_state *state ) {
 char *fvm_getptr( struct fvm_state *state, uint32_t addr, int len, int writeable ) {
   if( len < 0 ) return NULL;
   
-  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize - len)) ) {
+  if( (addr >= FVM_ADDR_DATA) && ((addr + len) <= (FVM_ADDR_DATA + state->module->datasize)) ) {
     return &state->module->data[addr - FVM_ADDR_DATA];
   }
 
   if( !writeable ) {
-    if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize - len)) ) {
+    if( (addr >= FVM_ADDR_TEXT) && ((addr + len) <= (FVM_ADDR_TEXT + state->module->textsize)) ) {
       return &state->module->text[addr - FVM_ADDR_TEXT];
     }
   }
   
-  if( (addr >= FVM_ADDR_STACK) && (addr < (FVM_ADDR_STACK + FVM_MAX_STACK - len)) ) {
+  if( (addr >= FVM_ADDR_STACK) && ((addr + len) <= (FVM_ADDR_STACK + FVM_MAX_STACK)) ) {
     return &state->stack[addr - FVM_ADDR_STACK];
   }
   return NULL;  

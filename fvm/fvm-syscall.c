@@ -105,8 +105,9 @@ static struct fvm_fd *fvmfd_open( char *path ) {
   int i, sts;
 
   for( i = 0; i < FVM_MAX_FD; i++ ) {
-    if( strcmp( filehandles[i].path, path ) == 0 ) {
+    if( filehandles[i].fd && (strcmp( filehandles[i].path, path ) == 0) ) {
       filehandles[i].refcount++;
+      fvm_log( LOG_LVL_TRACE, "fvmfd_open returning existing filedecsriptor %u rcount=%u", filehandles[i].fd, filehandles[i].refcount );
       return &filehandles[i];
     }
   }
@@ -122,6 +123,8 @@ static struct fvm_fd *fvmfd_open( char *path ) {
       
       filehandles[i].refcount = 1;
       strncpy( filehandles[i].path, path, sizeof(filehandles[i].path) - 1 );
+
+      fvm_log( LOG_LVL_TRACE, "fvmfd_open returning new handle %u", filehandles[i].fd );
       return &filehandles[i];
     }
   }
@@ -138,12 +141,17 @@ static void fvmfd_close( int fd ) {
       filehandles[i].refcount--;
       if( filehandles[i].refcount == 0 ) {
 	mmf_close( &filehandles[i].mmf );
-	filehandles[i].fd = 0;
+	memset( &filehandles[i], 0, sizeof(filehandles[i]) );
+	
+	fvm_log( LOG_LVL_TRACE, "fvmfd_close closing file handle %u", fd );
 	return;
       }
     }
   }
+
+  fvm_log( LOG_LVL_WARN, "fvmfd_close unknown file descriptor" );
 }
+
 static struct fvm_fd *fvmfd_get( int fd ) {
   int i;
   for( i = 0; i < FVM_MAX_FD; i++ ) {
@@ -1239,7 +1247,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       char *path;
       
       read_pars( state, pars, 2 );
-      path = fvm_getptr( state, pars[0], 0, 0 );
+      path = fvm_getstr( state, pars[0] );
       if( path ) {
 	fvmfd = fvmfd_open( path );
 	fvm_write_u32( state, pars[1], fvmfd ? fvmfd->fd : 0 );
@@ -1270,6 +1278,9 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( fvmfd ) {
 	buf = fvm_getptr( state, pars[2], pars[1], 1 );
 	if( buf ) mmf_read( &fvmfd->mmf, buf, pars[1], pars[3] );
+	else fvm_log( LOG_LVL_ERROR, "syscall read bad args len=%u addr=0x%x", pars[1], pars[2] );
+      } else {
+	fvm_log( LOG_LVL_ERROR, "syscall read bad file descriptor" );
       }
     }
     break;
@@ -1286,6 +1297,9 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       if( fvmfd ) {
 	buf = fvm_getptr( state, pars[2], pars[1], 0 );
 	if( buf ) mmf_write( &fvmfd->mmf, buf, pars[1], pars[3] );
+	else fvm_log( LOG_LVL_ERROR, "syscall write bad args len=%u addr=0x%x", pars[1], pars[2] );
+      } else {
+	fvm_log( LOG_LVL_ERROR, "syscall write bad file descriptor" );
       }
     }
     break;

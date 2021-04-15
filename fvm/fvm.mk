@@ -10,6 +10,7 @@ fvmprogs += fvm/test/hello-world.fvm
 fvmprogs += fvm/test/test-record.fvm
 fvmprogs += fvm/test/test-sec.fvm
 fvmprogs += fvm/test/test-file.fvm
+fvmprogs += fvm/test/test-snapshot.fvm
 
 fvm: ${LIBDIR}/libfvm.a fvm/test/test1.fvm ${fvmprogs}
 
@@ -39,6 +40,8 @@ fvm/test/test-sec.fvm: fvm/test/test-sec.pas ${BINDIR}/fju fvm/stdlib/syscall.pa
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/test/test-sec.pas
 fvm/test/test-file.fvm: fvm/test/test-file.pas ${BINDIR}/fju fvm/stdlib/syscall.pas
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/test/test-file.pas
+fvm/test/test-snapshot.fvm: fvm/test/test-snapshot.pas ${BINDIR}/fju fvm/stdlib/syscall.pas
+	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/test/test-snapshot.pas
 
 LIBRARIES+=fvm
 

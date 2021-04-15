@@ -1453,7 +1453,7 @@ static void parsevariableexpr( FILE *f, var_t *vartypep, struct record **recordp
 	    addr = l ? l->address : 0;
 	    emit_jmp( addr );
 	    startaddr = glob.pc;
-	    emitdata( glob.tok.val, strlen( cl->val ) + 1 );
+	    emitdata( cl->val, cl->len );
 	    addlabel( lname );
 	    
 	    emit_lea( startaddr - glob.pc - 3 ); /* LEA opcode uses 3 bytes */
@@ -2601,6 +2601,7 @@ static uint32_t parseconstexprval( FILE *f ) {
     
     cv = getconstval( glob.tok.val );
     if( !cv ) usage( "Unknown const %s", glob.tok.val );
+    if( cv->type != VAR_TYPE_U32 ) usage( "Bad const %s type, expected u32", glob.tok.val );
     if( cv->len != 4 ) usage( "Bad const %s", glob.tok.val );
     val = *((uint32_t *)cv->val);
     expecttok( f, TOK_NAME );

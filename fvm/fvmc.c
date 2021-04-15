@@ -3425,7 +3425,7 @@ static void disassemblefile( char *path ) {
   while( i < mmf.fsize ) {
     for( j = 0; j < hdr.nprocs; j++ ) {
       if( hdr.procs[j].address == (FVM_ADDR_TEXT + i - xdr.offset) ) {
-	printf( "%04x Procedure %s(", FVM_ADDR_TEXT + i - xdr.offset, hdr.procs[j].name );
+	printf( "\n%04x Procedure %s(", FVM_ADDR_TEXT + i - xdr.offset, hdr.procs[j].name );
 	nargs = FVM_SIGINFO_NARGS(hdr.procs[j].siginfo);
 	for( k = 0; k < nargs; k++ ) {
 	  vartype = FVM_SIGINFO_VARTYPE(hdr.procs[j].siginfo, k);

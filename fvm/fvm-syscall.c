@@ -1033,19 +1033,19 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 33:
-    /* DmbSubscribe(procaddr : int, msgid : int) */
+    /* DmbSubscribe(procaddr : int, msgid : int, flags : int) */
     {
-      uint32_t pars[2];
+      uint32_t pars[3];
       char *procname;
       int procid;
       
-      read_pars( state, pars, 2 );
+      read_pars( state, pars, 3 );
       procid = fvm_procid_by_addr( state->module, pars[0] );      
       if( procid >= 0 ) {
 	procname = state->module->procs[procid].name;
 
-	if( pars[1] == 0 ) {
-	  /* check procedure parameters match int,int,opaque */
+	if( (pars[2] & DMB_FVMSC_APPLY) == 0 ) {
+	  /* raw mode: check procedure parameters match int,int,opaque */
 	  uint64_t siginfo = 0;
 	  FVM_SIGINFO_SETPARAM(siginfo,2,VAR_TYPE_OPAQUE,0);
 	  FVM_SIGINFO_SETNPARS(siginfo,3);
@@ -1054,7 +1054,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	  }
 	}
 	
-	dmb_subscribe_fvm( state->module->name, procname, pars[1] );
+	dmb_subscribe_fvm( state->module->name, procname, pars[1], pars[2] );
       }
     }    
     break;

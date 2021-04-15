@@ -21,7 +21,7 @@ Declare Procedure ChtWrite(keylen : int, keybuf : opaque, datalen : int, databuf
 
 Procedure Init()
 Begin
-	Syscall DmbSubscribe(&ChtWrite,ChtMsgWrite);
+	Syscall DmbSubscribe(&ChtWrite,ChtMsgWrite,DmbFlagApply);
 End;
 
 Procedure Exit()

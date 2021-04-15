@@ -31,6 +31,7 @@ struct dmb_host {
 struct dmb_fvmsc {
   uint32_t phandle;   /* proc handle */
   uint32_t msgid; /* msgid filter */
+  uint32_t flags;
 };
 
 #define DMB_MAX_HOST  32    /* max number of hosts */
@@ -236,11 +237,11 @@ static void dmb_invoke_subscribers( uint64_t hostid, uint64_t seq, uint32_t msgi
 
   for( i = 0; i < glob.nfvmsc; i++ ) {
     if( (glob.fvmsc[i].msgid == 0) || (glob.fvmsc[i].msgid == msgid) ) {
-      if( glob.fvmsc[i].msgid ) {
+      if( glob.fvmsc[i].flags & DMB_FVMSC_APPLY ) {
 	/* if filtering on a specific msg then pass buffer as args directly */
 	xdr_init( &args, (uint8_t *)buf, len );
       } else {
-	/* if filtering on all messages then pass buffer as opaque */
+	/* raw mode: pass buffer as opaque, signature (msgid,len,buf) */
 	xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
 	xdr_encode_uint32( &args, msgid );
 	xdr_encode_opaque( &args, (uint8_t *)buf, len );
@@ -430,7 +431,7 @@ int dmb_subscribe( struct dmb_subscriber *sc ) {
   return 0;
 }
 
-int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid ) {
+int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid, uint32_t flags ) {
   int i, sts;
   uint32_t phandle;
   
@@ -445,6 +446,7 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid ) {
   for( i = 0; i < glob.nfvmsc; i++ ) {
     if( glob.fvmsc[i].phandle == phandle ) {
       glob.fvmsc[i].msgid = msgid;
+      glob.fvmsc[i].flags = flags;
       return 0;
     }
   }
@@ -453,6 +455,7 @@ int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid ) {
 
   glob.fvmsc[glob.nfvmsc].phandle = phandle;
   glob.fvmsc[glob.nfvmsc].msgid = msgid;
+  glob.fvmsc[glob.nfvmsc].flags = flags;
   glob.nfvmsc++;
 
   return 0;

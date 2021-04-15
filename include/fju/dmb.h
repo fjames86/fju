@@ -48,11 +48,16 @@ int dmb_subscribe( struct dmb_subscriber *sc );
 #define DMB_SUBSCRIBER(name,cat,cb) struct dmb_subscriber name = { NULL, cat, cb }
 
 /*
- * Register an fvm procedure to receive messages. If msgid is zero the the procedure
- * has signature Proc(msgid : int, len : int, buf : opaque) and receives all messages. 
- * If non-zero the procedure receives the buffer as its args directly, and only for that specific message.
+ * Register an fvm procedure to receive messages. If DMB_FVMSC_RAW is set then procedure
+ * has signature Proc(msgid : int, len : int, buf : opaque) and receives the message buffer. 
+ * If DMB_FVMSC_APPLY is set the procedure receives the buffer as its args directly.
+ * If msgid = 0 then the procedure is invoked for all messages. Otherwise only for that 
+ * specific message.
 */
-int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid );
+
+#define DMB_FVMSC_RAW   0x0000  /* invoke subscriber with raw args (msgid,len,buf) */
+#define DMB_FVMSC_APPLY 0x0001 /* invoke subscriber as if msg buffer were args */
+int dmb_subscribe_fvm( char *modname, char *procname, uint32_t msgid, uint32_t flags );
 
 /* 
  * Unsubscribe an fvm subscriber

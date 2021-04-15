@@ -6,17 +6,20 @@
  * can later restore it from the file. 
 }
 
-Program TestSnapshot(0,0,Init,GetString,SetString,Save,Load);
+Program TestSnapshot(0,0,Init,Exit,GetString,SetString,Save,Load,MsgLoad,Publish);
 Begin
    { Includes }
    Include "syscall.pas";
    Include "string.pas";
    Include "log.pas";
+   Include "dmb.pas";
    
    { constants }
+   Const MsgIdLoad = DmbCatTestsnapshot + 0;
    
    { declarations }
    Declare Const var FILENAME : string;
+   Declare Procedure MsgLoad(msgid : int, len : int, buf : opaque);
    
    { globals }
    var gstart : int;
@@ -27,8 +30,14 @@ Begin
    Procedure Init()
    Begin
 	Call Strcpy(mystr,"Init");
+	Syscall DmbSubscribe(&MsgLoad, MsgIdLoad, DmbFlagRaw);
    End;
 
+   Procedure Exit()
+   Begin
+	Syscall DmbUnsubscribe(&MsgLoad);
+   End;
+   
    Procedure SetString(s : string, var prev : string)
    Begin
 	var l : int;
@@ -70,6 +79,20 @@ Begin
 	
 	Syscall Read(fd, &gend - &gstart, &gstart, 0 );
 	Syscall Close(fd);
+   End;
+
+   Procedure MsgLoad(msgid : int, len : int, buf : opaque)
+   Begin
+	If len = (&gend - &gstart) Then
+	   Call Memcpy(&gstart, buf, len);
+	   
+   End;
+
+   Procedure Publish()
+   Begin
+	var seqh, seql : int;
+
+	Syscall DmbPublish(MsgIdLoad, DmbRemote, &gend - &gstart, &gstart, seqh, seql);
    End;
    
    { constant values }

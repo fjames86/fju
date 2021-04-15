@@ -57,7 +57,10 @@ Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque, va
   * the procedure is invoked as if the message buffer were the procedure args. 
   * if subscrining to all messages the proc is passed args (msgid : int, len : int, buf : opaque) 
 }
-Declare Syscall DmbSubscribe(procaddr : int, msgid : int) : 33;
+
+Const DmbFlagRaw = 0x0000; { subscriber must have signature (msgid,len,buf) }
+Const DmbFlagApply = 0x0001; { subscriber is passed msg buffer directly as args }
+Declare Syscall DmbSubscribe(procaddr : int, msgid : int, flags : int) : 33;
 Declare Syscall DmbUnsubscribe(procaddr : int) : 34;
 { Get Info about the registered host. seq is the message seq last acked by host }
 Declare Syscall DmbHostInfo(hostH : int, hostL : int, var seqH : int, var seqL : int) : 35;

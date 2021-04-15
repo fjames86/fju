@@ -200,7 +200,7 @@ Begin
 	End;
 	nlogs = i;
 
-	Syscall DmbSubscribe(&NlsMsgWrite,NlsMsgIdWrite);
+	Syscall DmbSubscribe(&NlsMsgWrite,NlsMsgIdWrite,DmbFlagApply);
 End;
 
 Procedure Exit()

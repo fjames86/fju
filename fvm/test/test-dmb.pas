@@ -27,8 +27,8 @@ Begin
    Procedure Init()
    Begin
 	{ Register to receive all messages }
-	Syscall DmbSubscribe(&MsgHandler,0);
-	Syscall DmbSubscribe(&MsgHandler2,MsgLogVals);
+	Syscall DmbSubscribe(&MsgHandler,0,DmbFlagRaw);
+	Syscall DmbSubscribe(&MsgHandler2,MsgLogVals,DmbFlagApply);
    End;
 
    { Exit routine - called when module unloaded }

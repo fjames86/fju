@@ -1035,6 +1035,17 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       procid = fvm_procid_by_addr( state->module, pars[0] );      
       if( procid >= 0 ) {
 	procname = state->module->procs[procid].name;
+
+	if( pars[1] == 0 ) {
+	  /* check procedure parameters match int,int,opaque */
+	  uint64_t siginfo = 0;
+	  FVM_SIGINFO_SETPARAM(siginfo,2,VAR_TYPE_OPAQUE,0);
+	  FVM_SIGINFO_SETNPARS(siginfo,3);
+	  if( state->module->procs[procid].siginfo != siginfo ) {
+	    fvm_log( LOG_LVL_WARN, "DmbSubscribe %s/%s bad signature", state->module->name, procname );
+	  }
+	}
+	
 	dmb_subscribe_fvm( state->module->name, procname, pars[1] );
       }
     }    

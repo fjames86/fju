@@ -27,6 +27,7 @@ static void usage( char *fmt, ... );
 static void compile_file( char *path, char *outpath );
 static void addincludepath( char *path );
 static void disassemblefile( char *path );
+static void gen_cfile( char *outpath, char *fvmpath );
 
 static int fvmc_debug = 0;
 static void fvmc_printf( char *fmt, ... ) {
@@ -43,9 +44,11 @@ int fvmc_main( int argc, char **argv ) {
   int i;
   char *outpath = NULL;
   int disass;
-
+  int gencfile;
+  
   disass = 0;
-
+  gencfile = 0;
+  
   i = 1;
   while( i < argc ) {
     if( strcmp( argv[i], "-o" ) == 0 ) {
@@ -62,6 +65,8 @@ int fvmc_main( int argc, char **argv ) {
       fvmc_debug = 1;
     } else if( strcmp( argv[i], "-d" ) == 0 ) {
       disass = 1;
+    } else if( strcmp( argv[i], "-C" ) == 0 ) {
+      gencfile = 1;
     } else {
       char outpathstr[256];
       int j;
@@ -88,11 +93,11 @@ int fvmc_main( int argc, char **argv ) {
 
       
       if( !outpath ) {
-	sprintf( outpathstr, "%s.fvm", argv[i] );
+	sprintf( outpathstr, "%s.%s", argv[i], gencfile ? "c" : "fvm" );
 	for( j = strlen( argv[i] ) - 1; j > 0; j-- ) {
 	  if( outpathstr[j] == '.' ) {
 	    outpathstr[j] = '\0';
-	    strcat( outpathstr + j, ".fvm" );
+	    strcat( outpathstr + j, gencfile ? ".c" : ".fvm" );
 	    break;
 	  }
 	}
@@ -102,6 +107,7 @@ int fvmc_main( int argc, char **argv ) {
       }
       
       if( disass ) disassemblefile( argv[i] );
+      else if( gencfile ) gen_cfile( outpathstr, argv[i] );
       else compile_file( argv[i], outpathstr );
       break;
     }
@@ -3505,4 +3511,95 @@ static void usage( char *fmt, ... ) {
   }
   
   exit( 1 );  
+}
+
+static void gen_cfile( char *outpath, char *fvmpath ) {
+  FILE *f;
+  int sts, i, serviceprocid;
+  struct mmf_s mmf;
+  struct fvm_headerinfo hdr;
+  struct xdr_s xdr;
+  char *textsegment;
+  
+  sts = mmf_open2( fvmpath, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) usage( "Failed to open fvm file %s", fvmpath );
+
+  mmf_remap( &mmf, mmf.fsize );
+  xdr_init( &xdr, mmf.file, mmf.fsize );
+  sts = fvmc_decode_header( &xdr, &hdr );
+  if( sts ) usage( "Failed to parse header" );
+
+  if( hdr.magic != FVM_MAGIC ) {
+    usage( "Bad magic" );
+  }  
+  if( hdr.version != FVM_VERSION ) {
+    usage( "Bad version" );
+  }  
+  if( xdr.count != (xdr.offset + hdr.textsize) ) {
+    usage( "Bad buffer size %u expected %u", xdr.count, xdr.offset + hdr.textsize );
+  }
+  textsegment = (char *)mmf.file + xdr.offset;
+  
+  f = fopen( outpath, "w" );
+  if( !f ) usage( "Failed to open cfile %s", outpath );
+
+  fprintf( f, "\n" );
+  fprintf( f, "/* FVM static module %s generated on " __DATE__ " " __TIME__ " */\n", hdr.name );
+  fprintf( f, "\n" );
+  fprintf( f, "#include <fju/rpc.h>\n" );
+  fprintf( f, "#include <fju/fvm.h>\n" );
+  fprintf( f, "\n" );  
+  fprintf( f, "static struct fvm_module mod;\n" );
+  if( hdr.datasize > 0 ) fprintf( f, "static char datasegment[%u];\n", hdr.datasize );
+  fprintf( f, "static char textsegment[%u] = \n", hdr.textsize );
+  fprintf( f, "{\n    " );
+  for( i = 0; i < hdr.textsize; i++ ) {
+    if( i && (i % 16 == 0) ) fprintf( f, "\n    " );
+    fprintf( f, "0x%02x", (uint32_t)(uint8_t)textsegment[i] );
+    if( i != (hdr.textsize - 1) ) fprintf( f, ", " );
+  }
+  fprintf( f, "\n};\n" );
+
+  serviceprocid = -1;
+  for( i = 0; i < hdr.nprocs; i++ ) {
+    if( strcasecmp( hdr.procs[i].name, "service" ) == 0 ) {
+      serviceprocid = i;
+      break;
+    }
+  }
+  
+  if( serviceprocid >= 0 ) {
+    fprintf( f, "static void servicecb( struct rpc_iterator *iter ) {\n" );
+    fprintf( f, "  fvm_run( &mod, %u, NULL, NULL );\n", serviceprocid );
+    fprintf( f, "}" );
+    fprintf( f, "static RPC_ITERATOR(serviceiter,1000,servicecb);\n" );
+  }
+
+  fprintf( f, "\n" );
+  fprintf( f, "int %s_register( void ) {\n", hdr.name );
+  fprintf( f, "  strcpy( mod.name, \"%s\" );\n", hdr.name );
+  fprintf( f, "  mod.progid = %u;\n", hdr.progid );
+  fprintf( f, "  mod.versid = %u;\n", hdr.versid );
+  fprintf( f, "  mod.nprocs = %u;\n", hdr.nprocs );
+  for( i = 0; i < hdr.nprocs; i++ ) {
+    fprintf( f, "  strcpy( mod.procs[%u].name, \"%s\" );\n", i, hdr.procs[i].name );
+    fprintf( f, "  mod.procs[%u].address = 0x%x;\n", i, hdr.procs[i].address );
+    fprintf( f, "  mod.procs[%u].siginfo = 0x%"PRIx64"LL;\n", i, hdr.procs[i].siginfo );
+  }
+  if( hdr.datasize > 0 ) fprintf( f, "  mod.data = datasegment;\n" );
+  fprintf( f, "  mod.datasize = %u;\n", hdr.datasize );
+  fprintf( f, "  mod.text = textsegment;\n" );
+  fprintf( f, "  mod.textsize = %u;\n", hdr.textsize );
+  fprintf( f, "  mod.timestamp = %"PRIu64"LL;\n", hdr.timestamp );
+  fprintf( f, "  mod.flags = FVM_MODULE_STATIC;\n" );
+  fprintf( f, "  fvm_module_register( &mod );\n" );
+  
+  if( serviceprocid >= 0 ) {
+    fprintf( f, "  rpc_iterator_register( &serviceiter );\n" );
+  }
+  
+  fprintf( f, "  return 0;\n" );
+  fprintf( f, "}\n" );
+  fprintf( f, "\n" );
+  fclose( f );
 }

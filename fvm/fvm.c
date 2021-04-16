@@ -232,7 +232,7 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
    */
   do {
     module->tag = (glob.moduletag + 1) % 0x10000;
-  } while( !fvm_module_by_tag( module->tag ) );
+  } while( fvm_module_by_tag( module->tag ) );
   glob.moduletag = module->tag;
   
   module->next = glob.modules;
@@ -255,6 +255,34 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
       fvm_log( LOG_LVL_TRACE, "fvm_module_load %s registering service proc %s", module->name, procname );
       fvm_register_iterator( module->name, fvm_procid_by_name( module, procname ), service_period );      
     }
+  }
+  
+  return 0;
+}
+
+int fvm_module_register( struct fvm_module *mod ) {
+  char procname[FVM_MAX_NAME];
+  int sts;
+  
+  /* forbid if name conflict */
+  if( fvm_module_by_name( mod->name ) ) return -1;
+
+  /* assign tag */
+  do {
+    mod->tag = (glob.moduletag + 1) % 0x10000;
+  } while( fvm_module_by_tag( mod->tag ) );
+  glob.moduletag = mod->tag;
+
+  /* register module */
+  mod->next = glob.modules;
+  glob.modules = mod;
+
+  /* run init proc */
+  sts = get_init_proc( mod, procname );
+  if( !sts ) {
+    fvm_log( LOG_LVL_TRACE, "fvm_module_register: %s running init proc %s", mod->name, procname );
+    sts = fvm_run( mod, fvm_procid_by_name( mod, procname ), NULL, NULL );
+    if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_register: init routine failed" );
   }
   
   return 0;
@@ -297,7 +325,7 @@ int fvm_module_unload( char *modname ) {
       
       if( prev ) prev->next = m->next;
       else glob.modules = m->next;
-      free( m );
+      if( !(m->flags & FVM_MODULE_STATIC) ) free( m );
       return 0;
     }
     prev = m;
@@ -1624,7 +1652,7 @@ void fvm_rpc_register( void ) {
 
   sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxruntime", FREG_TYPE_UINT32, (char *)&glob.max_runtime, 4, NULL );
   sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxsteps", FREG_TYPE_UINT32, (char *)&glob.max_steps, 4, NULL );
-  
+
 }
 
 void fvm_setdebug( int debugmode ) {

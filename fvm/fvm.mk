@@ -17,7 +17,7 @@ fvm: ${LIBDIR}/libfvm.a ${fvmprogs}
 
 ${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-private.h fvm/fvm-syscall.c 
 	${CC} -c fvm/fvm.c fvm/fvm-syscall.c ${CFLAGS} 
-	${AR} rcs $@ fvm.o fvm-syscall.o
+	${AR} rcs $@ fvm.o fvm-syscall.o 
 
 ${BINDIR}/cht.fvm: fvm/modules/cht.pas ${BINDIR}/fju fvm/stdlib/*.pas
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib fvm/modules/cht.pas

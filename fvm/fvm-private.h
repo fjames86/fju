@@ -93,5 +93,6 @@ char *fvm_getstr( struct fvm_state *state, uint32_t addr );
 void fvm_setdebug( int debugmode );
 int fvm_log( int lvl, char *fmt, ... );
 
+
 #endif
 

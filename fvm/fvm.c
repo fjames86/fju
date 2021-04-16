@@ -31,6 +31,7 @@ static int fvm_unregister_program( char *modname );
 static void fvm_unregister_iterator( char *modname );
 static int fvm_init_module( char *modname );
 static void fvm_register_iterator( char *modname, int procid, int period );
+static int fvm_register_program( char *modname );
 
 struct fvm_iterator {
   struct rpc_iterator iter;
@@ -139,9 +140,9 @@ static void fvm_module_postload( struct fvm_module *module ) {
   /* Run init proc */
   sts = get_init_proc( module, procname );
   if( !sts ) {
-    fvm_log( LOG_LVL_TRACE, "fvm_module_load: %s running init proc %s", module->name, procname );
+    fvm_log( LOG_LVL_TRACE, "fvm_module_postload: %s running init proc %s", module->name, procname );
     sts = fvm_run( module, fvm_procid_by_name( module, procname ), NULL, NULL );
-    if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_load: init routine failed" );
+    if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_postload: init routine failed" );
   }
 
   /* register service routine if rpcdp=true and procedure named "Service" exists */
@@ -149,8 +150,13 @@ static void fvm_module_postload( struct fvm_module *module ) {
     int service_period;
     sts = get_service_proc( module, procname, &service_period );
     if( !sts ) {
-      fvm_log( LOG_LVL_TRACE, "fvm_module_load %s registering service proc %s", module->name, procname );
+      fvm_log( LOG_LVL_TRACE, "fvm_module_postload %s registering service proc %s", module->name, procname );
       fvm_register_iterator( module->name, fvm_procid_by_name( module, procname ), service_period );      
+    }
+
+    if( module->progid ) {
+      fvm_log( LOG_LVL_TRACE, "fvm_module_postload %s register as rpc program", module->name );
+      fvm_register_program( module->name );
     }
   }
 }
@@ -254,13 +260,20 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
 
   /* register module with system */
   sts = fvm_module_register( module );
-
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_module_load failed to register %s", module->name );
+    free( module );
+    return -1;
+  }
+  
   if( modulep ) *modulep = module;
 
   return 0;
 }
 
 int fvm_module_register( struct fvm_module *mod ) {
+
+  fvm_log( LOG_LVL_INFO, "fvm_module_register %s", mod->name );
   
   /* forbid if name conflict */
   if( fvm_module_by_name( mod->name ) ) {
@@ -1584,7 +1597,13 @@ static int fvm_init_module( char *modname ) {
   struct fvm_module *m;
   
   /* unload if already existing */
-  fvm_module_unload( modname );
+  if( fvm_module_by_name( modname) ) {
+    sts = fvm_module_unload( modname );
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "fvm_init_module failed to unload %s", modname );
+      return sts;
+    }
+  }
   
   sprintf( path, "/fju/fvm/modules/%s", modname );
   sts = freg_entry_by_name( NULL, 0, path, &entry, NULL );
@@ -1600,7 +1619,7 @@ static int fvm_init_module( char *modname ) {
   }
   sts = fvm_module_load_file( path, 0, &m );
   if( sts ) {
-    fvm_log( LOG_LVL_ERROR, "Failed to load module file" );
+    fvm_log( LOG_LVL_ERROR, "Failed to load module file %s", path );
     return -1;
   }
 
@@ -1649,6 +1668,7 @@ void fvm_rpc_register( void ) {
   id = 0;
   while( !freg_next( NULL, key, id, &entry ) ) {
     if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+      fvm_log( LOG_LVL_INFO, "fvm load registry module %s", entry.name );
       fvm_init_module( entry.name );
     }
     id = entry.id;

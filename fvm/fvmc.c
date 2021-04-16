@@ -3571,7 +3571,7 @@ static void gen_cfile( char *outpath, char *fvmpath ) {
   if( serviceprocid >= 0 ) {
     fprintf( f, "static void servicecb( struct rpc_iterator *iter ) {\n" );
     fprintf( f, "  fvm_run( &mod, %u, NULL, NULL );\n", serviceprocid );
-    fprintf( f, "}" );
+    fprintf( f, "}\n" );
     fprintf( f, "static RPC_ITERATOR(serviceiter,1000,servicecb);\n" );
   }
 

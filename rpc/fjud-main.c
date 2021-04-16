@@ -49,6 +49,8 @@ static struct rpc_iterator rusage_iter =
   };
 #endif  
 
+void Nls_register( void );
+
 static void init_cb( void ) {
   /* 
    * Register programs, auth providers and other initialization. 
@@ -68,6 +70,7 @@ static void init_cb( void ) {
   rex_register();
   dmb_open();
   dlm_open();
+  Nls_register();
   
   //rpc_iterator_register( &rusage_iter );
 }

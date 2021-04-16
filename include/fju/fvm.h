@@ -66,6 +66,7 @@ int fvm_procid_by_addr( struct fvm_module *module, int address );
  * - handles cannot be passed between machines or persisted. 
  */
 int fvm_handle_by_name( char *modname, char *procname, uint32_t *phandle );
+int fvm_handle_by_procid( char *modname, int procid, uint32_t *phandle );
 
 /* resolve a handle to module/procid so it can be called */
 int fvm_proc_by_handle( uint32_t phandle, struct fvm_module **m, int *procid );

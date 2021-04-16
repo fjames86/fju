@@ -34,8 +34,7 @@ static void fvm_register_iterator( char *modname, int procid, int period );
 
 struct fvm_iterator {
   struct rpc_iterator iter;
-  char modname[FVM_MAX_NAME];
-  uint32_t procid;
+  uint32_t prochandle;
   struct fvm_iterator *next;
 };
 
@@ -227,9 +226,14 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
     fvm_log( LOG_LVL_INFO, "fvm_module_load %s timestamp=%s", module->name, sec_timestr( hdr.timestamp, timestr ) );
   }
 
-  glob.moduletag = (glob.moduletag + 1) % 0x10000;
-  /* TODO: check this isn't already taken */
-  module->tag = glob.moduletag;
+  /* 
+   * Choose a tag not already taken.
+   * Note that this would cause an infinite loop if we hit 64k modules but that isn't a realistic scenario.
+   */
+  do {
+    module->tag = (glob.moduletag + 1) % 0x10000;
+  } while( !fvm_module_by_tag( module->tag ) );
+  glob.moduletag = module->tag;
   
   module->next = glob.modules;
   glob.modules = module;
@@ -358,6 +362,18 @@ int fvm_handle_by_name( char *modname, char *procname, uint32_t *phandle ) {
 
   procid = fvm_procid_by_name( m, procname );
   if( procid < 0 ) return -1;
+
+  *phandle = (m->tag << 16) | procid;
+  return 0;
+}
+
+int fvm_handle_by_procid( char *modname, int procid, uint32_t *phandle ) {
+  struct fvm_module *m;
+
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  if( (procid < 0) || (procid >= m->nprocs) ) return -1;
 
   *phandle = (m->tag << 16) | procid;
   return 0;
@@ -1470,27 +1486,34 @@ static struct rpc_program fvm_prog = {
 static void fvm_module_iter( struct rpc_iterator *iter ) {
   struct fvm_iterator *fiter;
   struct fvm_module *m;
-  int sts;
+  int sts, procid;
   
   fiter = (struct fvm_iterator *)iter;
-  m = fvm_module_by_name( fiter->modname );
-  if( !m ) return;
+  sts = fvm_proc_by_handle( fiter->prochandle, &m, &procid );
+  if( sts ) return;
 
-  sts = fvm_run( m, fiter->procid, NULL, NULL );
+  sts = fvm_run( m, procid, NULL, NULL );
   if( sts ) fvm_log( LOG_LVL_ERROR, "fvm iter failed" );
 }
 
 static void fvm_register_iterator( char *modname, int procid, int period ) {
   struct fvm_iterator *iter;
+  int sts;
+  
   fvm_log( LOG_LVL_INFO, "fvm register iterator %s %u", modname, procid );
 
   iter = malloc( sizeof(*iter) );
   memset( iter, 0, sizeof(*iter) );
   iter->iter.cb = fvm_module_iter;
   iter->iter.period = period;
+
+  sts = fvm_handle_by_procid( modname, procid, &iter->prochandle );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_register_iterator bad proc %s/%u", modname, procid );
+    free( iter );
+    return;
+  }
   
-  strcpy( iter->modname, modname );
-  iter->procid = procid;
   iter->next = glob.iterators;
   glob.iterators = iter;
   
@@ -1499,11 +1522,16 @@ static void fvm_register_iterator( char *modname, int procid, int period ) {
 
 static void fvm_unregister_iterator( char *modname ) {
   struct fvm_iterator *it, *prev;
+  struct fvm_module *m;
+
+  m = fvm_module_by_name( modname );
+  if( !m ) return;
+  
   it = glob.iterators;
   prev = NULL;
   while( it ) {
-    if( strcasecmp( it->modname, modname ) == 0 ) {
-      fvm_log( LOG_LVL_TRACE, "fvm unregister iterator %s %u", modname, it->procid );
+    if( ((it->prochandle & 0xffff0000) >> 16) == m->tag ) {
+      fvm_log( LOG_LVL_TRACE, "fvm unregister iterator %s %u", modname, it->prochandle & 0xffff );
       
       if( prev ) prev->next = it->next;
       else glob.iterators = it->next;

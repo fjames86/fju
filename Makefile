@@ -52,7 +52,7 @@ ${BINDIR}/fju: ${LIBFJU} ${fju_files}
 	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c ${fju_files}
 
 clean:
-	rm -f ${BINDIR}/* ${LIBDIR}/* *.o 
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm/test/*.fvm
 
 tar:
 	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}

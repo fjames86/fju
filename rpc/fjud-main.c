@@ -49,6 +49,7 @@ static struct rpc_iterator rusage_iter =
   };
 #endif  
 
+/* Defined in nls/nls.c (generated from nls.pas) */
 void Nls_register( void );
 
 static void init_cb( void ) {
@@ -58,6 +59,9 @@ static void init_cb( void ) {
   rpcbind_register();
   shauth_register( NULL );
   hrauth_register();
+
+  /* must register all static modules before fvm */
+  Nls_register();
   
   /* 
    * These could be moved out to separate modules and dynamically loaded but for now 
@@ -70,7 +74,8 @@ static void init_cb( void ) {
   rex_register();
   dmb_open();
   dlm_open();
-  Nls_register();
+  
+
   
   //rpc_iterator_register( &rusage_iter );
 }

@@ -46,7 +46,7 @@ struct fvm_module {
   uint64_t timestamp;
   int tag;
   uint32_t flags;
-#define FVM_MODULE_STATIC 0x0001 /* module implemented statically allocated */
+#define FVM_MODULE_STATIC 0x0001 /* module cannot be unloaded */
 };
 
 
@@ -54,6 +54,9 @@ struct fvm_module {
 int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep );
 int fvm_module_load_file( char *filename, uint32_t flags, struct fvm_module **modulep );
 int fvm_module_unload( char *modname );
+
+/* Register a module */
+int fvm_module_register( struct fvm_module *mod );
 
 struct fvm_module *fvm_module_by_name( char *name ); /* lookup by name */
 struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid );  /* lookup by rpc prog */
@@ -83,8 +86,6 @@ void fvm_rpc_register( void );
 int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, int len );
 int fvm_cluster_run2( uint64_t clid, char *modname, char *procname, char *args, int len, uint64_t tgt_hostid, uint64_t excl_hostid );
 int fvm_cluster_updatestate( uint64_t clid, char *modname );
-
-int fvm_module_register( struct fvm_module *mod );
 
 #endif
 

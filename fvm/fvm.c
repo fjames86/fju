@@ -132,13 +132,35 @@ static int get_service_proc( struct fvm_module *m, char *procname, int *service_
   return -1;
 }
 
+static void fvm_module_postload( struct fvm_module *module ) {
+  int sts;
+  char procname[FVM_MAX_NAME];
+
+  /* Run init proc */
+  sts = get_init_proc( module, procname );
+  if( !sts ) {
+    fvm_log( LOG_LVL_TRACE, "fvm_module_load: %s running init proc %s", module->name, procname );
+    sts = fvm_run( module, fvm_procid_by_name( module, procname ), NULL, NULL );
+    if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_load: init routine failed" );
+  }
+
+  /* register service routine if rpcdp=true and procedure named "Service" exists */
+  if( rpcdp() ) {
+    int service_period;
+    sts = get_service_proc( module, procname, &service_period );
+    if( !sts ) {
+      fvm_log( LOG_LVL_TRACE, "fvm_module_load %s registering service proc %s", module->name, procname );
+      fvm_register_iterator( module->name, fvm_procid_by_name( module, procname ), service_period );      
+    }
+  }
+}
+
 int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep ) {
   /* parse header, load data and text segments */
   struct fvm_headerinfo hdr;
   struct fvm_module *module;
   int i, sts;
   struct xdr_s xdr;
-  char procname[FVM_MAX_NAME];
   
   xdr_init( &xdr, (uint8_t *)buf, size );
   sts = fvmc_decode_header( &xdr, &hdr );
@@ -195,7 +217,11 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
   }
   if( fvm_module_by_name( hdr.name ) ) {
     if( flags & FVM_RELOAD ) {
-      fvm_module_unload( hdr.name );
+      sts = fvm_module_unload( hdr.name );
+      if( sts ) {
+	fvm_log( LOG_LVL_ERROR, "Failed to unload existing module" );
+	return -1;
+      }
     } else {
       fvm_log( LOG_LVL_ERROR, "Module already registered" );
       return -1;
@@ -226,48 +252,26 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
     fvm_log( LOG_LVL_INFO, "fvm_module_load %s timestamp=%s", module->name, sec_timestr( hdr.timestamp, timestr ) );
   }
 
-  /* 
-   * Choose a tag not already taken.
-   * Note that this would cause an infinite loop if we hit 64k modules but that isn't a realistic scenario.
-   */
-  do {
-    module->tag = (glob.moduletag + 1) % 0x10000;
-  } while( fvm_module_by_tag( module->tag ) );
-  glob.moduletag = module->tag;
-  
-  module->next = glob.modules;
-  glob.modules = module;
+  /* register module with system */
+  sts = fvm_module_register( module );
 
   if( modulep ) *modulep = module;
 
-  sts = get_init_proc( module, procname );
-  if( !sts ) {
-    fvm_log( LOG_LVL_TRACE, "fvm_module_load: %s running init proc %s", module->name, procname );
-    sts = fvm_run( module, fvm_procid_by_name( module, procname ), NULL, NULL );
-    if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_load: init routine failed" );
-  }
-
-  /* register service routine if rpcdp=true and procedure named "Service" exists */
-  if( rpcdp() ) {
-    int service_period;
-    sts = get_service_proc( module, procname, &service_period );
-    if( !sts ) {
-      fvm_log( LOG_LVL_TRACE, "fvm_module_load %s registering service proc %s", module->name, procname );
-      fvm_register_iterator( module->name, fvm_procid_by_name( module, procname ), service_period );      
-    }
-  }
-  
   return 0;
 }
 
 int fvm_module_register( struct fvm_module *mod ) {
-  char procname[FVM_MAX_NAME];
-  int sts;
   
   /* forbid if name conflict */
-  if( fvm_module_by_name( mod->name ) ) return -1;
+  if( fvm_module_by_name( mod->name ) ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_module_register %s exists", mod->name );
+    return -1;
+  }
 
-  /* assign tag */
+  /* 
+   * Choose a tag not already taken.
+   * Note that this would cause an infinite loop if we hit 64k modules but that isn't a realistic scenario.
+   */  
   do {
     mod->tag = (glob.moduletag + 1) % 0x10000;
   } while( fvm_module_by_tag( mod->tag ) );
@@ -277,13 +281,7 @@ int fvm_module_register( struct fvm_module *mod ) {
   mod->next = glob.modules;
   glob.modules = mod;
 
-  /* run init proc */
-  sts = get_init_proc( mod, procname );
-  if( !sts ) {
-    fvm_log( LOG_LVL_TRACE, "fvm_module_register: %s running init proc %s", mod->name, procname );
-    sts = fvm_run( mod, fvm_procid_by_name( mod, procname ), NULL, NULL );
-    if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_register: init routine failed" );
-  }
+  fvm_module_postload( mod );
   
   return 0;
 }
@@ -310,6 +308,12 @@ int fvm_module_unload( char *modname ) {
     if( strcasecmp( m->name, modname ) == 0 ) {
       fvm_log( LOG_LVL_INFO, "fvm_module_unload %s", modname );
 
+      if( m->flags & FVM_MODULE_STATIC ) {
+	fvm_log( LOG_LVL_ERROR, "Attempt to unload static module" );
+	return -1;
+      }
+
+      /* Run exit proc */
       sts = get_exit_proc( m, procname );
       if( !sts ) {
 	fvm_log( LOG_LVL_TRACE, "fvm_module_unload: %s running exit proc %s", m->name, procname );
@@ -325,7 +329,7 @@ int fvm_module_unload( char *modname ) {
       
       if( prev ) prev->next = m->next;
       else glob.modules = m->next;
-      if( !(m->flags & FVM_MODULE_STATIC) ) free( m );
+      free( m );
       return 0;
     }
     prev = m;

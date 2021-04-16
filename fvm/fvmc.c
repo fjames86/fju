@@ -3496,11 +3496,12 @@ static void usage( char *fmt, ... ) {
     va_end( args );
     printf( "\n" );
   } else {
-    printf( "Usage: fvmc [-o output] [-I includepath] [-v] [-d] filename\n"
+    printf( "Usage: fvmc [-o output] [-I includepath] [-v] [-d] [-C] filename\n"
 	    "  -o            Set output path\n"
 	    "  -I            Add include path\n"
 	    "  -v            Verbose mode\n"
-	    "  -d            Disassemble file\n"
+	    "  -d            Disassemble file. filename names a compiled fvm module.\n"
+	    "  -C            Generate static module. filename names a compiled fvm module.\n" 
 	    );
   }
 

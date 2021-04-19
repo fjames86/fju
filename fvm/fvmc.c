@@ -570,7 +570,7 @@ static struct label *getlabel( char *prefix );
 static struct proc *getproc( char *name );
 static struct param *getparam( struct proc *proc, char *name );
 static struct var *getlocal( struct proc *proc, char *name );
-static struct constvar *getconst( char *name );
+static struct constvar *getconstvar( char *name );
 static struct constval *getconstval( char *name );
 static void processincludefile( char *path );
 static uint32_t parseconstdefexpr( FILE *f );
@@ -986,7 +986,7 @@ static struct export *getexport( char *name ) {
   return NULL;
 }
 
-static struct constvar *getconst( char *name ) {
+static struct constvar *getconstvar( char *name ) {
   struct constvar *v;
   v = glob.consts;
   while( v ) {
@@ -996,15 +996,15 @@ static struct constvar *getconst( char *name ) {
   return NULL;
 }
 
-static struct constvar *addconst( char *name, var_t type, char *val, int len ) {
+static struct constvar *addconstvar( char *name, var_t type, char *val, int len ) {
   struct constvar *v;
 
   if( glob.pass == PASS_EMIT ) {
     emitdata( val, len );
-    return getconst( name );
+    return getconstvar( name );
   }
   
-  v = getconst( name );
+  v = getconstvar( name );
   if( v ) usage( "Const name %s already exists", name );
 
   fvmc_printf( ";; Adding const %s\n", name );
@@ -1470,7 +1470,7 @@ static void parsevariableexpr( FILE *f, var_t *vartypep, struct record **recordp
 	}
 
       } else {
-	cv = getconst( glob.tok.val );
+	cv = getconstvar( glob.tok.val );
 	if( cv ) {
 	  vartype = cv->type;
 	  
@@ -1665,7 +1665,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	    emit_leasp( p->offset + glob.currentproc->localsize + glob.stackoffset );
 	  }
 	} else {
-	  cv = getconst( glob.tok.val );
+	  cv = getconstvar( glob.tok.val );
 	  if( cv ) {
 	    emit_ldi32( cv->address );
 	  } else {
@@ -2048,10 +2048,10 @@ static int parsestatement( FILE *f ) {
     if( kw == 1 ) {
       if( proc->xcall ) {
 	struct constvar *cv;
-	cv = getconst( proc->modname );
+	cv = getconstvar( proc->modname );
 	if( !cv ) usage( "Failed to get modname const" );
 	emit_ldi32( cv->address );
-	cv = getconst( proc->name );
+	cv = getconstvar( proc->name );
 	if( !cv ) usage( "Failed to get procname const" );
 	emit_ldi32( cv->address );
 	nparams += 2;
@@ -2496,8 +2496,8 @@ static void parsedeclaration( FILE *f ) {
       strcpy( procname, glob.tok.val );
       xcall = 1;
 
-      addconst( modname, VAR_TYPE_STRING, strdup( modname ), strlen( modname ) + 1 );
-      addconst( procname, VAR_TYPE_STRING, strdup( procname ), strlen( procname ) + 1 );
+      addconstvar( modname, VAR_TYPE_STRING, strdup( modname ), strlen( modname ) + 1 );
+      addconstvar( procname, VAR_TYPE_STRING, strdup( procname ), strlen( procname ) + 1 );
       expecttok( f, TOK_NAME );      
     }
     
@@ -2537,11 +2537,11 @@ static void parsedeclaration( FILE *f ) {
     } else usage( "Invalid constant type" );
 
     if( glob.pass == PASS_LABELS ) {
-      struct constvar *cv = getconst( name );
+      struct constvar *cv = getconstvar( name );
       if( cv ) {
 	if( cv->type != type ) usage( "Constant type mismatch for %s", name );
       } else {
-	cv = addconst( name, type, NULL, 0 );
+	cv = addconstvar( name, type, NULL, 0 );
 	cv->address = 0;
       }
     }
@@ -2585,7 +2585,7 @@ static uint32_t parsesizeof( FILE *f ) {
       v = getglobal( name );
       if( v ) val = v->size;
       else {
-	cvar = getconst( name );
+	cvar = getconstvar( name );
 	if( cvar ) val = cvar->len;
 	else {
 	  record = getrecord( name );
@@ -2675,7 +2675,7 @@ static uint32_t parseconstexprval( FILE *f ) {
 }
 
 static uint32_t parseconstdefexpr( FILE *f ) {
-  /* u32 | name where name names another getconst 
+  /* u32 | name where name names another getconstvar
    * (expr)
    * expr || expr [+ - * / % & | ^ >> <<] expr 
    */
@@ -3034,7 +3034,7 @@ static void parsefile( FILE *f ) {
 
       if( glob.pass == PASS_LABELS ) {
 	struct constvar *cv;
-	cv = getconst( varname );
+	cv = getconstvar( varname );
 	if( cv ) {
 	  if( cv->address ) usage( "Duplicate definition of const var %s", varname );
 	  if( cv->type != vartype ) usage( "Declaration type does not match definition type for const %s", varname );
@@ -3043,10 +3043,10 @@ static void parsefile( FILE *f ) {
 	  cv->address = glob.pc;
 	  glob.pc += len;
 	} else {
-	  addconst( varname, vartype, val, len );
+	  addconstvar( varname, vartype, val, len );
 	}
       } else {
-	struct constvar *cv = getconst( varname );
+	struct constvar *cv = getconstvar( varname );
 	if( !cv ) usage( "Unknown const %s", varname );
 	emitdata( cv->val, cv->len );
       }

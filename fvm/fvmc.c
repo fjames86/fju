@@ -559,6 +559,9 @@ static int getnexttok( FILE *f, struct token *tok ) {
 
 /* ---------- file parsing -------------------------- */
 
+#define PASS_LABELS  1   /* pass that generates address labels */
+#define PASS_EMIT    2   /* pass that emits bytecode (final pass) */
+
 static void emitdata( void *data, int len );
 static struct var *getglobal( char *name );
 static struct label *getlabel( char *prefix );
@@ -737,7 +740,7 @@ static struct label *getlabel( char *lname ) {
 static struct label *addlabel( char *lname ) {
   struct label *l;
 
-  if( glob.pass == 2 ) {
+  if( glob.pass == PASS_EMIT ) {
     l = getlabel( lname );
     fvmc_printf( ";; PC=%04x SP=%04u %s:\n", l ? l->address : 0, glob.stackoffset, lname );
     return l;
@@ -766,7 +769,7 @@ static struct var *getglobal( char *name ) {
 static struct var *addglobal( char *name, var_t type, uint32_t arraylen ) {
   struct var *v;
   
-  if( glob.pass == 2 ) return getglobal( name );
+  if( glob.pass == PASS_EMIT ) return getglobal( name );
 
   v = getglobal( name );
   if( v ) usage( "Global %s already exists", name );
@@ -813,7 +816,7 @@ static struct proc *getxcall( char *modname, char *procname ) {
 static struct proc *addproc( char *name, struct param *params, int nparams, uint64_t siginfo ) {
   struct proc *p;
   
-  if( glob.pass == 2 ) usage( "assert" );
+  if( glob.pass == PASS_EMIT ) usage( "assert" );
 
   fvmc_printf( ";; %04x Add procedure %s\n", glob.pc, name );
   
@@ -855,7 +858,7 @@ static struct var *getlocal( struct proc *proc, char *name ) {
 static struct var *addlocal( struct proc *proc, char *name, var_t type, uint32_t arraylen ) {
   struct var *v, **vp, *v2;
 
-  if( glob.pass == 2 ) return getlocal( proc, name );
+  if( glob.pass == PASS_EMIT ) return getlocal( proc, name );
   
   v = getglobal( name );
   if( v ) fvmc_printf( ";; Warning: local variable %s shadows existing global\n", name );
@@ -917,7 +920,7 @@ static struct var *addlocal( struct proc *proc, char *name, var_t type, uint32_t
 static void addexport( char *name ) {
   struct export *e, **ep;
 
-  if( glob.pass == 2 ) return;
+  if( glob.pass == PASS_EMIT ) return;
 
   e = glob.exports;
   while( e ) {
@@ -971,7 +974,7 @@ static struct constvar *getconst( char *name ) {
 static struct constvar *addconst( char *name, var_t type, char *val, int len ) {
   struct constvar *v;
 
-  if( glob.pass == 2 ) {
+  if( glob.pass == PASS_EMIT ) {
     emitdata( val, len );
     return getconst( name );
   }
@@ -1007,7 +1010,7 @@ static struct constval *getconstval( char *name ) {
 static struct constval *addconstval( char *name, var_t type, char *val, int len ) {
   struct constval *v;
 
-  if( glob.pass == 2 ) return getconstval( name );
+  if( glob.pass == PASS_EMIT ) return getconstval( name );
   
   v = getconstval( name );
   if( v ) usage( "Const name %s already exists", name );
@@ -1204,7 +1207,7 @@ static void emitopcode( op_t op, void *data, int len ) {
   if( !info ) usage( "Unknown opcode" );
   if( len != info->pcdata ) usage( "opcode %s data mismatch %u != %u", info->name, len, info->pcdata );
   
-  if( glob.pass == 2 ) {
+  if( glob.pass == PASS_EMIT ) {
     if( len == 0 ) fvmc_printf( ";; PC=%04x SP=%04u %s\n", glob.pc, glob.stackoffset, info->name );  
     else if( len == 2 ) {
       uint16_t u16 = *((uint16_t *)data);
@@ -1216,7 +1219,7 @@ static void emitopcode( op_t op, void *data, int len ) {
   }
   
   u8 = op;
-  if( glob.pass == 2 ) {
+  if( glob.pass == PASS_EMIT ) {
     fwrite( &u8, 1, 1, glob.outfile );
     fwrite( data, 1, info->pcdata, glob.outfile );
   }
@@ -1330,7 +1333,7 @@ static void emit_syscall( uint16_t u ) {
 
 
 static void emitdata( void *data, int len ) {
-  if( glob.pass == 2 ) {
+  if( glob.pass == PASS_EMIT ) {
     fvmc_printf( ";; PC=%04x SP=%04u Const data len %u %.*s\n", glob.pc, glob.stackoffset, len, len, data );
     fwrite( data, 1, len, glob.outfile );
   }
@@ -1451,7 +1454,7 @@ static void parsevariableexpr( FILE *f, var_t *vartypep, struct record **recordp
 	    uint32_t addr;
 	    
 	    getlabelname( "STRING", lname );
-	    if( glob.pass == 1 ) l = NULL;
+	    if( glob.pass == PASS_LABELS ) l = NULL;
 	    else {
 	      l = getlabel( lname );
 	      if( !l ) usage( "Failed to get label" );
@@ -1580,7 +1583,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
     uint16_t startaddr;
 
     getlabelname( "STRING", lname );
-    if( glob.pass == 1 ) l = NULL;
+    if( glob.pass == PASS_LABELS ) l = NULL;
     else {
       l = getlabel( lname );
       if( !l ) usage( "Failed to get label" );
@@ -1994,7 +1997,7 @@ static int parsestatement( FILE *f ) {
     }
     expecttok( f, TOK_CPAREN );      
 
-    if( glob.pass == 2 && (ipar < nparams) ) usage( "Insufficient params supplied to proc %s", procname );
+    if( glob.pass == PASS_EMIT && (ipar < nparams) ) usage( "Insufficient params supplied to proc %s", procname );
     
     if( kw == 1 ) {
       if( proc->xcall ) {
@@ -2031,7 +2034,7 @@ static int parsestatement( FILE *f ) {
     getlabelname( "ELSE", lnameelse );
     getlabelname( "END", lnameend );
 
-    if( glob.pass == 1 ) {
+    if( glob.pass == PASS_LABELS ) {
       elseaddr = 0;
       endaddr = 0;
     } else {
@@ -2103,7 +2106,7 @@ static int parsestatement( FILE *f ) {
     strcpy( glob.brklbl, dolbl );
     strcpy( glob.contlbl, whilelbl );
     
-    if( glob.pass == 1 ) {
+    if( glob.pass == PASS_LABELS ) {
       whileaddr = 0;
       doaddr = 0;
     } else {
@@ -2147,7 +2150,7 @@ static int parsestatement( FILE *f ) {
     uint16_t addr;
     
     if( glob.tok.type != TOK_NAME ) usage( "Expected label identifier" );
-    if( glob.pass == 1 ) {
+    if( glob.pass == PASS_LABELS ) {
       addr = 0;
     } else {
       char lname[64];
@@ -2453,7 +2456,7 @@ static void parsedeclaration( FILE *f ) {
     }
     
     parseproceduresig( f, &params, &nparams, &siginfo );
-    if( glob.pass == 1 ) {
+    if( glob.pass == PASS_LABELS ) {
       proc = getproc( procname );
       if( proc ) {
 	if( proc->siginfo != siginfo ) usage( "Declaration does not match definition for %s", procname );
@@ -2487,7 +2490,7 @@ static void parsedeclaration( FILE *f ) {
       type = VAR_TYPE_STRING;
     } else usage( "Invalid constant type" );
 
-    if( glob.pass == 1 ) {
+    if( glob.pass == PASS_LABELS ) {
       struct constvar *cv = getconst( name );
       if( cv ) {
 	if( cv->type != type ) usage( "Constant type mismatch for %s", name );
@@ -2731,7 +2734,7 @@ static void parseprocedure( FILE *f ) {
   expecttok( f, TOK_NAME );
 
   parseproceduresig( f, &params, &nparams, &siginfo );
-  if( glob.pass == 1 ) {
+  if( glob.pass == PASS_LABELS ) {
     proc = getproc( name );
     if( proc ) {
       if( proc->address ) usage( "Duplicate procedure definition for %s", name  );
@@ -2833,7 +2836,7 @@ static void parserecord( FILE *f ) {
     else v->size = 4;
     if( v->size % 4 ) v->size += 4 - (v->size % 4);
     
-    if( glob.pass == 2 ) free( v );
+    if( glob.pass == PASS_EMIT ) free( v );
     else {
       if( vp ) vp->next = v;
       else r->fields = v;
@@ -2846,7 +2849,7 @@ static void parserecord( FILE *f ) {
 
   r->size = vp ? vp->offset + vp->size : 0;
   
-  if( glob.pass == 2 ) free( r );
+  if( glob.pass == PASS_EMIT ) free( r );
   else {
     r->next = glob.records;
     glob.records = r;
@@ -2978,7 +2981,7 @@ static void parsefile( FILE *f ) {
 	break;
       }
 
-      if( glob.pass == 1 ) {
+      if( glob.pass == PASS_LABELS ) {
 	struct constvar *cv;
 	cv = getconst( varname );
 	if( cv ) {

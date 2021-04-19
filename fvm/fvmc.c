@@ -559,8 +559,10 @@ static int getnexttok( FILE *f, struct token *tok ) {
 
 /* ---------- file parsing -------------------------- */
 
-#define PASS_LABELS  1   /* pass that generates address labels */
-#define PASS_EMIT    2   /* pass that emits bytecode (final pass) */
+#define PASS_LEXING   0
+#define PASS_PROCREFS 1 
+#define PASS_LABELS   2   /* pass that generates address labels */
+#define PASS_EMIT     3   /* pass that emits bytecode (final pass) */
 
 static void emitdata( void *data, int len );
 static struct var *getglobal( char *name );
@@ -607,6 +609,11 @@ struct param {
   uint32_t offset;  /* stack offset */
 };
 
+struct procref {
+  struct procref *next;
+  char name[FVM_MAX_NAME];
+};
+
 struct proc {
   struct proc *next;
   char name[FVM_MAX_NAME];
@@ -619,6 +626,9 @@ struct proc {
 
   int xcall;
   char modname[FVM_MAX_NAME];
+
+  int refcount;
+  struct procref *procrefs;
 };
 
 struct label {
@@ -666,7 +676,6 @@ struct record {
   struct var *fields;
   int size;
 };
-
 
 /*
  * stack: 
@@ -717,6 +726,9 @@ static struct {
    */
   char brklbl[64];
   char contlbl[64];
+
+  int noemit;
+  struct proc *refprocs;
 } glob;
 
 static void incrementlinecount( void ) {
@@ -804,6 +816,15 @@ static struct proc *getproc( char *name ) {
   }
   return NULL;
 }
+static struct proc *getrefproc( char *name ) {
+  struct proc *p;
+  p = glob.refprocs;
+  while( p ) {
+    if( strcasecmp( p->name, name ) == 0 ) return p;
+    p = p->next;
+  }
+  return NULL;
+}
 static struct proc *getxcall( char *modname, char *procname ) {
   struct proc *p;
   p = glob.procs;
@@ -815,6 +836,7 @@ static struct proc *getxcall( char *modname, char *procname ) {
 }
 static struct proc *addproc( char *name, struct param *params, int nparams, uint64_t siginfo ) {
   struct proc *p;
+  struct proc *pr;
   
   if( glob.pass == PASS_EMIT ) usage( "assert" );
 
@@ -830,6 +852,9 @@ static struct proc *addproc( char *name, struct param *params, int nparams, uint
   p->params = params;
   p->nparams = nparams;
   p->siginfo = siginfo;
+
+  pr = getrefproc( name );
+  if( pr ) p->refcount = pr->refcount;
   
   p->next = glob.procs;
   glob.procs = p;
@@ -1128,7 +1153,19 @@ static struct syscall *addsyscall( char *name, struct param *params, int nparams
   return sc;  
 }
 
-
+static void addprocref( struct proc *p, char *name ) {
+  struct procref *pr;
+  pr = p->procrefs;
+  while( pr ) {
+    if( strcasecmp( pr->name, name ) == 0 ) return;
+    pr = pr->next;
+  }
+  pr = malloc( sizeof(*pr) );
+  memset( pr, 0, sizeof(*pr) );
+  strncpy( pr->name, name, FVM_MAX_NAME - 1 );
+  pr->next = p->procrefs;
+  p->procrefs = pr;
+}
 
 /* ---------------- */
 
@@ -1206,25 +1243,28 @@ static void emitopcode( op_t op, void *data, int len ) {
   info = getopinfo( op );
   if( !info ) usage( "Unknown opcode" );
   if( len != info->pcdata ) usage( "opcode %s data mismatch %u != %u", info->name, len, info->pcdata );
-  
-  if( glob.pass == PASS_EMIT ) {
-    if( len == 0 ) fvmc_printf( ";; PC=%04x SP=%04u %s\n", glob.pc, glob.stackoffset, info->name );  
-    else if( len == 2 ) {
-      uint16_t u16 = *((uint16_t *)data);
-      fvmc_printf( ";; PC=%04x SP=%04u %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, (uint32_t)u16, (int32_t)(int16_t)u16, (uint32_t)u16 );
-    } else if( len == 4 ) {
-      uint32_t u32 = *((uint32_t *)data);
-      fvmc_printf( ";; PC=%04x SP=%04u %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, u32, u32, u32 );
+
+  if( !glob.noemit ) {
+    if( glob.pass == PASS_EMIT ) {
+      if( len == 0 ) fvmc_printf( ";; PC=%04x SP=%04u %s\n", glob.pc, glob.stackoffset, info->name );  
+      else if( len == 2 ) {
+	uint16_t u16 = *((uint16_t *)data);
+	fvmc_printf( ";; PC=%04x SP=%04u %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, (uint32_t)u16, (int32_t)(int16_t)u16, (uint32_t)u16 );
+      } else if( len == 4 ) {
+	uint32_t u32 = *((uint32_t *)data);
+	fvmc_printf( ";; PC=%04x SP=%04u %s\t%u (%d) 0x%x\n", glob.pc, glob.stackoffset, info->name, u32, u32, u32 );
+      }
     }
+    
+    u8 = op;
+    if( glob.pass == PASS_EMIT ) {
+      fwrite( &u8, 1, 1, glob.outfile );
+      fwrite( data, 1, info->pcdata, glob.outfile );
+    }
+    glob.pc += 1 + info->pcdata;
+    glob.stackoffset += info->stackadjust;
   }
   
-  u8 = op;
-  if( glob.pass == PASS_EMIT ) {
-    fwrite( &u8, 1, 1, glob.outfile );
-    fwrite( data, 1, info->pcdata, glob.outfile );
-  }
-  glob.pc += 1 + info->pcdata;
-  glob.stackoffset += info->stackadjust;
 }
 
 
@@ -1333,6 +1373,8 @@ static void emit_syscall( uint16_t u ) {
 
 
 static void emitdata( void *data, int len ) {
+  if( glob.noemit ) return;
+  
   if( glob.pass == PASS_EMIT ) {
     fvmc_printf( ";; PC=%04x SP=%04u Const data len %u %.*s\n", glob.pc, glob.stackoffset, len, len, data );
     fwrite( data, 1, len, glob.outfile );
@@ -1567,7 +1609,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
     addlabel( lname1 );
     emit_ldi32( 0 );
     addlabel( lname2 );
-    glob.stackoffset -= 4;
+    if( !glob.noemit ) glob.stackoffset -= 4;
   } else if( accepttok( f, TOK_MINUS ) ) {
     /* - expr */
     /* TODO: could improve this by adding a negation opcode, but for now we just subtract from 0 */
@@ -1630,6 +1672,8 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	    struct proc *proc = getproc( glob.tok.val );
 	    if( proc ) {
 	      if( !getexport( glob.tok.val ) ) usage( "Procedure %s not exported - may only take address of exported procedure", glob.tok.val );
+
+	      addprocref( glob.currentproc, proc->name );
 	      emit_ldi32( proc->address );
 	    } else {
 	      usage( "Unknown variable %s", glob.tok.val );
@@ -1821,7 +1865,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	/* both parseexpr() functions have adjusted the stack, but only one of them 
 	 * will be executed by the runtime. so we end up with an incorrect stack adjustment here.
 	 * to work around this we modify it by hand */
-	glob.stackoffset -= 4;
+	if( !glob.noemit ) glob.stackoffset -= 4;
 	
 	parseexpr( f );
 	addlabel( lname2 );
@@ -1852,7 +1896,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	/* both parseexpr() functions have adjusted the stack, but only one of them 
 	 * will be executed by the runtime. so we end up with an incorrect stack adjustment here.
 	 * to work around this we modify it by hand */
-	glob.stackoffset -= 4;
+	if( !glob.noemit ) glob.stackoffset -= 4;
 
 	emit_ldi32( 1 ); /* push true */
 	addlabel( lname2 );
@@ -1883,7 +1927,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	/* both parseexpr() functions have adjusted the stack, but only one of them 
 	 * will be executed by the runtime. so we end up with an incorrect stack adjustment here.
 	 * to work around this we modify it by hand */
-	glob.stackoffset -= 4;
+	if( !glob.noemit ) glob.stackoffset -= 4;
 	
 	parseexpr( f );
 	addlabel( lname2 );
@@ -1939,6 +1983,8 @@ static int parsestatement( FILE *f ) {
       addr = proc->address;
       nparams = proc->nparams;
       params = proc->params;
+
+      if( !xcall ) addprocref( glob.currentproc, procname );
     } else {
       /* syscall - lookup syscall */
       sc = getsyscall( procname );
@@ -2017,7 +2063,7 @@ static int parsestatement( FILE *f ) {
 
     /* remove args from stack */
     emit_subsp( nparams * 4 );
-    glob.stackoffset -= nparams * 4;
+    if( !glob.noemit ) glob.stackoffset -= nparams * 4;
 
   } else if( acceptkeyword( f, "begin" ) ) {
     /* begin statement statement ... end */
@@ -2747,7 +2793,11 @@ static void parseprocedure( FILE *f ) {
     proc = getproc( name );
   }
   glob.currentproc = proc;
-      
+
+  if( proc->refcount == 0 ) {
+    glob.noemit = 1;
+  }
+  
   expectkeyword( f, "Begin" );
   /* parse body: var definitions followed by statements */
   while( acceptkeyword( f, "var" ) ) {
@@ -2805,7 +2855,8 @@ static void parseprocedure( FILE *f ) {
   expectkeyword( f, "End" );
   expecttok( f, TOK_SEMICOLON );
   fvmc_printf( ";; ------------------------\n\n" );
-        
+
+  glob.noemit = 0;
 }
 
 static void parserecord( FILE *f ) {
@@ -3052,6 +3103,23 @@ static void processincludefile( char *path ) {
   fclose( f );
 }
 
+static void getprocrefcounts( struct proc *p ) {
+  struct procref *pp;
+  struct proc *pr;
+  
+  pp = p->procrefs;
+  while( pp ) {
+    pr = getproc( pp->name );
+    if( !pr ) usage( "Bad procref %s", pp->name );
+    if( pr->refcount == 0 ) {
+      pr->refcount = 1;
+      getprocrefcounts( pr );
+    }
+    pp = pp->next;
+  }
+}
+
+
 static void processfile( char *path ) {
   FILE *f;
   struct includepath *p;
@@ -3074,7 +3142,7 @@ static void processfile( char *path ) {
   }
 
   switch( glob.pass ) {
-  case 0:
+  case PASS_LEXING:
     /* print lexing info if first pass */
     while( 1 ) {
       struct token *tok;
@@ -3098,14 +3166,59 @@ static void processfile( char *path ) {
 
     }
     break;
-  case 1:
+  case PASS_PROCREFS:
+    /* get all procedure reference/call tree */
+    glob.pass = PASS_LABELS; /* pretend to be a labels passing phase */
+    parsefile( f );
+
+    {
+      struct export *ex;
+      struct proc *p, *next;
+
+      ex = glob.exports;
+      while( ex ) {
+	p = getproc( ex->name );
+	p->refcount = 1;
+	getprocrefcounts( p );
+	ex = ex->next;
+      }
+
+      p = glob.procs;
+      while( p ) {
+	next = p->next;
+	
+	if( p->refcount ) {
+	  p->next = glob.refprocs;
+	  glob.refprocs = p;
+	}
+
+	p = next;
+      }
+
+    }
+    
+    /* discard/leak all the things the labels phase produced */
+    glob.labelidx = 0;
+    glob.labels = NULL;
+    glob.globals = NULL;
+    glob.procs = NULL;
+    glob.exports = NULL;
+    glob.consts = NULL;
+    glob.constvals = NULL;
+    glob.syscalls = NULL;
+    glob.records = NULL;
+    glob.datasize = 0;
+    glob.textsize = 0;
+    break;
+  case PASS_LABELS:
     /* first pass - collect info on data variables, procs etc */
     glob.pc = FVM_ADDR_TEXT;
     parsefile( f );
     glob.datasize = glob.globals ? (glob.globals->address + glob.globals->size) - FVM_ADDR_DATA : 0;
     glob.textsize = glob.pc - FVM_ADDR_TEXT;
+    
     break;
-  case 2:
+  case PASS_EMIT:
     /* second pass - generate code */
     glob.pc = FVM_ADDR_TEXT;
     glob.stackoffset = 0;
@@ -3179,18 +3292,21 @@ static void compile_file( char *path, char *outpath ) {
   glob.outfile = fopen( outpath, "wb" );
   if( !glob.outfile ) usage( "Unable to open output file" );
   
-  //glob.pass = 0;  
+  //glob.pass = PASS_LEXING;  
   //processfile( path );
 
+  glob.pass = PASS_PROCREFS;
+  processfile( path );
+  
   fvmc_printf( "--------------------- Pass 1 -------------------- \n" );
-  glob.pass = 1;  
+  glob.pass = PASS_LABELS;  
   processfile( path );
 
   if( glob.pc > (FVM_ADDR_TEXT + FVM_MAX_TEXT) ) usage( "Text segment size %d > max %d", glob.textsize, FVM_MAX_TEXT);
   if( glob.datasize > FVM_MAX_DATA ) usage( "Data segment size %d > max %d", glob.datasize, FVM_MAX_DATA );
   
   fvmc_printf( "--------------------- Pass 2 -------------------- \n" );
-  glob.pass = 2;
+  glob.pass = PASS_EMIT;
 
   /* emit header section */
   memset( &header, 0, sizeof(header) );

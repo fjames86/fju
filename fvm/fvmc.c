@@ -3593,7 +3593,7 @@ static void gen_cfile( char *outpath, char *fvmpath ) {
   fprintf( f, "  mod.textsize = %u;\n", hdr.textsize );
   fprintf( f, "  mod.timestamp = %"PRIu64"LL;\n", hdr.timestamp );
   fprintf( f, "  mod.flags = FVM_MODULE_STATIC;\n" );
-  fprintf( f, "  fvm_module_register( &mod );\n" );
+  fprintf( f, "  if( fvm_module_register( &mod ) ) return -1;\n" );
   
   if( serviceprocid >= 0 ) {
     fprintf( f, "  rpc_iterator_register( &serviceiter );\n" );

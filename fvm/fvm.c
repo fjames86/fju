@@ -164,8 +164,8 @@ static void fvm_module_postload( struct fvm_module *module ) {
 int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep ) {
   /* parse header, load data and text segments */
   struct fvm_headerinfo hdr;
-  struct fvm_module *module;
-  int i, sts;
+  struct fvm_module *module, *prevmodule;
+  int i, sts, prevstatic;
   struct xdr_s xdr;
   
   xdr_init( &xdr, (uint8_t *)buf, size );
@@ -221,12 +221,22 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
       }
     }
   }
-  if( fvm_module_by_name( hdr.name ) ) {
+
+  prevstatic = 0;
+  prevmodule = fvm_module_by_name( hdr.name );
+  if( prevmodule ) {
     if( flags & FVM_RELOAD ) {
-      sts = fvm_module_unload( hdr.name );
-      if( sts ) {
-	fvm_log( LOG_LVL_ERROR, "Failed to unload existing module" );
-	return -1;
+      if( prevmodule->flags & FVM_MODULE_STATIC ) {
+	fvm_log( LOG_LVL_INFO, "reload: unregistering module %s", hdr.name );
+	fvm_module_unregister( prevmodule );
+	prevstatic = 1;
+      } else {
+	sts = fvm_module_unload( hdr.name );
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "Failed to unload existing module" );
+	  return -1;
+	}
+	prevmodule = NULL;
       }
     } else {
       fvm_log( LOG_LVL_ERROR, "Module already registered" );
@@ -263,6 +273,12 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "fvm_module_load failed to register %s", module->name );
     free( module );
+
+    if( prevstatic ) {
+      fvm_log( LOG_LVL_WARN, "fvm_module_load re-registering static module %s", prevmodule->name );
+      fvm_module_register( prevmodule );
+    }
+    
     return -1;
   }
   
@@ -310,10 +326,41 @@ int fvm_module_load_file( char *filename, uint32_t flags, struct fvm_module **mo
   return sts;
 }
 
+int fvm_module_unregister( struct fvm_module *module ) {
+  struct fvm_module *m, *prev;
+  int sts;
+  char procname[FVM_MAX_NAME];
+  
+  prev = NULL;
+  m = glob.modules;
+  while( m ) {
+    if( m == module ) {
+      /* Run exit proc */
+      sts = get_exit_proc( m, procname );
+      if( !sts ) {
+	fvm_log( LOG_LVL_TRACE, "fvm_module_unregister: %s running exit proc %s", m->name, procname );
+	sts = fvm_run( m, fvm_procid_by_name( m, procname ), NULL, NULL );
+	if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_unregister: exit routine failed" );
+      }
+      
+      /* unload any rpc program, if any */
+      fvm_unregister_program( module->name);
+
+      /* unregister any iterator */
+      fvm_unregister_iterator( module->name );
+      
+      if( prev ) prev->next = m->next;
+      else glob.modules = m->next;
+      return 0;
+    }
+    prev = m;
+    m = m->next;
+  }
+  return -1;
+}
+
 int fvm_module_unload( char *modname ) {
   struct fvm_module *m, *prev;
-  char procname[FVM_MAX_NAME];
-  int sts;
   
   m = glob.modules;
   prev = NULL;
@@ -326,22 +373,8 @@ int fvm_module_unload( char *modname ) {
 	return -1;
       }
 
-      /* Run exit proc */
-      sts = get_exit_proc( m, procname );
-      if( !sts ) {
-	fvm_log( LOG_LVL_TRACE, "fvm_module_unload: %s running exit proc %s", m->name, procname );
-	sts = fvm_run( m, fvm_procid_by_name( m, procname ), NULL, NULL );
-	if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_unload: exit routine failed" );
-      }
-      
-      /* unload any rpc program, if any */
-      fvm_unregister_program( modname );
+      fvm_module_unregister( m );
 
-      /* unregister any iterator */
-      fvm_unregister_iterator( modname );
-      
-      if( prev ) prev->next = m->next;
-      else glob.modules = m->next;
       free( m );
       return 0;
     }

@@ -55,8 +55,9 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
 int fvm_module_load_file( char *filename, uint32_t flags, struct fvm_module **modulep );
 int fvm_module_unload( char *modname );
 
-/* Register a module */
+/* low level routines */
 int fvm_module_register( struct fvm_module *mod );
+int fvm_module_unregister( struct fvm_module *module );
 
 struct fvm_module *fvm_module_by_name( char *name ); /* lookup by name */
 struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid );  /* lookup by rpc prog */

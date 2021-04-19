@@ -298,28 +298,32 @@ static void fvm_xcall( struct fvm_state *state ) {
 
 struct fvm_sc_iterator {
   struct rpc_iterator iter;
-  uint32_t modtag;
-  int procid;
+  uint32_t prochandle;
   uint32_t private;
 };
 
 static void fvm_syscall_iter_cb( struct rpc_iterator *iter ) {
   struct fvm_sc_iterator *sciter;
   struct fvm_module *m;
+  int procid, sts;
   struct xdr_s args;
   uint8_t argbuf[4];
   
   sciter = (struct fvm_sc_iterator *)iter;
 
-  m = fvm_module_by_tag( sciter->modtag );
-  if( m ) {
-    xdr_init( &args, argbuf, sizeof(argbuf) );
-    xdr_encode_uint32( &args, sciter->private );
-    args.offset = 0;
-
-    fvm_run( m, sciter->procid, &args, NULL );
+  sts = fvm_proc_by_handle( sciter->prochandle, &m, &procid );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_syscall_iter_cb bad proc handle" );
+    goto done;
   }
+  
+  xdr_init( &args, argbuf, sizeof(argbuf) );
+  xdr_encode_uint32( &args, sciter->private );
+  args.offset = 0;
 
+  fvm_run( m, procid, &args, NULL );
+
+ done:
   rpc_iterator_unregister( iter );
   free( iter );  
 }
@@ -1161,6 +1165,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t pars[3];
       struct fvm_sc_iterator *iter;
       uint64_t siginfo;
+      int procid, sts;
       
       read_pars( state, pars, 3 );
 
@@ -1169,17 +1174,22 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       iter->iter.timeout = rpc_now() + pars[0];
       iter->iter.period = pars[0];
       iter->iter.cb = fvm_syscall_iter_cb;
-      iter->modtag = state->module->tag;
-      iter->procid = fvm_procid_by_addr( state->module, pars[1] );
-      if( iter->procid < 0 ) {
+      procid = fvm_procid_by_addr( state->module, pars[1] );
+      if( procid < 0 ) {
 	fvm_log( LOG_LVL_ERROR, "Bad procaddr %x", pars[1] );
 	return -1;
       }
 
+      sts = fvm_handle_by_procid( state->module->name, procid, &iter->prochandle );
+      if( sts ) {
+	fvm_log( LOG_LVL_ERROR, "Failed to get proc handle" );
+	return -1;
+      }
+      
       siginfo = 0;
       FVM_SIGINFO_SETPARAM(siginfo,0,VAR_TYPE_U32,0);
       FVM_SIGINFO_SETNPARS(siginfo,1);
-      if( state->module->procs[iter->procid].siginfo != siginfo ) {
+      if( state->module->procs[procid].siginfo != siginfo ) {
 	fvm_log( LOG_LVL_WARN, "Bad sleep signature" );
       }
       

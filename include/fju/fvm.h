@@ -47,6 +47,7 @@ struct fvm_module {
   int tag;
   uint32_t flags;
 #define FVM_MODULE_STATIC 0x0001 /* module cannot be unloaded */
+#define FVM_MODULE_DISABLED 0x0002 /* module cannot run any procedures */
 };
 
 

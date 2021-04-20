@@ -227,11 +227,11 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
     if( flags & FVM_RELOAD ) {
       sts = fvm_module_unload( hdr.name );
       if( sts ) {
-	fvm_log( LOG_LVL_ERROR, "Failed to unload existing module" );
+	fvm_log( LOG_LVL_ERROR, "Failed to unload existing module %s", hdr.name );
 	return -1;
       }
     } else {
-      fvm_log( LOG_LVL_ERROR, "Module already registered" );
+      fvm_log( LOG_LVL_ERROR, "Module %s already registered", hdr.name );
       return -1;
     }
   }
@@ -1032,6 +1032,11 @@ static int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t 
 int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf ) {
   uint32_t nsteps;
   int sts;
+
+  if( module->flags & FVM_MODULE_DISABLED ) {
+    fvm_log( LOG_LVL_WARN, "fvm_run module %s disabled", module->name );
+    return -1;
+  }
   
   if( (procid < 0) || (procid >= module->nprocs) ) {
     fvm_log( LOG_LVL_ERROR, "fvm_run bad procid" );
@@ -1700,4 +1705,20 @@ void fvm_rpc_register( void ) {
 
 void fvm_setdebug( int debugmode ) {
   glob.debug = debugmode;
+}
+
+int fvm_module_enable( char *modname, int enable, int *prev ) {
+  struct fvm_module *m;
+  
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  /* return previous enabled state */
+  if( prev ) {
+    *prev = (m->flags & FVM_MODULE_DISABLED) ? 0 : 1;
+  }
+
+  /* set/clear disabled flag */
+  m->flags = (m->flags & ~FVM_MODULE_DISABLED) | (enable ? 0 : FVM_MODULE_DISABLED);
+  return 0;
 }

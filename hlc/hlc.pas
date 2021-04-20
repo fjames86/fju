@@ -20,7 +20,7 @@ Begin
    Record Header =
    	  hash : opaque[32];
    End;
-   
+
    { globals }
    var gfd : int;
    
@@ -52,14 +52,55 @@ Begin
 	End;
    End;
 
+   Procedure GetHash(idH : int, idL : int, tsH : int, tsL : int, len : int, buf : opaque, hash : opaque)
+   Begin
+	var iov : SecIov[5];
+	var iovp : ^SecIov;
+
+	iovp = iov[0];
+	iovp.len = 4;
+	iovp.buf = &idH;
+	iovp = iov[1];
+	iovp.len = 4;
+	iovp.buf = &idL;
+	iovp = iov[2];
+	iovp.len = 4;
+	iovp.buf = &tsH;
+	iovp = iov[3];
+	iovp.len = 4;
+	iovp.buf = &tsH;
+	iovp = iov[4];
+	iovp.len = len;
+	iovp.buf = buf;
+	Syscall Sha1(5,iov,hash);
+   End;
+   
    Procedure Write(len : int, buf : opaque)
    Begin
 	var bufp : opaque[2048];
-
+	var iov : SecIov[2];
+	var iovp : ^SecIov;
+	var idh, idl, tsh, tsl, flags, lenp : int;
+	
 	If gfd = 0 Then Return;
 
-	{ TODO: compute sha1(id,seq,buf) instead of sha1(buf) }
-	Syscall Sha1(len,buf,bufp);	
+	iovp = iov[0];
+	Syscall LogLastId(gfd,idh,idl);
+	If idh && idl Then
+	Begin
+		{ first entry - initialize genesis block }
+		idh = -1;
+		idl = -1;
+		tsh = -1;
+		tsl = -1;
+	End
+	Else
+	Begin
+		{ Compute header derived from previous entry }
+		Syscall LogReadInfo(gfd,idh,idl,lenp,flags,tsh,tsl);
+	End;
+
+	Call GetHash(idh,idl,tsh,tsl,len,buf,bufp);
 	Call Memcpy(bufp + HdrSize,buf,len);
 	Syscall LogWrite(gfd,LogBinary,len + HdrSize, bufp);
    End;

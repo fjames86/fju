@@ -89,5 +89,7 @@ int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, i
 int fvm_cluster_run2( uint64_t clid, char *modname, char *procname, char *args, int len, uint64_t tgt_hostid, uint64_t excl_hostid );
 int fvm_cluster_updatestate( uint64_t clid, char *modname );
 
+int fvm_module_enable( char *modname, int enable, int *prev );
+
 #endif
 

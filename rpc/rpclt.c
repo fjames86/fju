@@ -43,43 +43,38 @@ static void hrauth_local_results( struct xdr_s *xdr );
 static void hrauth_list_results( struct xdr_s *xdr );
 static void clt_call( struct clt_info *info, int argc, char **argv, int i );
 static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i );
-static void freg_list_results( struct xdr_s *xdr );
-static void freg_list_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void freg_get_results( struct xdr_s *xdr );
-static void freg_get_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void freg_put_results( struct xdr_s *xdr );
-static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void freg_rem_results( struct xdr_s *xdr );
-static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void cmdprog_licinfo_results( struct xdr_s *xdr );
-static void cmdprog_connlist_results( struct xdr_s *xdr );
-static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void rawmode_results( struct xdr_s *xdr );
-static void raft_command_results( struct xdr_s *xdr );
-static void raft_command_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void raft_snapshot_results( struct xdr_s *xdr );
-static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void raft_change_results( struct xdr_s *xdr );
-static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_list_results( struct xdr_s *xdr );
-static void fvm_load_results( struct xdr_s *xdr );
-static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_unload_results( struct xdr_s *xdr );
-static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_run_results( struct xdr_s *xdr );
-static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_clrun_results( struct xdr_s *xdr );
-static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_reload_results( struct xdr_s *xdr );
-static void fvm_reload_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void dmb_invoke_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void dmb_publish_results( struct xdr_s *xdr );
-static void dlm_list_results( struct xdr_s *xdr );
-static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void dlm_acquire_results( struct xdr_s *xdr );
-static void dlm_release_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_data_results( struct xdr_s *xdr );
+
+/* macrology shorthand for arg/result procedures */
+#define RESULTPROC(name) static void name##_results( struct xdr_s *xdr )
+#define ARGPROC(name) static void name##_args( int argc, char **argv, int i, struct xdr_s *xdr )
+#define ARGRESULTPROC(name) \
+  RESULTPROC(name);\
+  ARGPROC(name)
+
+ARGRESULTPROC(freg_list);
+ARGRESULTPROC(freg_get);
+ARGRESULTPROC(freg_put);
+ARGRESULTPROC(freg_rem);
+RESULTPROC(cmdprog_licinfo);
+RESULTPROC(cmdprog_connlist);
+ARGRESULTPROC(rawmode);
+ARGRESULTPROC(raft_command);
+ARGRESULTPROC(raft_snapshot);
+ARGRESULTPROC(raft_change);
+RESULTPROC(fvm_list);
+ARGRESULTPROC(fvm_load);
+ARGRESULTPROC(fvm_unload);
+ARGRESULTPROC(fvm_run);
+ARGRESULTPROC(fvm_reload);
+ARGPROC(dmb_invoke);
+ARGRESULTPROC(dmb_publish);
+RESULTPROC(dlm_list);
+ARGRESULTPROC(dlm_acquire);
+ARGPROC(dlm_release);
+RESULTPROC(fvm_data);
+ARGRESULTPROC(fvm_enable);
+
+ARGRESULTPROC(fvm_clrun);
 
 static struct clt_info clt_procs[] = {
     { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
@@ -103,7 +98,8 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
-    { FVM_RPC_PROG, 1, 7, fvm_reload_args, fvm_data_results, "fvm.data", "modname" },    
+    { FVM_RPC_PROG, 1, 7, fvm_reload_args, fvm_data_results, "fvm.data", "modname" },
+    { FVM_RPC_PROG, 1, 8, fvm_enable_args, fvm_enable_results, "fvm.enable", "modname=* [enable] [disable]" },
     { DMB_RPC_PROG, 1, 1, dmb_invoke_args, NULL, "dmb.invoke", "msgid=* [seq=*] [flags=*] [buf=base64]" },
     { DMB_RPC_PROG, 1, 3, dmb_publish_args, dmb_publish_results, "dmb.publish", "msgid=* [flags=*] [buf=base64]" },
     { DLM_RPC_PROG, 1, 1, NULL, dlm_list_results, "dlm.list", NULL },
@@ -1502,4 +1498,42 @@ static void fvm_data_results( struct xdr_s *xdr ) {
       printf( "%02x ", (uint32_t)(uint8_t)buf[i] );
     }
   } else printf( "Failure\n" );
+}
+
+static void fvm_enable_results( struct xdr_s *xdr ) {
+  int sts, prev, success;
+
+  sts = xdr_decode_boolean( xdr, &success );
+  if( sts ) usage( "Xdr error" );
+  if( !success ) printf( "Failure\n" );
+  sts = xdr_decode_boolean( xdr, &prev );
+  if( sts ) usage( "Xdr error" );
+  printf( "Previous: %s\n", prev ? "Enabled" : "Disabled" );
+}
+
+static void fvm_enable_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *modname;
+  int enable;
+
+  modname = NULL;
+  enable = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "modname" ) == 0 ) {
+      modname = argval;
+    } else if( strcmp( argname, "enable" ) == 0 ) {
+      enable = 1;
+    } else if( strcmp( argname, "disable" ) == 0 ) {
+      enable = 0;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !modname ) usage( "Need module name" );
+  
+  xdr_encode_string( xdr, modname );
+  xdr_encode_boolean( xdr, enable );
 }

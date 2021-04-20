@@ -3721,5 +3721,12 @@ static void gen_cfile( char *outpath, char *fvmpath ) {
   fprintf( f, "  return 0;\n" );
   fprintf( f, "}\n" );
   fprintf( f, "\n" );
+  fprintf( f, "void %s_unregister( void ) {\n", hdr.name );
+  fprintf( f, "  fvm_module_unregister( &mod );\n" );
+  if( serviceprocid >= 0 ) {
+    fprintf( f, "  rpc_iterator_unregister( &serviceiter );\n" );
+  }
+  fprintf( f, "}\n" );
+  fprintf( f, "\n" );
   fclose( f );
 }

@@ -330,7 +330,7 @@ int fvm_module_unregister( struct fvm_module *module ) {
       }
       
       /* unload any rpc program, if any */
-      fvm_unregister_program( module->name);
+      fvm_unregister_program( module->name );
 
       /* unregister any iterator */
       fvm_unregister_iterator( module->name );

@@ -164,8 +164,8 @@ static void fvm_module_postload( struct fvm_module *module ) {
 int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep ) {
   /* parse header, load data and text segments */
   struct fvm_headerinfo hdr;
-  struct fvm_module *module, *prevmodule;
-  int i, sts, prevstatic;
+  struct fvm_module *module;
+  int i, sts;
   struct xdr_s xdr;
   
   xdr_init( &xdr, (uint8_t *)buf, size );
@@ -222,21 +222,13 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
     }
   }
 
-  prevstatic = 0;
-  prevmodule = fvm_module_by_name( hdr.name );
-  if( prevmodule ) {
+  
+  if( fvm_module_by_name( hdr.name ) ) {
     if( flags & FVM_RELOAD ) {
-      if( prevmodule->flags & FVM_MODULE_STATIC ) {
-	fvm_log( LOG_LVL_INFO, "reload: unregistering module %s", hdr.name );
-	fvm_module_unregister( prevmodule );
-	prevstatic = 1;
-      } else {
-	sts = fvm_module_unload( hdr.name );
-	if( sts ) {
-	  fvm_log( LOG_LVL_ERROR, "Failed to unload existing module" );
-	  return -1;
-	}
-	prevmodule = NULL;
+      sts = fvm_module_unload( hdr.name );
+      if( sts ) {
+	fvm_log( LOG_LVL_ERROR, "Failed to unload existing module" );
+	return -1;
       }
     } else {
       fvm_log( LOG_LVL_ERROR, "Module already registered" );
@@ -272,13 +264,7 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
   sts = fvm_module_register( module );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "fvm_module_load failed to register %s", module->name );
-    free( module );
-
-    if( prevstatic ) {
-      fvm_log( LOG_LVL_WARN, "fvm_module_load re-registering static module %s", prevmodule->name );
-      fvm_module_register( prevmodule );
-    }
-    
+    free( module );    
     return -1;
   }
   

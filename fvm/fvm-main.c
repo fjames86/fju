@@ -26,10 +26,10 @@ static void usage( char *fmt, ... ) {
     printf( "fvm OPTIONS file...\n"
 	    "\n"
 	    "\n OPTIONS:\n"
-	    "   -m      module\n"
-	    "   -p      proc name\n"
-	    "   -v      Verbose\n"
-	    "   --u32 u32 | --str str | --opaque b64 Set arg values\n" 
+	    "   -m            module\n"
+	    "   -p            proc name\n"
+	    "   -v            Verbose\n"
+	    "   --args base64 Set argument buffer\n" 
 	    "\n" );
   }
   
@@ -55,16 +55,12 @@ int fvm_main( int argc, char **argv ) {
   int verbose = 0;
   uint64_t start, end;
   uint64_t siginfo;
-  int nargs, sargs;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
   memset( mname, 0, sizeof(mname) );
   memset( pname, 0, sizeof(pname) );
 
-  siginfo = 0;
-  nargs = 0;
-  
   i = 1;
   if( i >= argc ) usage( NULL );
 
@@ -84,32 +80,14 @@ int fvm_main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
       verbose = 1;
       fvm_setdebug( 1 );
-    } else if( strcmp( argv[i], "--u32" ) == 0 ) {
+    } else if( strcmp( argv[i], "--args" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      xdr_encode_uint32( &argxdr, strtoul( argv[i], NULL, 0 ) );
-      FVM_SIGINFO_SETPARAM(siginfo,nargs,VAR_TYPE_U32,0);
-      nargs++;
-    } else if( strcmp( argv[i], "--str" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      xdr_encode_string( &argxdr, argv[i] );
-      FVM_SIGINFO_SETPARAM(siginfo,nargs,VAR_TYPE_STRING,0);
-      nargs++;
-    } else if( strcmp( argv[i], "--opaque" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      sts = base64_decode( (char *)argxdr.buf + argxdr.offset + 4, (argxdr.count - argxdr.offset) - 4, argv[i] );
-      if( sts < 0 ) usage( "Failed to decode base64" );
-      xdr_encode_uint32( &argxdr, sts );
-      argxdr.offset += sts;
+      xdr_reset( &argxdr );
+      sts = base64_decode( (char *)argxdr.buf, argxdr.count, argv[i] );
+      if( sts < 0 ) usage( "Bad base64" );
+      argxdr.offset = sts;
       if( sts % 4 ) argxdr.offset += 4 - (sts % 4);
-
-      FVM_SIGINFO_SETPARAM(siginfo,nargs,VAR_TYPE_U32,0);
-      nargs++;
-      FVM_SIGINFO_SETPARAM(siginfo,nargs,VAR_TYPE_OPAQUE,0);
-      nargs++;
-
     } else break;
     
     i++;
@@ -138,20 +116,7 @@ int fvm_main( int argc, char **argv ) {
   if( procid < 0 ) usage( "Unknown proc %s", pname );
 
   siginfo = module->procs[procid].siginfo;
-    
-  sargs = 0;
-  for( i = 0; i < FVM_SIGINFO_NARGS(siginfo); i++ ) {
-    if( !FVM_SIGINFO_ISVAR(siginfo,i) ) sargs++;
-  }
-  
-  if( sargs != nargs ) usage( "Needed %u args", sargs );
-  for( i = 0; i < nargs; i++ ) {
-    if( !FVM_SIGINFO_ISVAR(module->procs[procid].siginfo,i) ) {
-      if( FVM_SIGINFO_VARTYPE(module->procs[procid].siginfo,i) != FVM_SIGINFO_VARTYPE(siginfo,i) )
-	usage( "Expected param %u type %u not %u", i, FVM_SIGINFO_VARTYPE(module->procs[procid].siginfo,i), FVM_SIGINFO_VARTYPE(siginfo,i) );
-    }
-  }
-  
+
   xdr_init( &resxdr, argbuf, sizeof(argbuf) );
   argxdr.count = argxdr.offset;
   argxdr.offset = 0;
@@ -195,7 +160,7 @@ int fvm_main( int argc, char **argv ) {
 	  sts = xdr_decode_opaque( &resxdr, (uint8_t *)opaque, (int *)&u32 );
 	  if( sts ) usage( "XDR error decoding opaque" );
 	  base64_encode( opaque, u32, str );
-	  printf( "[%d] %s\n", i, str );
+	  printf( "[%d] Len=%u %s\n", i, u32, str );
 	  break;
 	}
       }

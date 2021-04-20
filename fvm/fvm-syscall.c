@@ -1202,17 +1202,34 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     /* sha1(len,buf,hash) */
     {
       uint32_t pars[3];
-      char *buf, *hash;
-      struct sec_buf iov;
+      char *hash;
+      struct sec_buf iov[16];
+      int i, niov, gotbuf, iovaddr, addr;
+
+      memset( iov, 0, sizeof(iov) );
       
       read_pars( state, pars, 3 );
-      buf = fvm_getptr( state, pars[1], pars[0], 0 );
+      niov = pars[0];
+      if( niov > 16 ) niov = 16;
+
+      gotbuf = 1;
+      iovaddr = pars[1];
+      for( i = 0; i < niov; i++ ) {
+	iov[i].len = fvm_read_u32( state, iovaddr );
+	iovaddr += 4;
+	addr = fvm_read_u32( state, iovaddr );
+	iov[i].buf = fvm_getptr( state, addr, iov[i].len, 0 );
+	iovaddr += 4;
+	if( (iov[i].buf == NULL) && iov[i].len ) {
+	  gotbuf = 0;
+	  break;
+	}
+      }
+      
       hash = fvm_getptr( state, pars[2], SEC_SHA1_MAX_HASH, 1 );
 
-      if( buf && hash ) {
-	iov.buf = buf;
-	iov.len = pars[0];
-	sha1( (uint8_t *)hash, &iov, 1 );
+      if( gotbuf && hash ) {
+	sha1( (uint8_t *)hash, iov, niov );
       }
     }
     break;

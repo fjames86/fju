@@ -71,7 +71,13 @@ Declare Syscall RpcCall(hostH : int, hostL : int, prog : int, vers : int, proc :
 Declare Syscall Sleep(timeout : int, cbaddr : int, private : int) : 38;
 
 Const SHA1HashSize = 20;
-Declare Syscall SHA1(len : int, buf : opaque, hash : opaque) : 39;
+Record SecIov =
+       Len : int;
+       Buf : int;
+End;
+
+{ iov is address of vector of SecIov records. Hash points to a vector of Sha1HashSize }
+Declare Syscall SHA1(niov : int, iov : int, hash : opaque) : 39;
 
 Const AesKeySize = 16;
 Declare Syscall AesEncrypt(len : int, buf : opaque, key : opaque) : 40;

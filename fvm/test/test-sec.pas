@@ -17,8 +17,14 @@ Begin
    Procedure TestHash(len : int, buf : opaque, var hashlen : int, var hashbuf : opaque)
    Begin
 	var hash : opaque[SHA1HashSize];
+	var iov : SecIov[1];
+	var iovp : ^SecIov;
 	
-	Syscall SHA1(len,buf,hash);
+	iovp = iov;
+	iovp.len = len;
+	iovp.buf = buf;
+	
+	Syscall SHA1(1,iov,hash);
 	hashlen = SHA1HashSize;
 	hashbuf = hash;
    End;

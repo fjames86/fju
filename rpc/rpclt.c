@@ -1213,7 +1213,7 @@ static void fvm_run_results( struct xdr_s *xdr ) {
   if( b ) {
     str = malloc( lenp * 2 );
     base64_encode( (char *)bufp, lenp, str );
-    printf( "[%u] %s\n", lenp, str );
+    if( lenp > 0 ) printf( "[%u] %s\n", lenp, str );
   }
 }
 

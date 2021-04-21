@@ -17,6 +17,7 @@ fju rpc hemlock fvm.load filename=bin/test-dmb.fvm reload > /dev/null
 fju rpc fvm.run modname=DmbTest procname=TestMsg > /dev/null
 sleep 1
 
+echo -n "Result: "
 fju reg /dmbtest
 
 echo "----- TestDmb2 --------------"

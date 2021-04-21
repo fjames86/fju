@@ -24,6 +24,20 @@ echo "----- TestDmb2 --------------"
 
 fju rpc fvm.run modname=DmbTest procname=TestMsg2
 
+echo "------- TestFile ------------"
+
+if [ -e /opt/fju/test.txt ]; then
+    rm /opt/fju/test.txt
+fi
+
+fju fvm -p TestProc --args $(fju xdr encode str=test.txt) bin/test-file.fvm
+if [ -e /opt/fju/test.txt ]; then
+    echo "Success"
+else
+    echo "Failure"
+fi
+rm /opt/fju/test.txt
+
 echo "--------- Done -------------"
 
 

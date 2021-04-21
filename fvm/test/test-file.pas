@@ -19,6 +19,11 @@ Begin
 	var fd : int;
 	var buf : opaque[16];
 	Syscall Open(filename,fd);
+	If fd = 0 Then Begin
+	   Syscall Puts("failed to open file");
+	   Return;
+	End;
+	   
 	Syscall Read(fd,16,buf,0);
 	Syscall Puts(buf);
 	Syscall Close(fd);

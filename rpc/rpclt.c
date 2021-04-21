@@ -73,6 +73,7 @@ ARGRESULTPROC(dlm_acquire);
 ARGPROC(dlm_release);
 RESULTPROC(fvm_data);
 ARGRESULTPROC(fvm_enable);
+RESULTPROC(raft_applist);
 
 ARGRESULTPROC(fvm_clrun);
 
@@ -92,6 +93,7 @@ static struct clt_info clt_procs[] = {
     { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
     { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
     { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*] [distribute]" },
+    { RAFT_RPC_PROG, 1, 8, NULL, raft_applist_results, "raft.applist", NULL },
     { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
@@ -1537,4 +1539,19 @@ static void fvm_enable_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   
   xdr_encode_string( xdr, modname );
   xdr_encode_boolean( xdr, enable );
+}
+
+static void raft_applist_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint32_t appid;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "Xdr error" );
+  while( b ) {
+    sts = xdr_decode_uint32( xdr, &appid );
+    if( sts ) usage( "Xdr error" );
+    printf( "%u\n", appid );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "Xdr error" );
+  }
 }

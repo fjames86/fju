@@ -1533,6 +1533,23 @@ static int raft_proc_list( struct rpc_inc *inc ) {
 	return 0;
 }
 
+static int raft_proc_applist( struct rpc_inc *inc ) {
+	int handle;
+	struct raft_app *app;
+	
+	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+	app = glob.app;
+	while( app ) {
+	  xdr_encode_boolean( &inc->xdr, 1 );
+	  xdr_encode_uint32( &inc->xdr, app->appid );
+	  app = app->next;
+	}
+	xdr_encode_uint32( &inc->xdr, 0 );
+	rpc_complete_accept_reply( inc, handle );
+  
+	return 0;
+}
+
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_append },
@@ -1542,6 +1559,7 @@ static struct rpc_proc raft_procs[] = {
   { 5, raft_proc_snapshot },
   { 6, raft_proc_change },
   { 7, raft_proc_list },
+  { 8, raft_proc_applist },
   { 0, NULL }
 };
 

@@ -92,3 +92,13 @@ Declare Syscall LogOpen(name : string, var handle : int) : 47;
 Declare Syscall LogClose(handle : int) : 48;
 Declare Syscall Timestr(timeh : int, timel : int, str : string) : 49;
 Declare Syscall TimeNow(var high : int, var low : int) : 50;
+
+{
+ * Register a raft application.
+ * Command,snapsave and snapload are addresses of procedures that are invoked by raft framework.
+ * Command(clidHigh,clidLow,seqHigh,seqLow,len,buf)
+ * Snapsave(clidHigh,clidLow,termH,termL,seqH,seqL);
+ * Snapload(clidH,clidL,len,buf)
+}
+Declare Syscall RaftAppRegister(appid : int, command : int, snapsave : int, snapload : int) : 51;
+

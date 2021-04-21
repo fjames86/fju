@@ -369,6 +369,79 @@ static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) 
 }
 
 
+struct fvm_raft_app {
+  struct raft_app app;
+  uint32_t command;
+  uint32_t snapsave;
+  uint32_t snapload;
+};
+static void fvm_raft_command_cb( struct raft_app *rapp, struct raft_cluster *cl, uint64_t cmdseq, char *buf, int len ) {
+  struct fvm_raft_app *app = (struct fvm_raft_app *)rapp;
+  int sts, procid;
+  struct fvm_module *m;
+  struct xdr_s args;
+  char *argbuf;
+  
+  /* get proc */
+  sts = fvm_proc_by_handle( app->command, &m, &procid );
+  if( sts ) return;
+  
+  /* encode args */
+  argbuf = malloc( len + 32 );
+  xdr_init( &args, (uint8_t *)argbuf, len + 32 );
+  xdr_encode_uint64( &args, cl->clid );
+  xdr_encode_uint64( &args, cmdseq );
+  xdr_encode_opaque( &args, (uint8_t *)buf, len );
+  
+  /* run */
+  sts = fvm_run( m, procid, &args, NULL );
+
+  free( argbuf );
+}
+
+static void fvm_raft_snapsave_cb( struct raft_app *rapp, struct raft_cluster *cl, uint64_t term, uint64_t seq ) {
+  struct fvm_raft_app *app = (struct fvm_raft_app *)rapp;
+  int sts, procid;
+  struct fvm_module *m;
+  struct xdr_s args;
+  char argbuf[32];
+  
+  /* get proc */
+  sts = fvm_proc_by_handle( app->snapsave, &m, &procid );
+  if( sts ) return;
+  
+  /* encode args */
+  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+  xdr_encode_uint64( &args, cl->clid );
+  xdr_encode_uint64( &args, term );  
+  xdr_encode_uint64( &args, seq );
+
+  /* run */
+  sts = fvm_run( m, procid, &args, NULL );
+}
+static void fvm_raft_snapload_cb( struct raft_app *rapp, struct raft_cluster *cl, char *buf, int len ) {
+  struct fvm_raft_app *app = (struct fvm_raft_app *)rapp;
+  int sts, procid;
+  struct fvm_module *m;
+  struct xdr_s args;
+  char *argbuf;
+  
+  /* get proc */
+  sts = fvm_proc_by_handle( app->snapload, &m, &procid );
+  if( sts ) return;
+  
+  /* encode args */
+  argbuf = malloc( len + 32 );
+  xdr_init( &args, (uint8_t *)argbuf, len + 32 );
+  xdr_encode_uint64( &args, cl->clid );
+  xdr_encode_opaque( &args, (uint8_t *)buf, len );
+  
+  /* run */
+  sts = fvm_run( m, procid, &args, NULL );
+
+  free( argbuf );  
+}
+
 int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   switch( syscallid ) {
   case 1:
@@ -1383,6 +1456,32 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       now = time( NULL );
       fvm_write_u32( state, pars[0], now >> 32 );
       fvm_write_u32( state, pars[1], now & 0xffffffff );
+    }
+    break;
+  case 51:
+    /* RaftAppRegister(appid,&command,&snapsave,&snapload) */
+    {
+      uint32_t pars[4];
+      struct fvm_raft_app *app;
+      int sts;
+      
+      read_pars( state, pars, 4 );
+
+      app = malloc( sizeof(*app) );
+      memset( app, 0, sizeof(*app) );
+      app->app.appid = pars[0];
+      app->app.command = fvm_raft_command_cb;
+      sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[1] ), &app->command );
+      if( pars[2] ) {
+	app->app.snapsave = fvm_raft_snapsave_cb;
+	sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[2] ), &app->snapsave );
+      }
+      if( pars[3] ) {
+	app->app.snapload = fvm_raft_snapload_cb;
+	sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[3] ), &app->snapload );
+      }
+      
+      raft_app_register( &app->app );
     }
     break;
   case 0xffff:

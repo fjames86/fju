@@ -38,6 +38,18 @@ else
 fi
 rm /opt/fju/test.txt
 
+echo "-------- TestSha1 ----------"
+
+result=$(fju fvm -p TestHash --args $(fju xdr encode str=a) bin/test-sec.fvm | awk '{print $3}')
+result=$(fju xdr decode 'xxxxx' $result | tr -d '\n')
+
+# test sha1("a") gives correct result 
+if [ "$result" = "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8" ]; then
+    echo "Success"
+else
+    echo "Failure $result != $correct"
+fi
+
 echo "--------- Done -------------"
 
 

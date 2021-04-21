@@ -1083,7 +1083,7 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
 static void fvm_list_results( struct xdr_s *xdr ) {
   int sts, b, i;
   char name[64];
-  uint32_t progid, versid, datasize, textsize, nprocs, address;
+  uint32_t progid, versid, datasize, textsize, nprocs, address, flags;
   uint64_t siginfo, timestamp, nsteps, rcount;
   int vartype, isvar, nargs, j;
   char timestr[64];
@@ -1097,8 +1097,9 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     xdr_decode_uint32( xdr, &datasize );
     xdr_decode_uint32( xdr, &textsize );
     xdr_decode_uint64( xdr, &timestamp );
+    xdr_decode_uint32( xdr, &flags );
     xdr_decode_uint32( xdr, &nprocs );
-    printf( "%s %u:%u Data=%u Text=%u Timestamp=%s\n", name, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ) );    
+    printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x\n", name, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ), flags );
     for( i = 0; i < nprocs; i++ ) {
       xdr_decode_string( xdr, name, sizeof(name) ); 
       xdr_decode_uint32( xdr, &address );     
@@ -1117,7 +1118,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
 		vartype == 2 ? "Opaque" : 
 		"Other" );
       }
-      printf( ") RCount=%"PRIu64" NSteps=%"PRIu64"\n", rcount, nsteps );
+      printf( ") RunCount=%"PRIu64" NSteps=%"PRIu64"\n", rcount, nsteps );
     }
     printf( "\n" );
     
@@ -1210,7 +1211,7 @@ static void fvm_run_results( struct xdr_s *xdr ) {
   if( b ) {
     str = malloc( lenp * 2 );
     base64_encode( (char *)bufp, lenp, str );
-    printf( "%s\n", str );
+    printf( "[%u] %s\n", lenp, str );
   }
 }
 

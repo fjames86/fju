@@ -1365,6 +1365,7 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
     xdr_encode_uint32( &inc->xdr, m->datasize );
     xdr_encode_uint32( &inc->xdr, m->textsize );
     xdr_encode_uint64( &inc->xdr, m->timestamp );
+    xdr_encode_uint32( &inc->xdr, m->flags );
     xdr_encode_uint32( &inc->xdr, m->nprocs );
     for( i = 0; i < m->nprocs; i++ ) {
       xdr_encode_string( &inc->xdr, m->procs[i].name ); 

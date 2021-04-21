@@ -45,11 +45,14 @@ Begin
 	If gfd = 0 Then Return;
 	
 	Syscall LogRead(gfd,idhigh,idlow,SizeOf(buf),buf,flagsp,lenpp);
-	If lenpp > 0 Then
+	If lenpp >= HdrSize Then
 	Begin
 		bufp = buf + HdrSize;
 		lenp = lenpp - HdrSize;
-	End;
+	End
+	Else	
+		Call LogWritef(LogLvlError,"HLC previous entry too small %u", lenpp, 0,0,0);
+
    End;
 
    Procedure GetHash(idH : int, idL : int, tsH : int, tsL : int, len : int, buf : opaque, hash : opaque)

@@ -16,3 +16,4 @@ hlc/hlc-fvm.c: hlc/hlc.fvm ${BINDIR}/fju
 
 PROGRAMS+=hlc
 LIBRARIES+=hlc
+FVMMODULES += hlc/hlc-fvm.c

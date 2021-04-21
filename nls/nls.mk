@@ -6,3 +6,5 @@ ${BINDIR}/nls.fvm: ${BINDIR}/fju nls/nls.pas
 
 nls/nls.c: ${BINDIR}/nls.fvm
 	${BINDIR}/fju fvmc -o nls/nls.c -C ${BINDIR}/nls.fvm
+
+FVMMODULES += nls/nls.c

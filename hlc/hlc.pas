@@ -81,28 +81,21 @@ Begin
    Procedure Write(len : int, buf : opaque)
    Begin
 	var bufp : opaque[2048];
-	var iov : SecIov[2];
-	var iovp : ^SecIov;
 	var idh, idl, tsh, tsl, flags, lenp : int;
 	
 	If gfd = 0 Then Return;
 
-	iovp = iov[0];
 	Syscall LogLastId(gfd,idh,idl);
-	If idh && idl Then
+	If (idh = 0) && (idl = 0) Then
 	Begin
-		{ first entry - initialize genesis block }
-		idh = -1;
-		idl = -1;
-		tsh = -1;
-		tsl = -1;
-	End
-	Else
-	Begin
-		{ Compute header derived from previous entry }
-		Syscall LogReadInfo(gfd,idh,idl,lenp,flags,tsh,tsl);
+		{ No previous entry - add genesis entry }
+		Call GetHash(-1,-1,-1,-1,0,0,bufp);
+		Syscall LogWrite(gfd,LogBinary,HdrSize,bufp);
+		Syscall LogLastId(gfd,idh,idl);
 	End;
 
+	{ Compute header derived from previous entry }
+	Syscall LogReadInfo(gfd,idh,idl,lenp,flags,tsh,tsl);
 	Call GetHash(idh,idl,tsh,tsl,len,buf,bufp);
 	Call Memcpy(bufp + HdrSize,buf,len);
 	Syscall LogWrite(gfd,LogBinary,len + HdrSize, bufp);
@@ -110,7 +103,7 @@ Begin
    
    Procedure Init()
    Begin
-	Call Open("hlc.log");
+	Call Open("hlc");
    End;
 
    Procedure Exit()

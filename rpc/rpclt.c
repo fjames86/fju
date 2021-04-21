@@ -97,7 +97,7 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
-    { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname=* procname=* args=*" },
+    { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname/procname [args]" },
     { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
     { FVM_RPC_PROG, 1, 7, fvm_reload_args, fvm_data_results, "fvm.data", "modname" },
@@ -1218,35 +1218,35 @@ static void fvm_run_results( struct xdr_s *xdr ) {
 }
 
 static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;  
-  char *modname, *procname;
+  char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
   char *buf;
   int len, sts;
+  char *p, *q;
   
-  modname = NULL;
-  buf = NULL;
-  len = 0;
-  procname = NULL;
+  if( i >= argc ) usage( "Need modname/procname" );
 
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "modname" ) == 0 ) {
-      modname = argval;
-    } else if( strcmp( argname, "procname" ) == 0 ) {
-      procname = argval;
-    } else if( strcmp( argname, "args" ) == 0 ) {
-      buf = malloc( 32*1024 );
-      len = 32*1024;
-      sts = base64_decode( buf, len, argval );
-      if( sts < 0 ) usage( "Base64 decode error" );
-      len = sts;
-    } else usage( NULL );
-    
-    i++;
+  p = strchr( argv[i], '/' );
+  if( !p ) usage( "Expect modname/procname" );
+
+  p = argv[i];
+  q = modname;
+  while( *p != '0' && *p != '/' ) {
+    *q = *p;
+    p++;
+    q++;
   }
-
-  if( !modname ) usage( "Need module name" );
-  if( !procname ) usage( "Need proc name" );
+  *q = '\0';
+  strncpy( procname, p + 1, FVM_MAX_NAME - 1 );
+  len = 0;
+  buf = NULL;
+  i++;
+  if( i < argc ) {
+    buf = malloc( 32*1024 );
+    len = 32*1024;
+    sts = base64_decode( buf, len, argv[i] );
+    if( sts < 0 ) usage( "Base64 failed to decode args" );
+    len = sts;
+  }
   
   xdr_encode_string( xdr, modname );
   xdr_encode_string( xdr, procname );

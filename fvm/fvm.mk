@@ -23,9 +23,9 @@ ${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-private.h fvm/fvm-syscall.c
 .SUFFIXES: .pas .fvm
 .pas.fvm:
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib $<
-	mv $@ ${BINDIR}/
+	cp $@ ${BINDIR}/
 
-${fvmprogs}: fvm/stdlib/*.pas
+${fvmprogs}: ${BINDIR}/fju fvm/stdlib/*.pas
 
 LIBRARIES+=fvm
 

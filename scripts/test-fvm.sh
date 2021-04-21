@@ -2,18 +2,18 @@
 
 echo "----- Hello World ----------"
 
-fju fvm fvm/test/hello-world.fvm
+fju fvm bin/hello-world.fvm
 
 echo "------- Test ---------------"
 
-fju fvm fvm/test/test.fvm
+fju fvm bin/test.fvm
 
 echo "----- TestDmb --------------"
 
 fju reg rem /dmbtest > /dev/null 
 
-fju rpc fvm.load filename=fvm/test/test-dmb.fvm reload > /dev/null
-fju rpc hemlock fvm.load filename=fvm/test/test-dmb.fvm reload > /dev/null
+fju rpc fvm.load filename=bin/test-dmb.fvm reload > /dev/null
+fju rpc hemlock fvm.load filename=bin/test-dmb.fvm reload > /dev/null
 fju rpc fvm.run modname=DmbTest procname=TestMsg > /dev/null
 sleep 1
 

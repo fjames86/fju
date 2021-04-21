@@ -2,7 +2,7 @@
 { -*- mode: fvm -*- }
 
 {
- * Attempt at rewriting hlc.c into fvm pascal.
+ * Naive hash chain implemented using an fju log 
 }
 
 Program HLC(0,0,Open,Close,Read,Write,Init,Exit);
@@ -78,7 +78,7 @@ Begin
 	Syscall Sha1(5,iov,hash);
    End;
    
-   Procedure Write(len : int, buf : opaque)
+   Procedure Write(len : int, buf : opaque, var idHigh : int, var idLow : int)
    Begin
 	var bufp : opaque[2048];
 	var idh, idl, tsh, tsl, flags, lenp : int;
@@ -99,6 +99,9 @@ Begin
 	Call GetHash(idh,idl,tsh,tsl,len,buf,bufp);
 	Call Memcpy(bufp + HdrSize,buf,len);
 	Syscall LogWrite(gfd,LogBinary,len + HdrSize, bufp);
+	Syscall LogLastId(gfd,idh,idl);
+	idHigh = idh;
+	idLow = idl;
    End;
    
    Procedure Init()

@@ -77,6 +77,14 @@ Begin
 	iovp.buf = buf;
 	Syscall Sha1(5,iov,hash);
    End;
+
+   Procedure WriteGenesisBlock()
+   Begin
+	var bufp : opaque[HdrSize];
+
+	Call GetHash(-1,-1,-1,-1,0,0,bufp);
+	Syscall LogWrite(gfd,LogBinary,HdrSize,bufp);
+   End;
    
    Procedure Write(len : int, buf : opaque, var idHigh : int, var idLow : int)
    Begin
@@ -88,10 +96,8 @@ Begin
 	Syscall LogLastId(gfd,idh,idl);
 	If (idh = 0) && (idl = 0) Then
 	Begin
-		{ No previous entry - add genesis entry }
-		Call GetHash(-1,-1,-1,-1,0,0,bufp);
-		Syscall LogWrite(gfd,LogBinary,HdrSize,bufp);
-		Syscall LogLastId(gfd,idh,idl);
+	   Call WriteGenesisBlock();
+	   Syscall LogLastId(gfd,idh,idl);
 	End;
 
 	{ Compute header derived from previous entry }
@@ -102,6 +108,33 @@ Begin
 	Syscall LogLastId(gfd,idh,idl);
 	idHigh = idh;
 	idLow = idl;
+   End;
+
+   Procedure Append(hdrlen : int, hdr : opaque, len : int, buf : opaque)
+   Begin
+	var idh, idl : int;
+	var tmphdr : opaque[HdrSize];
+	var lenp, flags,tsh,tsl,result : int;
+	
+	Syscall LogLastId(gfd,idh,idl);
+	If (idh = 0) && (idl = 0) Then
+	Begin
+		Call WriteGenesisBlock();
+		Syscall LogLastId(gfd,idh,idl);
+	End;
+
+	{ Compute the hash that we would generate and compare }
+	Syscall LogReadInfo(gfd,idh,idl,lenp,flags,tsh,tsl);
+	Call GetHash(idh,idl,tsh,tsl,len,buf,tmphdr);
+	Call Memcmp(tmphdr,hdr,Hdrsize,result);
+	If result = 0 Then
+	Begin
+		Call LogWritef(LogLvlError,"HLC Append mismatch",0,0,0,0);
+		Return;
+	End;
+
+	Call Write(len,buf,0,0);
+	
    End;
    
    Procedure Init()

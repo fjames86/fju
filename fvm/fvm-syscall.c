@@ -987,25 +987,38 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 29:
-    /* LogReadInfo(logname,idhigh,idlow,var len,var flags,var timestampHIgh, var timestampLow) */
+    /* LogReadInfo(fd : int, idh : int, idl : int, info : opaque) */
     {
       struct fvmlog *logp;
       uint64_t id;
       int sts;
-      uint32_t pars[7];
       struct log_entry entry;
+      uint32_t pars[4];
+      uint32_t addr;
       
-      read_pars( state, pars, 7 );
-      logp = fvmlog_get( pars[0] );
+      read_pars( state, pars, 2 );
+      logp = fvmlog_get( pars[0] );      
       id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
-
+      addr = pars[3];
+      
       memset( &entry, 0, sizeof(entry) );
       entry.niov = 0;
       sts = log_read_entry( logp ? &logp->log : NULL, id, &entry );
-      fvm_write_u32( state, pars[3], sts ? 0 : entry.msglen );
-      fvm_write_u32( state, pars[4], sts ? 0 : entry.flags );
-      fvm_write_u32( state, pars[5], sts ? 0 : (uint32_t)(entry.timestamp >> 32) );
-      fvm_write_u32( state, pars[6], sts ? 0 : entry.timestamp & 0xffffffff );
+      if( !sts ) {
+	fvm_write_u32( state, addr, entry.seq >> 32 );
+	addr += 4;
+	fvm_write_u32( state, addr, entry.seq & 0xffffffff );
+	addr += 4;
+	fvm_write_u32( state, addr, entry.timestamp >> 32 );
+	addr += 4;
+	fvm_write_u32( state, addr, entry.timestamp & 0xffffffff );
+	addr += 4;
+	fvm_write_u32( state, addr, entry.msglen );
+	addr += 4;
+	fvm_write_u32( state, addr, entry.flags );
+	addr += 4;	
+      }
+            
     }
     break;
   case 30:

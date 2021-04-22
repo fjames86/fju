@@ -22,6 +22,7 @@ Begin
 	var timeH, timeL, l, f : int;
 	var p : opaque;
 	var logh : int;
+	var loginfo : LogInfo;
 	var xdr : opaque[2048];
 
 	Syscall LogOpen(logname,logh);
@@ -47,7 +48,12 @@ Begin
 		Call XdrEncodeU64(xdr,offset,idhigh,idlow);		
 		Call XdrEncodeU32(xdr,offset,flags);
 
-		Syscall LogReadInfo(logh,idhigh,idlow,l,f,timeH,timeL);
+		Syscall LogReadInfo(logh,idhigh,idlow,loginfo);
+		l = loginfo.msglen;
+		f = loginfo.Flags;
+		timeH = loginfo.TimestampH;
+		timeL = loginfo.TimestampL;
+		
 		Call XdrEncodeU64(xdr,offset,timeH,timeL);
 		
 		Call XdrEncodeU32(xdr,offset,len);

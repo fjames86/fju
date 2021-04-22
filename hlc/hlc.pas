@@ -5,16 +5,18 @@
  * Naive hash chain implemented using an fju log 
 }
 
-Program HLC(0,0,Open,Close,Read,Write,Init,Exit);
+Program HLC(0,0,Open,Close,Read,Write,Init,Exit,MsgAppend);
 Begin
    { Includes }
    Include "syscall.pas";
    Include "string.pas";
    Include "xdr.pas";
    Include "log.pas";
+   Include "dmb.pas";
    
    { constants }
    Const HdrSize = 32;
+   Const HlcMsgAppend = DmbCatHlc + 0;
    
    { declarations }
    Record Header =
@@ -55,17 +57,17 @@ Begin
 
    End;
 
-   Procedure GetHash(idH : int, idL : int, tsH : int, tsL : int, len : int, buf : opaque, hash : opaque)
+   Procedure GetHash(seqH : int, seqL : int, tsH : int, tsL : int, len : int, buf : opaque, hash : opaque)
    Begin
 	var iov : SecIov[5];
 	var iovp : ^SecIov;
 
 	iovp = iov[0];
 	iovp.len = 4;
-	iovp.buf = &idH;
+	iovp.buf = &seqH;
 	iovp = iov[1];
 	iovp.len = 4;
-	iovp.buf = &idL;
+	iovp.buf = &seqL;
 	iovp = iov[2];
 	iovp.len = 4;
 	iovp.buf = &tsH;
@@ -89,7 +91,8 @@ Begin
    Procedure Write(len : int, buf : opaque, var idHigh : int, var idLow : int)
    Begin
 	var bufp : opaque[2048];
-	var idh, idl, tsh, tsl, flags, lenp : int;
+	var idh, idl : int;
+	var loginfo : LogInfo;
 	
 	If gfd = 0 Then Return;
 
@@ -101,20 +104,25 @@ Begin
 	End;
 
 	{ Compute header derived from previous entry }
-	Syscall LogReadInfo(gfd,idh,idl,lenp,flags,tsh,tsl);
-	Call GetHash(idh,idl,tsh,tsl,len,buf,bufp);
+	Syscall LogReadInfo(gfd,idh,idl,loginfo);
+	
+	Call GetHash(loginfo.SeqH, loginfo.Seql, loginfo.TimestampH, loginfo.TimestampL,len,buf,bufp);
 	Call Memcpy(bufp + HdrSize,buf,len);
 	Syscall LogWrite(gfd,LogBinary,len + HdrSize, bufp);
 	Syscall LogLastId(gfd,idh,idl);
 	idHigh = idh;
 	idLow = idl;
+
+	{ publish dmb message }	
+	Syscall DmbPublish(HlcMsgAppend, DmbRemote, bufp, len + HdrSize, 0, 0);
    End;
 
    Procedure Append(hdrlen : int, hdr : opaque, len : int, buf : opaque)
    Begin
 	var idh, idl : int;
 	var tmphdr : opaque[HdrSize];
-	var lenp, flags,tsh,tsl,result : int;
+	var result : int;
+	var loginfo : LogInfo;
 	
 	Syscall LogLastId(gfd,idh,idl);
 	If (idh = 0) && (idl = 0) Then
@@ -124,8 +132,8 @@ Begin
 	End;
 
 	{ Compute the hash that we would generate and compare }
-	Syscall LogReadInfo(gfd,idh,idl,lenp,flags,tsh,tsl);
-	Call GetHash(idh,idl,tsh,tsl,len,buf,tmphdr);
+	Syscall LogReadInfo(gfd,idh,idl,loginfo);
+	Call GetHash(loginfo.SeqH, loginfo.SeqL, loginfo.TimestampH, loginfo.TimestampL,len,buf,tmphdr);
 	Call Memcmp(tmphdr,hdr,Hdrsize,result);
 	If result = 0 Then
 	Begin
@@ -136,10 +144,22 @@ Begin
 	Call Write(len,buf,0,0);
 	
    End;
+
+   Procedure MsgAppend(msgid : int, len : int, buf : opaque)
+   Begin
+	{ decode message and append }
+	If msgid <> HlcMsgAppend Then Return;
+
+	{ msg buffer should be <hdr><buffer> }
+	If len < HdrSize Then Return;
+
+	Call Append(Hdrsize, buf, len - HdrSize, buf + HdrSize);	
+   End;
    
    Procedure Init()
    Begin
 	Call Open("hlc");
+	Syscall DmbSubscribe(&MsgAppend, HlcMsgAppend, DmbFlagRaw);
    End;
 
    Procedure Exit()

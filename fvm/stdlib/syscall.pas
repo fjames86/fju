@@ -46,18 +46,27 @@ Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf
 Declare Syscall RaftCommand(idHigh : int, idLow : int, len : int, buf : opaque) : 26;
 Declare Syscall FvmClRun(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 27;
 Declare Syscall FvmClRunOthers(idHigh : int, idLow : int, modname : string, procname : string, len : int, buf : opaque) : 28;
-Declare Syscall LogReadInfo(handle : int, idHigh : int, idLow : int, var len : int, var flags : int, var timestampHigh : int, var timestampLow : int ) : 29;
+
+Record LogInfo =
+    SeqH : int;
+    SeqL : int;
+    TimestampH : int;
+    TimestampL : int;
+    MsgLen : int;
+    Flags : int;
+End;
+Declare Syscall LogReadInfo(handle : int, idh : int, idl : int, loginfo : opaque) : 29;
 Declare Syscall LogPrev(handle : int, idHigh : int, idLow : int, var high : int, var low : int ) : 30;
 Declare Syscall ChtList(startkey : opaque,keybuf : opaque, nkeybuf : int, var nkeys : int) : 31;
 Const DmbLocal = 0x1;   { Not published remotely }
 Const DmbRemote = 0x2;  { Not published locally }
 Declare Syscall DmbPublish(msgid : int, flags : int, len : int, buf : opaque, var seqH : int, var seqL : int) : 32;
 { 
-  * Subscribe to a specific message or all messages if msgid=0. When subscribing to a specific message 
-  * the procedure is invoked as if the message buffer were the procedure args. 
-  * if subscrining to all messages the proc is passed args (msgid : int, len : int, buf : opaque) 
+  * Subscribe to a specific message or all messages if msgid=0. 
+  * Pass flag DmbFlagApply to use the message buffer as args to the procedure. 
+  * Pass flag DmbFlagRaw (default) procedure is passed args as signature (msgid : int, len : int, buf : opaque) 
+  * 
 }
-
 Const DmbFlagRaw = 0x0000; { subscriber must have signature (msgid,len,buf) }
 Const DmbFlagApply = 0x0001; { subscriber is passed msg buffer directly as args }
 Declare Syscall DmbSubscribe(procaddr : int, msgid : int, flags : int) : 33;

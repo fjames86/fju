@@ -1194,23 +1194,31 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 37:
-    /* RpcCall(hostH,hostL,prog,vers,proc,len,buf,resultproc,private) */
+    /* RpcCall(info,len,buf,resultproc,private) */
     {
-      uint32_t pars[9];
+      uint32_t pars[5];
       uint64_t hostid;
-      uint32_t len, progid,versid,procid, bufaddr;
+      uint32_t len, progid,versid,procid, bufaddr, addr, timeout;
       char *bufp;
       struct hrauth_call hcall;
       struct xdr_s args;
       int mprocid;
       
-      read_pars( state, pars, 9 );
-      hostid = (((uint64_t)pars[0]) << 32) | (uint64_t)pars[1];
-      progid = pars[2];
-      versid = pars[3];
-      procid = pars[4];
-      len = pars[5];
-      bufaddr = pars[6];
+      read_pars( state, pars, 5 );
+      addr = pars[0];
+      hostid = ((uint64_t)fvm_read_u32( state, addr ) << 32) | fvm_read_u32( state, addr + 4);
+      addr += 8;
+      progid = fvm_read_u32( state, addr );
+      addr += 4;
+      versid = fvm_read_u32( state, addr );
+      addr += 4;
+      procid = fvm_read_u32( state, addr );
+      addr += 4;
+      timeout = fvm_read_u32( state, addr );
+      addr += 4;
+      
+      len = pars[1];
+      bufaddr = pars[2];
       bufp = len ? fvm_getptr( state, bufaddr, len, 0 ) : NULL;
 
       memset( &hcall, 0, sizeof(hcall) );
@@ -1218,12 +1226,13 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       hcall.prog = progid;
       hcall.vers = versid;
       hcall.proc = procid;
-      if( pars[7] ) {
+      hcall.timeout = timeout;
+      if( pars[3] ) {
 	hcall.donecb = fvm_rpccall_donecb;
 	hcall.cxt[0] = state->module->tag;
-	mprocid = fvm_procid_by_addr( state->module, pars[7] );
+	mprocid = fvm_procid_by_addr( state->module, pars[3] );
 	if( mprocid < 0 ) {
-	  fvm_log( LOG_LVL_ERROR, "Bad procid %x for RpcCall", pars[7] );
+	  fvm_log( LOG_LVL_ERROR, "Bad procid %x for RpcCall", pars[3] );
 	} else {
 	  uint64_t siginfo = 0;
 	  FVM_SIGINFO_SETPARAM(siginfo,0,VAR_TYPE_U32,0);
@@ -1235,7 +1244,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	  }
 	}
 	hcall.cxt[1] = mprocid;
-	hcall.cxt[2] = pars[8];
+	hcall.cxt[2] = pars[4];
       }
       
       memset( &args, 0, sizeof(args) );

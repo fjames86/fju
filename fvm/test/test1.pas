@@ -66,12 +66,18 @@ End;
 Procedure TestRpcCall()
 Begin
 	var idh, idl : int;
-
+	var cinfo : RpcCallInfo;
+	
 	Syscall HostregIdByName("hemlock",idh,idl);
 	Call LogWritef(LogLvlInfo,"rpcbind Hemlock=%x%x", idh,idl,0,0);
 
 	{ call the rpcbind.list procedure, which takes no arguments }
-	Syscall RpcCall(idh,idl,100000,2,4,0,0,&rpcbindResult,12);
+	cinfo.Hosth = idh;
+	cinfo.HostL = idl;
+	cinfo.Prog = 100000;
+	cinfo.Vers = 2;
+	cinfo.Proc = 4;
+	Syscall RpcCall(cinfo, 0, 0,&rpcbindResult,12);
 	
 	Call LogWritef(LogLvlInfo,"rpcbindCall sent",0,0,0,0);
 End;

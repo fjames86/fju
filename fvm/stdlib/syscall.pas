@@ -76,7 +76,15 @@ Declare Syscall DmbHostInfo(hostH : int, hostL : int, var seqH : int, var seqL :
 { Get info about currently invoked dmb message. Only valid when called from a dmb msg handler }
 Declare Syscall DmbMsgInfo(var hostH : int, var hostL : Int, var seqH : int, var seqL : int) : 36;
 { Send an RPC call to another host. HostH/HostL names the host. Prog/vers/proc names the procedure. len/buf names the args. resultprocaddr is optional and is address of a procedure called when reply received }
-Declare Syscall RpcCall(hostH : int, hostL : int, prog : int, vers : int, proc : int, len : int, buf : opaque, resultprocaddr : int, private : int) : 37;
+Record RpcCallInfo =
+       HostH : int;
+       HostL : int;
+       Prog : int;
+       Vers : int;
+       Proc : int;
+       Timeout : int;
+End;
+Declare Syscall RpcCall(info : int, len : int, buf : opaque, resultprocaddr : int, private : int) : 37;
 Declare Syscall Sleep(timeout : int, cbaddr : int, private : int) : 38;
 
 Const SHA1HashSize = 20;

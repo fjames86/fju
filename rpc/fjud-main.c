@@ -52,6 +52,7 @@ static struct rpc_iterator rusage_iter =
 /* static fvm modules */
 void Nls_register( void );
 void HLC_register( void );
+void LHT_register( void );
 
 static void init_cb( void ) {
   /* 
@@ -64,6 +65,7 @@ static void init_cb( void ) {
   /* must register all static modules before fvm */
   Nls_register();
   HLC_register();
+  LHT_register();
   
   /* 
    * These could be moved out to separate modules and dynamically loaded but for now 

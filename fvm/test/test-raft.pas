@@ -1,7 +1,7 @@
 
 { -*- mode: fvm -*- }
 
-Program TestRaft(0,0,Init,Command,Snapsave,Snapload,GetValue);
+Program TestRaft(0,0,Init,Exit,Command,Snapsave,Snapload,GetValue);
 Begin
    { Includes }
    Include "syscall.pas";
@@ -53,6 +53,11 @@ Begin
 	Syscall RaftAppRegister(APPID,&Command,&Snapsave,&Snapload);
    End;
 
+   Procedure Exit()
+   Begin
+	Syscall RaftAppUnregister(APPID);
+   End;
+	
    Procedure GetValue(var x : int)
    Begin
 	x = myglob;

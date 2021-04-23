@@ -268,7 +268,6 @@ static void raft_convert_follower( struct raft_cluster *cl, uint64_t term, uint6
 static void raft_convert_candidate( struct raft_cluster *cl );
 static void raft_convert_leader( struct raft_cluster *cl );
 static void raft_set_iter_timeout( void );
-static struct raft_app *raft_app_by_appid( uint32_t appid );
 static void raft_call_putcmd( struct raft_cluster *cl, uint64_t hostid, uint64_t cseq );
 static void raft_apply_commands( struct raft_cluster *cl );
 static void raft_call_snapsave( struct raft_cluster *cl, uint64_t hostid );
@@ -1686,7 +1685,23 @@ int raft_app_register( struct raft_app *app ) {
   return 0;    
 }
 
-static struct raft_app *raft_app_by_appid( uint32_t appid ) {
+int raft_app_unregister( struct raft_app *app ) {
+  struct raft_app *ap, *prev;
+  ap = glob.app;
+  prev = NULL;
+  while( ap ) {
+    if( ap == app ) {
+      if( prev ) prev->next = ap->next;
+      else glob.app = ap->next;
+      return 0;
+    }
+    prev = ap;
+    ap = ap->next;
+  }
+  return -1;
+}
+
+struct raft_app *raft_app_by_appid( uint32_t appid ) {
   struct raft_app *app;
   app = glob.app;
   while( app ) {

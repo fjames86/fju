@@ -110,4 +110,5 @@ Declare Syscall TimeNow(var high : int, var low : int) : 50;
  * Snapload(clidH,clidL,len,buf)
 }
 Declare Syscall RaftAppRegister(appid : int, command : int, snapsave : int, snapload : int) : 51;
+Declare Syscall RaftAppUnregister(appid : int) : 52;
 

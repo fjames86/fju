@@ -1,12 +1,10 @@
 
-lht: ${BINDIR}/lht ${LIBDIR}/liblht.a 
+lht: ${BINDIR}/lht.fvm lht/lht.c 
 
-${LIBDIR}/liblht.a: lht/lht.c include/fju/lht.h 
-	${CC} -c lht/lht.c ${CFLAGS} 
-	${AR} rcs $@ lht.o
+${BINDIR}/lht.fvm: ${BINDIR}/fju lht/lht.pas 
+	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib lht/lht.pas
 
-${BINDIR}/lht: lht/lht-main.c ${LIBFJU}
-	${CC} -o $@ lht/lht-main.c ${CFLAGS} ${LFLAGS} 
+lht/lht.c: ${BINDIR}/lht.fvm
+	${BINDIR}/fju fvmc -o lht/lht.c -C ${BINDIR}/lht.fvm
 
-PROGRAMS+=lht
-LIBRARIES+=lht
+FVMMODULES += lht/lht.c

@@ -115,6 +115,8 @@ struct raft_app {
   void (*snapload)( struct raft_app *app, struct raft_cluster *cl, char *buf, int len );
 };
 int raft_app_register( struct raft_app *app );
+int raft_app_unregister( struct raft_app *app );
+struct raft_app *raft_app_by_appid( uint32_t appid );
 
 /* max size of a command buffer */
 #define RAFT_MAX_COMMAND (32*1024)

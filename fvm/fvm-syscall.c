@@ -1497,6 +1497,20 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       raft_app_register( &app->app );
     }
     break;
+  case 52:
+    /* RaftAppUnregister(appid) */
+    {
+      uint32_t pars[1];
+      struct raft_app *app;
+      
+      read_pars( state, pars, 1 );
+      app = raft_app_by_appid( pars[0] );
+      if( app ) {
+	raft_app_unregister( app );
+	free( app );
+      }
+    }
+    break;
   case 0xffff:
     fvm_xcall( state );
     break;

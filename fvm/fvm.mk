@@ -19,13 +19,23 @@ ${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-private.h fvm/fvm-syscall.c
 	${CC} -c fvm/fvm.c fvm/fvm-syscall.c ${CFLAGS} 
 	${AR} rcs $@ fvm.o fvm-syscall.o 
 
+fvm/stdlib/dmb.pas: include/fju/dmb-category.h
+	echo "" > fvm/stdlib/dmb.pas
+	echo "{ -*- mode: fvm -*- }" >> fvm/stdlib/dmb.pas
+	echo "" >> fvm/stdlib/dmb.pas
+	echo "{ Generated from include/fju/dmb-category.h - DO NOT EDIT }" >> fvm/stdlib/dmb.pas
+	echo "" >> fvm/stdlib/dmb.pas
+	grep "define DMB_CAT_" include/fju/dmb-category.h | tr '[:upper:]' '[:lower:]' | sed 's/#define //' | perl -pe 's/(^|_)./uc($$&)/ge;s/_//g' | awk '{print "Const " $$1 " = " $$2 ";" }' >> fvm/stdlib/dmb.pas
+	echo "" >> fvm/stdlib/dmb.pas
+
+
 # suffix rule to generate module and place it in bin/
 .SUFFIXES: .pas .fvm
 .pas.fvm:
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib $<
 	cp $@ ${BINDIR}/
 
-${fvmprogs}: ${BINDIR}/fju fvm/stdlib/*.pas
+${fvmprogs}: ${BINDIR}/fju fvm/stdlib/*.pas fvm/stdlib/dmb.pas 
 
 LIBRARIES+=fvm
 

@@ -50,6 +50,15 @@ else
     echo "Failure $result != $correct"
 fi
 
+echo "---------- LHT --------------"
+
+fju fvm -p Put --args $(fju xdr encode str=testkey str=testval) bin/lht.fvm
+echo "Should succeed:"
+fju fvm -p Get --args $(fju xdr encode str=testkey) bin/lht.fvm
+echo "Should fail:"
+fju fvm -p Rem --args $(fju xdr encode str=testkey) bin/lht.fvm
+fju fvm -p Get --args $(fju xdr encode str=testkey) bin/lht.fvm
+
 echo "--------- Done -------------"
 
 

@@ -1,6 +1,14 @@
 
 { -*- mode: fvm -*- }
 
+{
+ * Implements a very naive hash table using log
+ * Adding new entries is done by appending to the end
+ * deleting entries is done by appending a deletion entry to the end 
+ * lookups are done by walking the log, starting from the end.
+ * Note that this isn't really a hash table at all - it is really a simple lookup table
+}
+
 Program LHT(0,0,Init,Exit,Get,Put,Rem);
 Begin
    { Includes }

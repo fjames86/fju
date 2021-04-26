@@ -38,6 +38,13 @@ struct fvm_module {
     uint64_t siginfo;
     struct fvm_perfdata perfdata;
 
+    /*
+     * allow defining fake fvm modules in C which fit into the fvm module framework
+     * but are really just shims to C code. This allows calling into configurable native code without 
+     * having to define new syscalls. The limitation compared to syscalls is these operate just on 
+     * arg/result buffers like any other fvm procedure, whereas syscalls have direct access to the 
+     * calling environment (stack/datasegment etc). 
+     */
     int (*nativeproc)( struct xdr_s *argbuf, struct xdr_s *resbuf );
   } procs[FVM_MAX_PROC];
 

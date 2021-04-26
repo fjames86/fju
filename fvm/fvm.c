@@ -871,12 +871,12 @@ static int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t 
   uint32_t u;
   int i, nargs, len;
   char *str, *buf;
-  
+
   if( (procaddr < FVM_ADDR_TEXT) || (procaddr >= (FVM_ADDR_TEXT + module->textsize)) ) {
     fvm_log( LOG_LVL_ERROR, "fvm_run bad procaddr %x", procaddr );
     return -1;
   }
-  
+
   memset( &state, 0, sizeof(state) );
   state.module = module;
   state.sp = 0;
@@ -1043,6 +1043,13 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
     return -1;
   }
 
+  if( module->flags & FVM_MODULE_NATIVE ) {
+    if( !module->procs[procid].nativeproc ) return -1;
+    sts = module->procs[procid].nativeproc( argbuf, resbuf );
+    module->procs[procid].perfdata.rcount++;
+    return sts;
+  }
+  
   sts = fvm_run_proc( module, module->procs[procid].address, module->procs[procid].siginfo, argbuf, resbuf, &nsteps );
   module->procs[procid].perfdata.rcount++;
   module->procs[procid].perfdata.nsteps += nsteps;

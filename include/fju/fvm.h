@@ -37,6 +37,8 @@ struct fvm_module {
     uint32_t address;
     uint64_t siginfo;
     struct fvm_perfdata perfdata;
+
+    int (*nativeproc)( struct xdr_s *argbuf, struct xdr_s *resbuf );
   } procs[FVM_MAX_PROC];
 
   char *data;
@@ -46,8 +48,9 @@ struct fvm_module {
   uint64_t timestamp;
   int tag;
   uint32_t flags;
-#define FVM_MODULE_STATIC 0x0001 /* module cannot be unloaded */
+#define FVM_MODULE_STATIC   0x0001 /* module cannot be unloaded */
 #define FVM_MODULE_DISABLED 0x0002 /* module cannot run any procedures */
+#define FVM_MODULE_NATIVE   0x0004 
 };
 
 

@@ -232,7 +232,7 @@ static char b64chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01
 static char *base64_encode_block( uint8_t *buf, int len, char *str ) {
   str[0] = b64chars[buf[0] >> 2];
   str[1] = b64chars[((buf[0] & 0x3) << 4) | ((buf[1] & 0xf0) >> 4)];
-  str[2] = len > 1 ? b64chars[((buf[1] & 0x0f) << 2) | ((buf[2] & 0xc0) >> 6)] : '=';
+  str[2] = len > 1 ? b64chars[((buf[1] & 0x0f) << 2) | (len > 2 ? ((buf[2] & 0xc0) >> 6) : 0)] : '=';
   str[3] = len > 2 ? b64chars[buf[2] & 0x3f] : '=';
   return str + 4;
 }

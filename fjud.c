@@ -24,7 +24,7 @@
 #include <fju/dmb.h>
 #include <fju/dlm.h>
 
-#include "rpc-private.h"
+#include "rpc/rpc-private.h"
 
 #include <time.h>
 
@@ -53,6 +53,7 @@ static struct rpc_iterator rusage_iter =
 void Nls_register( void );
 void HLC_register( void );
 void LHT_register( void );
+void test_native_register( void );
 
 static void init_cb( void ) {
   /* 
@@ -66,6 +67,7 @@ static void init_cb( void ) {
   Nls_register();
   HLC_register();
   LHT_register();
+  test_native_register();
   
   /* 
    * These could be moved out to separate modules and dynamically loaded but for now 

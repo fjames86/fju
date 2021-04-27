@@ -30,7 +30,7 @@ LIBFJU=${LIBDIR}/libfju.so
 
 .PHONY: all strip clean tar install uninstall strip ${PROJECTS}
 
-all: ${PROJECTS} ${LIBFJU} ${BINDIR}/fju
+all: ${PROJECTS} ${LIBFJU} ${BINDIR}/fju ${BINDIR}/fjud 
 	rm -f *.o
 
 fju_files += log/fjlog.c
@@ -53,6 +53,7 @@ ${BINDIR}/fju: ${LIBFJU} ${fju_files}
 
 fjud_files += rpc/cmdprog.c
 fjud_files += ${FVMMODULES}
+fjud_files += fvm/test/native.c
 ${BINDIR}/fjud: ${LIBFJU} ${fjud_files}
 	${CC} -o $@ ${CFLAGS} ${LFLAGS} fjud.c ${fjud_files}
 

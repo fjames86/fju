@@ -101,5 +101,14 @@ int fvm_cluster_updatestate( uint64_t clid, char *modname );
 
 int fvm_module_enable( char *modname, int enable, int *prev );
 
+/* dynamically registering syscalls */
+struct fvm_state;
+struct fvm_syscall {
+  struct fvm_syscall *next;
+  int scid;
+  int (*cb)( struct fvm_syscall *sc, struct fvm_state *state );
+};
+int fvm_syscall_register( struct fvm_syscall *sc );
+  
 #endif
 

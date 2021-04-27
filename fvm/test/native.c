@@ -2,6 +2,7 @@
 #include <fju/rpc.h>
 #include <fju/log.h>
 #include <fju/fvm.h>
+#include "../fvm-private.h"
 
 static struct fvm_module mod;
 
@@ -22,9 +23,30 @@ static int native_exit( struct xdr_s *args, struct xdr_s *res ) {
   return 0;
 }
 
+static void read_pars( struct fvm_state *state, uint32_t *pars, int n ) {
+  int i;
+  for( i = 0; i < n; i++ ) {
+    pars[n - i - 1] = fvm_stack_read( state, 4 + 4*i );
+  }
+}
+
+static int native_sc_cb( struct fvm_syscall *sc, struct fvm_state *state ) {
+  uint32_t pars[1];
+
+  log_writef( NULL, LOG_LVL_INFO, "native_sc_cb" );
+  
+  read_pars( state, pars, 1 );
+  fvm_write_u32( state, pars[0], 321 );
+  
+  return 0;
+}
+
+static struct fvm_syscall native_sc = { NULL, 1000, native_sc_cb };
 
 void test_native_register( void ) {
-  strcpy( mod.name, "NativeTest" );
+  fvm_syscall_register( &native_sc );
+  
+  strcpy( mod.name, "Native" );
   mod.progid = 0;
   mod.versid = 0;
   mod.nprocs = 4;

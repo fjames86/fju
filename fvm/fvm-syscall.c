@@ -442,6 +442,34 @@ static void fvm_raft_snapload_cb( struct raft_app *rapp, struct raft_cluster *cl
   free( argbuf );  
 }
 
+static struct fvm_syscall *scproviders;
+int fvm_syscall_register( struct fvm_syscall *sc ) {
+  struct fvm_syscall *s;
+
+  /* check syscall id */
+  if( sc->scid < 1000 ) return -1;
+  if( sc->scid >= 0xffff ) return -1;
+  
+  s = scproviders;
+  while( s ) {
+    if( s->scid == sc->scid ) return -1;
+    s = s->next;
+  }
+  sc->next = scproviders;
+  scproviders = sc;
+  return 0;
+}
+static struct fvm_syscall *fvm_syscall_by_id( int scid ) {
+  struct fvm_syscall *sc;
+  sc = scproviders;
+  while( sc ) {
+    if( sc->scid == scid ) return sc;
+    sc = sc->next;
+  }
+  return NULL;
+}
+		    
+      
 int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
   switch( syscallid ) {
   case 1:
@@ -1524,7 +1552,14 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     fvm_xcall( state );
     break;
   default:
-    return -1;
+    {
+      /* allow providers to implement syscalls */
+      struct fvm_syscall *sc;
+      sc = fvm_syscall_by_id( syscallid );
+      if( !sc ) return -1;
+      if( sc->cb( sc, state ) ) return -1;
+    }
+    break;
   }
   return 0;
 }

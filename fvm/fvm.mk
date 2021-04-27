@@ -12,6 +12,7 @@ fvmprogs += fvm/test/test-sec.fvm
 fvmprogs += fvm/test/test-file.fvm
 fvmprogs += fvm/test/test-snapshot.fvm
 fvmprogs += fvm/test/test-raft.fvm
+fvmprogs += fvm/test/native-test.fvm
 
 fvm: ${LIBDIR}/libfvm.a ${fvmprogs}
 

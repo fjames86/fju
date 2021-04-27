@@ -1003,10 +1003,9 @@ static struct constvar *addconstvar( char *name, var_t type, char *val, int len 
     emitdata( val, len );
     return getconstvar( name );
   }
-  
-  v = getconstvar( name );
-  if( v ) usage( "Const name %s already exists", name );
 
+  /* Note: don't bother to check for duplicates because this is enforced by the compiler */
+  
   fvmc_printf( ";; Adding const %s\n", name );
   v = malloc( sizeof(*v) );
   strncpy( v->name, name, FVM_MAX_NAME - 1 );

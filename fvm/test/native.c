@@ -1,4 +1,15 @@
 
+/*
+ * This file tests two separate things:
+ * 1. It implements an fvm module in C. This is a module which fits
+ * into the FVM framework so that from the outside it appears to be written
+ * in fvm pascal. But the actual procedures are really implemented in C. This 
+ * makes it easy to e.g. do cross-calls into C code from FVM.
+ * 2. It implements an fvm syscall provider. This allows defining custom system calls 
+ * not impleemnted by the base fvm-syscall.c framework. The syscall id still needs to be 
+ * hardcoded so we need to keep a registry somewhere of who has what syscall id allocated.
+ */
+
 #include <fju/rpc.h>
 #include <fju/log.h>
 #include <fju/fvm.h>
@@ -20,6 +31,17 @@ static int native_init( struct xdr_s *args, struct xdr_s *res ) {
 }
 static int native_exit( struct xdr_s *args, struct xdr_s *res ) {
   log_writef( NULL, LOG_LVL_INFO, "native_exit" );
+  return 0;
+}
+static int native_testproc( struct xdr_s *args, struct xdr_s *res ) {
+  uint32_t x;
+  int sts;
+  
+  log_writef( NULL, LOG_LVL_INFO, "native_testproc" );
+  sts = xdr_decode_uint32( args, &x );
+  if( sts ) return -1;
+  
+  xdr_encode_uint32( res, x + 1 );
   return 0;
 }
 
@@ -62,6 +84,12 @@ void test_native_register( void ) {
   strcpy( mod.procs[3].name, "Exit" );
   mod.procs[3].siginfo = 0x0LL;
   mod.procs[3].nativeproc = native_exit;
+  strcpy( mod.procs[4].name, "TestProc" );
+  mod.procs[4].siginfo = 0;
+  FVM_SIGINFO_SETPARAM(mod.procs[4].siginfo,0,VAR_TYPE_U32,0);
+  FVM_SIGINFO_SETPARAM(mod.procs[4].siginfo,1,VAR_TYPE_U32,1);
+  FVM_SIGINFO_SETNPARS(mod.procs[4].siginfo,2);
+  mod.procs[4].nativeproc = native_testproc;
   
   mod.timestamp = 1619425897LL;
   mod.flags = FVM_MODULE_STATIC|FVM_MODULE_NATIVE;

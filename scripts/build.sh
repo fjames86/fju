@@ -24,11 +24,7 @@ ssh root@${remoteip} mkdir -p /usr/local/bin
 ssh root@${remoteip} mkdir -p /usr/local/lib
 scp bin/fju bin/fjud root@${remoteip}:/usr/local/bin
 scp lib/libfju.so root@${remoteip}:/usr/local/lib
-scp bin/nls.fvm root@${remoteip}:/root/nls.fvm
-scp bin/log.fvm root@${remoteip}:/root/log.fvm
-scp bin/cht.fvm root@${remoteip}:/root/cht.fvm
-scp bin/dmb.fvm root@${remoteip}:/root/dmb.fvm
-
+scp bin/*.fvm root@${remoteip}:/root
 
 ## restart remote services
 sh scripts/fjud.sh start
@@ -37,6 +33,6 @@ ssh root@${remoteip} sh ~/fjud.sh start
 # run the fvm test script
 #sh scripts/test-fvm.sh
 
-#tar czf fjud.tar.gz bin/fjud bin/rpclt bin/freg bin/fjlog
+#tar czf fjud.tar.gz bin/fjud bin/fjud lib/libfju.so
 #cat scripts/install.sh fjud.tar.gz > bin/install.sh
 

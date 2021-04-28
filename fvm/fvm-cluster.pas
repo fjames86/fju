@@ -24,7 +24,10 @@ Begin
    Procedure Init()
    Begin
 	Syscall RaftAppRegister(FvmClusterAppId, "FvmCluster", &FvmClusterCommand, 0, 0);
-	Syscall RaftClidByAppid(FvmClusterAppid, gclidH, gclidL); 
+	Syscall RaftClidByAppid(FvmClusterAppid, gclidH, gclidL);
+	If (gclidH = 0) && (gclidL = 0) Then
+	   Call LogWritef(LogLvlError,"FvmCluster failed to get cluster with appid=%u",FvmClusterAppId,0,0,0);
+	  
    End;
 
    Procedure Exit()
@@ -58,7 +61,7 @@ Begin
 	Call XdrEncodeOpaque(bufp,offset,len,buf);
 	Syscall RaftCommand(gclidH, gclidL, offset, bufp);
    End;
-   
+
    { constant values }
 
 End.

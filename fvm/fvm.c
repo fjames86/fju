@@ -1057,6 +1057,24 @@ int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , 
   return sts;
 }
 
+int fvm_run_by_name( char *modname, char *procname, struct xdr_s *args, struct xdr_s *res ) {
+  struct fvm_module *m;
+  int procid;
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+  procid = fvm_procid_by_name( m, procname );
+  if( procid < 0 ) return -1;
+  return fvm_run( m, procid, args, res );
+}
+
+int fvm_run_by_handle( int handle, struct xdr_s *args, struct xdr_s *res ) {
+  struct fvm_module *m;
+  int procid;
+  int sts;
+  sts = fvm_proc_by_handle( handle, &m, &procid );
+  if( sts ) return -1;
+  return fvm_run( m, procid, args, res );
+}
 
 
 /* -------------------- clustering ---------------- */

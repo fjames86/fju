@@ -90,6 +90,8 @@ int fvm_proc_by_handle( uint32_t phandle, struct fvm_module **m, int *procid );
 
 /* run the given proc with args receiving results */
 int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf );
+int fvm_run_by_handle( int handle, struct xdr_s *args, struct xdr_s *res );
+int fvm_run_by_name( char *modname, char *procname, struct xdr_s *args, struct xdr_s *res );
 
 /* register rpc interface */
 void fvm_rpc_register( void );

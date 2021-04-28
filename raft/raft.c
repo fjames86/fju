@@ -1541,6 +1541,7 @@ static int raft_proc_applist( struct rpc_inc *inc ) {
 	while( app ) {
 	  xdr_encode_boolean( &inc->xdr, 1 );
 	  xdr_encode_uint32( &inc->xdr, app->appid );
+	  xdr_encode_string( &inc->xdr, app->name ? app->name : "" );
 	  app = app->next;
 	}
 	xdr_encode_uint32( &inc->xdr, 0 );

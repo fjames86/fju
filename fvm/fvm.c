@@ -16,7 +16,6 @@
 #include <fju/mmf.h>
 #include <fju/rpc.h>
 #include <fju/log.h>
-#include <fju/raft.h>
 #include <fju/hostreg.h>
 #include <fju/rpcd.h>
 #include <fju/programs.h>
@@ -1077,177 +1076,6 @@ int fvm_run_by_handle( int handle, struct xdr_s *args, struct xdr_s *res ) {
 }
 
 
-/* -------------------- clustering ---------------- */
-
-struct fvm_command_s {
-  char modname[FVM_MAX_NAME];
-  uint32_t mode;
-#define FVM_MODE_UPDATESTATE 0   /* args are the updated state to apply */
-#define FVM_MODE_RUN         1   /* run a given proc with specified args */
-  union {
-    struct {
-      char *buf;
-      int len;
-    } updatestate;
-    struct {
-      uint64_t tgt_hostid;           /* target hostid: if 0 then run on all nodes, otherwise only run on the target */
-      uint64_t excl_hostid;          /* if non-zero, don't run on this hostid */
-      char procname[FVM_MAX_NAME];
-      char *args;                /* proc args */
-      int len;
-    } run;
-  } u;
-};
-
-static int fvm_decode_command( struct xdr_s *xdr, struct fvm_command_s *x ) {
-  int sts;
-  sts = xdr_decode_string( xdr, x->modname, sizeof(x->modname) );
-  if( !sts ) sts = xdr_decode_uint32( xdr, &x->mode );
-  if( sts ) return sts;
-  
-  switch( x->mode ) {
-  case FVM_MODE_UPDATESTATE:
-    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&x->u.updatestate.buf, &x->u.updatestate.len );
-    break;
-  case FVM_MODE_RUN:
-    sts = xdr_decode_uint64( xdr, &x->u.run.tgt_hostid );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &x->u.run.excl_hostid );    
-    if( !sts ) sts = xdr_decode_string( xdr, x->u.run.procname, sizeof(x->u.run.procname) );
-    if( !sts ) sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&x->u.run.args, &x->u.run.len );
-    break;
-  }
-  
-  return sts;
-}
-
-
-
-static void fvm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len ) {
-  int sts;
-  struct fvm_command_s cmd;
-  struct xdr_s xdr;
-  struct fvm_module *m;
-    
-  xdr_init( &xdr, (uint8_t *)buf, len );
-  sts = fvm_decode_command( &xdr, &cmd );
-  if( sts ) {
-    fvm_log( LOG_LVL_ERROR, "XDR error decoding command" );
-    return;
-  }
-
-  m = fvm_module_by_name( cmd.modname );
-  if( !m ) {
-    fvm_log( LOG_LVL_ERROR, "Unknown module %s", cmd.modname );
-    return;
-  }
-  
-  switch( cmd.mode ) {
-  case FVM_MODE_UPDATESTATE:
-    if( cmd.u.updatestate.len != m->datasize ) {
-      fvm_log( LOG_LVL_ERROR, "Bad datasize" );
-      return;
-    }
-    fvm_log( LOG_LVL_TRACE, "fvm update data segment modname=%s", cmd.modname );
-    memcpy( m->data, cmd.u.updatestate.buf, m->datasize );
-    break;
-  case FVM_MODE_RUN:
-    {
-      uint32_t procid;
-      
-      fvm_log( LOG_LVL_TRACE, "fvm run %s/%s arglen=%u", cmd.modname, cmd.u.run.procname, cmd.u.run.len );
-      
-      if( ((cmd.u.run.tgt_hostid == 0) || (cmd.u.run.tgt_hostid == hostreg_localid())) &&
-	  (cmd.u.run.excl_hostid != hostreg_localid()) ) {
-	struct xdr_s args;
-	
-	procid = fvm_procid_by_name( m, cmd.u.run.procname );
-	if( procid < 0 ) {
-	  fvm_log( LOG_LVL_ERROR, "Unknown proc %s", cmd.u.run.procname );
-	  return;
-	}
-
-	xdr_init( &args, (uint8_t *)cmd.u.run.args, cmd.u.run.len );
-	sts = fvm_run( m, procid, &args, NULL );
-	if( sts ) fvm_log( LOG_LVL_ERROR, "fvm run %s/%s failed", cmd.modname, cmd.u.run.procname );
-      }
-    }
-    break;
-  }
-}
-
-
-static struct raft_app fvm_app =
-  {
-   NULL,
-   FVM_RPC_PROG,
-   fvm_command,
-   //   fvm_snapsave,  /* no need for snapshotting so we can ignore these */
-   //   fvm_snapload,
-  };
-
-
-int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, int len ) {
-  return fvm_cluster_run2( clid, modname, procname, args, len, 0, 0 );
-}
-
-int fvm_cluster_run2( uint64_t clid, char *modname, char *procname, char *args, int len, uint64_t tgt_hostid, uint64_t excl_hostid ) {
-  struct xdr_s buf;
-  struct rpc_conn *c;
-  int sts;
-
-  fvm_log( LOG_LVL_TRACE, "fvm_cluster_run %s/%s", modname, procname );
-  
-  /* If cluster not specified lookup first cluster with appid=FVM_RPC_PROG */
-  if( clid == 0 ) {
-    clid = raft_clid_by_appid( FVM_RPC_PROG );
-    if( clid == 0 ) return -1;
-  }
-
-  c = rpc_conn_acquire();
-  if( !c ) return -1;
-
-  xdr_init( &buf, (uint8_t *)c->buf, c->count );
-  xdr_encode_string( &buf, modname );
-  xdr_encode_uint32( &buf, FVM_MODE_RUN );
-  xdr_encode_uint64( &buf, tgt_hostid );  /* target hostid */
-  xdr_encode_uint64( &buf, excl_hostid ); /* exclude hostid */  
-  xdr_encode_string( &buf, procname );
-  xdr_encode_opaque( &buf, (uint8_t *)args, len );
-  sts = raft_command( clid, (char *)buf.buf, buf.offset, NULL );
-  
-  rpc_conn_release( c );
-  
-  return sts;
-}
-
-int fvm_cluster_updatestate( uint64_t clid, char *modname ) {
-  struct xdr_s buf;
-  struct rpc_conn *c;
-  int sts;
-  struct fvm_module *m;
-  
-  m = fvm_module_by_name( modname );
-  if( !m ) return -1;
-  
-  if( clid == 0 ) {
-    clid = raft_clid_by_appid( FVM_RPC_PROG );
-    if( clid == 0 ) return -1;
-  }
-
-  c = rpc_conn_acquire();
-  if( !c ) return -1;
-
-  xdr_init( &buf, (uint8_t *)c->buf, c->count );
-  xdr_encode_string( &buf, modname );
-  xdr_encode_uint32( &buf, FVM_MODE_UPDATESTATE );
-  xdr_encode_opaque( &buf, (uint8_t *)m->data, m->datasize );
-  sts = raft_command( clid, (char *)buf.buf, buf.offset, NULL );
-
-  rpc_conn_release( c );
-  
-  return sts;
-}
-
 /* ------------------- rpc interface ---------------- */
 
 static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int nprocs, rpc_proc_t proccb ) {
@@ -1497,31 +1325,6 @@ static int fvm_proc_run( struct rpc_inc *inc ) {
   return 0;
 }
 
-static int fvm_proc_clrun( struct rpc_inc *inc ) {
-  int handle, sts;
-  char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
-  char *bufp = NULL;
-  int lenp;
-  uint64_t clid;
-
-  sts = xdr_decode_uint64( &inc->xdr, &clid );
-  if( !sts ) sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
-  if( !sts ) sts = xdr_decode_string( &inc->xdr, procname, sizeof(procname) );
-  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-
-  fvm_log( LOG_LVL_DEBUG, "fvm_proc_clrun clid=%"PRIx64" mod=%s proc=%s buflen=%u",
-	   clid, modname, procname, lenp );
-
-  sts = fvm_cluster_run( clid, modname, procname, bufp, lenp );
-
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
-  rpc_complete_accept_reply( inc, handle );
-  
-  return 0;
-}
-
 static int fvm_proc_reload( struct rpc_inc *inc ) {
   int handle, sts;
   char modname[FVM_MAX_NAME];
@@ -1581,7 +1384,7 @@ static struct rpc_proc fvm_procs[] = {
   { 2, fvm_proc_load },
   { 3, fvm_proc_unload },
   { 4, fvm_proc_run },
-  { 5, fvm_proc_clrun },
+  // { 5, NULL }, // unused 
   { 6, fvm_proc_reload },
   { 7, fvm_proc_data },
   { 8, fvm_proc_enable },
@@ -1724,7 +1527,6 @@ void fvm_rpc_register( void ) {
   struct freg_entry entry;
   
   rpc_program_register( &fvm_prog );
-  raft_app_register( &fvm_app );  
 
   /* 
    * load modules registered in /fju/fvm/modules/MODNAME/path str 

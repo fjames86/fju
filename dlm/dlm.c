@@ -132,6 +132,7 @@ static struct dlm_lock *lock_by_lockid( uint64_t lockid );
 static struct raft_app dlm_app = {
     NULL,
     DLM_RPC_PROG,
+    "DLM",
     dlm_command,
     dlm_snapsave,
     dlm_snapload,				  

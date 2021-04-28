@@ -36,6 +36,7 @@ static struct raft_app rex_app =
   {
    NULL,
    REX_APPID,
+   "REX",
    rex_command,
    rex_snapsave,
    rex_snapload

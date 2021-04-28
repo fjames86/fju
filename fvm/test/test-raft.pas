@@ -50,7 +50,7 @@ Begin
    
    Procedure Init()
    Begin
-	Syscall RaftAppRegister(APPID,&Command,&Snapsave,&Snapload);
+	Syscall RaftAppRegister(APPID,"TestRaft",&Command,&Snapsave,&Snapload);
    End;
 
    Procedure Exit()

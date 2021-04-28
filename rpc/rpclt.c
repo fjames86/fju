@@ -75,8 +75,6 @@ RESULTPROC(fvm_data);
 ARGRESULTPROC(fvm_enable);
 RESULTPROC(raft_applist);
 
-ARGRESULTPROC(fvm_clrun);
-
 static struct clt_info clt_procs[] = {
     { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
@@ -98,7 +96,6 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname/procname [args]" },
-    { FVM_RPC_PROG, 1, 5, fvm_clrun_args, fvm_clrun_results, "fvm.clrun", "modname=* procname=* args=*" },
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
     { FVM_RPC_PROG, 1, 7, fvm_reload_args, fvm_data_results, "fvm.data", "modname" },
     { FVM_RPC_PROG, 1, 8, fvm_enable_args, fvm_enable_results, "fvm.enable", "modname=* [enable] [disable]" },
@@ -1254,56 +1251,6 @@ static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 }
 
 
-static void fvm_clrun_results( struct xdr_s *xdr ) {
-  int sts, b;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "XDR error" );
-  printf( "%s\n", b ? "Success" : "Failure" );
-}
-
-static void fvm_clrun_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;  
-  char *modname, *procname;
-  char *buf;
-  int len, sts;
-  uint64_t clid;
-  
-  modname = NULL;
-  buf = NULL;
-  len = 0;
-  clid = 0;
-  procname = NULL;
-
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "modname" ) == 0 ) {
-      modname = argval;
-    } else if( strcmp( argname, "procname" ) == 0 ) {
-      procname = argval;
-    } else if( strcmp( argname, "clid" ) == 0 ) {
-      clid = strtoull( argval, NULL, 16 );
-    } else if( strcmp( argname, "args" ) == 0 ) {
-      buf = malloc( 32*1024 );
-      len = 32*1024;
-      sts = base64_decode( buf, len, argval );
-      if( sts < 0 ) usage( "Base64 decode error" );
-      len = sts;
-    } else usage( NULL );
-    
-    i++;
-  }
-
-  if( !modname ) usage( "Need module name" );
-  if( !procname ) usage( "Need proc name" );
-
-  xdr_encode_uint64( xdr, clid );
-  xdr_encode_string( xdr, modname );
-  xdr_encode_string( xdr, procname );
-  xdr_encode_opaque( xdr, (uint8_t *)buf, len );
-}
-
-
 static void fvm_reload_results( struct xdr_s *xdr ) {
   int sts, b;
   sts = xdr_decode_boolean( xdr, &b );
@@ -1544,12 +1491,16 @@ static void fvm_enable_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 static void raft_applist_results( struct xdr_s *xdr ) {
   int sts, b;
   uint32_t appid;
+  char name[64];
+  
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "Xdr error" );
   while( b ) {
     sts = xdr_decode_uint32( xdr, &appid );
     if( sts ) usage( "Xdr error" );
-    printf( "%u\n", appid );
+    sts = xdr_decode_string( xdr, name, sizeof(name) );
+    if( sts ) usage( "Xdr error" );
+    printf( "%-12u (0x%08x) %s\n", appid, appid, name );
     
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "Xdr error" );

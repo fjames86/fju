@@ -19,7 +19,7 @@
 #define HRAUTH_RPC_PROG (FJU_BASE_PROG + 2)
 #define HRAUTH_RPC_VERS 1
 
-#define NLS_RPC_PROG (FJU_BASE_PROC + 3)
+#define NLS_RPC_PROG (FJU_BASE_PROG + 3)
 #define NLS_RPC_VERS 1
 
 #define FREG_RPC_PROG (FJU_BASE_PROG + 4)
@@ -47,4 +47,3 @@
 #define DLM_RPC_VERS 1
 
 #endif
-

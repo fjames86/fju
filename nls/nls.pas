@@ -131,7 +131,7 @@ Begin
 	offset = 0;
 	Call XdrEncodeString(argbuf,offset,logname);
 	Call XdrEncodeU32(argbuf,offset,flags);
-	Call XdrEncodeOpaque(argbuf,offset,buf,len);
+	Call XdrEncodeOpaque(argbuf,offset,len,buf);
 
 	Syscall DmbPublish(NlsMsgIdWrite,DmbRemote,offset,argbuf,seqH,seqL);
 End;

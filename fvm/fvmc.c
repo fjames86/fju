@@ -3177,6 +3177,7 @@ static void processfile( char *path ) {
       ex = glob.exports;
       while( ex ) {
 	p = getproc( ex->name );
+	if( !p ) usage( "Unknown exported proc %s", ex->name );
 	p->refcount = 1;
 	getprocrefcounts( p );
 	ex = ex->next;

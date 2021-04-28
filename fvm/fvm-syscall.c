@@ -371,6 +371,7 @@ static void fvm_rpccall_donecb( struct xdr_s *res, struct hrauth_call *hcallp ) 
 
 struct fvm_raft_app {
   struct raft_app app;
+  char name[64];
   uint32_t command;
   uint32_t snapsave;
   uint32_t snapload;
@@ -1509,26 +1510,32 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 51:
-    /* RaftAppRegister(appid,&command,&snapsave,&snapload) */
+    /* RaftAppRegister(appid,name,&command,&snapsave,&snapload) */
     {
-      uint32_t pars[4];
+      uint32_t pars[5];
       struct fvm_raft_app *app;
       int sts;
+      char *strp;
       
-      read_pars( state, pars, 4 );
+      read_pars( state, pars, 5 );
 
       app = malloc( sizeof(*app) );
       memset( app, 0, sizeof(*app) );
       app->app.appid = pars[0];
+      app->app.name = app->name;
+      strp = fvm_getstr( state, pars[1] );
+      if( strp ) strncpy( app->name, strp, sizeof(app->name) - 1 );
+      else sprintf( app->name, "FVM App %x", app->app.appid );
+      
       app->app.command = fvm_raft_command_cb;
-      sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[1] ), &app->command );
-      if( pars[2] ) {
-	app->app.snapsave = fvm_raft_snapsave_cb;
-	sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[2] ), &app->snapsave );
-      }
+      sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[2] ), &app->command );
       if( pars[3] ) {
+	app->app.snapsave = fvm_raft_snapsave_cb;
+	sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[3] ), &app->snapsave );
+      }
+      if( pars[4] ) {
 	app->app.snapload = fvm_raft_snapload_cb;
-	sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[3] ), &app->snapload );
+	sts = fvm_handle_by_procid( state->module->name, fvm_procid_by_addr( state->module, pars[4] ), &app->snapload );
       }
       
       raft_app_register( &app->app );
@@ -1546,6 +1553,18 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	raft_app_unregister( app );
 	free( app );
       }
+    }
+    break;
+  case 53:
+    /* RaftClidByAppid(appid : int, var clidH : int, var clidL : int) */
+    {
+      uint32_t pars[3];
+      uint64_t clid;
+      
+      read_pars( state, pars, 3 );
+      clid = raft_clid_by_appid( pars[0] );
+      fvm_write_u32( state, pars[1], clid >> 32 );
+      fvm_write_u32( state, pars[2], clid & 0xffffffff );
     }
     break;
   case 0xffff:

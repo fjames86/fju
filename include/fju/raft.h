@@ -101,7 +101,8 @@ void raft_register( void );
 struct raft_app {
   struct raft_app *next;
   uint32_t appid;
-
+  char *name;
+  
   /* apply command to state machine */
   void (*command)( struct raft_app *app, struct raft_cluster *cl, uint64_t cmdseq, char *buf, int len );
 

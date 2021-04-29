@@ -51,12 +51,6 @@ fju_files += dlm/dlm-main.c
 ${BINDIR}/fju: ${LIBFJU} ${fju_files}
 	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c ${fju_files}
 
-fjud_files += rpc/cmdprog.c
-fjud_files += ${FVMMODULES}
-fjud_files += fvm/test/native.c
-${BINDIR}/fjud: ${LIBFJU} ${fjud_files}
-	${CC} -o $@ ${CFLAGS} ${LFLAGS} fjud.c ${fjud_files}
-
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm/test/*.fvm
 
@@ -69,6 +63,12 @@ strip:
 .for proj in ${PROJECTS}
 .include "${proj}/${proj}.mk"
 .endfor
+
+fjud_files += rpc/cmdprog.c
+fjud_files += ${FVMMODULES}
+fjud_files += fvm/test/native.c
+${BINDIR}/fjud: ${LIBFJU} ${fjud_files}
+	${CC} -o $@ ${CFLAGS} ${LFLAGS} fjud.c ${fjud_files}
 
 install: all #strip
 	mkdir -p /opt/fju

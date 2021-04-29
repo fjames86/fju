@@ -13,18 +13,18 @@ fvmprogs += fvm/test/test-file.fvm
 fvmprogs += fvm/test/test-snapshot.fvm
 fvmprogs += fvm/test/test-raft.fvm
 fvmprogs += fvm/test/native-test.fvm
-fvmprogs += fvm/fvm-cluster.fvm
+fvmprogs += fvm/modules/fvm-cluster.fvm
 fvmprogs += fvm/modules/stateseq.fvm
 
-fvm: ${LIBDIR}/libfvm.a ${fvmprogs} fvm/fvm-cluster.c
+fvm: ${LIBDIR}/libfvm.a ${fvmprogs} fvm/modules/fvm-cluster.c
 
 ${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-private.h fvm/fvm-syscall.c 
 	${CC} -c fvm/fvm.c fvm/fvm-syscall.c ${CFLAGS} 
 	${AR} rcs $@ fvm.o fvm-syscall.o 
 
-fvm/fvm-cluster.c: fvm/fvm-cluster.fvm ${BINDIR}/fju 
-	${BINDIR}/fju fvmc -C -o $@ fvm/fvm-cluster.fvm
-FVMMODULES += fvm/fvm-cluster.c
+fvm/modules/fvm-cluster.c: fvm/modules/fvm-cluster.fvm ${BINDIR}/fju 
+	${BINDIR}/fju fvmc -C -o $@ fvm/modules/fvm-cluster.fvm
+FVMMODULES += fvm/modules/fvm-cluster.c
 
 fvm/stdlib/dmb.pas: include/fju/dmb-category.h
 	echo "" > fvm/stdlib/dmb.pas

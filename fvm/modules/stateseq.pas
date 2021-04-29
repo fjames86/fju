@@ -1,12 +1,20 @@
 
 { -*- mode: fvm -*- }
 
+{
+ * This module maintains a sequence number that is incremented when the service starts.
+ * It is intended to be loaded at startup and never unloaded. 
+ * Subscribers to the StateSeqMsg dmb message are informed when this service has restarted.
+}
+
 Program StateSeq(0,0,Init,GetStateSeq);
 Begin
    { Includes }
    Include "syscall.pas";
+   Include "dmb.pas";
    
    { constants }
+   Const StateSeqMsg = DmbCatStateSeq + 0;
    
    { declarations }
    Declare Const var StateSeqPath : string;
@@ -21,6 +29,8 @@ Begin
 	Syscall FregReadInt(StateSeqPath, stateseq, result);
 	stateseq = stateseq + 1;
 	Syscall FregWriteInt(StateSeqPath,stateseq);
+
+	Syscall DmbPublish(StateSeqMsg,DmbRemote,4,&stateseq,0,0);
    End;
 
    Procedure GetStateSeq(var seq : int)

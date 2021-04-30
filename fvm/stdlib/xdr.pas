@@ -37,8 +37,9 @@ Procedure XdrDecodeString(buf : opaque, var offset : int, str : string)
 Begin
 	var len : int;
 
-	Call XdrDecodeU32(offset,buf,len);
-	Call Strcpy(str,buf + offset);
+	Call XdrDecodeU32(buf,offset,len);
+	Call Memcpy(str,buf + offset,len);
+	str[len] = 0;
 	if len % 4 then len = len + 4 - (len % 4);
 	offset = offset + len;
 End;
@@ -67,9 +68,21 @@ Procedure XdrDecodeOpaque(buf : opaque, var offset : int, var lenp : int, bufp :
 Begin
 	var len : int;
 
-	Call XdrDecodeU32(offset,buf,len);
+	Call XdrDecodeU32(buf,offset,len);
 	Call Memcpy(bufp,buf + offset,len);
 	lenp = len;
 	if len % 4 then len = len + 4 - (len % 4);
 	offset = offset + len;
 End;
+
+Procedure XdrDecodeOpaqueRef(buf : opaque, var offset : int, var lenp : int, var bufp : opaque)
+Begin
+	var len : int;
+
+	Call XdrDecodeU32(buf,offset,len);
+	bufp = buf + offset;
+	lenp = len;
+	if len % 4 then len = len + 4 - (len % 4);
+	offset = offset + len;
+End;
+

@@ -3312,6 +3312,29 @@ static void compile_file( char *path, char *outpath ) {
       }
     }
 
+    /* check if rpc proc */
+    if( header.progid ) {
+      char proch[8];
+      struct param *param;
+      memcpy( proch, proc->name, 4 );
+      proch[4] = '\0';
+
+#define RPCPROC_SIGINFO 0x800000000000d10L
+      if( (strcasecmp( proch, "proc" ) == 0) && (proc->siginfo != RPCPROC_SIGINFO) ) {
+	printf( "WARNING: exporting RPC procedure %s has incorrect signature, expected (int, opaque, var int, var opaque) got (",
+		proc->name );
+	param = proc->params;
+	while( param ) {
+	  printf( "%s%s%s", param->isvar ? "var " : "",
+		  param->type == VAR_TYPE_U32 ? "int" : param->type == VAR_TYPE_STRING ? "string" : "opaque",
+		  param->next ? ", " : "" );
+	  param = param->next;
+	}
+	printf( ")\n" );
+	    
+      }
+    }
+    
     
     strcpy( header.procs[header.nprocs].name, proc->name );
     header.procs[header.nprocs].address = proc->address;

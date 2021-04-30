@@ -1025,13 +1025,12 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       uint32_t pars[4];
       uint32_t addr;
       
-      read_pars( state, pars, 2 );
+      read_pars( state, pars, 4 );
       logp = fvmlog_get( pars[0] );      
       id = (((uint64_t)pars[1]) << 32) | (uint64_t)pars[2];
       addr = pars[3];
       
       memset( &entry, 0, sizeof(entry) );
-      entry.niov = 0;
       sts = log_read_entry( logp ? &logp->log : NULL, id, &entry );
       if( !sts ) {
 	fvm_write_u32( state, addr, entry.seq >> 32 );
@@ -1045,7 +1044,9 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	fvm_write_u32( state, addr, entry.msglen );
 	addr += 4;
 	fvm_write_u32( state, addr, entry.flags );
-	addr += 4;	
+	addr += 4;
+      } else {
+	fvm_log( LOG_LVL_ERROR, "LogReadInfo Failed to get entry info id=%"PRIx64"", id );
       }
             
     }

@@ -375,7 +375,7 @@ static char *decodevalue( struct xdr_s *xdr, char *fmt ) {
       fmt = decodevalue( xdr, fmt );
     }
     if( !fmt ) usage( "Bad format: unexpected end of string after {" );
-    printf( "}" );
+    printf( "}, " );
     printed = 1;
     fmt++;
     break;

@@ -1104,7 +1104,8 @@ static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int npro
 }
 
 
-/* only export the rpc procedures with names of format Procxxx */
+#define RPCPROC_SIGINFO 0x800000000000d10L
+/* only export the rpc procedures with names of format Procxxx that have correct signature */
 static int get_rpc_procid( struct fvm_module *m, int rpcid ) {
   int i, procid;
   char name[8];
@@ -1113,7 +1114,7 @@ static int get_rpc_procid( struct fvm_module *m, int rpcid ) {
   for( i = 0; i < m->nprocs; i++ ) {    
     memcpy( name, m->procs[i].name, 4 );
     name[4] = '\0';
-    if( strcasecmp( name, "proc" ) == 0 ) {
+    if( (strcasecmp( name, "proc" ) == 0) && (m->procs[i].siginfo == RPCPROC_SIGINFO) ) {
       if( procid == rpcid ) {
 	return i;
       }
@@ -1145,8 +1146,16 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
 
   fvm_log( LOG_LVL_DEBUG, "fvm_rpc_proc %s %s", m->name, m->procs[procid].name );
 
-  xdr_init( &argbuf, inc->xdr.buf + inc->xdr.offset, inc->xdr.count - inc->xdr.offset );
-
+  if( (inc->xdr.offset + 4) > inc->xdr.buf_size ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_rpc_proc out of buffer space" );
+    return -1;
+  }
+  
+  memmove( inc->xdr.buf + inc->xdr.offset + 4, inc->xdr.buf + inc->xdr.offset, inc->xdr.count - inc->xdr.offset );
+  xdr_init( &argbuf, inc->xdr.buf + inc->xdr.offset, inc->xdr.count - inc->xdr.offset + 4 );
+  xdr_encode_uint32( &argbuf, inc->xdr.count - inc->xdr.offset );
+  argbuf.offset = 0;
+  
   conn = rpc_conn_acquire();
   xdr_init( &resbuf, conn->buf, conn->count );
   sts = fvm_run( m, procid, &argbuf, &resbuf );
@@ -1156,7 +1165,7 @@ static int fvm_rpc_proc( struct rpc_inc *inc ) {
   }
 	      
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  sts = xdr_encode_fixed( &inc->xdr, resbuf.buf, resbuf.count );
+  sts = xdr_encode_fixed( &inc->xdr, resbuf.buf + 4, resbuf.count - 4 );
   rpc_complete_accept_reply( inc, handle );
 
   rpc_conn_release( conn );

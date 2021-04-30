@@ -50,12 +50,12 @@ Begin
 
 { ---------------- RPC interface -------------------- }
 
-Procedure ProcNull()
+Procedure ProcNull(alen : int, abuf : opaque, var rlen : int, var rbuf : opaque)
 Begin
 	Call LogWritef(LogLvlTrace,"NlsProcNull",0,0,0,0);
 End;
 
-Procedure ProcList(var lenp : int, var bufp : opaque) 
+Procedure ProcList(alen : int, abuf : opaque, var rlen : int, var rbuf : opaque)
 Begin
 	var offset, i : int;
 	var name : string;
@@ -74,8 +74,8 @@ Begin
 	      i = i + 1;
 	End;
 
-	bufp = buf;
-	lenp = offset;
+	rbuf = buf;
+	rlen = offset;
 End;
 
 { -------------------- Utility functions ------------------------- }

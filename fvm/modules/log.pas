@@ -8,30 +8,30 @@ Begin
 Include "syscall.pas";
 Include "string.pas";
 Include "xdr.pas";
+Include "log.pas";
 
 Const LogEntryHeader = 24; { reserve space for id,flags,timestamp,msglen }
 
-Procedure ProcNull()
+Procedure ProcNull(alen : int, abuf : opaque, var rlen : int, var rbuf : opaque)
 Begin
 End;
 
 { helper function to read entries }
-Procedure ReadLogEntries(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, var ebuf : opaque, fromend : int)
+Procedure ReadLogEntries(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, xdr : opaque, fromend : int)
 Begin
 	var flags, len, offset, ne : int;
-	var timeH, timeL, l, f : int;
+	var timeH, timeL : int;
 	var p : opaque;
 	var logh : int;
 	var loginfo : LogInfo;
-	var xdr : opaque[2048];
 
 	Syscall LogOpen(logname,logh);
-	
+
 	offset = 0;
 	ne = 0;
 	If fromend Then Syscall LogPrev(logh,idhigh,idlow,idhigh,idlow)
 	Else Syscall LogNext(logh,idhigh,idlow,idhigh,idlow);
-	
+
 	While (idhigh|idlow) Do
 	Begin
 		If (offset + LogEntryHeader) >= 2048 Then Break;
@@ -49,8 +49,6 @@ Begin
 		Call XdrEncodeU32(xdr,offset,flags);
 
 		Syscall LogReadInfo(logh,idhigh,idlow,loginfo);
-		l = loginfo.msglen;
-		f = loginfo.Flags;
 		timeH = loginfo.TimestampH;
 		timeL = loginfo.TimestampL;
 		
@@ -70,39 +68,103 @@ Begin
 	
 	nentries = ne;
 	elen = offset;
-	ebuf = xdr;
 End;
 
 { read up to n entries starting from id }
-Procedure ProcRead(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, var ebuf : opaque)
+Procedure ProcRead(alen : int, abuf : opaque, var rlen : int, var rbuf : opaque)
 Begin
-	Call ReadLogEntries(logname,idhigh,idlow,n,nentries,elen,ebuf,0);
+	var logname : string[64];
+	var idhigh, idlow, n : int;
+	var offset : int;
+	var elen, nentries : int;
+	var buf : opaque[4096];
+
+	offset = 0;
+	Call XdrDecodeString(abuf,offset,logname);
+	Call XdrDecodeU32(abuf,offset,idhigh);
+	Call XdrDecodeU32(abuf,offset,idlow);
+	Call XdrDecodeU32(abuf,offset,n);
+
+	Call ReadLogEntries(logname,idhigh,idlow,n,nentries,elen,buf + 4,0);
+
+	offset = 0;
+	Call XdrEncodeU32(buf,offset,nentries);
+	offset = offset + elen;
+	
+	rlen = offset;
+	rbuf = buf;
 End;
 
 { procedure to write into log }
-Procedure ProcWrite(logname : string, flags : int, len : int, buf : opaque, var idhigh : int, var idlow : int)
+Procedure ProcWrite(alen : int, abuf : opaque, var rlen : int, var rbuf : opaque)
 Begin
-	var logh : int;
+	var logname : string[64];
+	var len, idhigh, idlow, offset : int;
+	var buf : opaque;
+	var logh, flags : int;
+	var bufp : opaque[8];
 	
+	offset = 0;
+	Call XdrDecodeString(abuf,offset,logname);
+	Call XdrDecodeOpaqueRef(abuf,offset,len,buf);
+
 	Syscall LogOpen(logname,logh);
 	Syscall LogWrite(logname,flags,len,buf);
 	Syscall LogLastId(logname,idhigh,idlow);
 	Syscall LogClose(logh);
+
+	offset = 0;
+	Call XdrEncodeU32(bufp,offset,idhigh);
+	Call XdrEncodeU32(bufp,offset,idlow);
+	rlen = offset;
+	rbuf = bufp;
 End;
 
 { procedure to get last id }
-Procedure ProcLastId(logname : string, var idhigh : int, var idlow : int)
+Procedure ProcLastId(alen : int, abuf : opaque, var rlen : int, var rbuf : opaque) 
 Begin
-	var logh : int;
+	var logname : string[64];
+	var logh, offset : int;
+	var bufp : opaque[8];
+	var idhigh, idlow : int;
+	
+	offset = 0;
+	Call XdrDecodeString(abuf,offset,logname);
+	
 	Syscall LogOpen(logname,logh);
 	Syscall LogLastId(logname,idhigh,idlow);
 	Syscall LogClose(logh);
+
+	offset = 0;
+	Call XdrEncodeU32(bufp, offset, idhigh);
+	Call XdrencodeU32(bufp, offset, idlow);
+	rlen = offset;
+	rbuf = bufp;
 End;
 
 { read entries from end }
-Procedure ProcReadEnd(logname : string, idhigh : int, idlow : int, n : int, var nentries : int, var elen : int, var ebuf : opaque)
+Procedure ProcReadEnd(alen : int, abuf : opaque, var rlen : int, var rbuf : opaque)
 Begin
-	Call ReadLogEntries(logname,idhigh,idlow,n,nentries,elen,ebuf,1);
+	var logname : string[64];
+	var idhigh, idlow, n : int;
+	var offset : int;
+	var elen, nentries : int;
+	var buf : opaque[4096];
+
+	offset = 0;
+	Call XdrDecodeString(abuf,offset,logname);
+	Call XdrDecodeU32(abuf,offset,idhigh);
+	Call XdrDecodeU32(abuf,offset,idlow);
+	Call XdrDecodeU32(abuf,offset,n);
+
+	Call ReadLogEntries(logname,idhigh,idlow,n,nentries,elen,buf + 4,1);
+
+	offset = 0;
+	Call XdrEncodeU32(buf,offset,nentries);
+	offset = offset + elen;
+	
+	rlen = offset;
+	rbuf = buf;
 End;
 
 { ------- non-rpc procedures below ------ }

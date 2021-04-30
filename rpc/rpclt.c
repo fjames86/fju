@@ -115,6 +115,8 @@ static void usage( char *fmt, ... ) {
   
   printf( "Usage: rpclt [OPTIONS] <HOSTID|addr|local|broadcast BCADDR> program.vers.proc [args...]\n"
 	  "\n"
+	  "             raw <prog> <vers> <proc> [u32=] [str=] [fixed=] [opaque=] [resb64]\n" 
+	  "\n"
 	  "Where OPTIONS:\n"
 	  "      -p port             Port\n"
 	  "      -L none|integ|priv  Service level\n"

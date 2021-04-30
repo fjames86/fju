@@ -59,6 +59,10 @@ echo "Should fail:"
 fju fvm -p Rem --args $(fju xdr encode str=testkey) bin/lht.fvm
 fju fvm -p Get --args $(fju xdr encode str=testkey) bin/lht.fvm
 
+echo "---------- Log ------------"
+
+fju rpc raw 805271418 1 1 resb64 str=fju u32=0 u32=0 u32=100
+
 echo "--------- Done -------------"
 
 

@@ -19,8 +19,13 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\fjud.c" />
+    <ClCompile Include="..\..\fvm\modules\fvm-cluster.c" />
+    <ClCompile Include="..\..\fvm\test\native.c" />
+    <ClCompile Include="..\..\hlc\hlc.c" />
+    <ClCompile Include="..\..\lht\lht.c" />
+    <ClCompile Include="..\..\nls\nls.c" />
     <ClCompile Include="..\..\rpc\cmdprog.c" />
-    <ClCompile Include="..\..\rpc\fjud-main.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{3770EA50-4E37-49B0-8637-F9663BB0712C}</ProjectGuid>

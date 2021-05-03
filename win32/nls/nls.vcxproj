@@ -106,7 +106,15 @@
       <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas
 $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\log.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\log.pas
 $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\cht.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\cht.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas</Command>
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\fvm-cluster.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\fvm-cluster.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\lht.fvm -I ..\..\fvm\stdlib ..\..\lht\lht.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\hlc.fvm -I ..\..\fvm\stdlib ..\..\hlc\hlc.pas
+
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\nls\nls.c ..\..\bin\nls.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\lht\lht.c ..\..\bin\lht.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\hlc\hlc.c ..\..\bin\hlc.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\fvm\modules\fvm-cluster.c ..\..\bin\fvm-cluster.fvm</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -126,7 +134,15 @@ $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I 
       <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas
 $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\log.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\log.pas
 $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\cht.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\cht.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas</Command>
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\fvm-cluster.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\fvm-cluster.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\lht.fvm -I ..\..\fvm\stdlib ..\..\lht\lht.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\hlc.fvm -I ..\..\fvm\stdlib ..\..\hlc\hlc.pas
+
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\nls\nls.c ..\..\bin\nls.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\lht\lht.c ..\..\bin\lht.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\hlc\hlc.c ..\..\bin\hlc.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\fvm\modules\fvm-cluster.c ..\..\bin\fvm-cluster.fvm</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -150,7 +166,15 @@ $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I 
       <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas
 $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\log.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\log.pas
 $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\cht.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\cht.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas</Command>
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\fvm-cluster.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\fvm-cluster.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\lht.fvm -I ..\..\fvm\stdlib ..\..\lht\lht.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\hlc.fvm -I ..\..\fvm\stdlib ..\..\hlc\hlc.pas
+
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\nls\nls.c ..\..\bin\nls.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\lht\lht.c ..\..\bin\lht.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\hlc\hlc.c ..\..\bin\hlc.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\fvm\modules\fvm-cluster.c ..\..\bin\fvm-cluster.fvm</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -174,7 +198,15 @@ $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I 
       <Command>$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\nls.fvm -I ..\..\fvm\stdlib ..\..\nls\nls.pas
 $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\log.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\log.pas
 $(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\cht.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\cht.pas
-$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas</Command>
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\dmb.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\dmb.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\fvm-cluster.fvm -I ..\..\fvm\stdlib ..\..\fvm\modules\fvm-cluster.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\lht.fvm -I ..\..\fvm\stdlib ..\..\lht\lht.pas
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -o ..\..\bin\hlc.fvm -I ..\..\fvm\stdlib ..\..\hlc\hlc.pas
+
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\nls\nls.c ..\..\bin\nls.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\lht\lht.c ..\..\bin\lht.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\hlc\hlc.c ..\..\bin\hlc.fvm
+$(SolutionDir)$(Platform)\$(Configuration)\fju.exe fvmc -C -o ..\..\fvm\modules\fvm-cluster.c ..\..\bin\fvm-cluster.fvm</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

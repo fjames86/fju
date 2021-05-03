@@ -981,39 +981,8 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 27:
-    /* FvmClRun(idHigh,idLow,modname,procname,len,buf) */
-    {
-      uint32_t pars[6];
-      uint64_t id;
-      char *modname, *procname, *buf;
-      read_pars( state, pars, 6 );
-      id = (((uint64_t)(pars[0])) << 32) | pars[1];
-      modname = fvm_getstr( state, pars[2] );
-      procname = fvm_getstr( state, pars[3] );
-      buf = fvm_getptr( state, pars[5], 0, 0 );
-      if( modname && procname ) {
-	fvm_log( LOG_LVL_TRACE, "FvmClRun %s/%s len=%u %s", modname, procname, pars[4], buf ? "" : "NoBuf" );
-	fvm_cluster_run( id, modname, procname, buf, buf ? pars[4] : 0 );
-      }
-    }
+	break;
   case 28:
-    /* FvmClRunOthers(idHigh,idLow,modname,procname,len,buf) */
-    {
-      uint32_t pars[6];
-      uint64_t id;
-      char *modname, *procname, *buf;
-      read_pars( state, pars, 6 );
-      id = (((uint64_t)(pars[0])) << 32) | pars[1];
-      modname = fvm_getstr( state, pars[2] );
-      procname = fvm_getstr( state, pars[3] );
-      buf = fvm_getptr( state, pars[5], 0, 0 );
-      if( modname && procname ) {
-	fvm_log( LOG_LVL_TRACE, "FvmClRunOthers %s/%s len=%u %s", modname, procname, pars[4], buf ? "" : "NoBuf" );
-
-	/* schedule to run on all nodes in cluster except local node */
-	fvm_cluster_run2( id, modname, procname, buf, buf ? pars[4] : 0, 0, hostreg_localid() );
-      }
-    }
     break;
   case 29:
     /* LogReadInfo(fd : int, idh : int, idl : int, info : opaque) */

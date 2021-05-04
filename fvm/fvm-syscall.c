@@ -167,7 +167,7 @@ static void read_pars( struct fvm_state *state, uint32_t *pars, int n ) {
   }
 }
 
-static void fvm_xcall( struct fvm_state *state ) {
+static int fvm_xcall( struct fvm_state *state ) {
   /* 
    * Special syscall for calling procedures in other modules. 
    * Effectively the same as FvmRun syscall but allows us to 
@@ -187,17 +187,17 @@ static void fvm_xcall( struct fvm_state *state ) {
   
   read_pars( state, pars, FVM_MAX_PARAM + 2 );
   modname = fvm_getstr( state, pars[FVM_MAX_PARAM] );
-  if( !modname ) return;
+  if( !modname ) return -1;
   procname = fvm_getstr( state, pars[FVM_MAX_PARAM + 1] );
-  if( !procname ) return;
+  if( !procname ) return -1;
   m = fvm_module_by_name( modname );
-  if( !m ) return;
+  if( !m ) return -1;
   procid = fvm_procid_by_name( m, procname );
-  if( procid < 0 ) return;
+  if( procid < 0 ) return -1;
 
   if( rpcdp() ) {
     conn = rpc_conn_acquire();
-    if( !conn ) return;
+    if( !conn ) return -1;
     tmpbufp = (char *)conn->buf;
   } else {
     tmpbufp = malloc( 32*1024 );
@@ -294,6 +294,8 @@ static void fvm_xcall( struct fvm_state *state ) {
  done:
   if( conn ) rpc_conn_release( conn );
   if( !rpcdp() ) free( tmpbufp );
+
+  return 0;
 }
 
 struct fvm_sc_iterator {
@@ -1538,7 +1540,15 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 0xffff:
-    fvm_xcall( state );
+    /* Cross module call */
+    {
+      int sts;
+      sts = fvm_xcall( state );
+      if( sts ) {
+	fvm_log( LOG_LVL_ERROR, "fvm xcall failed" );
+	return -1;
+      }
+    }
     break;
   default:
     {

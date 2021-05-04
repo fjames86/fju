@@ -132,6 +132,17 @@ int xdr_main( int argc, char **argv ) {
       base64_encode( (char *)(xdr.buf + xdr.offset), xdr.count - xdr.offset, bufstr );
       printf( "Remaining: %s\n", bufstr );
     }
+  } else if( strcmp( argv[i], "hd" ) == 0 ) {
+    i++;
+    if( i >= argc ) usage( NULL );
+    sts = base64_decode( buf, sizeof(buf), argv[i] );
+    if( sts < 0 ) usage( "Failed to decode base64" );
+    for( i = 0; i < sts; i++ ) {
+      if( i % 16 == 0 ) printf( "%04o  ", i );
+      printf( "%02x ", (uint32_t)(uint8_t)buf[i] );
+      if( i && (i % 16 == 0) ) printf( "\n" );
+    }
+    printf( "\n" );
   } else usage( NULL );
   
   return 0;

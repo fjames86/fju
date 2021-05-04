@@ -395,14 +395,29 @@ void fjui_call_raftlist( uint64_t hostid ) {
 
 static void fvmrun_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {	
 	int sts;
-	int b;
+	int b, rlen;
 
 	if( !xdr ) return;
 	fjui_set_statusbar( 1, "FvmRun Success " );
 
 	sts = xdr_decode_boolean( xdr, &b );
+	if( sts ) {
+		fjui_set_statusbar( 1, "FvmRun XDR error" );
+		return;
+	}
 
-	fjui_fvm_setcallres( sts || !b ? NULL : xdr );
+	if( !b ) {
+		fjui_set_statusbar( 1, "FvmRun failure" );
+		return;
+	}
+
+	sts = xdr_decode_uint32( xdr, &rlen );
+	if( sts ) {
+		fjui_set_statusbar( 1, "FvmRun XDR error" );
+		return;
+	}
+
+	fjui_fvm_setcallres( xdr );
 }
 
 void fjui_call_fvmrun( uint64_t hostid, char *modname, char *procname, struct xdr_s *args ) {
@@ -438,12 +453,9 @@ static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	/* results: nentries,opaque array of entries */
 	/* each entry is msgid(uint64), flags (uint32) timestamp(u64) data (opaque) */
 	int i, len, sts;
-	char *bufp;
+	char *bufp = NULL;
 	uint32_t nentry, flags;
 	uint64_t msgid, timestamp;
-	struct xdr_s xx;
-
-	
 
 	if( !xdr ) {
 		fjui_set_statusbar( 1, "LogRead Timeout" );
@@ -452,13 +464,11 @@ static void logread_cb( struct xdr_s *xdr, struct hrauth_call *hcallp ) {
 	fjui_set_statusbar( 1, "LogRead Success " );
 
 	sts = xdr_decode_uint32( xdr, &nentry );
-	sts = xdr_decode_opaque_ref( xdr, &bufp, &len );
-	xdr_init( &xx, bufp, len );
 	for( i = 0; i < nentry; i++ ) {
-		sts = xdr_decode_uint64( &xx, &msgid );
-		if( !sts ) sts = xdr_decode_uint32( &xx, &flags );
-		if( !sts ) sts = xdr_decode_uint64( &xx, &timestamp );
-		if( !sts ) sts = xdr_decode_opaque_ref( &xx, &bufp, &len );
+		sts = xdr_decode_uint64( xdr, &msgid );
+		if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
+		if( !sts ) sts = xdr_decode_uint64( xdr, &timestamp );
+		if( !sts ) sts = xdr_decode_opaque_ref( xdr, &bufp, &len );
 		if( sts ) return;
 
 		if(fjui_log_addentry( hcallp->hostid, msgid, flags, timestamp, bufp, len, i )) return;

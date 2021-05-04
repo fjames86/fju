@@ -20,7 +20,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\fvm\modules\cht.pas" />
+    <None Include="..\..\fvm\modules\fvm-cluster.pas" />
     <None Include="..\..\fvm\modules\log.pas" />
+    <None Include="..\..\hlc\hlc.pas" />
+    <None Include="..\..\lht\lht.pas" />
     <None Include="..\..\nls\nls.pas" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

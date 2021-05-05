@@ -28,7 +28,7 @@ LFLAGS += -L${LIBDIR} -lfju -lcrypto
 
 LIBFJU=${LIBDIR}/libfju.so
 
-.PHONY: all strip clean tar install uninstall strip ${PROJECTS}
+.PHONY: all strip clean tar install uninstall strip ${PROJECTS} installer 
 
 all: ${PROJECTS} ${LIBFJU} ${BINDIR}/fju ${BINDIR}/fjud 
 	rm -f *.o
@@ -52,7 +52,7 @@ ${BINDIR}/fju: ${LIBFJU} ${fju_files}
 	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c ${fju_files}
 
 clean:
-	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm/test/*.fvm
+	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm/test/*.fvm ${FVMMODULES}
 
 tar:
 	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}
@@ -69,7 +69,6 @@ fjud_files += ${FVMMODULES}
 fjud_files += fvm/test/native.c
 ${BINDIR}/fjud: ${LIBFJU} ${fjud_files}
 	${CC} -o $@ ${CFLAGS} ${LFLAGS} fjud.c ${fjud_files}
-	rm ${FVMMODULES}
 
 install: all #strip
 	mkdir -p /opt/fju
@@ -93,3 +92,14 @@ FJU_LIBS+=-l${lib}
 ${LIBFJU}: ${FJU_DEPS}
 	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive
 
+installer: ${BINDIR}/fju ${BINDIR}/fjud ${LIBFJU}
+	mkdir -p opt/fju/bin
+	mkdir -p opt/fju/lib
+	mkdir -p opt/fju/fvm 
+	cp ${BINDIR}/fju ${BINDIR}/fjud opt/fju/bin
+	cp ${LIBFJU} opt/fju/lib
+	cp ${BINDIR}/*.fvm opt/fju/fvm
+	cp scripts/freg-defaults.reg opt/fju/freg-defaults.reg 
+	tar czvf fju.tar.gz opt
+	rm -rf opt
+	cat scripts/install.sh fju.tar.gz > bin/install.sh

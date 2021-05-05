@@ -11,6 +11,7 @@ tail -n+$ARCHIVE $0 | tar xzv -C $TMPDIR
 CDIR=$(pwd)
 cd $TMPDIR
 
+# run installer script to set things up 
 #./installer.sh
 
 cd $CDIR

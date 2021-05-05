@@ -1101,7 +1101,11 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     xdr_decode_uint64( xdr, &timestamp );
     xdr_decode_uint32( xdr, &flags );
     xdr_decode_uint32( xdr, &nprocs );
-    printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x\n", name, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ), flags );
+    printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x (%s%s%s)\n",
+	    name, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ), flags,
+	    flags & FVM_MODULE_STATIC ? "Static " : "",
+	    flags & FVM_MODULE_NATIVE ? "Native " : "",
+	    flags & FVM_MODULE_DISABLED ? "Disabled " : "" );
     for( i = 0; i < nprocs; i++ ) {
       xdr_decode_string( xdr, name, sizeof(name) ); 
       xdr_decode_uint32( xdr, &address );     

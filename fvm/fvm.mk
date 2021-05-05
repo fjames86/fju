@@ -51,7 +51,7 @@ fvm/stdlib/programs.pas: include/fju/programs.h
 .SUFFIXES: .pas .fvm
 .pas.fvm:
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib $<
-	cp $@ ${BINDIR}/
+	@cp $@ ${BINDIR}/
 
 ${fvmprogs}: ${BINDIR}/fju fvm/stdlib/*.pas fvm/stdlib/dmb.pas fvm/stdlib/programs.pas
 

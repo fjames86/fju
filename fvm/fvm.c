@@ -1388,7 +1388,7 @@ static int fvm_proc_enable( struct rpc_inc *inc ) {
 }
 
 static int fvm_proc_getprocinfo( struct rpc_inc *inc ) {
-  int handle, i, sts, procid;
+  int handle, sts, procid;
   struct fvm_module *m;
   char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
   

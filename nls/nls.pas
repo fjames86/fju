@@ -16,7 +16,7 @@
   * "subscribe" by monitoring the log for new messages.
 }
 
-Program Nls(0x2FFF7773,1,ProcNull,ProcList,Init,Exit,Service,NlsMsgWrite);
+Program Nls(0x2FFF7773,1,ProcNull,ProcList,Init,Exit,Service,NlsMsgWrite,List);
 Begin
 
    { includes }
@@ -76,6 +76,11 @@ Begin
 
 	rbuf = buf;
 	rlen = offset;
+End;
+
+Procedure List(var len : int, var buf : opaque)
+Begin
+	Call ProcList(0,0,len,buf);
 End;
 
 { -------------------- Utility functions ------------------------- }

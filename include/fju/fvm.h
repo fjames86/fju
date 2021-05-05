@@ -11,6 +11,9 @@
 #define FVM_SIGINFO_NARGS(siginfo) ((uint32_t)(((siginfo) >> 57) & 0x1f))
 #define FVM_SIGINFO_VARTYPE(siginfo,i) ((uint32_t)((siginfo >> (3*(i))) & 0x3))
 #define FVM_SIGINFO_ISVAR(siginfo,i) ((uint32_t)((siginfo >> (3*(i))) & 0x4))
+#define FVM_VARTYPE_INT 0
+#define FVM_VARTYPE_STRING 1
+#define FVM_VARTYPE_OPAQUE 2
 
 #define FVM_ADDR_DATA   0x1000
 #define FVM_ADDR_TEXT   0x5000

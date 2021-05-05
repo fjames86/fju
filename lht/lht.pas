@@ -79,6 +79,7 @@ Begin
 		       Syscall LogPrev(gfd,idh,idl,idh,idl);
 		       If idh && idl Then Begin
 		       	  Syscall LogRead(gfd,idh,idl,SizeOf(xbuf),xbuf,flags,lenp);
+			  Call LogWritef(LogLvlTrace,"LHT key %s found len=%u", key,lenp,0,0);
 			  found = 1;
 		       	  len = lenp;
 		       	  buf = xbuf;
@@ -93,7 +94,8 @@ Begin
 		End;
 		If idh && idl Then Syscall LogPrev(gfd,idh,idl,idh,idl);
 	End;
-	
+
+	Call LogWritef(LogLvlInfo,"LHT key %s not found", key,0,0,0);
 	found = 0;
 	len = 0;
 	buf = 0;

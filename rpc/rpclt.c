@@ -206,6 +206,7 @@ static struct {
     int tcp;
     int reporttime;
     int rawmodeb64;
+  uint64_t siginfo;
 } glob;
 
 int rpc_main( int argc, char **argv ) {
@@ -1199,28 +1200,93 @@ static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
 
 static void fvm_run_results( struct xdr_s *xdr ) {
   int sts, b;
-  uint8_t *bufp;
+  char *bufp;
   int lenp;
-  char *str;
+  char str[2048];
+  int i32, nargs, i;
+  uint64_t siginfo;
+  struct xdr_s rxdr;
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
-  printf( "%s\n", b ? "Success" : "Failure" );
-  sts = xdr_decode_opaque_ref( xdr, &bufp, &lenp );
+  if( !b ) usage( "FVM run failed" );
+  
+  sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) usage( "XDR error" );
 
-  if( b ) {
-    str = malloc( lenp * 2 );
-    base64_encode( (char *)bufp, lenp, str );
-    if( lenp > 0 ) printf( "[%u] %s\n", lenp, str );
+  xdr_init( &rxdr, (uint8_t *)bufp, lenp );
+  siginfo = glob.siginfo;
+  nargs = FVM_SIGINFO_NARGS(siginfo);
+  for( i = 0; i < nargs; i++ ) {
+    if( FVM_SIGINFO_ISVAR(siginfo,i) ) {
+      switch( FVM_SIGINFO_VARTYPE(siginfo,i) ) {
+      case FVM_VARTYPE_INT:
+	if( (i != (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,i+1) == FVM_VARTYPE_OPAQUE) ) {
+	} else {
+	  sts = xdr_decode_int32( &rxdr, &i32 );
+	  if( sts ) usage( "Xdr decode error result %d", i );
+	  printf( "%d (0x%x)\n", i32, i32 );
+	}
+	break;
+      case FVM_VARTYPE_STRING:
+	sts = xdr_decode_string( &rxdr, str, sizeof(str) );
+	if( sts ) usage( "Xdr decode error result %d", i );
+	printf( "%s\n", str );
+	break;
+      case FVM_VARTYPE_OPAQUE:
+	sts = xdr_decode_opaque_ref( &rxdr, (uint8_t **)&bufp, &lenp );
+	if( sts ) usage( "Xdr decode error result %d", i );
+	base64_encode( bufp, lenp, str );
+	printf( "[%u] %s\n", lenp, str );
+	break;
+      }
+    }
   }
+}
+
+static void getprocinfo_getargs( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  xdr_encode_string( xdr, argv[0] );
+  xdr_encode_string( xdr, argv[1] );
+}
+
+static void getprocinfo_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint32_t u32;
+
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr decode error" );
+  if( !b ) usage( "Failed to get proc info" );
+  
+  sts = xdr_decode_uint32( xdr, &u32 );
+  if( sts ) usage( "Xdr decode error" );
+  sts = xdr_decode_uint64( xdr, &glob.siginfo );
+  if( sts ) usage( "Xdr decode error" );
+}
+
+static void call_getprocinfo( char *modname, char *procname ) {
+  struct clt_info cinfo;
+  char *argv[2];
+  argv[0] = modname;
+  argv[1] = procname;
+  
+  memset( &cinfo, 0, sizeof(cinfo) );
+  cinfo.prog = FVM_RPC_PROG;
+  cinfo.vers = FVM_RPC_VERS;
+  cinfo.proc = 9;
+  cinfo.getargs = getprocinfo_getargs;
+  cinfo.results = getprocinfo_results;
+  cinfo.procname = "getprocinfo";
+  cinfo.procargs = NULL;
+  clt_call( &cinfo, 2, argv, 0 );
 }
 
 static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
-  char *buf;
-  int len, sts;
-  char *p, *q;
+  int sts;
+  char *p, *q, *terminator;
+  struct xdr_s axdr;
+  int nargs, n, i32;
+  uint64_t siginfo;
   
   if( i >= argc ) usage( "Need modname/procname" );
 
@@ -1236,20 +1302,73 @@ static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   }
   *q = '\0';
   strncpy( procname, p + 1, FVM_MAX_NAME - 1 );
-  len = 0;
-  buf = NULL;
   i++;
-  if( i < argc ) {
-    buf = malloc( 32*1024 );
-    len = 32*1024;
-    sts = base64_decode( buf, len, argv[i] );
-    if( sts < 0 ) usage( "Base64 failed to decode args" );
-    len = sts;
+  
+  call_getprocinfo( modname, procname );
+  siginfo = glob.siginfo;
+  
+  nargs = FVM_SIGINFO_NARGS(siginfo);
+  xdr_init( &axdr, malloc( 32*1024 ), 32*1024 );
+  for( n = 0; n < nargs; n++ ) {
+    if( !FVM_SIGINFO_ISVAR(siginfo,n) ) {
+      if( i >= argc ) {
+	char argstr[1024];
+	for( i = 0; i < nargs; i++ ) {
+	  if( !FVM_SIGINFO_ISVAR(siginfo,i) ) {
+	    switch( FVM_SIGINFO_VARTYPE(siginfo,i) ) {
+	    case FVM_VARTYPE_INT:
+	      sprintf( argstr + strlen(argstr), "int " );
+	      break;
+	    case FVM_VARTYPE_STRING:
+	      sprintf( argstr + strlen(argstr), "string " );	      
+	      break;
+	    case FVM_VARTYPE_OPAQUE:
+	      sprintf( argstr + strlen(argstr), "opaque " );	      
+	      break;
+	    }
+	  }
+	}
+	
+	usage( "Expected args: %s", argstr );
+      }
+      
+      switch( FVM_SIGINFO_VARTYPE(siginfo,n) ) {
+      case FVM_VARTYPE_INT:
+	/* int */
+	if( (n != (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,n+1) == FVM_VARTYPE_OPAQUE) ) {
+	  /* next arg is opaque so do nothing here */
+	} else {
+	  i32 = strtol( argv[i], &terminator, 0 );
+	  if( *terminator ) usage( "Failed to parse int" );
+	  xdr_encode_int32( &axdr, i32 );
+	  i++;
+	}
+	break;
+      case FVM_VARTYPE_STRING:
+	/* string */
+	xdr_encode_string( &axdr, argv[i] );
+	i++;
+	break;
+      case FVM_VARTYPE_OPAQUE:
+	/* opaque */
+	{
+	  char *bufp;
+	  bufp = malloc( 32*1024 );
+	  sts = base64_decode( bufp, 32*1024, argv[i] );
+	  if( sts < 0 ) usage( "Failed to parse base64" );
+	  xdr_encode_opaque( &axdr, (uint8_t *)bufp, sts );
+	  free( bufp );
+	}
+	i++;
+	break;
+      }
+    }
   }
   
   xdr_encode_string( xdr, modname );
   xdr_encode_string( xdr, procname );
-  xdr_encode_opaque( xdr, (uint8_t *)buf, len );
+  xdr_encode_opaque( xdr, (uint8_t *)axdr.buf, axdr.offset );
+  free( axdr.buf );
 }
 
 

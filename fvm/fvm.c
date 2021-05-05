@@ -1387,6 +1387,36 @@ static int fvm_proc_enable( struct rpc_inc *inc ) {
   return 0;
 }
 
+static int fvm_proc_getprocinfo( struct rpc_inc *inc ) {
+  int handle, i, sts, procid;
+  struct fvm_module *m;
+  char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
+  
+  sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
+  if( !sts ) sts = xdr_decode_string( &inc->xdr, procname, sizeof(procname) );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  m = fvm_module_by_name( modname );
+  if( m ) {
+    procid = fvm_procid_by_name( m, procname );
+    if( procid >= 0 ) {
+      xdr_encode_boolean( &inc->xdr, 1 );
+      xdr_encode_uint32( &inc->xdr, m->procs[procid].address );     
+      xdr_encode_uint64( &inc->xdr, m->procs[procid].siginfo );
+      xdr_encode_uint64( &inc->xdr, m->procs[procid].perfdata.nsteps );
+      xdr_encode_uint64( &inc->xdr, m->procs[procid].perfdata.rcount );      
+    } else {
+      xdr_encode_boolean( &inc->xdr, 0 );
+    }
+  } else {
+    xdr_encode_boolean( &inc->xdr, 0 );
+  }
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_list },
@@ -1397,6 +1427,7 @@ static struct rpc_proc fvm_procs[] = {
   { 6, fvm_proc_reload },
   { 7, fvm_proc_data },
   { 8, fvm_proc_enable },
+  { 9, fvm_proc_getprocinfo },
   
   { 0, NULL }
 };

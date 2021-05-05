@@ -187,13 +187,25 @@ static int fvm_xcall( struct fvm_state *state ) {
   
   read_pars( state, pars, FVM_MAX_PARAM + 2 );
   modname = fvm_getstr( state, pars[FVM_MAX_PARAM] );
-  if( !modname ) return -1;
+  if( !modname ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_xcall bad modname" );
+    return -1;
+  }
   procname = fvm_getstr( state, pars[FVM_MAX_PARAM + 1] );
-  if( !procname ) return -1;
+  if( !procname ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_xcall bad procname" );
+    return -1;
+  }
   m = fvm_module_by_name( modname );
-  if( !m ) return -1;
+  if( !m ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_xcall Failed to get module %s", modname );
+    return -1;
+  }
   procid = fvm_procid_by_name( m, procname );
-  if( procid < 0 ) return -1;
+  if( procid < 0 ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_xcall failed to get proc %s/%s", modname, procname );
+    return -1;
+  }
 
   if( rpcdp() ) {
     conn = rpc_conn_acquire();

@@ -122,7 +122,7 @@ int fvm_main( int argc, char **argv ) {
   argxdr.offset = 0;
   start = rpc_now();
   sts = fvm_run( module, procid, &argxdr, &resxdr );
-  if( sts ) usage( "Failed to run" );
+  if( sts ) usage( "Failed to run %s/%s", mname, pname );
   end = rpc_now();
   if( verbose ) printf( "Runtime: %ums\n", (uint32_t)(end - start) );
   

@@ -15,6 +15,7 @@ fvmprogs += fvm/test/test-raft.fvm
 fvmprogs += fvm/test/native-test.fvm
 fvmprogs += fvm/modules/fvm-cluster.fvm
 fvmprogs += fvm/modules/stateseq.fvm
+fvmprogs += fvm/test/test-xcall.fvm
 
 fvm: ${LIBDIR}/libfvm.a ${fvmprogs} fvm/modules/fvm-cluster.c
 

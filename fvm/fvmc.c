@@ -1536,8 +1536,28 @@ static int parsebuiltinfn( FILE *f, var_t *vartypep ) {
   return 0;
 }
 
-static void parseexpr2( FILE *f, int nobinaryops ) {
+static void emit_conststr( char *str ) {
+  char lname[FVM_MAX_NAME];
+  struct label *l;
+  uint16_t startaddr;
   uint16_t addr;
+  
+  getlabelname( "STRING", lname );
+  if( glob.pass == PASS_LABELS ) l = NULL;
+  else {
+    l = getlabel( lname );
+    if( !l ) usage( "Failed to get label" );
+  }
+  addr = l ? l->address : 0;
+  emit_jmp( addr );
+  startaddr = glob.pc;
+  emitdata( str, strlen( str ) + 1 );
+  addlabel( lname );
+  
+  emit_lea( startaddr - glob.pc - 3 ); /* the emit_lea opcode takes 3 bytes */
+}
+
+static void parseexpr2( FILE *f, int nobinaryops ) {
   tok_t optype;
   
   /*
@@ -1588,24 +1608,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
     emit_ldi32( glob.tok.u32 );
     expecttok( f, TOK_U32 );
   } else if( glob.tok.type == TOK_STRING ) {
-    char lname[FVM_MAX_NAME];
-    struct label *l;
-    uint16_t startaddr;
-
-    getlabelname( "STRING", lname );
-    if( glob.pass == PASS_LABELS ) l = NULL;
-    else {
-      l = getlabel( lname );
-      if( !l ) usage( "Failed to get label" );
-    }
-    addr = l ? l->address : 0;
-    emit_jmp( addr );
-    startaddr = glob.pc;
-    emitdata( glob.tok.val, strlen( glob.tok.val ) + 1 );
-    addlabel( lname );
-
-    emit_lea( startaddr - glob.pc - 3 ); /* the emit_lea opcode takes 3 bytes */
-
+    emit_conststr( glob.tok.val );
     expecttok( f, TOK_STRING );
   } else if( accepttok( f, TOK_AND ) ) {
     /* address of operator */
@@ -2015,13 +2018,8 @@ static int parsestatement( FILE *f ) {
     
     if( kw == 1 ) {
       if( proc->xcall ) {
-	struct constvar *cv;
-	cv = getconstvar( proc->modname );
-	if( !cv ) usage( "Failed to get modname const" );
-	emit_ldi32( cv->address );
-	cv = getconstvar( proc->name );
-	if( !cv ) usage( "Failed to get procname const" );
-	emit_ldi32( cv->address );
+	emit_conststr( proc->modname );
+	emit_conststr( proc->name );
 	nparams += 2;
 	emit_syscall( 0xffff );
       } else {
@@ -2464,8 +2462,6 @@ static void parsedeclaration( FILE *f ) {
       strcpy( procname, glob.tok.val );
       xcall = 1;
 
-      addconstvar( modname, VAR_TYPE_STRING, strdup( modname ), strlen( modname ) + 1 );
-      addconstvar( procname, VAR_TYPE_STRING, strdup( procname ), strlen( procname ) + 1 );
       expecttok( f, TOK_NAME );      
     }
     

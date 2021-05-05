@@ -543,6 +543,16 @@ static uint16_t fvm_read_pcu16( struct fvm_state *state ) {
   state->pc += 2;  
   return u;
 }
+static uint32_t fvm_read_pcu32( struct fvm_state *state ) {
+  uint32_t u;
+  uint32_t addr = state->pc;
+  u = 0;
+  if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    memcpy( &u, &state->module->text[addr - FVM_ADDR_TEXT], 4 );
+  }
+  state->pc += 4;  
+  return u;
+}
 
 int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
 
@@ -609,6 +619,7 @@ static struct opinfo opcodeinfo[] =
    { OP_LD8, "LD8", 0, 0 },
    { OP_ST8, "ST8", 0, -8 },
    { OP_LDIZ, "LDIZ", 0, 4 }, /* load zero */
+   { OP_LDI16, "LDI16", 2, 4 }, /* load 16 bit immediate */   
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -663,10 +674,13 @@ static int fvm_step( struct fvm_state *state ) {
   case OP_NOP:
     break;
   case OP_LDI32:
-    u32 = fvm_read_u32( state, state->pc );
-    state->pc += 4;
+    u32 = fvm_read_pcu32( state );
     fvm_push( state, u32 );
     break;
+  case OP_LDI16:
+    i16 = (int16_t)fvm_read_pcu16( state );
+    fvm_push( state, (uint32_t)(int32_t)i16 );
+    break;    
   case OP_LDIZ:
     fvm_push( state, 0 );
     break;    

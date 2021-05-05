@@ -147,7 +147,7 @@ int fvm_main( int argc, char **argv ) {
 	  } else {
 	    sts = xdr_decode_uint32( &resxdr, &u32 );
 	    if( sts ) usage( "XDR error decoding u32" );
-	    printf( "[%d] %u 0x%08x\n", i, u32, u32 );
+	    printf( "[%d] %d %u 0x%08x\n", i, u32, u32, u32 );
 	  }
 	  break;
 	case VAR_TYPE_STRING:

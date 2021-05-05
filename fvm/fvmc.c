@@ -1213,6 +1213,7 @@ static struct opinfo opcodeinfo[] =
    { OP_LD8, "LD8", 0, 0 },
    { OP_ST8, "ST8", 0, -8 },
    { OP_LDIZ, "LDIZ", 0, 4 },
+   { OP_LDI16, "LDI16", 2, 4 },   
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -1271,8 +1272,18 @@ static void emitopcode( op_t op, void *data, int len ) {
 static void emit_ldi32( uint32_t val ) {
   emitopcode( OP_LDI32, &val, 4 );
 }
+static void emit_ldi16( uint16_t val ) {
+  emitopcode( OP_LDI16, &val, 2 );
+}
 static void emit_ldiz( void ) {
   emitopcode( OP_LDIZ, NULL, 0 );
+}
+static void emit_ldi( uint32_t val ) {
+  int v;
+  v = (int)val;
+  if( val == 0 ) emit_ldiz();
+  else if( (v < 0 ? -v : v) <= 0x7fff ) emit_ldi16( val );
+  else emit_ldi32( val );
 }
 static void emit_lea( int16_t offset ) {
   emitopcode( OP_LEA, &offset, 2 );
@@ -1455,9 +1466,9 @@ static void parsevariableexpr( FILE *f, var_t *vartypep, struct record **recordp
     if( v ) {
       vartype = v->type;
       
-      if( v->arraylen ) emit_ldi32( v->address );
+      if( v->arraylen ) emit_ldi16( v->address );
       else {
-	emit_ldi32( v->address );
+	emit_ldi16( v->address );
 	emit_ld();
       }
 
@@ -1478,10 +1489,10 @@ static void parsevariableexpr( FILE *f, var_t *vartypep, struct record **recordp
 	  vartype = cv->type;
 	  
 	  if( cv->type == VAR_TYPE_U32 ) {
-	    emit_ldi32( cv->address );
+	    emit_ldi16( cv->address );
 	    emit_ld();
 	  } else if( cv->type == VAR_TYPE_STRING ) {
-	    emit_ldi32( cv->address );
+	    emit_ldi16( cv->address );
 	  } else usage( "Bad const type" );
 
 	} else {
@@ -1491,7 +1502,7 @@ static void parsevariableexpr( FILE *f, var_t *vartypep, struct record **recordp
 	  vartype = cl->type;
 	  
 	  if( cl->type == VAR_TYPE_U32 ) {
-	    emit_ldi32( *((uint32_t *)cl->val) );
+	    emit_ldi( *((uint32_t *)cl->val) );
 	  } else if( cl->type == VAR_TYPE_STRING ) {
 	    char lname[FVM_MAX_NAME];
 	    struct label *l;
@@ -1526,14 +1537,14 @@ static int parsebuiltinfn( FILE *f, var_t *vartypep ) {
   if( acceptkeyword( f, "sizeof" ) ) {
     uint32_t u32;
     u32 = parsesizeof( f );
-    emit_ldi32( u32 );
+    emit_ldi( u32 );
     return 1;
   }
 
   if( acceptkeyword( f, "offsetof" ) ) {
     uint32_t u32;
     u32 = parseoffsetof( f );
-    emit_ldi32( u32 );
+    emit_ldi( u32 );
     return 1;
   }
 
@@ -1596,7 +1607,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 
     parseexpr( f );
     emit_br( addr1 );
-    emit_ldi32( 1 );
+    emit_ldi16( 1 );
     emit_jmp( addr2 );
     addlabel( lname1 );
     emit_ldiz();
@@ -1609,9 +1620,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
     parseexpr( f );
     emit_sub();
   } else if( glob.tok.type == TOK_U32 ) {
-    if( glob.tok.u32 == 0 ) emit_ldiz();
-    else emit_ldi32( glob.tok.u32 );
-    
+    emit_ldi( glob.tok.u32 );    
     expecttok( f, TOK_U32 );
   } else if( glob.tok.type == TOK_STRING ) {
     emit_conststr( glob.tok.val );
@@ -1632,7 +1641,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
     } else {
       v = getglobal( glob.tok.val );
       if( v ) {
-	emit_ldi32( v->address );
+	emit_ldi16( v->address );
       } else {
 	p = getparam( glob.currentproc, glob.tok.val );
 	if( p ) {
@@ -1644,14 +1653,14 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	} else {
 	  cv = getconstvar( glob.tok.val );
 	  if( cv ) {
-	    emit_ldi32( cv->address );
+	    emit_ldi16( cv->address );
 	  } else {
 	    struct proc *proc = getproc( glob.tok.val );
 	    if( proc ) {
 	      if( !getexport( glob.tok.val ) ) usage( "Procedure %s not exported - may only take address of exported procedure", glob.tok.val );
 
 	      addprocref( glob.currentproc, proc->name );
-	      emit_ldi32( proc->address );
+	      emit_ldi16( proc->address );
 	    } else {
 	      usage( "Unknown variable %s", glob.tok.val );
 	    }
@@ -1681,7 +1690,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
       field = getrecordfield( recordp, glob.tok.val );
       if( !field ) usage( "Record %s does not have a field %s", recordp->name, glob.tok.val );
       
-      emit_ldi32( field->offset );
+      emit_ldi( field->offset );
       emit_add();  /* get address of the field */
       if( !field->arraylen ) {
 	emit_ld();
@@ -1695,12 +1704,12 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
       /* name[expr] */
       parseexpr( f );
       if( vartype == VAR_TYPE_U32 ) {
-	emit_ldi32( 4 );
+	emit_ldi16( 4 );
 	emit_mul();
 	emit_add();
 	emit_ld();
       } else if( recordp ) {
-	emit_ldi32( recordp->size );
+	emit_ldi16( recordp->size );
 	emit_mul();
 	emit_add();
       } else {
@@ -1717,7 +1726,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
       field = getrecordfield( recordp, glob.tok.val );
       if( !field ) usage( "Record %s does not have a field %s", recordp->name, glob.tok.val );
       
-      emit_ldi32( field->offset );
+      emit_ldi( field->offset );
       emit_add();  /* get address of the field */
       if( !field->arraylen ) {
 	emit_ld();
@@ -1875,7 +1884,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	 * to work around this we modify it by hand */
 	if( !glob.noemit ) glob.stackoffset -= 4;
 
-	emit_ldi32( 1 ); /* push true */
+	emit_ldi16( 1 ); /* push true */
 	addlabel( lname2 );
       }
       break;
@@ -1993,7 +2002,7 @@ static int parsestatement( FILE *f ) {
 	    v = getglobal( glob.tok.val );
 	    if( v ) {
 	      /* global var - push address */
-	      emit_ldi32( v->address );	    
+	      emit_ldi16( v->address );	    
 	    } else {
 	      struct param *p = getparam( glob.currentproc, glob.tok.val );
 	      if( !p ) usage( "Unknown variable or parameter %s", glob.tok.val );
@@ -2225,7 +2234,7 @@ static int parsestatement( FILE *f ) {
 	if( v->arraylen ) emit_leasp( v->offset + glob.stackoffset );
 	else emit_ldsp( v->offset + glob.stackoffset );
 	
-	emit_ldi32( field->offset );
+	emit_ldi( field->offset );
 	emit_add();  /* get address of the field */
 
 	expecttok( f, TOK_NAME );
@@ -2238,7 +2247,7 @@ static int parsestatement( FILE *f ) {
 	parseexpr( f );
 	if( setfield ) {
 	  if( field->type == VAR_TYPE_U32 ) {
-	    emit_ldi32( 4 );
+	    emit_ldi16( 4 );
 	    emit_mul();
 	    emit_add();
 	    setarray8 = 0;
@@ -2248,12 +2257,12 @@ static int parsestatement( FILE *f ) {
 
 	} else {
 	  if( v->type == VAR_TYPE_U32 ) {
-	    emit_ldi32( 4 );
+	    emit_ldi16( 4 );
 	    emit_mul();
 	    emit_leasp( v->offset + glob.stackoffset );
 	    emit_add();
 	  } else if( v->record ) {
-	    emit_ldi32( v->record->size );
+	    emit_ldi16( v->record->size );
 	    emit_mul();
 	    emit_leasp( v->offset + glob.stackoffset );
 	    emit_add();
@@ -2284,14 +2293,14 @@ static int parsestatement( FILE *f ) {
     } else {
       v = getglobal( glob.tok.val );
       if( v ) {
-	emit_ldi32( v->address );
+	emit_ldi16( v->address );
 	
 	expecttok( f, TOK_NAME );
 	if( accepttok( f, TOK_OARRAY ) ) {
 	  /* name[expr] = expr */
 	  parseexpr( f );
 	  if( v->type == VAR_TYPE_U32 ) {
-	    emit_ldi32( 4 );
+	    emit_ldi16( 4 );
 	    emit_mul();
 	    emit_add();
 	  } else {
@@ -2310,7 +2319,7 @@ static int parsestatement( FILE *f ) {
 	  /* if arraylen=0 this implies the variable is a pointer to a record, not a record itself, hence we dereference the pointer */
 	  if( v->arraylen == 0 ) emit_ld();
 	  
-	  emit_ldi32( field->offset );
+	  emit_ldi( field->offset );
 	  emit_add(); /* get address of field */
 	  expecttok( f, TOK_NAME );
 	}
@@ -2341,7 +2350,7 @@ static int parsestatement( FILE *f ) {
 	  
 	  parseexpr( f );
 	  if( p->type == VAR_TYPE_U32 ) {
-	    emit_ldi32( 4 );
+	    emit_ldi16( 4 );
 	    emit_mul();
 	    emit_add();
 	  } else {
@@ -2357,7 +2366,7 @@ static int parsestatement( FILE *f ) {
 	  field = getrecordfield( v->record, glob.tok.val );
 	  if( !field ) usage( "Record %s does not have a field %s", v->record->name, glob.tok.val );
 	  
-	  emit_ldi32( field->offset );
+	  emit_ldi( field->offset );
 	  emit_add(); /* get address of field */	  
 	}
 	

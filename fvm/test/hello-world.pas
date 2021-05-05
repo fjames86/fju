@@ -1,13 +1,14 @@
 
 { -*- mode: fvm -*- }
 
-Program HelloWorld(0,0,Hello,GetHello);
+Program HelloWorld(0,0,Hello,GetHello,GetInt);
 Begin
 
    Include "syscall.pas";
 
+   const xx = -12;
    Procedure Hello()
-   Begin	
+   Begin
       Syscall Puts("Hello, World!\n");
    End;
 
@@ -15,5 +16,10 @@ Begin
    Begin
 	str = "Hello, world!";
    End;
-   
+
+   Procedure GetInt(var r : int)
+   Begin
+	r = xx;
+   End;
+	
 End.

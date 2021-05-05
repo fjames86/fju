@@ -69,6 +69,7 @@ fjud_files += ${FVMMODULES}
 fjud_files += fvm/test/native.c
 ${BINDIR}/fjud: ${LIBFJU} ${fjud_files}
 	${CC} -o $@ ${CFLAGS} ${LFLAGS} fjud.c ${fjud_files}
+	rm ${FVMMODULES}
 
 install: all #strip
 	mkdir -p /opt/fju

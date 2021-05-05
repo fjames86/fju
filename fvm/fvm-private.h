@@ -41,6 +41,7 @@ typedef enum {
     OP_BRZ = 33, /* branch if zero (inverse of br) */
     OP_LD8 = 34, /* load 8bit */
     OP_ST8 = 35, /* Store 8bit */
+    OP_LDIZ = 36, /* load zero */
 } op_t;
 
 /* any procthat needs a u64 just has a something like Proc( high : u32, low : u32 ) i.e. high word followed by low word */

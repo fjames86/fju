@@ -14,7 +14,7 @@ fju reg rem /dmbtest > /dev/null
 
 fju rpc fvm.load filename=bin/test-dmb.fvm reload > /dev/null
 fju rpc hemlock fvm.load filename=bin/test-dmb.fvm reload > /dev/null
-fju rpc fvm.run modname=DmbTest procname=TestMsg > /dev/null
+fju rpc fvm.run DmbTest/TestMsg > /dev/null
 sleep 1
 
 echo -n "Result: "
@@ -22,7 +22,7 @@ fju reg /dmbtest
 
 echo "----- TestDmb2 --------------"
 
-fju rpc fvm.run modname=DmbTest procname=TestMsg2
+fju rpc fvm.run DmbTest/TestMsg2
 
 echo "------- TestFile ------------"
 

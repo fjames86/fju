@@ -1212,6 +1212,7 @@ static struct opinfo opcodeinfo[] =
    { OP_BRZ, "BRZ", 2, -4 },
    { OP_LD8, "LD8", 0, 0 },
    { OP_ST8, "ST8", 0, -8 },
+   { OP_LDIZ, "LDIZ", 0, 4 },
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -1269,6 +1270,9 @@ static void emitopcode( op_t op, void *data, int len ) {
 
 static void emit_ldi32( uint32_t val ) {
   emitopcode( OP_LDI32, &val, 4 );
+}
+static void emit_ldiz( void ) {
+  emitopcode( OP_LDIZ, NULL, 0 );
 }
 static void emit_lea( int16_t offset ) {
   emitopcode( OP_LEA, &offset, 2 );
@@ -1595,17 +1599,19 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
     emit_ldi32( 1 );
     emit_jmp( addr2 );
     addlabel( lname1 );
-    emit_ldi32( 0 );
+    emit_ldiz();
     addlabel( lname2 );
     if( !glob.noemit ) glob.stackoffset -= 4;
   } else if( accepttok( f, TOK_MINUS ) ) {
     /* - expr */
     /* TODO: could improve this by adding a negation opcode, but for now we just subtract from 0 */
-    emit_ldi32( 0 ); 
+    emit_ldiz(); 
     parseexpr( f );
     emit_sub();
   } else if( glob.tok.type == TOK_U32 ) {
-    emit_ldi32( glob.tok.u32 );
+    if( glob.tok.u32 == 0 ) emit_ldiz();
+    else emit_ldi32( glob.tok.u32 );
+    
     expecttok( f, TOK_U32 );
   } else if( glob.tok.type == TOK_STRING ) {
     emit_conststr( glob.tok.val );
@@ -1829,7 +1835,7 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
 	addr2 = l ? l->address : 0;
 	
 	emit_br( addr1 ); /* if true then evaluate other expression */
-	emit_ldi32( 0 ); /* not true - push false */
+	emit_ldiz(); /* not true - push false */
 	emit_jmp( addr2 ); /* go to end */
 	addlabel( lname1 );
 
@@ -1975,7 +1981,7 @@ static int parsestatement( FILE *f ) {
 	/* var type param requires a variable name */
 	if( (glob.tok.type == TOK_U32) && (glob.tok.u32 == 0) ) {
 	  /* push constant address 0 i.e. don't pass a pointer */
-	  emit_ldi32( 0 );
+	  emit_ldiz();
 	  expecttok( f, TOK_U32 );
 	} else if( glob.tok.type != TOK_NAME ) usage( "Param %s expected a var name", params->name );
 	else {

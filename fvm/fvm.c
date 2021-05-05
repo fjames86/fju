@@ -608,6 +608,7 @@ static struct opinfo opcodeinfo[] =
    { OP_BRZ, "BRZ", 2, 0 }, /* branch if zero */
    { OP_LD8, "LD8", 0, 0 },
    { OP_ST8, "ST8", 0, -8 },
+   { OP_LDIZ, "LDIZ", 0, 4 }, /* load zero */
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -666,6 +667,9 @@ static int fvm_step( struct fvm_state *state ) {
     state->pc += 4;
     fvm_push( state, u32 );
     break;
+  case OP_LDIZ:
+    fvm_push( state, 0 );
+    break;    
   case OP_LEA:
     i16 = (int16_t)fvm_read_pcu16( state );
     fvm_push( state, ((int)state->pc) + i16 );

@@ -619,7 +619,9 @@ static struct opinfo opcodeinfo[] =
    { OP_LD8, "LD8", 0, 0 },
    { OP_ST8, "ST8", 0, -8 },
    { OP_LDIZ, "LDIZ", 0, 4 }, /* load zero */
-   { OP_LDI16, "LDI16", 2, 4 }, /* load 16 bit immediate */   
+   { OP_LDI16, "LDI16", 2, 4 }, /* load 16 bit immediate */
+   { OP_INC, "INC", 0, 0 }, /* increment by 1 */
+   { OP_DEC, "DEC", 0, 0 }, /* decrement by 1 */
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -833,6 +835,14 @@ static int fvm_step( struct fvm_state *state ) {
     addr = fvm_pop( state );
     fvm_push( state, addr >> u32 );
     break;
+  case OP_INC:
+    u32 = fvm_pop( state );
+    fvm_push( state, u32 + 1 );      
+    break;
+  case OP_DEC:
+    u32 = fvm_pop( state );
+    fvm_push( state, u32 - 1 );      
+    break;        
   case OP_LD:
     u32 = fvm_pop( state );
     u32 = fvm_read_u32( state, u32 );

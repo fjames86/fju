@@ -1213,7 +1213,9 @@ static struct opinfo opcodeinfo[] =
    { OP_LD8, "LD8", 0, 0 },
    { OP_ST8, "ST8", 0, -8 },
    { OP_LDIZ, "LDIZ", 0, 4 },
-   { OP_LDI16, "LDI16", 2, 4 },   
+   { OP_LDI16, "LDI16", 2, 4 },
+   { OP_INC, "INC", 0, 0 },
+   { OP_DEC, "DEC", 0, 0 },   
    { 0, NULL, 0, 0 }
   };
 static struct opinfo *getopinfo( op_t op ) {
@@ -1384,7 +1386,12 @@ static void emit_st8( void ) {
 static void emit_syscall( uint16_t u ) {
   emitopcode( OP_SYSCALL, &u, 2 );
 }
-
+static void emit_inc( void ) {
+  emitopcode( OP_INC, NULL, 0 );
+}
+static void emit_dec( void ) {
+  emitopcode( OP_DEC, NULL, 0 );
+}
 
 static void emitdata( void *data, int len ) {
   if( glob.noemit ) return;
@@ -1748,13 +1755,24 @@ static void parseexpr2( FILE *f, int nobinaryops ) {
     switch( optype ) {
     case TOK_PLUS:
       expecttok( f, optype );
-      parseexpr( f );      
-      emit_add();
+      /* peek next token, if immediate 1 then use increment operator */
+      if( (glob.tok.type == TOK_U32) && (glob.tok.u32 == 1) ) {
+	expecttok( f, TOK_U32 );
+	emit_inc();
+      } else {
+	parseexpr( f );      
+	emit_add();
+      }
       break;
-    case TOK_MINUS:
+    case TOK_MINUS:      
       expecttok( f, optype );
-      parseexpr( f );      
-      emit_sub();
+      if( (glob.tok.type == TOK_U32) && (glob.tok.u32 == 1) ) {
+	expecttok( f, TOK_U32 );
+	emit_dec();
+      } else {
+	parseexpr( f );      
+	emit_sub();
+      }
       break;
     case TOK_MUL:
       expecttok( f, optype );

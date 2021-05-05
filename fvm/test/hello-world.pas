@@ -19,6 +19,9 @@ Begin
 
    Procedure GetInt(var r : int)
    Begin
+	var x : int;
+	x = 2;
+	x = x + 1;
 	r = xx;
    End;
 	

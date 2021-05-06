@@ -135,11 +135,6 @@ Begin
 	Syscall Puts(s);
    End;
 
-   Procedure TestFvmClRun()
-   Begin
-	Syscall FvmClRun(0,0,"Test","TestXCallCB",0,0);
-   End;
-   
 
    Procedure TestLoop()
    Begin
@@ -237,11 +232,10 @@ Begin
         Call TestAdd();
 	Call TestFreg();
 	Call TestXCall();
-	{ Call TestFvmClRun(); }
 	Call TestLoop();
 	Call TestStrcpy();
 	Call TestMemcmp();
-        { Call TestLogProp(); } 
+	Call TestLogProp(); 
 	
 	Syscall Puts("Done");
    End;

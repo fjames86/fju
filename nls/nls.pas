@@ -37,6 +37,7 @@ Begin
    	  Name : string[MaxLogName];
 	  IDHigh : int;
 	  IDLow : int;
+	  logh : int;
    End;
 
    Declare Procedure NlsMsgWrite(logname : string, flags : int, len : int, buf : opaque);
@@ -85,7 +86,7 @@ End;
 
 { -------------------- Utility functions ------------------------- }
 
-Procedure GetLogId(logname : string, var logidHigh : u32, var logidLow : u32)
+Procedure GetEntry(logname : string, var entryp : opaque)
 Begin
 	var i, result : int;
 	var p : ^LogEntry;
@@ -95,34 +96,17 @@ Begin
 	Begin
 		p = LogEntries[i];
 		Call Strcmp(p.Name, logname, result);
-		If result Then Begin
-		   logidhigh = p.IDHigh;
-		   logidlow = p.IDLow;
-		   Return;
-		End;
-		i = i + 1;
-	End;	
-End;
-
-Procedure SetLogId(logname : string, logidHigh : u32, logidLow : u32)
-Begin
-	var i, result : int;
-	var p : ^LogEntry;
-	var name : string;
-
-	i = 0;
-	While i < nlogs Do
-	Begin
-		p = LogEntries[i];	
-		Call Strcmp(p.Name, logname, result);
-		If result Then Begin
-		   p.IDHigh = logidHigh;
-		   p.IDLow = logidLow;
-		   Return;
+		If result Then
+		Begin
+			entryp = p;
+			Return;
 		End;
 		i = i + 1;
 	End;
+	entryp = 0;
+	Return;
 End;
+
 
 Procedure PublishCommand(logname : string, flags : int, len : int, buf : opaque)
 Begin
@@ -141,18 +125,20 @@ Begin
 	Syscall DmbPublish(NlsMsgIdWrite,DmbRemote,offset,argbuf,seqH,seqL);
 End;
 
-Procedure CheckLogId(logname : string)
+Procedure CheckLogId(entryp : opaque)
 Begin
+	var p : ^LogEntry;
 	var idhigh, idlow : int;
 	var high, low, pub : int;
 	var len, flags : int;
 	var buf : opaque[4096];
 	var logh : int;
 
-	Syscall LogOpen(logname,logh);
+	p = entryp;
 	
-	Syscall LogLastId(logh,idhigh,idlow);
-	Call GetLogId(logname,high,low);
+	Syscall LogLastId(p.logh,idhigh,idlow);
+	high = p.IDHigh;
+	low = p.IDLow;
 
 	{ read entries until we get to the last one, if any }
 	While (idhigh <> high) || (idlow <> low) Do
@@ -160,17 +146,17 @@ Begin
 		Syscall LogNext(logh,high,low,high,low);
 		Syscall LogRead(logh,high,low,4096,buf,flags,len);
 		If len Then Begin
-		    Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",logname,idhigh,idlow,0);
+		    Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",p.name,idhigh,idlow,0);
 
-		    Call PublishCommand(logname,flags,len,buf); 
+		    Call PublishCommand(p.name,flags,len,buf); 
 		End Else Begin
 		     high = idhigh;
 		     low = idlow;
 		End;
 	End;
-	Call SetLogId(logname,idhigh,idlow);
-
-	Syscall LogClose(logh);
+	
+	p.IDHigh = idhigh;
+	p.IDLow = idlow;
 End;
 
 { -------------------------- Public procedures ----------------------- }
@@ -194,10 +180,11 @@ Begin
 
 		Syscall LogOpen(p.Name,logh);
 		Syscall LogLastId(logh, idhigh, idlow);
-		Syscall LogClose(logh);
+		
 		
 		p.IDHigh = idhigh;
 		p.IDLow = idlow;
+		p.logh = logh;
 	        i = i + 1;
 		If i > MaxLog Then Break;
             End;
@@ -225,7 +212,7 @@ Begin
 	While i < nlogs Do
 	Begin
 		p = LogEntries[i];
-		Call CheckLogId(p.Name);
+		Call CheckLogId(p);
 		i = i + 1;
 	End;
 End;
@@ -233,19 +220,19 @@ End;
 { Command procedure - invoked to replicate log entries }
 Procedure NlsMsgWrite(logname : string, flags : int, len : int, buf : opaque)
 Begin
+	var p : ^LogEntry;
 	var high, low : int;
-	var hostidh, hostidl : int;
-	var logh : int;
-	
-	Call LogWritef(LogLvlTrace,"NlsMsgWrite Logname=%s len=%u", logname, len,0,0);
 
-	Syscall LogOpen(logname, logh);
-	
-	Syscall LogWrite(logh,flags,len,buf);
-	Syscall LogLastId(logh,high,low);	
-	Call SetLogId(logname,high,low);
+	Call GetEntry(logname,p);
+	If p Then
+	Begin
+	    Call LogWritef(LogLvlTrace,"NlsMsgWrite Logname=%s len=%u", logname, len,0,0);
 
-	Syscall LogClose(logh);
+	    Syscall LogWrite(p.logh,flags,len,buf);
+	    Syscall LogLastId(p.logh,high,low);
+	    p.IDHigh = high;
+	    p.IDLow = low;
+	End;
 End;
 
 End.

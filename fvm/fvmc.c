@@ -629,6 +629,7 @@ struct proc {
 
   int refcount;
   struct procref *procrefs;
+  int isincludefile;
 };
 
 struct label {
@@ -729,6 +730,7 @@ static struct {
 
   int noemit;
   struct proc *refprocs;
+  int isincludefile;
 } glob;
 
 static void incrementlinecount( void ) {
@@ -2508,6 +2510,7 @@ static void parsedeclaration( FILE *f ) {
 	proc->address = 0;
 	if( xcall ) {
 	  proc->xcall = 1;
+	  proc->refcount = 1; /* xcalls are always referenced and not removed */
 	  strcpy( proc->modname, modname );
 	}
       }
@@ -2789,6 +2792,7 @@ static void parseprocedure( FILE *f ) {
   } else {
     proc = getproc( name );
   }
+  proc->isincludefile = glob.isincludefile;
   glob.currentproc = proc;
 
   if( proc->refcount == 0 ) {
@@ -3063,6 +3067,8 @@ static void processincludefile( char *path ) {
   struct includepath *p;
   char ppath[256];
   struct token *tok;
+
+  glob.isincludefile = 1;
   
   f = fopen( path, "r" );
   if( !f ) {
@@ -3079,7 +3085,7 @@ static void processincludefile( char *path ) {
     }
     if( !f ) usage( "No file \"%s\"", path );
   }
-
+  
   tok = nexttok( f );
   if( tok ) {
     while( 1 ) {
@@ -3096,8 +3102,9 @@ static void processincludefile( char *path ) {
     }
   }
   
-
   fclose( f );
+
+  glob.isincludefile = 0;
 }
 
 static void getprocrefcounts( struct proc *p ) {
@@ -3188,6 +3195,9 @@ static void processfile( char *path ) {
 	if( p->refcount ) {
 	  p->next = glob.refprocs;
 	  glob.refprocs = p;
+	} else {
+	  if( p->isincludefile ) fvmc_printf( ";; Removing unused included procedure %s\n", p->name );
+	  else printf( ";; Warning: unused procedure %s\n", p->name );
 	}
 
 	p = next;

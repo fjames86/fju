@@ -44,6 +44,7 @@ Declare Syscall ChtDelete(keybuf : opaque) : 23;
 Declare Syscall Puts(str : string) : 24;
 Declare Syscall FvmRun(modname : string, procname : string, arglen : int, argbuf : opaque, reslen : int, resbuf : opaque, var rlen : int) : 25;
 Declare Syscall RaftCommand(idHigh : int, idLow : int, len : int, buf : opaque) : 26;
+{ Note syscalls 27/28 are unused }
 
 Record LogInfo =
     SeqH : int;

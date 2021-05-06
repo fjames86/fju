@@ -4,7 +4,7 @@
 { 
   * This defines a module which does the following:
   * - Monitors a configurable set of logs (stored as keys in freg /fju/nls/logs)
-  * - When a new entry is appended, issue an fvm cluster command to run a command procedure.
+  * - When a new entry is appended, issue a dmb command to run a command procedure.
   * - The command includes the originating hostid. Don't write if the message originated locally.
   * - Increment internal seqnos so that no subsequent commands are issued after replicating log entries.
   * 
@@ -115,7 +115,7 @@ Begin
 	var hosth, hostl : int;
 	var seqH, seqL : int;
 	
-	Call LogWritef(LogLvlTrace,"NlsPublishCommand len=%u",len,0,0,0);
+	Call LogWritef(LogLvlTrace,"NlsPublishCommand log=%s len=%u",logname, len,0,0);
 	
 	offset = 0;
 	Call XdrEncodeString(argbuf,offset,logname);
@@ -132,7 +132,6 @@ Begin
 	var high, low, pub : int;
 	var len, flags : int;
 	var buf : opaque[4096];
-	var logh : int;
 
 	p = entryp;
 	
@@ -143,10 +142,10 @@ Begin
 	{ read entries until we get to the last one, if any }
 	While (idhigh <> high) || (idlow <> low) Do
 	Begin
-		Syscall LogNext(logh,high,low,high,low);
-		Syscall LogRead(logh,high,low,4096,buf,flags,len);
+		Syscall LogNext(p.logh,high,low,high,low);
+		Syscall LogRead(p.logh,high,low,4096,buf,flags,len);
 		If len Then Begin
-		    Call LogWritef(LogLvlTrace,"Nls New Log entry %s %08x%08x",p.name,idhigh,idlow,0);
+		    Call LogWritef(LogLvlTrace,"Nls New Log entry log=%s %08x%08x",p.name,idhigh,idlow,0);
 
 		    Call PublishCommand(p.name,flags,len,buf); 
 		End Else Begin

@@ -290,6 +290,19 @@ int freg_get( struct freg_s *freg, uint64_t id, uint32_t *flags, char *buf, int 
     return 0;
 }
 
+static int freg_valid_name( char *name ) {
+  char *p;
+  for( p = name; *p != '\0'; p++ ) {
+    /* only allow a-z A-Z 0-9 */
+    if( !(((*p >= 'a') && (*p <= 'z')) ||
+	  ((*p >= 'A') && (*p <= 'Z')) ||
+	  ((*p >= '0') && (*p <= '9'))) ) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, char *buf, int len, uint64_t *id ) {
     int sts, nentry, i, j, n;
     struct freg_entry entry;
@@ -303,7 +316,8 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
       freg = &glob.freg;
     }
     if( !parentid ) parentid = freg->rootid;
-
+    if( !name ) return -1;
+    
     switch( flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
 	if( len != sizeof(uint32_t) ) return -1;
@@ -357,6 +371,7 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
     
     /* add new entry */
     memset( &e, 0, sizeof(e) );
+    if( !freg_valid_name( tmpname ) ) return -1;
     strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
     e.flags = flags;
     sts = fdtab_alloc( &freg->fdt, sizeof(e) + len, &tid );
@@ -386,7 +401,8 @@ int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, cha
       if( !glob.ocount ) return -1;
       freg = &glob.freg;
     }
-
+    if( name && !freg_valid_name( name ) ) return -1;
+    
     if( flags && len ) {
 	switch( (*flags) & FREG_TYPE_MASK ) {
 	case FREG_TYPE_UINT32:

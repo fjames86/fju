@@ -15,6 +15,7 @@
 #include <fju/hrauth.h>
 #include <fju/dmb.h>
 #include <fju/dmb-category.h>
+#include <fju/fvm.h>
 
 static log_deflogger(dlm_log,"DLM")
 
@@ -881,6 +882,76 @@ static void dlm_subscriber( uint64_t hostid, uint64_t seq, uint32_t msgid, char 
 }
 static DMB_SUBSCRIBER(dlm_sc,DLM_MSGID_HEARTBEAT,dlm_subscriber);
 
+/* DLM/Get(idH,idL,var len,var buf) */
+static int dlmmod_proc_get( struct xdr_s *argbuf, struct xdr_s *resbuf ) {
+  uint64_t id;
+  int sts;
+  struct dlm_lock lock;
+  
+  sts = xdr_decode_uint64( argbuf, &id );
+  if( sts ) return -1;
+
+  sts = dlm_lock_by_lockid( id, &lock );
+  if( sts ) memset( &lock, 0, sizeof(lock) );
+
+  xdr_encode_opaque( resbuf, (uint8_t *)&lock, sizeof(lock) );
+  
+  return 0;
+}
+
+/* DLM/Acquire(resH,resL,shared,var idH, var idL) */
+static int dlmmod_proc_acquire( struct xdr_s *argbuf, struct xdr_s *resbuf ) {
+  int sts;
+  uint64_t resid, lockid;
+  int shared;
+
+  sts = xdr_decode_uint64( argbuf, &resid );
+  if( sts ) return sts;
+  sts = xdr_decode_int32( argbuf, &shared );
+  if( sts ) return sts;
+
+  sts = dlm_acquire( resid, shared, &lockid, NULL, NULL );
+  if( sts ) lockid = 0;
+
+  xdr_encode_uint64( resbuf, lockid );
+  
+  return 0;
+}
+
+/* DLM/Release(idH,idL) */
+static int dlmmod_proc_release( struct xdr_s *argbuf, struct xdr_s *resbuf ) {
+  int sts;
+  uint64_t id;
+
+  sts = xdr_decode_uint64( argbuf, &id );
+  if( sts ) return sts;
+
+  dlm_release( id );
+  return 0;
+}
+
+
+static struct fvm_module dlmmod =
+  {
+   NULL,
+   "DLM",
+   0,
+   0,
+   3,
+   {
+    { "Get", 0, 0x800000000000d00LL, { 0, 0 }, dlmmod_proc_get },
+    { "Acquire", 0, 0xa00000000004800LL, { 0, 0 }, dlmmod_proc_acquire },
+    { "Release", 0, 0x400000000000000LL, { 0, 0 }, dlmmod_proc_release },
+   },
+   NULL,
+   0,
+   NULL,
+   0,
+   0,
+   0,
+   FVM_MODULE_STATIC|FVM_MODULE_NATIVE
+  };
+
 int dlm_open( void ) {
   /* open database, register raft app etc */
 
@@ -934,6 +1005,9 @@ int dlm_open( void ) {
   dlm_log( LOG_LVL_INFO, "Replaying raft commands" );
   raft_replay( glob.raftclid );
 
+  dlmmod.timestamp = time( NULL );
+  fvm_module_register( &dlmmod );
+  
   glob.releaseownlocks = 1;
   glob.ocount = 1;
   return 0;

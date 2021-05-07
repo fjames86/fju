@@ -26,6 +26,10 @@
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    [-c id] [-d id]\n"
+	    "          -c id          create state machine\n"
+	    "          -d id          delete state machine\n"
+	    "          -w             write command (from stdin) to state machine\n"
+	    "          -T seq         truncate state machine log to this seq\n" 
     );
 
     if( fmt ) {

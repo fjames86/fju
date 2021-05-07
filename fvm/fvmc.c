@@ -67,6 +67,36 @@ int fvmc_main( int argc, char **argv ) {
       disass = 1;
     } else if( strcmp( argv[i], "-C" ) == 0 ) {
       gencfile = 1;
+    } else if( strcmp( argv[i], "--siginfo" ) == 0 ) {
+      uint64_t siginfo = 0;
+      int nargs = 0;
+      int isvar;
+      
+      i++;
+      isvar = 0;
+      while( i < argc ) {
+	if( strcasecmp( argv[i], "int" ) == 0 ) {
+	  FVM_SIGINFO_SETPARAM(siginfo,nargs,FVM_VARTYPE_INT,isvar);
+	  isvar = 0;
+	  nargs++;
+	} else if( strcasecmp( argv[i], "string" ) == 0 ) {
+	  FVM_SIGINFO_SETPARAM(siginfo,nargs,FVM_VARTYPE_STRING,isvar);
+	  isvar = 0;
+	  nargs++;
+	} else if( strcasecmp( argv[i], "opaque" ) == 0 ) {
+	  FVM_SIGINFO_SETPARAM(siginfo,nargs,FVM_VARTYPE_OPAQUE,isvar);
+	  isvar = 0;
+	  nargs++;
+	} else if( strcasecmp( argv[i], "var" ) == 0 ) {
+	  isvar = 1;
+	}
+	i++;
+      }
+
+      FVM_SIGINFO_SETNPARS(siginfo,nargs);
+      printf( "Siginfo: 0x%"PRIx64"\n", siginfo );
+      exit( 0 );
+      
     } else {
       char outpathstr[256];
       int j;

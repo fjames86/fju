@@ -45,9 +45,11 @@ Begin
 	var timestr : string[64];
 	var valstr : string[128];
 	var nowh, nowl : int;
-	
+
+{
 	Syscall DmbMsgInfo(hostH,hostL,seqH,seqL);
 	Call LogWritef(LogLvlInfo,"DmbTest Host %x%x Msgid %x Len %u", hostH, hostL, msgid, len);
+}
 
 	If msgid = MsgPing Then Begin
 	   Call LogWritef(LogLvlInfo, "DmbTest Sending reply message", 0,0,0,0 );

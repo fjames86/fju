@@ -930,6 +930,20 @@ static int dlmmod_proc_release( struct xdr_s *argbuf, struct xdr_s *resbuf ) {
   return 0;
 }
 
+/* DLM/GetState(idH,idL, var result) */
+static int dlmmod_proc_getstate( struct xdr_s *argbuf, struct xdr_s *resbuf ) {
+  int sts;
+  uint64_t id;
+  struct dlm_lock lock;
+  
+  sts = xdr_decode_uint64( argbuf, &id );
+  if( sts ) return sts;
+
+  sts = dlm_lock_by_lockid( id, &lock );
+  xdr_encode_uint32( resbuf, sts ? 0 : lock.state );
+  
+  return 0;
+}
 
 static struct fvm_module dlmmod =
   {
@@ -937,11 +951,12 @@ static struct fvm_module dlmmod =
    "DLM",
    0,
    0,
-   3,
+   4,
    {
     { "Get", 0, 0x800000000000d00LL, { 0, 0 }, dlmmod_proc_get },
     { "Acquire", 0, 0xa00000000004800LL, { 0, 0 }, dlmmod_proc_acquire },
     { "Release", 0, 0x400000000000000LL, { 0, 0 }, dlmmod_proc_release },
+    { "GetState", 0, 0x600000000000100, { 0, 0 }, dlmmod_proc_getstate },
    },
    NULL,
    0,

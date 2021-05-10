@@ -24,6 +24,7 @@ End;
 Declare Procedure DLM/Get(idH : int, idL : int, var len : int, var lock : opaque);
 Declare Procedure DLM/Acquire(residH : int, residL : int, shared : int, var lockidH : int, var lockidL : int);
 Declare Procedure DLM/Release(idH : int, idL : int);
+Declare Procedure DLM/GetState(idH : int, idL : int, var state : int);
 
 
    

@@ -99,11 +99,7 @@ int fvm_run_by_name( char *modname, char *procname, struct xdr_s *args, struct x
 /* register rpc interface */
 void fvm_rpc_register( void );
 
-/* clustering routines */
-int fvm_cluster_run( uint64_t clid, char *modname, char *procname, char *args, int len );
-int fvm_cluster_run2( uint64_t clid, char *modname, char *procname, char *args, int len, uint64_t tgt_hostid, uint64_t excl_hostid );
-int fvm_cluster_updatestate( uint64_t clid, char *modname );
-
+/* enable/disable the module */
 int fvm_module_enable( char *modname, int enable, int *prev );
 
 /* dynamically registering syscalls */

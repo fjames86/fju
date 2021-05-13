@@ -15,13 +15,14 @@
 #define FVM_VARTYPE_STRING 1
 #define FVM_VARTYPE_OPAQUE 2
 
-#define FVM_ADDR_DATA   0x1000
-#define FVM_ADDR_TEXT   0x5000
-#define FVM_ADDR_STACK  0xc000
+/* address range 0-0x0fff is reserved and unused */
+#define FVM_ADDR_DATA   0x1000 /* data segment starts here */
+#define FVM_ADDR_TEXT   0x5000 /* text segment stars here */
+#define FVM_ADDR_STACK  0xc000 /* stack stars here */
 
-#define FVM_MAX_DATA    0x4000
-#define FVM_MAX_TEXT    0x8000
-#define FVM_MAX_STACK   0x4000
+#define FVM_MAX_DATA    0x4000 /* 16k max data */
+#define FVM_MAX_TEXT    0x7000 /* 28k max text */
+#define FVM_MAX_STACK   0x4000 /* 16k max stack */
 
 struct fvm_perfdata {
   uint64_t nsteps;

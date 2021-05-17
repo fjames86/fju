@@ -24,6 +24,10 @@
 #include <dlfcn.h>
 #endif
 
+#ifdef __FREEBSD__
+#include <sys/event.h>
+#endif
+
 static struct {
 	int foreground;
 	int no_rpcregister;
@@ -55,6 +59,9 @@ static struct {
 	uint64_t connid;
   
         struct rpcd_active_conn aconn;
+#ifdef __FREEBSD__
+  int kq;
+#endif
 } rpc;
 
 #ifdef WIN32
@@ -468,6 +475,71 @@ static void rpc_init_listen( void ) {
 #define RPC_POLLHUP       POLLHUP
 #endif
 
+#ifdef __FREEBSD__
+
+static int bsd_poll( struct pollfd *pfd, int npfd, int timeout ) {
+
+  int sts, i, ni, no;
+  struct timespec ts;
+  struct kevent ievent[RPC_MAX_LISTEN + RPC_MAX_CONN], oevent[RPC_MAX_LISTEN + RPC_MAX_CONN];
+
+  if( rpc.kq == 0 ) {
+    rpc.kq = kqueue();
+  }
+  
+  /* set events for all connections */
+  ni = 0;
+  for( i = 0; i < npfd; i++ ) {
+    if( pfd[i].fd == -1 ) continue;
+    
+    if( pfd[i].events & POLLIN ) {
+      EV_SET( &ievent[ni], pfd[i].fd, EVFILT_READ, EV_ADD|EV_CLEAR|EV_ENABLE, 0, 0, (void *)(long)i );
+      ni++;
+    } else if( pfd[i].events & POLLOUT ) {
+      EV_SET( &ievent[ni], pfd[i].fd, EVFILT_WRITE, EV_ADD|EV_CLEAR|EV_ENABLE, 0, 0, (void *)(long)i );
+      ni++;
+    }
+  }
+
+  memset( oevent, 0, sizeof(oevent) );
+  ts.tv_sec = timeout / 1000;
+  ts.tv_nsec = (timeout % 1000) * 1000000;
+  sts = kevent( rpc.kq, ievent, ni, oevent, RPC_MAX_LISTEN + RPC_MAX_CONN, &ts );
+  if( sts < 0 ) {
+    rpc_log( RPC_LOG_ERROR, "kevent error %s", strerror( errno ) );
+    return -1;
+  }
+  if( sts == 0 ) {
+    //rpc_log( RPC_LOG_INFO, "kevent timeout" );
+    return 0;
+  }
+
+  for( no = 0; no < sts; no++ ) {
+    i = (int)oevent[no].udata;
+
+    /* translate to POLLIN/POLLOUT flags */
+    switch( oevent[no].filter ) {
+    case EVFILT_READ:
+      pfd[i].revents = POLLIN | (oevent[no].flags & EV_EOF ? POLLHUP : 0) | (oevent[no].flags & EV_ERROR ? POLLERR : 0);
+      break;
+    case EVFILT_WRITE:
+      pfd[i].revents = POLLOUT | (oevent[no].flags & EV_EOF ? POLLHUP : 0) | (oevent[no].flags & EV_ERROR ? POLLERR : 0);      
+      break;
+    case EVFILT_AIO:
+      rpc_log( RPC_LOG_INFO, "kevent aio" );
+      break;
+    default:
+      rpc_log( RPC_LOG_INFO, "kevent filter %u", oevent[no].filter );
+      break;
+    }
+  }
+
+  return sts;
+}
+
+#endif /* freebsd */
+
+
 void rpc_poll( int timeout ) {
 	int i, sts;
 	int npfd;
@@ -558,7 +630,12 @@ void rpc_poll( int timeout ) {
 	    return;
 	}
 #else
+	/* not windows */
+#ifdef __FREEBSD__
+	sts = bsd_poll( pfd, npfd, timeout );	
+#else
 	sts = poll( pfd, npfd, timeout );
+#endif
 	if( sts <= 0 ) return;
 #endif
 

@@ -25,7 +25,7 @@ int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 
 	memset( mmf, 0, sizeof(*mmf) );
 
-	mmf->fd = CreateFileA( path, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, flags & MMF_OPEN_EXISTING ? OPEN_EXISTING : OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+	mmf->fd = CreateFileA( path, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, flags & MMF_OPEN_EXISTING ? OPEN_EXISTING : OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | (flags & MMF_OPEN_ASYNC ? FILE_FLAG_OVERLAPPED : 0), NULL );
 	if( mmf->fd == INVALID_HANDLE_VALUE ) return -1;
 
 	mmf->fsize = (int)GetFileSize( mmf->fd, NULL );
@@ -192,7 +192,7 @@ int mmf_fsize( struct mmf_s *mmf ) {
 #else
 int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 	memset( mmf, 0, sizeof(*mmf) );
-	mmf->fd = open( path, O_RDWR|(flags & MMF_OPEN_EXISTING ? 0 : O_CREAT), 0666 );
+	mmf->fd = open( path, O_RDWR|(flags & MMF_OPEN_EXISTING ? 0 : O_CREAT)|(flags & MMF_OPEN_ASYNC ? O_DIRECT : 0), 0666 );
 	if( mmf->fd < 0 ) return -1;
 	mmf->fsize = lseek( mmf->fd, 0, SEEK_END );
 	return 0;

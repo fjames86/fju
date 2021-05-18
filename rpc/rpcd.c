@@ -17,15 +17,58 @@
 #include <fju/rpcd.h>
 #include "rpc-private.h"
 #include <fju/freg.h>
+#include <fju/mmf.h>
 #include <inttypes.h>
 
+#define RPCD_MAX_IOCB 256
+
 #ifdef WIN32
+
+struct rpcd_iocb {
+  struct rpcd_iocb *next;
+
+  OVERLAPPED overlap;
+  struct mmf_s *mmf;
+  void (*donecb)();
+  void *prv;
+  char *buf;
+  int len;
+  
+};
+
 #else
 #include <dlfcn.h>
 #endif
 
-#ifdef __FREEBSD__
+#ifdef __FreeBSD__
 #include <sys/event.h>
+#include <sys/aio.h>
+
+struct rpcd_iocb {
+  struct rpcd_iocb *next;
+  
+  struct mmf_s *mmf;
+  struct aiocb aiocb;
+  void (*donecb)();
+  void *prv;
+  char *buf;
+  int len;
+};
+#endif
+
+#ifdef __linux__
+#include <libaio.h>
+
+struct rpcd_iocb {
+  struct rpcd_iocb *next;
+  
+  struct mmf_s *mmf;
+  struct iocb aiocb;
+  void (*donecb)();
+  void *prv;
+  char *buf;
+  int len;
+};
 #endif
 
 static struct {
@@ -59,10 +102,32 @@ static struct {
 	uint64_t connid;
   
         struct rpcd_active_conn aconn;
-#ifdef __FREEBSD__
+#ifdef __FreeBSD__
   int kq;
 #endif
+#ifdef __linux__
+  io_context_t iocxt;
+  int eventfd;
+#endif
+  
+  struct rpcd_iocb iocb[RPCD_MAX_IOCB];
+  struct rpcd_iocb *iocbfl;
 } rpc;
+
+static struct rpcd_iocb *rpcd_iocb_alloc( void ) {
+  struct rpcd_iocb *iocb;
+  
+  if( !rpc.iocbfl ) return NULL;
+  iocb = rpc.iocbfl;
+  rpc.iocbfl = iocb->next;
+  memset( iocb, 0, sizeof(*iocb) );
+  return iocb;
+}
+
+static void rpcd_iocb_free( struct rpcd_iocb *iocb ) {
+  iocb->next = rpc.iocbfl;
+  rpc.iocbfl = iocb;
+}
 
 #ifdef WIN32
 typedef int socklen_t;
@@ -460,7 +525,7 @@ static void rpc_init_listen( void ) {
 	}
 	rpcbind_set_laddrs( prot_ports, j );
 
-
+	
 }
 
 #ifdef WIN32
@@ -475,7 +540,17 @@ static void rpc_init_listen( void ) {
 #define RPC_POLLHUP       POLLHUP
 #endif
 
-#ifdef __FREEBSD__
+
+
+
+
+#ifdef __FreeBSD__
+
+/*
+ * We need to use kqueue on bsd systems so that we can suppor aio.
+ * Linux we can use eventfd and poll that using standard poll() mechanism
+ * Win32 we can use overlapped IO (and WriteFileEx etc) so no need to change there
+ */
 
 static int bsd_poll( struct pollfd *pfd, int npfd, int timeout ) {
 
@@ -527,6 +602,15 @@ static int bsd_poll( struct pollfd *pfd, int npfd, int timeout ) {
       break;
     case EVFILT_AIO:
       rpc_log( RPC_LOG_INFO, "kevent aio" );
+      {
+	struct rpcd_iocb *iocb;
+	rpcd_aio_donecb donecb;
+
+	iocb = (struct rpcd_iocb *)oevent[no].udata;
+	donecb = (rpcd_aio_donecb)iocb->donecb;
+	donecb( iocb->mmf, (char *)iocb->aiocb.aio_buf, aio_return( &iocb->aiocb ), iocb->prv );
+	rpcd_iocb_free( iocb );
+      }      
       break;
     default:
       rpc_log( RPC_LOG_INFO, "kevent filter %u", oevent[no].filter );
@@ -621,8 +705,16 @@ void rpc_poll( int timeout ) {
 		npfd++;
 	}
 
+#ifdef __linux__
+	pfd[i].fd = rpc.eventfd;
+	pfd[i].events = POLLIN;
+	pfd[i].revents = 0;
+	npfd++;
+#endif
+	
 #ifdef WIN32
-	sts = WSAWaitForMultipleEvents( 1, &rpc.evt, FALSE, timeout, FALSE );
+	/* Wait for something to happen - note we set bAlertable to true so that IO completion routines may run */
+	sts = WSAWaitForMultipleEvents( 1, &rpc.evt, FALSE, timeout, TRUE );
 	if( sts == WSA_WAIT_TIMEOUT ) {
 	    return;
 	}
@@ -631,8 +723,8 @@ void rpc_poll( int timeout ) {
 	}
 #else
 	/* not windows */
-#ifdef __FREEBSD__
-	sts = bsd_poll( pfd, npfd, timeout );	
+#ifdef __FreeBSD__
+	sts = bsd_poll( pfd, npfd, timeout );
 #else
 	sts = poll( pfd, npfd, timeout );
 #endif
@@ -918,6 +1010,28 @@ void rpc_poll( int timeout ) {
 		}
 	}
 
+#ifdef __linux__
+	if( revents[eventfdidx] & POLLIN ) {
+	  uint64_t nevents;
+	  struct timespec tm;
+	  struct io_event event;
+	  
+	  sts = read( rpc.eventfd, (char *)&nevents, sizeof(nevents) );
+
+	  while( nevents > 0 ) {
+	    memset( &tms, 0, sizeof(tims) );
+	    sts = io_getevents( rpc.iocxt, 0, 1, &event, &tms );
+	    if( sts > 0 ) {
+	      iocb = (struct rpcd_iocb *)event.data;
+	      iocb->donecb( iocb->mmf, iocb->buf, event.res, iocb->prv );
+	      rpcd_iocb_free( iocb );
+	    }
+	    nevents--;
+	  }
+	      
+	}
+#endif
+	
 	/* Close pending connections */
 	rpc_close_connections();
 
@@ -1076,7 +1190,8 @@ static void rpc_accept( struct rpc_listen *lis ) {
 void rpcd_init( void ) {
 	int i;
 	struct rpc_conn *c;
-
+	struct rpcd_iocb *iocb;
+	
 	/* setup connection table */
 	for( i = 0; i < RPC_MAX_CONN; i++ ) {
 		c = &rpc.conntab[i];
@@ -1087,8 +1202,19 @@ void rpcd_init( void ) {
 		rpc.flist = c;
 	}
 
+	for( i = 0; i < RPCD_MAX_IOCB; i++ ) {
+	  iocb = &rpc.iocb[i];
+	  iocb->next = rpc.iocbfl;
+	  rpc.iocbfl = iocb;
+	}
+
 #ifdef WIN32
 	rpc.evt = WSACreateEvent();
+#endif
+
+#ifdef __linux__
+	io_setup( RPCD_MAX_IOCB, &rpc.iocxt );
+	rpc.eventfd = eventfd( 0, EFD_NONBLOCK );
 #endif
 }
 
@@ -1586,3 +1712,191 @@ int rpcd_active_conn( struct rpcd_active_conn *aconn ) {
     *aconn = rpc.aconn;
     return 0;
 }
+
+#ifdef __FreeBSD__
+int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  struct rpcd_iocb *iocb;
+  int sts;
+  
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  iocb->aiocb.aio_fildes = mmf->fd;
+  iocb->aiocb.aio_offset = offset;
+  iocb->aiocb.aio_buf = buf;
+  iocb->aiocb.aio_nbytes = len;
+  iocb->aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
+  iocb->aiocb.aio_sigevent.sigev_notify_kqueue = rpc.kq;
+  iocb->aiocb.aio_sigevent.sigev_value.sigval_ptr = iocb;
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+  
+  sts = aio_read( &iocb->aiocb );
+  if( sts < 0 ) return -1;
+
+  return 0;
+}
+
+int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  struct rpcd_iocb *iocb;
+  int sts;
+  
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  iocb->aiocb.aio_fildes = mmf->fd;
+  iocb->aiocb.aio_offset = offset;
+  iocb->aiocb.aio_buf = buf;
+  iocb->aiocb.aio_nbytes = len;
+  iocb->aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
+  iocb->aiocb.aio_sigevent.sigev_notify_kqueue = rpc.kq;
+  iocb->aiocb.aio_sigevent.sigev_value.sigval_ptr = iocb;
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+		    
+  sts = aio_write( &iocb->aiocb );
+  if( sts < 0 ) return -1;
+
+  return 0;  
+}
+
+
+#endif
+
+#ifdef __linux__
+
+int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  struct rpcd_iocb *iocb;
+  int sts;
+  
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  memset( iocb, 0, sizeof(*iocb) );
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+    
+  io_prep_pread( &iocb->aiocb, mmf->fd, buf, len, offset );
+  io_set_eventfd( &iocb->aiocb, rpc.eventfd );
+  
+  sts = io_submit( rpc.iocxt, 1, &iocb->aiocb );
+  if( sts < 0 ) {
+    rpcd_iocb_free( iocb );
+    return -1;
+  }
+
+  return 0;
+}
+
+int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  struct rpcd_iocb *iocb;
+  int sts;
+  
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  memset( iocb, 0, sizeof(*iocb) );
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+  
+  io_prep_pwrite( &iocb->aiocb, mmf->fd, buf, len, offset );
+  io_set_eventfd( &iocb->aiocb, rpc.eventfd );
+  
+  sts = io_submit( rpc.iocxt, 1, &iocb->aiocb );
+  if( sts < 0 ) {
+    rpcd_iocb_free( iocb );
+    return -1;
+  }
+
+  return 0;
+
+
+#endif
+
+#ifdef WIN32
+
+static void win32_iocb_done( DWORD errorcode, DWORD nbytes, OVERLAPPED *overlap ) {
+  struct rpcd_iocb *iocb;
+
+  iocb = (struct rpcd_iocb *)overlap->hEvent;
+  iocb->donecb( iocb->mmf, iocb->buf, nbytes, iocb->prv );
+  rpcd_iocb_free( iocb );
+}
+
+int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  OVERLAPPED *overlap;
+  int sts;
+  struct rpcd_iocb *iocb;
+
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  overlap = &iocb->overlap;
+  
+  memset( iocb, 0, sizeof(iocb) );
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  
+  memset( overlap, 0, sizeof(*overlap) );
+  overlap->Offset = offset & 0xffffffff;
+  overlap->OffsetHigh = offset >> 32;
+  overlap->hEvent = (HANDLE)iocb;
+  
+  sts = ReadFileEx( mmf->fd, buf, len, overlap, win32_iocb_done );
+  if( sts ) {
+    rpcd_iocb_free( iocb );
+    return -1;
+  }
+  
+  return sts;
+}
+
+int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+    OVERLAPPED *overlap;
+  int sts;
+  struct rpcd_iocb *iocb;
+
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  overlap = &iocb->overlap;
+  
+  memset( iocb, 0, sizeof(iocb) );
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  
+  memset( overlap, 0, sizeof(*overlap) );
+  overlap->Offset = offset & 0xffffffff;
+  overlap->OffsetHigh = offset >> 32;
+  overlap->hEvent = (HANDLE)iocb;
+  
+  sts = WriteFileEx( mmf->fd, buf, len, overlap, win32_iocb_done );
+  if( sts ) {
+    rpcd_iocb_free( iocb );
+    return -1;
+  }
+  
+  return sts;
+}
+
+
+#endif
+

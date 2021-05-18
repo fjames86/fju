@@ -27,6 +27,7 @@
 #endif
 
 #include <fju/rpc.h>
+#include <fju/mmf.h>
 
 #define RPC_MAX_BUF (1024*1024)
 #define RPC_MAX_CONN 32 
@@ -170,6 +171,10 @@ void rpc_service( int timeout );
 #ifdef WIN32
 HANDLE rpcd_win32event( void );
 #endif
+
+typedef void (*rpcd_aio_donecb)( struct mmf_s *mmf, char *buf, int len, void *prv );
+int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv );
+int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv );
 
 
 #endif

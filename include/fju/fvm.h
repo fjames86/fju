@@ -111,6 +111,12 @@ struct fvm_syscall {
   int (*cb)( struct fvm_syscall *sc, struct fvm_state *state );
 };
 int fvm_syscall_register( struct fvm_syscall *sc );
-  
+
+#define FVM_MODULE_ADDPROC(mod,nme,sinfo,cb) \
+  strcpy( mod.procs[mod.nprocs].name, nme ); \
+  mod.procs[mod.nprocs].siginfo = sinfo; \
+  mod.procs[mod.nprocs].nativeproc = cb; \
+  mod.nprocs++
+
 #endif
 

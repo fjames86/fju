@@ -1212,11 +1212,11 @@ static void fvm_run_results( struct xdr_s *xdr ) {
   struct xdr_s rxdr;
   
   sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "XDR error" );
+  if( sts ) usage( "XDR error decoding bool" );
   if( !b ) usage( "FVM run failed" );
-  
+
   sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
-  if( sts ) usage( "XDR error" );
+  if( sts ) usage( "XDR error decoding result buffer" );
 
   xdr_init( &rxdr, (uint8_t *)bufp, lenp );
   siginfo = glob.siginfo;

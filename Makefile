@@ -33,6 +33,7 @@ LIBFJU=${LIBDIR}/libfju.so
 all: ${PROJECTS} ${LIBFJU} ${BINDIR}/fju ${BINDIR}/fjud 
 	rm -f *.o
 
+fju_files += fju.c 
 fju_files += log/fjlog.c
 fju_files += rpc/rpclt.c
 fju_files += rpc/xdru.c
@@ -49,7 +50,7 @@ fju_files += fsm/fsm-main.c
 fju_files += dlm/dlm-main.c
 
 ${BINDIR}/fju: ${LIBFJU} ${fju_files}
-	${CC} -o $@ ${CFLAGS} ${LFLAGS} fju.c ${fju_files}
+	${CC} -o $@ ${CFLAGS} ${LFLAGS} ${fju_files}
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm/test/*.fvm ${FVMMODULES}
@@ -64,11 +65,13 @@ strip:
 .include "${proj}/${proj}.mk"
 .endfor
 
+fjud_files += fjud.c 
 fjud_files += rpc/cmdprog.c
 fjud_files += ${FVMMODULES}
 fjud_files += fvm/test/native.c
+fjud_files += fvm/test/test-aio.c 
 ${BINDIR}/fjud: ${LIBFJU} ${fjud_files}
-	${CC} -o $@ ${CFLAGS} ${LFLAGS} fjud.c ${fjud_files}
+	${CC} -o $@ ${CFLAGS} ${LFLAGS} ${fjud_files}
 
 install: all #strip
 	mkdir -p /opt/fju

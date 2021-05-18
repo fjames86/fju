@@ -1,7 +1,12 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include <fju/rpc.h>
 #include <fju/rpcd.h>
@@ -36,7 +41,7 @@ static int testaio_read( struct xdr_s *args, struct xdr_s *res ) {
 }
 
 static void write_donecb( struct mmf_s *mmf, char *buf, int nbytes, void *prv ) {
-  log_writef( NULL, LOG_LVL_INFO, "testaio_write_donecb len=%d", nbytes );
+  log_writef( NULL, LOG_LVL_INFO, "testaio_write_donecb len=%d now=%"PRIu64"", nbytes, rpc_now() );
 }
 
 static int testaio_write( struct xdr_s *args, struct xdr_s *res ) {
@@ -48,7 +53,7 @@ static int testaio_write( struct xdr_s *args, struct xdr_s *res ) {
   if( sts ) return sts;
   
   sts = rpcd_aio_write( &gmmf, gbuf, len, 0, write_donecb, NULL );
-  log_writef( NULL, LOG_LVL_INFO, "testaio_write sts=%d len=%u", sts, len );
+  log_writef( NULL, LOG_LVL_INFO, "testaio_write sts=%d len=%u now=%"PRIu64"", sts, len, rpc_now() );
 
   res->offset = 0;
   res->count = 0;

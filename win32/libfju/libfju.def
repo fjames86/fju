@@ -250,3 +250,5 @@ fvm_syscall_register
 fvm_stack_read
 fvm_write_u32
 fvm_module_unregister
+rpcd_aio_read
+rpcd_aio_write

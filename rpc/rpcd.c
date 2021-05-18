@@ -608,7 +608,7 @@ static int bsd_poll( struct pollfd *pfd, int npfd, int timeout ) {
 
 	iocb = (struct rpcd_iocb *)oevent[no].udata;
 	donecb = (rpcd_aio_donecb)iocb->donecb;
-	donecb( iocb->mmf, (char *)iocb->aiocb.aio_buf, aio_return( &iocb->aiocb ), iocb->prv );
+	if( donecb ) donecb( iocb->mmf, (char *)iocb->aiocb.aio_buf, aio_return( &iocb->aiocb ), iocb->prv );
 	rpcd_iocb_free( iocb );
       }      
       break;
@@ -1023,7 +1023,7 @@ void rpc_poll( int timeout ) {
 	    sts = io_getevents( rpc.iocxt, 0, 1, &event, &tms );
 	    if( sts > 0 ) {
 	      iocb = (struct rpcd_iocb *)event.data;
-	      iocb->donecb( iocb->mmf, iocb->buf, event.res, iocb->prv );
+	      if( iocb->donecb ) iocb->donecb( iocb->mmf, iocb->buf, event.res, iocb->prv );
 	      rpcd_iocb_free( iocb );
 	    }
 	    nevents--;
@@ -1831,7 +1831,7 @@ static void win32_iocb_done( DWORD errorcode, DWORD nbytes, OVERLAPPED *overlap 
   struct rpcd_iocb *iocb;
 
   iocb = (struct rpcd_iocb *)overlap->hEvent;
-  iocb->donecb( iocb->mmf, iocb->buf, nbytes, iocb->prv );
+  if( iocb->donecb ) iocb->donecb( iocb->mmf, iocb->buf, nbytes, iocb->prv );
   rpcd_iocb_free( iocb );
 }
 
@@ -1858,12 +1858,12 @@ int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_
   overlap->hEvent = (HANDLE)iocb;
   
   sts = ReadFileEx( mmf->fd, buf, len, overlap, win32_iocb_done );
-  if( sts ) {
+  if( sts == 0 ) {
     rpcd_iocb_free( iocb );
     return -1;
   }
   
-  return sts;
+  return 0;
 }
 
 int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
@@ -1889,12 +1889,12 @@ int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd
   overlap->hEvent = (HANDLE)iocb;
   
   sts = WriteFileEx( mmf->fd, buf, len, overlap, win32_iocb_done );
-  if( sts ) {
+  if( sts == 0 ) {
     rpcd_iocb_free( iocb );
     return -1;
   }
   
-  return sts;
+  return 0;
 }
 
 

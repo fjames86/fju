@@ -10,6 +10,11 @@
 #include <Shlobj.h>
 #else
 #include <stdlib.h>
+
+#ifdef __linux__
+#define _GNU_SOURCE
+#define __USE_GNU 1
+#endif 
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>

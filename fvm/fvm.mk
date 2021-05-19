@@ -23,7 +23,7 @@ ${LIBDIR}/libfvm.a: fvm/fvm.c fvm/fvm-private.h fvm/fvm-syscall.c
 	${CC} -c fvm/fvm.c fvm/fvm-syscall.c ${CFLAGS} 
 	${AR} rcs $@ fvm.o fvm-syscall.o 
 
-fvm/modules/fvm-cluster.c: fvm/modules/fvm-cluster.fvm ${BINDIR}/fju 
+fvm/modules/fvm-cluster.c: fvm/modules/fvm-cluster.fvm ${BINDIR}/fju
 	${BINDIR}/fju fvmc -C -o $@ fvm/modules/fvm-cluster.fvm
 FVMMODULES += fvm/modules/fvm-cluster.c
 

@@ -1317,6 +1317,7 @@ static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     if( !FVM_SIGINFO_ISVAR(siginfo,n) ) {
       if( i >= argc ) {
 	char argstr[1024];
+	strcpy( argstr, "" );
 	for( i = 0; i < nargs; i++ ) {
 	  if( !FVM_SIGINFO_ISVAR(siginfo,i) ) {
 	    switch( FVM_SIGINFO_VARTYPE(siginfo,i) ) {

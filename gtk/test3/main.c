@@ -76,6 +76,7 @@ int main( int argc, char **argv ) {
 }
 
 static void main_destroy( GtkWidget *wnd, gpointer data ) {
+  
   gtk_main_quit();
 }
 
@@ -165,7 +166,7 @@ static void add_treeview( void ) {
 
 static void button1_click( GtkWidget *hwnd, gpointer data ) {
   char *str;
-  str = gtk_entry_get_text( GTK_ENTRY(fjgtk_get( "entry" )) );
+  str = (char *)gtk_entry_get_text( GTK_ENTRY(fjgtk_get( "entry" )) );
   add_listview_item( fjgtk_get( "treelist" ), str );
 }
 

@@ -10,8 +10,8 @@ PROJECTS += raft
 PROJECTS += rpc
 PROJECTS += dh
 PROJECTS += ef
-PROJECTS += ftab
 PROJECTS += freg
+PROJECTS += ftab
 PROJECTS += fvm
 PROJECTS += cht
 PROJECTS += dmb
@@ -23,8 +23,8 @@ LIBRARIES=
 BINDIR=bin
 LIBDIR=lib
 CFLAGS=-Iinclude -Wall -fPIC -g 
-LFLAGS += -L${LIBDIR} -lfju -lcrypto 
-
+LFLAGS += -lcrypto 
+LFLAGS += -ldl -laio # Linux only 
 
 LIBFJU=${LIBDIR}/libfju.so
 
@@ -33,25 +33,6 @@ LIBFJU=${LIBDIR}/libfju.so
 all: ${PROJECTS} ${LIBFJU} ${BINDIR}/fju ${BINDIR}/fjud 
 	rm -f *.o
 
-fju_files += fju.c 
-fju_files += log/fjlog.c
-fju_files += rpc/rpclt.c
-fju_files += rpc/xdru.c
-fju_files += raft/raft-main.c
-fju_files += cht/cht-main.c
-fju_files += dh/ecdh.c
-fju_files += sec/shamir.c
-fju_files += fvm/fvm-main.c
-fju_files += fvm/fvmc.c
-fju_files += freg/freg-main.c
-fju_files += hostreg/hostreg-main.c
-fju_files += dmb/dmb-main.c
-fju_files += fsm/fsm-main.c
-fju_files += dlm/dlm-main.c
-
-${BINDIR}/fju: ${LIBFJU} ${fju_files}
-	${CC} -o $@ ${CFLAGS} ${LFLAGS} ${fju_files}
-
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm/test/*.fvm ${FVMMODULES}
 
@@ -59,19 +40,11 @@ tar:
 	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}
 
 strip:
-	strip -s ${LIBFJU} ${BINDIR}/fju 
+	strip -s ${LIBFJU} ${BINDIR}/fju ${BINDIR}/fjud ${BINDIR}/fjlic 
 
 .for proj in ${PROJECTS}
 .include "${proj}/${proj}.mk"
 .endfor
-
-fjud_files += fjud.c 
-fjud_files += rpc/cmdprog.c
-fjud_files += ${FVMMODULES}
-fjud_files += fvm/test/native.c
-fjud_files += fvm/test/test-aio.c 
-${BINDIR}/fjud: ${LIBFJU} ${fjud_files}
-	${CC} -o $@ ${CFLAGS} ${LFLAGS} ${fjud_files}
 
 install: all #strip
 	mkdir -p /opt/fju
@@ -95,6 +68,33 @@ FJU_LIBS+=-l${lib}
 ${LIBFJU}: ${FJU_DEPS}
 	cc -shared -o $@ -L${LIBDIR} -Wl,--whole-archive ${FJU_LIBS} -Wl,--no-whole-archive
 
+fju_files += fju.c 
+fju_files += log/fjlog.c
+fju_files += rpc/rpclt.c
+fju_files += rpc/xdru.c
+fju_files += raft/raft-main.c
+fju_files += cht/cht-main.c
+fju_files += dh/ecdh.c
+fju_files += sec/shamir.c
+fju_files += fvm/fvm-main.c
+fju_files += fvm/fvmc.c
+fju_files += freg/freg-main.c
+fju_files += hostreg/hostreg-main.c
+fju_files += dmb/dmb-main.c
+fju_files += fsm/fsm-main.c
+fju_files += dlm/dlm-main.c
+${BINDIR}/fju: ${FJU_DEPS} ${fju_files}
+	${CC} -o $@ ${CFLAGS} ${fju_files} -L${LIBDIR} ${FJU_LIBS} ${LFLAGS}
+
+
+fjud_files += fjud.c 
+fjud_files += rpc/cmdprog.c
+fjud_files += ${FVMMODULES}
+fjud_files += fvm/test/native.c
+fjud_files += fvm/test/test-aio.c 
+${BINDIR}/fjud: ${FJU_DEPS} ${fjud_files}
+	${CC} -o $@ ${CFLAGS} ${fjud_files} -L${LIBDIR} ${FJU_LIBS} ${LFLAGS}
+
 installer: ${BINDIR}/fju ${BINDIR}/fjud ${LIBFJU}
 	mkdir -p opt/fju/bin
 	mkdir -p opt/fju/lib
@@ -106,3 +106,4 @@ installer: ${BINDIR}/fju ${BINDIR}/fjud ${LIBFJU}
 	tar czvf fju.tar.gz opt
 	rm -rf opt
 	cat scripts/install.sh fju.tar.gz > bin/install.sh
+

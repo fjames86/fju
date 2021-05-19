@@ -58,6 +58,7 @@ struct rpcd_iocb {
 
 #ifdef __linux__
 #include <libaio.h>
+#include <sys/eventfd.h>
 
 struct rpcd_iocb {
   struct rpcd_iocb *next;
@@ -636,7 +637,10 @@ void rpc_poll( int timeout ) {
 	struct xdr_s tmpx;
 	uint8_t tmpbuf[4];
 	struct rpc_conn *c;
-
+#ifdef __linux__
+	int eventfdidx;
+#endif
+       
 #ifndef WIN32
 	memset( pfd, 0, sizeof(pfd) );
 #endif
@@ -710,6 +714,7 @@ void rpc_poll( int timeout ) {
 	pfd[i].events = POLLIN;
 	pfd[i].revents = 0;
 	npfd++;
+	eventfdidx = i;
 #endif
 	
 #ifdef WIN32
@@ -1015,12 +1020,16 @@ void rpc_poll( int timeout ) {
 	  uint64_t nevents;
 	  struct timespec tm;
 	  struct io_event event;
-	  
-	  sts = read( rpc.eventfd, (char *)&nevents, sizeof(nevents) );
+	  struct rpcd_iocb *iocb;
 
+	  rpc_log( RPC_LOG_INFO, "eventfd ready" );
+	  sts = read( rpc.eventfd, (char *)&nevents, sizeof(nevents) );
+	  rpc_log( RPC_LOG_INFO, "eventfd read sts=%d nevents=%"PRIu64"", sts, nevents );
+	  
 	  while( nevents > 0 ) {
-	    memset( &tms, 0, sizeof(tims) );
-	    sts = io_getevents( rpc.iocxt, 0, 1, &event, &tms );
+	    memset( &tm, 0, sizeof(tm) );
+	    sts = io_getevents( rpc.iocxt, 0, 1, &event, &tm );
+	    rpc_log( RPC_LOG_INFO, "eventfd io_getevents sts=%d", sts );
 	    if( sts > 0 ) {
 	      iocb = (struct rpcd_iocb *)event.data;
 	      if( iocb->donecb ) iocb->donecb( iocb->mmf, iocb->buf, event.res, iocb->prv );
@@ -1774,6 +1783,7 @@ int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd
 int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
   struct rpcd_iocb *iocb;
   int sts;
+  struct iocb *iocbp[1];
   
   iocb = rpcd_iocb_alloc();
   if( !iocb ) return -1;
@@ -1787,8 +1797,10 @@ int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_
     
   io_prep_pread( &iocb->aiocb, mmf->fd, buf, len, offset );
   io_set_eventfd( &iocb->aiocb, rpc.eventfd );
+  iocb->aiocb.data = iocb;
   
-  sts = io_submit( rpc.iocxt, 1, &iocb->aiocb );
+  iocbp[0] = &iocb->aiocb;
+  sts = io_submit( rpc.iocxt, 1, iocbp );
   if( sts < 0 ) {
     rpcd_iocb_free( iocb );
     return -1;
@@ -1800,6 +1812,7 @@ int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_
 int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
   struct rpcd_iocb *iocb;
   int sts;
+  struct iocb *iocbp[1];
   
   iocb = rpcd_iocb_alloc();
   if( !iocb ) return -1;
@@ -1813,15 +1826,17 @@ int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd
   
   io_prep_pwrite( &iocb->aiocb, mmf->fd, buf, len, offset );
   io_set_eventfd( &iocb->aiocb, rpc.eventfd );
+  iocb->aiocb.data = iocb;
   
-  sts = io_submit( rpc.iocxt, 1, &iocb->aiocb );
+  iocbp[0] = &iocb->aiocb;
+  sts = io_submit( rpc.iocxt, 1, iocbp );
   if( sts < 0 ) {
     rpcd_iocb_free( iocb );
     return -1;
   }
 
   return 0;
-
+}
 
 #endif
 

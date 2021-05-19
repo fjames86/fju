@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -136,11 +136,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\fvm\fvm.c" />
-    <ClCompile Include="..\..\fvm\fvm-rpc.c" />
+    <ClInclude Include="..\..\include\fju\fvm.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\include\fju\fvm.h" />
+    <ClCompile Include="..\..\fvm\fvm-syscall.c" />
+    <ClCompile Include="..\..\fvm\fvm.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

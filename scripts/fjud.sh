@@ -1,7 +1,7 @@
 #!/bin/sh
 
 pidfile=/var/run/fjud.pid
-udpport=$(freg get /fju/rpc/port || echo 8000)
+port=$(fju reg get /fju/rpc/port || echo 8000)
 
 cmd=$1
 if [ ! $cmd ]; then
@@ -9,23 +9,16 @@ if [ ! $cmd ]; then
 fi
 
 if [ $cmd = "start" ]; then
-    if [ -e $pidfile ] && $(kill -0 $(cat $pidfile)); then
-	echo "$pidfile exists and pid $(cat $pidfile) exists - restarting"
-	kill $(cat $pidfile)
-	sleep 1 
-    fi
-    
-    fjud -u $udpport -p $pidfile
+    fju rpc fjud.stop > /dev/null
+    sleep 0.1 
+    fjud -u $port -t $port -p $pidfile
 elif [ $cmd = "stop" ]; then
+    fju rpc fjud.stop > /dev/null
+    sleep 0.1 
     if [ -e $pidfile ]; then 
-	kill $(cat $pidfile)
 	rm -f $pidfile
     fi
 elif [ $cmd = "status" ]; then
-    if [ -e $pidfile ]; then
-	rpclt -p $udpport rpcbind.list
-    else
-	echo "fjud not running"
-    fi
+    fju rpc -p $port rpcbind.list
 fi
 

@@ -33,24 +33,36 @@ Generate the bitmap using gimp and save as a bmp file in 32bpp format (8a 8r 8g 
 	      (height (nibbles:sb32ref/le bmp 22))
 	      (planes (nibbles:ub16ref/le bmp 26))
 	      (bits-per-pixel (nibbles:ub16ref/le bmp 28)))
+;;	  (format t "offset: ~D ~X~%" offset offset);
+	  
+	  (ecase bits-per-pixel
+	    (32 
+	     ;; bitmap stores it as aa rr gg bb
+	     ;; we want it as bb gg rr aa
+	     ;; BUT: we need to use premultiplied alpha 
+	     (do ((i 0 (+ i 4)))
+		 ((= i (- (length bmp) offset)))
+	       (let ((aa (aref bmp (+ offset i 3)))
+		     (bb (aref bmp (+ offset i 0)))
+		     (gg (aref bmp (+ offset i 1)))
+		     (rr (aref bmp (+ offset i 2))))
+		 (setf (aref bmp (+ offset i 0))
+		       (truncate (* bb aa) #xff)
+		       (aref bmp (+ offset i 1))
+		       (truncate (* gg aa) #xff)
+		       (aref bmp (+ offset i 2))
+		       (truncate (* rr aa) #xff)
+		       (aref bmp (+ offset i 3))
+		       aa))))
+	    (24
+	     #+nil(do ((i 0 (+ i 3)))
+		 ((= i (- (length bmp) offset)))
+	       (setf (aref bmp (+ offset i 0)) #xff
+		     (aref bmp (+ offset i 1)) 0
+		     (aref bmp (+ offset i 2)) 0))
 
-	  ;; bitmap stores it as aa rr gg bb
-	  ;; we want it as bb gg rr aa
-	  ;; BUT: we need to use premultiplied alpha 
-	  (do ((i 0 (+ i 4)))
-	      ((= i (- (length bmp) offset)))
-	    (let ((aa (aref bmp (+ offset i 0)))
-		  (bb (aref bmp (+ offset i 1)))
-		  (gg (aref bmp (+ offset i 2)))
-		  (rr (aref bmp (+ offset i 3))))
-	      (setf (aref bmp (+ offset i 0))
-		    (truncate (* bb aa) #xff)
-		    (aref bmp (+ offset i 1))
-		    (truncate (* gg aa) #xff)
-		    (aref bmp (+ offset i 2))
-		    (truncate (* rr aa) #xff)
-		    (aref bmp (+ offset i 3))
-		    aa)))
+	     
+	     nil))
 	  
 	  ;; print output for use with a C compiler 
 	  (format stream "static uint8_t ~A_bits[] = {~%" name)

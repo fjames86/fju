@@ -10,33 +10,16 @@
 #include <fju/sec.h>
 
 
-static char *u8_to_hex( uint8_t *u8, int len, char *hex ) {
-  int i;
-  strcpy( hex, "" );
-  for( i = 0; i < len; i++ ) {
-    sprintf( hex + strlen( hex ), "%02x", u8[i] );
-  }
-  return hex;
-}
-
-static uint8_t *hex_to_u8( char *hex, uint8_t *u8 ) {
-  char tmp[4];
-  int i, len;
-  len = strlen( hex ) / 2;
-  for( i = 0; i < len; i++ ) {
-    tmp[0] = hex[2*i];
-    tmp[1] = hex[2*i + 1];
-    tmp[2] = 0;
-    u8[i] = strtoul( tmp, NULL, 16 );
-  }
-  return u8;
-}
-
-
 static void usage( char *fmt, ... ) {
-  printf( "Usage: shamir [-n n] [-k k] split secret\n"
-	  "              join share ...\n"
+  printf( "Usage: shamir [-n n] [-k k] [-b] split secret\n"
+	  "                  join share ...\n"
+	  "    Where:\n"
+	  "     -n     number of shares\n"
+	  "     -k     share threshold\n"
+	  "     -b     binary mode, expect secet as base64 and emit share as base64\n"
+	  "\n"
 	  );
+
   if( fmt ) {
     va_list args;
     printf( "Error: " );
@@ -50,10 +33,11 @@ static void usage( char *fmt, ... ) {
 }
 
 
-int main( int argc, char **argv ) {
+int shamir_main( int argc, char **argv ) {
   int argi;
   int n = 3, k = 2;
-
+  int binarymode = 0;
+  
   argi = 1;
   while( argi < argc ) {
     if( strcmp( argv[argi], "-n" ) == 0 ) {
@@ -64,61 +48,90 @@ int main( int argc, char **argv ) {
       argi++;
       if( argi >= argc ) usage( NULL );
       k = strtoul( argv[argi], NULL, 10 );
+    } else if( strcmp( argv[argi], "-b" ) == 0 ) {
+      binarymode = 1;
     } else break;
+    argi++;
   }
       
   
   if( argi >= argc ) usage( NULL );
 
   if( strcmp( argv[argi], "split") == 0 ) {
-    int secretlen, i, row;
+    int secretlen, i, row, buflen, sl;
     char *buf;
     struct sec_shamir_share *shares;
     char *hex;
     
     argi++;
     if( argi >= argc ) usage( NULL );
-    buf = argv[argi];
+
+    if( binarymode ) {
+      sl = (3*strlen( argv[argi] )) + 5;
+      buf = malloc( sl );
+      buflen = base64_decode( buf, sl, argv[argi] );
+      if( buflen < 0 ) usage( "Failed to decode input buffer" );
+    } else {
+      buf = argv[argi];
+      buflen = strlen( argv[argi] ) + 1;
+    }
     
-    secretlen = strlen( buf );
+    secretlen = buflen;
     shares = malloc( sizeof(*shares) * n );
     for( i = 0; i < n; i++ ) {
       shares[i].flags = 0;
       shares[i].xval = 0;
-      shares[i].sharebuf = malloc( secretlen + 1 );
+      shares[i].sharebuf = malloc( secretlen );
     }
     sec_shamir_split( (uint8_t *)buf, secretlen, shares, n, k );
 
-    hex = malloc( (secretlen + 1) * 2 + 1 );
+    hex = malloc( (4*secretlen) / 3 + 5 );
     for( row = 0; row < n; row++ ) {
-      u8_to_hex( shares[row].sharebuf, secretlen + 1, hex );
+      base64_encode( (char *)shares[row].sharebuf, secretlen, hex );
       printf( "%s\n", hex );
       free( shares[row].sharebuf );
     }
     free( shares );
     free( hex );
+    if( binarymode ) free( buf );
   } else if( strcmp( argv[argi], "join" ) == 0 ) {
-    int k, secretlen, i;
+    int k, secretlen, i, sl;
     struct sec_shamir_share *shares;
     uint8_t *secret;
 
     argi++;
     if( argi >= argc ) usage( NULL );
     k = argc - argi;
-    secretlen = strlen(argv[argi]) - 1;
+    secretlen = -1; /* get secretlen from length of first share */
     shares = malloc( k * sizeof(*shares) );
 
     for( i = 0; i < k; i++ ) {
-      shares[i].sharebuf = malloc( strlen( argv[argi] ) / 2 );;
-      hex_to_u8( argv[argi], shares[i].sharebuf );
+      sl = strlen( argv[argi] );
+      sl = (4*sl) / 3 + 5;
+      shares[i].sharebuf = malloc( sl );
+      memset( shares[i].sharebuf, 0, sl );
+      sl = base64_decode( (char *)shares[i].sharebuf, sl, argv[argi] );
+      if( sl < 0 ) usage( "Bad share %d", i );
+      if( secretlen == -1 ) secretlen = sl;
+      else if( sl != secretlen ) usage( "Share %d length mismatch %d != %d", i, sl, secretlen );
+
       argi++;
     }
 
     secret = malloc( secretlen );
     sec_shamir_join( secret, secretlen, shares, k );
 
-    printf( "%s\n", secret );
+    if( binarymode ) {
+      char *sstr = malloc( (4*secretlen) / 3 + 5 );
+      base64_encode( (char *)secret, secretlen, sstr );
+      printf( "%s\n", sstr );
+      free( sstr );
+    } else {
+      printf( "%s\n", secret );
+    }
   } else usage( NULL );
 
   return 0;
 }
+
+

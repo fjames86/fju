@@ -1,27 +1,3 @@
-/*
- * MIT License
- *
- * Copyright (c) 2018 Frank James
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- */
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
@@ -66,8 +42,9 @@ struct _header {
   uint32_t flags;
   uint32_t unused2;
   uint64_t tag;
+  char cookie[LOG_MAX_COOKIE];
   
-  uint32_t spare[48]; /* future expansion */
+  uint32_t spare[44]; /* future expansion */
 };
 
 struct _entry {
@@ -179,6 +156,9 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
     hdr->count = 0;
     hdr->tag = time( NULL );
     hdr->flags = (opts && (opts->mask & LOG_OPT_FLAGS)) ? opts->flags : 0;
+    if( opts && opts->mask & LOG_OPT_COOKIE ) {
+      memcpy( hdr->cookie, opts->cookie, LOG_MAX_COOKIE );
+    }
     
     sts = mmf_remap( &log->mmf, (sizeof(struct _header) + LOG_LBASIZE * hdr->lbacount) );
     if( sts ) goto bad;
@@ -196,7 +176,14 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
   log->pid = getpid();
 #endif
 
-
+  if( opts && opts->mask & LOG_OPT_COOKIE ) {
+    hdr = (struct _header *)log->mmf.file;
+    if( memcmp( hdr->cookie, opts->cookie, LOG_MAX_COOKIE ) != 0 ) {
+      /* cookie mismatch */
+      goto bad;
+    }
+  }
+  
   log_prop( log, &prop );
   if( prop.count > prop.lbacount ) {
     log_reset( log );
@@ -206,7 +193,7 @@ int log_open( char *path, struct log_opts *opts, struct log_s *log ) {
     log_reset( log );
     log_writef( log, LOG_LVL_FATAL, "Log corruption detected - start=%d max=%d", prop.start, prop.lbacount );
   }
-  
+
   return 0;
 
  bad:
@@ -267,6 +254,7 @@ int log_prop( struct log_s *log, struct log_prop *prop ) {
   prop->last_id = hdr->last_id;
   prop->flags = hdr->flags;
   prop->tag = hdr->tag;
+  memcpy( prop->cookie, hdr->cookie, LOG_MAX_COOKIE );
   
   log_unlock( log );
 
@@ -365,6 +353,7 @@ int log_read( struct log_s *log, uint64_t id, struct log_entry *elist, int n, in
 	if( elist[i].iov[j].buf ) {
 	  elist[i].iov[j].buf[offset] = '\0';
 	  offset++;
+	  elist[i].msglen++;
 	}
       }
     }
@@ -406,8 +395,11 @@ int log_read_end( struct log_s *log, uint64_t id, struct log_entry *elist, int n
     the_id = hdr->last_id;
     log_unlock( log );
   }  
-  if( the_id == 0 ) return -1;
-
+  if( the_id == 0 ) {
+    if( nelist ) *nelist = 0;
+    return 0;
+  }
+    
   for( i = 0; i < n; i++ ) {
     ne = 0;
     sts = log_read( log, the_id | LOG_FLAG_READ, &elist[i], 1, &ne );
@@ -480,6 +472,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   hdrlvl = (hdr->flags & LOG_FLAG_LVLMASK) >> 4;
   if( (entry->flags & LOG_LVL_MASK) < hdrlvl ) {
     /* lvl too low - discard */
+    sts = 0;
     goto done;
   }
   
@@ -494,7 +487,10 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
     hdr = (struct _header *)log->mmf.file;
     hdr->lbacount = nlbacount;    
   } else {
-    if( cnt > (int)hdr->lbacount ) goto done;
+    if( cnt > (int)hdr->lbacount ) {
+      sts = -1;
+      goto done;
+    }
   }
   
   /* get next location */
@@ -505,6 +501,7 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
 
     if( hdr->flags & LOG_FLAG_FIXED ) {
       /* fixed log - no space left so bail out here */
+      sts = -1;
       goto done;
     }
     
@@ -528,10 +525,11 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   e->msglen = msglen;
   e->prev_id = hdr->last_id;
   e->seq = hdr->seq;
-  e->ltag = log->ltag;
+  e->ltag = log->ltag ? log->ltag : entry->ltag;
   hdr->last_id = e->id;
 
   entry->id = e->id;
+  entry->prev_id = e->prev_id;
   entry->msglen = msglen;
   entry->seq = e->seq;
   
@@ -569,12 +567,13 @@ int log_write( struct log_s *log, struct log_entry *entry ) {
   }
 
   hdr->seq++;
-
+  sts = 0;
+  
  done:
   if( log->flags & (LOG_SYNC|LOG_ASYNC) ) log_sync( log, log->flags & LOG_SYNC ? 1 : 0 );
   
   log_unlock( log );
-  return 0;
+  return sts;
 }
 
 int log_writev( struct log_s *log, int lvl, char *fmt, va_list args ) {
@@ -650,4 +649,103 @@ int log_sync( struct log_s *log, int sync ) {
   
   mmf_sync( &log->mmf, sync );
   return 0;
+}
+
+int log_set_cookie( struct log_s *log, char *cookie, int size ) {
+  struct _header *hdr;
+  
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+
+  hdr = (struct _header *)log->mmf.file;
+  if( size > LOG_MAX_COOKIE - 1 ) size = LOG_MAX_COOKIE - 1;
+
+  log_lock( log );
+  memset( hdr->cookie, 0, LOG_MAX_COOKIE );
+  memcpy( hdr->cookie, cookie, size );    
+  log_unlock( log );
+  
+  return 0;
+}
+
+
+int log_truncate( struct log_s *log, uint64_t id, uint32_t flags ) {
+  struct _header *hdr;
+  int sts;
+  uint32_t idx, ecount;
+  struct _entry *e;
+  char *p;
+
+  if( !log ) log = default_log();
+  if( !log ) return -1;
+
+  hdr = (struct _header *)log->mmf.file;
+
+  sts = -1;
+  log_lock( log );
+
+  /*
+   * check if this is a valid id.
+   * if it is then reduce the hdr->count to point to this index
+   */
+
+  if( !id ) {
+    if( flags & LOG_TRUNC_END ) {
+      id = hdr->last_id;
+    } else {
+      /* truncating to entry 0 means delete all entries */
+      hdr->start = 0;
+      hdr->count = 0;
+      hdr->last_id = 0;
+      sts = 0;
+      goto done;
+    }
+  }
+  
+  idx = (uint32_t)(id & LOG_INDEX_MASK);
+  if( idx >= hdr->lbacount ) goto done;
+
+  /* lookup item at index */
+  p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
+  e = (struct _entry *)p;
+  if( e->magic != LOG_MAGIC ) goto done;
+  if( e->id != id ) goto done;
+
+  if( flags & LOG_TRUNC_END ) {
+    /* delete all entries before here - just adjust start andcount */
+    hdr->count = (hdr->count - (idx - hdr->start) + hdr->lbacount) % hdr->lbacount;
+    hdr->start = idx;
+  } else {
+    /* get previous id */
+    id = e->prev_id;
+    if( id ) {
+      idx = (uint32_t)(id & LOG_INDEX_MASK);
+      if( idx >= hdr->lbacount ) goto done;
+      
+      p = (char *)log->mmf.file + sizeof(struct _header) + (LOG_LBASIZE * idx);
+      e = (struct _entry *)p;
+      if( e->magic != LOG_MAGIC ) goto done;
+      if( e->id != id ) goto done;
+    
+      ecount = 1 + (e->msglen / LOG_LBASIZE) + (e->msglen % LOG_LBASIZE ? 1 : 0);
+      idx = (idx + ecount) % hdr->lbacount;
+      
+      /* id is correct, truncate to here */
+      hdr->count = (idx - hdr->start + hdr->lbacount) % hdr->lbacount;
+      //hdr->seq++;
+      hdr->last_id = id;
+      
+    } else {
+      /* no prev */
+      hdr->start = 0;
+      hdr->count = 0;
+      hdr->last_id = 0;
+    }
+  }
+
+  sts = 0;
+ done:
+  log_unlock( log );
+
+  return sts;
 }

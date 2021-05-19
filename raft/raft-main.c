@@ -1,27 +1,3 @@
-/*
- * MIT License
- * 
- * Copyright (c) 2019 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
  
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
@@ -42,16 +18,22 @@
 #include <fju/rpc.h>
 #include <fju/hostreg.h>
 #include <fju/hrauth.h>
+#include <fju/fsm.h>
 
 static void usage( char *fmt, ... ) {
     printf( "Usage:    prop\n"
-	    "          reset\n" 
-            "          add cluster [clid=ID] [typeid=TYPEID] [witness=true|false]\n"
-            "          set cluster ID [typeid=TYPEID] [witness=true|false]\n"
+	    "          set prop [elec_low=*] [elec_high=*] [term_low=*] [term_high=*] [rpc_timeout=*]\n" 
+            "          add cluster [clid=ID] [appid=APPID] [witness=true|false] [cookie=*]\n"
+            "          set cluster ID [appid=APPID] [witness=true|false] [cookie=*]\n"
             "          rem cluster ID\n"
+	    "          get CLID|APPID\n" 
             "          add member [clid=CLID] [hostid=HOSTID]\n"
             "          set member\n"
             "          rem member clid=CLID hostid=HOSTID\n"
+	    "\n"
+	    "WARNING: These commands operate directly on the raft database.\n"
+	    "Do not use these while the service is running. Use rpc change command instead.\n"
+	    "\n"
     );
 
     if( fmt ) {
@@ -83,8 +65,9 @@ static void argval_split( char *instr, char *argname, char **argval ) {
 
 static void cmd_list( void );
 static void cmd_prop( void );
-			   
-int main( int argc, char **argv ) {
+static void print_cluster( struct raft_cluster *cluster );
+
+int raft_main( int argc, char **argv ) {
     int sts, i;
 
 #ifdef WIN32
@@ -96,6 +79,8 @@ int main( int argc, char **argv ) {
     sts = raft_open();
     if( sts ) usage( "Failed to open" );
 
+    hostreg_open();
+    
     i = 1;
     if( i >= argc ) {
         cmd_list();
@@ -103,8 +88,74 @@ int main( int argc, char **argv ) {
         cmd_list();
     } else if( strcmp( argv[i], "prop" ) == 0 ) {
         cmd_prop();
-    } else if( strcmp( argv[i], "reset" ) == 0 ) {
-        raft_reset();
+    } else if( strcmp( argv[i], "get" ) == 0 ) {
+      uint64_t clid = 0;
+      uint32_t appid = 0;
+      struct raft_cluster cl;
+      char *term;
+      char timestr[64];
+      struct raft_command_info *cmdlist;
+      int ncmd, n;
+      int printcommands;
+
+      printcommands = 0;
+      
+      i++;
+      if( i >= argc ) usage( NULL );
+      clid = strtoull( argv[i], &term, 16 );
+      if( *term ) {
+	appid = strtoul( argv[i], &term, 10 );
+	if( *term ) {
+	  clid = raft_clid_by_cookie( argv[i] );
+	  if( !clid ) usage( "Unable to find cluster %s", argv[i] );
+	} else {
+	  clid = raft_clid_by_appid( appid );
+	  if( !clid ) usage( "No cluster with appid %u", appid );
+	}	  
+      }
+      i++;
+      while( i < argc ) {
+	if( strcmp( argv[i], "-v" ) == 0 ) {
+	  printcommands = 1;
+	} else usage( NULL );
+	i++;
+      }
+
+      sts = raft_cluster_by_clid( clid, &cl );
+      if( sts ) usage( "Failed to find cluster" );
+      print_cluster( &cl );
+
+      ncmd = raft_command_list( clid, NULL, 0 );
+      cmdlist = malloc( sizeof(*cmdlist) * ncmd );
+      n = raft_command_list( clid, cmdlist, ncmd );
+      if( n < ncmd ) ncmd = n;
+      for( i = 0; i < ncmd; i++ ) {
+	int j;
+	char cmdbuf[RAFT_MAX_COMMAND];
+	uint64_t tt;
+	struct log_iov iov[2];
+	
+	printf( "  Command Term %"PRIu64" Seq %"PRIu64" Len %u When %s\n",
+		cmdlist[i].term, cmdlist[i].seq,
+		cmdlist[i].len,
+		sec_timestr( cmdlist[i].when, timestr ) );
+	
+	if( printcommands ) {
+	  iov[0].buf = (char *)&tt;
+	  iov[0].len = sizeof(tt);
+	  iov[1].buf = cmdbuf;
+	  iov[1].len = sizeof(cmdbuf);
+	  sts = fsm_command_load( clid, cmdlist[i].seq, iov, 2 );
+	  if( sts < 0 ) usage( "Failed to load command Seq=%"PRIu64"", cmdlist[i].seq );
+	  sts -= sizeof(tt);
+	  for( j = 0; j < sts; j++ ) {
+	    if( j && ((j % 16) == 0) ) printf( "\n" );
+	    printf( "%02x ", (uint32_t)(uint8_t)cmdbuf[j] );
+	  }
+	  printf( "\n" );
+	}
+      }
+      
     } else if( strcmp( argv[i], "add" ) == 0 ) {
         i++;
         if( i >= argc ) usage( NULL );
@@ -116,40 +167,58 @@ int main( int argc, char **argv ) {
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
 		 if( strcmp( argname, "clid" ) == 0 ) {
-		      if( argval ) entry.id = strtoull( argval, NULL, 16 );
-		 } else if( strcmp( argname, "typeid" ) == 0 ) {
-		   if( argval ) entry.typeid = strtoul( argval, NULL, 16 );
+		      if( argval ) entry.clid = strtoull( argval, NULL, 16 );
+		 } else if( strcmp( argname, "appid" ) == 0 ) {
+		   if( argval ) entry.appid = strtoul( argval, NULL, 0 );
 		 } else if( strcmp( argname, "witness" ) == 0 ) {
 		   if( argval ) {
 		     if( strcmp( argval, "true" ) == 0 ) entry.flags |= RAFT_CLUSTER_WITNESS;
 		     else entry.flags &= ~RAFT_CLUSTER_WITNESS;
-		   }		   
-                 } else {
+		   }
+		 } else if( strcmp( argname, "cookie" ) == 0 ) {
+		   if( argval ) strncpy( entry.cookie, argval, RAFT_MAX_COOKIE - 1 );
+                 } else {		   
 		     printf( "Unknown field name %s\n", argname ); usage( NULL );
 		 }
                  i++;
             }
-	    if( !entry.id ) sec_rand( &entry.id, sizeof(entry.id) );
+	    if( !entry.clid ) sec_rand( &entry.clid, sizeof(entry.clid) );
             sts = raft_cluster_set( &entry );
             if( sts ) usage( "Failed to add cluster" );
-            printf( "Added cluster ID=%"PRIx64"\n", entry.id );
+            printf( "Added cluster ID=%"PRIx64"\n", entry.clid );
         } else if( strcmp( argv[i], "member" ) == 0 ) {
-            struct raft_member entry;
+	    struct raft_cluster cl;
+	    uint64_t clid = 0, hostid = 0;
             char argname[64], *argval;
-            memset( &entry, 0, sizeof(entry) );
+            memset( &cl, 0, sizeof(cl) );
             i++;
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
                  if( strcmp( argname, "clid" ) == 0 ) {
-                      if( argval ) entry.clid = strtoull( argval, NULL, 16 );
+                      if( argval ) clid = strtoull( argval, NULL, 16 );
 		 } else if( strcmp( argname, "hostid" ) == 0 ) {
-		     if( argval ) entry.hostid = hostreg_hostid_by_name( argval );
+		   if( argval ) {
+		     char *term;
+		     hostid = strtoull( argval, &term, 16 );
+		     if( *term ) {
+		       hostid = hostreg_hostid_by_name( argval );
+		       if( !hostid ) usage( "Unknown host \"%s\"", argval );
+		     } else {
+		       if( hostreg_host_by_id( hostid, NULL ) ) usage( "Unknown hostid" );
+		     }
+		   }
                  } else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
                  i++;
             }
-            sts = raft_member_set( &entry );
-            if( sts ) usage( "Failed to add member" );
-            printf( "Added member ID=%"PRIx64"\n", entry.hostid );
+	    sts = raft_cluster_by_clid( clid, &cl );
+	    if( sts ) usage( "Unknown cluster" );
+	    if( cl.nmember >= RAFT_MAX_MEMBER ) usage( "No more members" );
+	    i = cl.nmember;
+	    memset( &cl.member[i], 0, sizeof(cl.member[i]) );
+	    cl.member[i].hostid = hostid;
+	    cl.nmember++;
+	    raft_cluster_set( &cl );
+            printf( "Added member ID=%"PRIx64"\n", hostid );
         } else usage( NULL );
     } else if( strcmp( argv[i], "rem" ) == 0 ) {
         i++;
@@ -164,18 +233,31 @@ int main( int argc, char **argv ) {
         } else if( strcmp( argv[i], "member" ) == 0 ) {
 	    char argname[64], *argval;
 	    uint64_t clid = 0, hostid = 0;
+	    struct raft_cluster cl;
             i++;
 	    while( i < argc ) {
 	        argval_split( argv[i], argname, &argval );
 		if( strcmp( argname, "clid" ) == 0 ) {
 		    if( argval ) clid = strtoull( argval, NULL, 16 );
 		} else if( strcmp( argname, "hostid" ) == 0 ) {
-		    if( argval ) hostid = hostreg_hostid_by_name( argval );
+		  if( argval ) {
+		    char *term;
+		    hostid = strtoull( argval, &term, 16 );
+		    if( *term ) hostid = hostreg_hostid_by_name( argval );
+		  }
 		} else { printf( "Unknown field name %s\n", argname ); usage( NULL ); }
 		i++;
 	    }
-            sts = raft_member_rem( clid, hostid );
-            if( sts ) usage( "Failed to rem member" );
+	    sts = raft_cluster_by_clid( clid, &cl );
+	    if( sts ) usage( "Unknown cluster" );
+	    for( i = 0; i < cl.nmember; i++ ) {
+	      if( cl.member[i].hostid == hostid ) {
+		if( i != (cl.nmember - 1) ) cl.member[i] = cl.member[cl.nmember - 1];
+		cl.nmember--;
+		raft_cluster_set( &cl );
+		break;
+	      }
+	    }
         } else usage( NULL );
     } else if( strcmp( argv[i], "set" ) == 0 ) {
         i++;
@@ -188,7 +270,8 @@ int main( int argc, char **argv ) {
 	  i++;
 	  if( i >= argc ) usage( NULL );
 	  clid = strtoull( argv[i], NULL, 16 );
-	  sts = raft_cluster_by_id( clid, &cl );
+	  sts = raft_cluster_by_clid( clid, &cl );
+	  if( sts ) usage( "Unknown cluster" );
 	  i++;
 	  while( i < argc ) {
 	    argval_split( argv[i], argname, &argval );
@@ -198,13 +281,17 @@ int main( int argc, char **argv ) {
 		else if( strcmp( argval, "candidate" ) == 0 ) cl.state = RAFT_STATE_CANDIDATE;
 		else if( strcmp( argval, "leader" ) == 0 ) cl.state = RAFT_STATE_LEADER;
 	      }
-	    } else if( strcmp( argname, "typeid" ) == 0 ) {
-	      if( argval ) cl.typeid = strtoul( argval, NULL, 16 );
+	    } else if( strcmp( argname, "appid" ) == 0 ) {
+	      if( argval ) cl.appid = strtoul( argval, NULL, 0 );
 	    } else if( strcmp( argname, "witness" ) == 0 ) {
 	      if( argval ) {
 		if( strcmp( argval, "true" ) == 0 ) cl.flags |= RAFT_CLUSTER_WITNESS;
 		else cl.flags &= ~RAFT_CLUSTER_WITNESS;
-	      }		   
+	      }
+	    } else if( strcmp( argname, "cookie" ) == 0 ) {
+	      if( argval ) {
+		strncpy( cl.cookie, argval, sizeof(cl.cookie) - 1 );
+	      }
 	    } else usage( NULL );
 	    i++;
 	  }
@@ -212,42 +299,45 @@ int main( int argc, char **argv ) {
 	} else if( strcmp( argv[i], "member" ) == 0 ) {
 	} else if( strcmp( argv[i], "prop" ) == 0 ) {
             char argname[64], *argval;
-	    uint32_t elec_low, elec_high, term_low, term_high;
-	    uint32_t rpc_timeout, rpc_retry;
-	      
-	    elec_low = 0;
-	    elec_high = 0;
-	    term_low = 0;
-	    term_high = 0;
-	    rpc_timeout = 0;
-	    rpc_retry = 0;
+	    struct raft_prop prop;
+	    uint32_t mask = 0;
+	    
+	    raft_prop( &prop );
 	    
             i++;
             while( i < argc ) {
                  argval_split( argv[i], argname, &argval );
                  if( strcmp( argname, "elec_low" ) == 0 ) {
-                      if( argval ) elec_low = strtoul( argval, NULL, 10 );
+		   if( argval ) {
+		     prop.elec_low = strtoul( argval, NULL, 10 );
+		     mask |= RAFT_PROP_ELEC_LOW;
+		   }
 		 } else if( strcmp( argname, "elec_high" ) == 0 ) {
-                      if( argval ) elec_high = strtoul( argval, NULL, 10 );
+		   if( argval ) {
+		     prop.elec_high = strtoul( argval, NULL, 10 );
+		     mask |= RAFT_PROP_ELEC_HIGH;
+		   }
 		 } else if( strcmp( argname, "term_low" ) == 0 ) {
-                      if( argval ) term_low = strtoul( argval, NULL, 10 );
+		   if( argval ) {
+		     prop.term_low = strtoul( argval, NULL, 10 );
+		     mask |= RAFT_PROP_TERM_LOW;
+		   }
 		 } else if( strcmp( argname, "term_high" ) == 0 ) {
-                      if( argval ) term_high = strtoul( argval, NULL, 10 );
+		   if( argval ) {
+		     prop.term_high = strtoul( argval, NULL, 10 );
+		     mask |= RAFT_PROP_TERM_HIGH;
+		   }
 		 } else if( strcmp( argname, "rpc_timeout" ) == 0 ) {
-                      if( argval ) rpc_timeout = strtoul( argval, NULL, 10 );
-		 } else if( strcmp( argname, "rpc_retry" ) == 0 ) {
-                      if( argval ) rpc_retry = strtoul( argval, NULL, 10 );
+		   if( argval ) {
+		     prop.rpc_timeout = strtoul( argval, NULL, 10 );
+		     mask |= RAFT_PROP_RPC_TIMEOUT;
+		   }
                  } else {
-		     printf( "Unknown field name %s\n", argname ); usage( NULL );
+		   printf( "Unknown field name %s\n", argname ); usage( NULL );
 		 }
                  i++;
             }
-	    raft_set_timeouts( elec_low ? &elec_low : NULL,
-			       elec_high ? &elec_high : NULL,
-			       term_low ? &term_low : NULL,
-			       term_high ? &term_high : NULL );
-	    if( rpc_timeout ) raft_set_rpc_timeout( rpc_timeout );
-	    if( rpc_retry ) raft_set_rpc_retry( rpc_retry );
+	    raft_prop_set( mask, &prop );
 	    
         } else usage( NULL );
     } else usage( NULL );
@@ -256,62 +346,97 @@ int main( int argc, char **argv ) {
     return 0;
 }
 
-static void print_cluster( struct raft_cluster *cluster, struct raft_member *member, int nmember ) {
+static void print_cluster( struct raft_cluster *cluster ) {
   char timestr[128], namestr[HOSTREG_MAX_NAME];
   int j;
-  
-      printf( "cluster id=%"PRIx64" state=%s termseq=%"PRIu64" leader=%"PRIx64" (%s)\n"
-	      "        typeid=%x flags=0x%x commitseq=%"PRIu64" stateseq=%"PRIu64"\n",
-	      cluster->id,
-	      cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
-	      cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
-	      cluster->state == RAFT_STATE_LEADER ? "Leader" :
-	      "Unknown",
-	      cluster->termseq, cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
-	      cluster->typeid, cluster->flags, cluster->commitseq, cluster->stateseq );
-	          
-      for( j = 0; j < nmember; j++ ) {
-	  if( member[j].lastseen ) {
-	    sec_timestr( member[j].lastseen, timestr );
-	  } else {
-	      strcpy( timestr, "Never" );
-	  }
+  uint64_t cseq;
 
-	  printf( "    member hostid=%"PRIx64" (%s) flags=%x lastseen=%s", 
-		  member[j].hostid, hostreg_name_by_hostid( member[j].hostid, namestr ), member[j].flags, timestr );
-	  if( cluster->state == RAFT_STATE_LEADER ) {
-	    printf( "nextseq=%"PRIu64" stateseq=%"PRIu64"", member[j].nextseq, member[j].stateseq );
-	  }
-	  printf( "\n" );
-    }  
+  raft_command_seq( cluster->clid, NULL, &cseq );
+  
+  printf( "Cluster ID=%"PRIx64" State=%s Term=%"PRIu64" Leader=%"PRIx64" (%s)\n"
+	  "        AppliedSeq=%"PRIu64" CommitSeq=%"PRIu64" StoredSeq=%"PRIu64" AppID=%u Flags=0x%x (%s) VoteID=%"PRIx64"\n"
+	  "        Cookie=%s\n", 
+	  cluster->clid,
+	  cluster->state == RAFT_STATE_FOLLOWER ? "Follower" :
+	  cluster->state == RAFT_STATE_CANDIDATE ? "Candidate" :
+	  cluster->state == RAFT_STATE_LEADER ? "Leader" :
+	  "Unknown",
+	  cluster->term,
+	  cluster->leaderid, hostreg_name_by_hostid( cluster->leaderid, namestr ),
+	  cluster->appliedseq, cluster->commitseq, cseq,
+	  cluster->appid, cluster->flags, cluster->flags & RAFT_CLUSTER_WITNESS ? "Witness" : "", 
+	  cluster->voteid,
+	  cluster->cookie );
+
+  for( j = 0; j < cluster->nmember; j++ ) {
+    if( cluster->member[j].lastseen ) {
+      sec_timestr( cluster->member[j].lastseen, timestr );
+    } else {
+      strcpy( timestr, "Never" );
+    }
+
+    printf( "    Member HostID=%"PRIx64" (%s) Flags=%s (0x%x) LastSeen=%s ", 
+	    cluster->member[j].hostid,
+	    hostreg_name_by_hostid( cluster->member[j].hostid, namestr ),
+	    cluster->member[j].flags & RAFT_MEMBER_VOTED ? "Voted," : "",
+	    cluster->member[j].flags,
+	    timestr );
+    if( cluster->state == RAFT_STATE_LEADER ) {
+      printf( "StoredSeq=%"PRIu64"", cluster->member[j].storedseq );
+    }
+    printf( "\n" );
+  }
+
+  {
+    struct raft_snapshot_info info;
+    int sts;
+    sts = raft_snapshot_info( cluster->clid, &info );
+    if( !sts ) {
+      printf( "    Snapshot Size=%u Term=%"PRIu64" Seq=%"PRIu64"\n", info.len, info.term, info.seq );
+    }
+  }
+
+  printf( "\n" );
 }
 
 static void cmd_list( void ) {
   int i, n, m;
   struct raft_cluster *cluster;
-  struct raft_member *member;
+  char hname[HOSTREG_MAX_NAME];
   
   n = raft_cluster_list( NULL, 0 );
   cluster = (struct raft_cluster *)malloc( sizeof(*cluster) * n );
 
-  member = (struct raft_member *)malloc( sizeof(*member) * 256 );
-  
+  printf( "%-16s %-10s %-16s %-10s %-8s %-8s %-8s %s\n",
+	  "CLID", "State", "Leader", "AppID", "Term", "Applied", "Commit", "Cookie" );
   m = raft_cluster_list( cluster, n );
   if( m < n ) n = m;
   for( i = 0; i < n; i++ ) {
-    m = raft_member_list( cluster[i].id, member, 256 );
-    print_cluster( &cluster[i], member, m );
+    strcpy( hname, "" );
+    if( cluster[i].leaderid ) hostreg_name_by_hostid( cluster[i].leaderid, hname );
+    
+    printf( "%"PRIx64" %-10s %-16s %-10u %-8"PRIu64" %-8"PRIu64" %-8"PRIu64" %s\n",
+	    cluster[i].clid,
+	    cluster[i].state == RAFT_STATE_LEADER ? "Leader" :
+	    cluster[i].state == RAFT_STATE_CANDIDATE ? "Candidate" :
+	    cluster[i].state == RAFT_STATE_FOLLOWER ? "Follower" :
+	    "Other",
+	    hname,
+	    cluster[i].appid,
+	    cluster[i].term,
+	    cluster[i].appliedseq, cluster[i].commitseq,
+	    cluster[i].cookie );
   }
+
   free( cluster );
-  printf( "\n" );
 }
 
 static void cmd_prop( void ) {
      struct raft_prop prop;
      raft_prop( &prop );
-     printf( "seq=%"PRIu64" rpc-timeout=%u rpc-retry=%u\n", prop.seq, prop.rpc_timeout, prop.rpc_retry );
-     printf( "Timeouts: election=[%d, %d] term=[%d, %d]\n", prop.elec_low, prop.elec_high, prop.term_low, prop.term_high );
-     printf( "cluster=%d/%d\n", prop.cluster_count, prop.cluster_max );
-     printf( "member=%d/%d\n", prop.member_count, prop.member_max );
+     printf( "seq=%"PRIu64" rpc-timeout=%u\n", prop.seq, prop.rpc_timeout );
+     printf( "Timeouts: election=[%d, %d] term=[%d, %d]\n",
+	     prop.elec_low, prop.elec_high, prop.term_low, prop.term_high );
+     printf( "Cluster=%u/%u\n", prop.count, RAFT_MAX_CLUSTER );
 }
 

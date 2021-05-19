@@ -1,31 +1,7 @@
 
-/*
- * MIT License
- * 
- * Copyright (c) 2019 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
-
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
+#define strcasecmp _stricmp
 #endif
 
 #include <stdlib.h>
@@ -183,7 +159,7 @@ int freg_list( struct freg_s *freg, uint64_t parentid, struct freg_entry *entry,
 }
 
 int freg_next( struct freg_s *freg, uint64_t parentid, uint64_t id, struct freg_entry *entry ) {
-  int sts, nentry, i, j, idx, nn;
+  int sts, nentry, i, j, nn;
     uint64_t buf[32];
     struct freg_entry etry;
     struct entry_s e;
@@ -203,7 +179,6 @@ int freg_next( struct freg_s *freg, uint64_t parentid, uint64_t id, struct freg_
     if( nentry < 0 ) return -1;  
     if( !nentry ) return -1;
     
-    idx = 0;
     getnext = id ? 0 : 1;    
     for( i = 0; i < nentry; i += 32 ) {
       sts = fdtab_read( &freg->fdt, parentid, (char *)buf, sizeof(buf), sizeof(e) + (sizeof(uint64_t) * i) );
@@ -264,7 +239,7 @@ int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, stru
 	sts = freg_entry_by_id( freg, buf[j], &etry );
 	if( sts ) {
 	  /* invalid item? */
-	} else if( strcmp( etry.name, tmpname ) == 0 ) {
+	} else if( strcasecmp( etry.name, tmpname ) == 0 ) {
 	  if( entry ) *entry = etry;
 	  if( parentidp ) *parentidp = parentid;
 	  return 0;
@@ -315,6 +290,19 @@ int freg_get( struct freg_s *freg, uint64_t id, uint32_t *flags, char *buf, int 
     return 0;
 }
 
+static int freg_valid_name( char *name ) {
+  char *p;
+  for( p = name; *p != '\0'; p++ ) {
+    /* only allow a-z A-Z 0-9 */
+    if( !(((*p >= 'a') && (*p <= 'z')) ||
+	  ((*p >= 'A') && (*p <= 'Z')) ||
+	  ((*p >= '0') && (*p <= '9'))) ) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, char *buf, int len, uint64_t *id ) {
     int sts, nentry, i, j, n;
     struct freg_entry entry;
@@ -328,7 +316,8 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
       freg = &glob.freg;
     }
     if( !parentid ) parentid = freg->rootid;
-
+    if( !name ) return -1;
+    
     switch( flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_UINT32:
 	if( len != sizeof(uint32_t) ) return -1;
@@ -358,7 +347,7 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
 	  sts = freg_entry_by_id( freg, tmpbuf[j], &entry );
 	  if( sts ) {
 	    /* invalid item? */
-	  } else if( strcmp( entry.name, tmpname ) == 0 ) {
+	  } else if( strcasecmp( entry.name, tmpname ) == 0 ) {
 	    /* check type match */
 	    if( (flags & FREG_TYPE_MASK) != (entry.flags & FREG_TYPE_MASK) ) return -1;
 
@@ -382,6 +371,7 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
     
     /* add new entry */
     memset( &e, 0, sizeof(e) );
+    if( !freg_valid_name( tmpname ) ) return -1;
     strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
     e.flags = flags;
     sts = fdtab_alloc( &freg->fdt, sizeof(e) + len, &tid );
@@ -411,7 +401,8 @@ int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, cha
       if( !glob.ocount ) return -1;
       freg = &glob.freg;
     }
-
+    if( name && !freg_valid_name( name ) ) return -1;
+    
     if( flags && len ) {
 	switch( (*flags) & FREG_TYPE_MASK ) {
 	case FREG_TYPE_UINT32:
@@ -536,7 +527,7 @@ static int get_subentry( struct freg_s *freg, uint64_t parentid, char *path, uin
     if( idx >= (FREG_MAX_NAME - 1) ) return -1;
     *q = '\0';
     if( *p == '/' ) p++;
-    if( strcmp( tmpname, "" ) == 0 ) return -1;
+    if( strcasecmp( tmpname, "" ) == 0 ) return -1;
     if( *p == '\0' ) break;
     
     sts = freg_entry_by_name( freg, parentid, tmpname, &e, NULL );
@@ -586,7 +577,7 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
     if( idx >= (FREG_MAX_NAME - 1) ) return -1;
     *q = '\0';
     if( *p == '/' ) p++;
-    if( strcmp( tmpname, "" ) == 0 ) return -1;
+    if( strcasecmp( tmpname, "" ) == 0 ) return -1;
     if( (flags & FREG_VALUEPATH) && (*p == '\0') ) break;
     
     sts = freg_entry_by_name( freg, parentid, tmpname, &entry, NULL );

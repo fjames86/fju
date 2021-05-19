@@ -1,27 +1,3 @@
-/*
- * MIT License
- *
- * Copyright (c) 2018 Frank James
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- */
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
@@ -57,7 +33,8 @@ static struct {
 #define CMD_TAIL      3 
 #define CMD_RESET     4
 #define CMD_PROP      5
-#define CMD_TEST      6 
+#define CMD_TEST      6
+#define CMD_TRUNCATE  7
   struct log_s log;
   int flags;
   uint64_t start_id;  
@@ -67,6 +44,10 @@ static struct {
   uint32_t ltag;
   int lvlflags;
   int logflags;
+  char cookie[LOG_MAX_COOKIE];
+  uint32_t nfilter;
+#define LOG_MAX_FILTER 8
+  uint32_t filtertags[LOG_MAX_FILTER];
 } fju;
 
 static void usage( char *fmt, ... ) {
@@ -85,6 +66,7 @@ static void usage( char *fmt, ... ) {
           "              -f                           Follow log.\n"
 	  "              -r                           Reset log, clearing all messages.\n"
 	  "              -u                           Show log properties.\n"
+	  "              -X                           Truncate to log entry set by -i option\n"
 	  "\n" 
 	  "  OPTIONS\n"
 	  "     -p path                               Use log file by path name.\n"
@@ -97,7 +79,8 @@ static void usage( char *fmt, ... ) {
 	  "     -b                                    Read/write binary.\n" 
 	  "     -i id                                 Read starting from msg ID\n" 
 	  "     -n nmsgs                              Read no more than nmsgs\n"
-	  "     -S none|sync|async                    Set log sync mode: none, sync, async\n" 
+	  "     -S none|sync|async                    Set log sync mode: none, sync, async\n"
+	  "     -C cookie                             Set log cookie\n" 
 	  "\n" );
   exit( 0 );
 }
@@ -107,13 +90,14 @@ static void cmd_write( void );
 static void cmd_tail( void );
 static void cmd_test( void );
 
-int main( int argc, char **argv ) {
+int log_main( int argc, char **argv ) {
   int i;
   int sts;
   int logsize = 2*1024*1024;
   struct log_opts opts;
   uint32_t logflags = 0;
   int setlvlflags = 0;
+  int setcookie = 0;
   
   memset( &opts, 0, sizeof(opts) );
   fju.cmd = CMD_READ;
@@ -135,6 +119,8 @@ int main( int argc, char **argv ) {
       fju.cmd = CMD_RESET;
     } else if( strcmp( argv[i], "-u" ) == 0 ) {
       fju.cmd = CMD_PROP;
+    } else if( strcmp( argv[i], "-X" ) == 0 ) {
+      fju.cmd = CMD_TRUNCATE;
     } else if( strcmp( argv[i], "-i" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -182,7 +168,11 @@ int main( int argc, char **argv ) {
     } else if( strcmp( argv[i], "-T" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
-      fju.ltag = strtol( argv[i], NULL, 16 );
+      strncpy( (char *)&fju.ltag, argv[i], 4 );
+      if( fju.nfilter < (LOG_MAX_FILTER - 1) ) {
+	fju.filtertags[fju.nfilter] = fju.ltag;
+	fju.nfilter++;
+      }
     } else if( strcmp( argv[i], "-S" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
@@ -193,7 +183,11 @@ int main( int argc, char **argv ) {
       } else if( strcmp( argv[i], "async" ) == 0 ) {
 	fju.logflags = LOG_ASYNC;
       }
-      
+    } else if( strcmp( argv[i], "-C" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      strncpy( fju.cookie, argv[i], LOG_MAX_COOKIE - 1 );
+      setcookie = 1;
     } else {
       usage( NULL );
     }
@@ -210,6 +204,10 @@ int main( int argc, char **argv ) {
   fju.log.flags = fju.logflags;
   
   if( setlvlflags && (fju.cmd != CMD_WRITE) ) log_set_lvl( &fju.log, fju.lvlflags );
+  if( setcookie ) {
+    log_set_cookie( &fju.log, fju.cookie, strlen( fju.cookie ) );
+    fju.cmd = CMD_PROP;
+  }
   
   switch( fju.cmd ) {
   case CMD_READ:
@@ -239,10 +237,16 @@ int main( int argc, char **argv ) {
 	      prop.last_id,
 	      prop.flags,
 	      lvlstr( (prop.flags & LOG_FLAG_LVLMASK) >> 4 ) );
+      if( prop.cookie[0] ) printf( "Cookie: \"%s\"\n", prop.cookie );
     }
     break;
   case CMD_TEST:
     cmd_test();
+    break;
+  case CMD_TRUNCATE:
+    if( !fju.start_id ) usage( "Need entry ID" );
+    sts = log_truncate( &fju.log, fju.start_id, fju.read_reverse ? LOG_TRUNC_END : 0 );
+    if( sts ) usage( "Failed to truncate" );
     break;
   }
 
@@ -261,6 +265,14 @@ static char *lvlstr( int lvl ) {
   case LOG_LVL_FATAL: return "FATAL";
   }
   return "ERROR";
+}
+
+static int filtermatch( uint32_t ltag ) {
+  int i;
+  for( i = 0; i < fju.nfilter; i++ ) {
+    if( fju.filtertags[i] == ltag ) return 1;
+  }
+  return 0;
 }
 
 static void cmd_read( uint64_t id, uint64_t *newid ) {
@@ -298,7 +310,7 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
     if( sts < 0 ) break;
     if( n == 0 ) break;
 
-    if( fju.ltag && (entry.ltag != fju.ltag) ) {
+    if( fju.ltag && !filtermatch( entry.ltag ) ) {
       /* do nothing if filtering on tag but wrong tag */
     } else if( fju.flags & LOG_BINARY ) {
       if( !fju.print_quiet ) {
@@ -309,11 +321,15 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 #endif
 	  }
     } else {
+      char tagstr[5];
+      memcpy( tagstr, (char *)&entry.ltag, 4 );
+      tagstr[4] = 0;
+      
       sec_timestr( entry.timestamp, timestr );
       
       if( entry.flags & LOG_BINARY ) {
 	int i;
-	printf( "%s %-8x %4u:%s %"PRIx64"\n", timestr, entry.ltag, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
+	printf( "%s %-4s %4u:%s %"PRIx64"\n", timestr, tagstr, entry.pid, lvlstr( entry.flags & LOG_LVL_MASK ), entry.id );
 	if( !fju.print_quiet ) {
 	  printf( "  0000  " );
 	  for( i = 0; i < entry.msglen; i++ ) {
@@ -326,8 +342,8 @@ static void cmd_read( uint64_t id, uint64_t *newid ) {
 	}
       } else {
 	if( !fju.print_quiet ) {
-	  printf( "%s %-8x %4u:%s %"PRIx64" %s\n",
-		  timestr, entry.ltag, entry.pid,
+	  printf( "%s %-4s %4u:%s %"PRIx64" %s\n",
+		  timestr, tagstr, entry.pid,
 		  lvlstr( entry.flags & LOG_LVL_MASK ), entry.id, msg );
 	}
       }

@@ -1,33 +1,10 @@
-/*
- * MIT License
- *
- * Copyright (c) 2018 Frank James
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- */
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
 #include <fju/mmf.h>
+#include <stdio.h>
 
 #ifdef WIN32
 #include <Shlobj.h>
@@ -48,7 +25,7 @@ int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 
 	memset( mmf, 0, sizeof(*mmf) );
 
-	mmf->fd = CreateFileA( path, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, flags & MMF_OPEN_EXISTING ? OPEN_EXISTING : OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+	mmf->fd = CreateFileA( path, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE, NULL, flags & MMF_OPEN_EXISTING ? OPEN_EXISTING : OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | (flags & MMF_OPEN_ASYNC ? FILE_FLAG_OVERLAPPED : 0), NULL );
 	if( mmf->fd == INVALID_HANDLE_VALUE ) return -1;
 
 	mmf->fsize = (int)GetFileSize( mmf->fd, NULL );
@@ -194,10 +171,28 @@ int mmf_truncate( struct mmf_s *mmf, int size ) {
   return 0;
 }
 
+int mmf_delete_file( char *path ) {
+  DeleteFileA( path );
+  return 0;
+}
+
+int mmf_rename( char *dirpath, char *oldname, char *newname ) {
+  char oldpath[256], newpath[256];
+  sprintf( oldpath, "%s\\%s", dirpath, oldname );
+  sprintf( newpath, "%s\\%s", dirpath, newname );
+  MoveFileExA( oldpath, newpath, MOVEFILE_REPLACE_EXISTING );
+  // Maybe use ReplaceFileA( oldpath, newpath, NULL, 0, NULL, NULL ); */
+  return 0;
+}
+
+int mmf_fsize( struct mmf_s *mmf ) {
+  return (int)GetFileSize( mmf->fd, NULL );
+}
+
 #else
 int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags ) {
 	memset( mmf, 0, sizeof(*mmf) );
-	mmf->fd = open( path, O_RDWR|(flags & MMF_OPEN_EXISTING ? 0 : O_CREAT), 0600 );
+	mmf->fd = open( path, O_RDWR|(flags & MMF_OPEN_EXISTING ? 0 : O_CREAT)|(flags & MMF_OPEN_ASYNC ? O_DIRECT : 0), 0666 );
 	if( mmf->fd < 0 ) return -1;
 	mmf->fsize = lseek( mmf->fd, 0, SEEK_END );
 	return 0;
@@ -299,4 +294,22 @@ int mmf_truncate( struct mmf_s *mmf, int size ) {
   ftruncate( mmf->fd, size );
   return 0;
 }
+
+int mmf_delete_file( char *path ) {
+  unlink( path );
+  return 0;
+}
+
+int mmf_rename( char *dirpath, char *oldname, char *newname ) {
+  char oldpath[256], newpath[256];
+  sprintf( oldpath, "%s/%s", dirpath, oldname );
+  sprintf( newpath, "%s/%s", dirpath, newname );
+  rename( oldpath, newpath );
+  return 0;
+}
+
+int mmf_fsize( struct mmf_s *mmf ) {
+  return lseek( mmf->fd, 0, SEEK_END );
+}
+
 #endif

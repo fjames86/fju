@@ -1,33 +1,11 @@
 
-/*
- * MIT License
- * 
- * Copyright (c) 2019 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
-
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #include <Winsock2.h>
 #include <Windows.h>
+
+#define strcasecmp _stricmp
+#define strdup _strdup
 #endif
 
 #include <stdlib.h>
@@ -111,10 +89,11 @@ static void cmd_get( int argc, char **argv, int i );
 static void cmd_dump( uint64_t parentid, char *path );
 static void cmd_populate( uint64_t parentid, int depth, int breadth, int *count );
 static void cmd_put( int argc, char **argv, int i );
+static void cmd_merge( char *filename );
 
 static void cmd_list( int argc, char **argv, int i ) {
   struct freg_entry *elist;
-  int sts, n, j;
+  int sts, n;
   uint64_t id;
   uint32_t u32;
   uint64_t u64;
@@ -180,9 +159,13 @@ static void cmd_list( int argc, char **argv, int i ) {
       sts = freg_get( glob.freg, elist[i].id, NULL, NULL, 0, &len );
       buf = malloc( len );
       sts = freg_get( glob.freg, elist[i].id, NULL, buf, len, NULL );
-      for( j = 0; j < len; j++ ) {
-	printf( "%02x", (uint32_t)(uint8_t)buf[j] );
+      {
+	char *strbuf = malloc( 4*(len / 3) + 5 );
+	base64_encode( buf, len, strbuf );
+	printf( "%s", strbuf );
+	free( strbuf );
       }
+      free( buf );
       break;      
     }
     
@@ -236,17 +219,19 @@ static void cmd_get( int argc, char **argv, int ii ) {
 	  printf( "%s\n", buf );
 	  break;
       case FREG_TYPE_OPAQUE:
-	  for( i = 0; i < len; i++ ) {
-	      printf( "%02x", (uint32_t)(uint8_t)buf[i] );
-	  }
-	  printf( "\n" );
+	{
+	  char *strbuf = malloc( (4*(len / 3)) + 5 );
+	  base64_encode( buf, len, strbuf );
+	  printf( "%s\n", strbuf );
+	  free( strbuf );
+	}
 	  break;
       }
   }
   free( buf );
 }
 
-int main( int argc, char **argv ) {
+int reg_main( int argc, char **argv ) {
   int sts, i;
   uint64_t id;
 
@@ -347,6 +332,11 @@ int main( int argc, char **argv ) {
       }
       end = rpc_now();
       printf( "%d cmd_put %dms %.3fus per call\n", niter, (int)(end - start), (float)(1000 * (end - start))/(float)niter );
+  } else if( strcmp( argv[i], "merge" ) == 0 ) {
+    /* merge filename */
+    i++;
+    if( i >= argc ) usage( NULL );
+    cmd_merge( argv[i] );
   } else if( strcmp( argv[i], "prop" ) == 0 ) {
     struct ftab_s ftab;
     struct ftab_prop prop;
@@ -400,7 +390,7 @@ int main( int argc, char **argv ) {
 static void cmd_get2( uint64_t parentid, char *path, char *name ) {
   uint32_t flags;
   char *buf;
-  int i, sts;
+  int sts;
   struct freg_entry e;
 
   sts = freg_entry_by_name( glob.freg, parentid, name, &e, NULL );
@@ -425,10 +415,12 @@ static void cmd_get2( uint64_t parentid, char *path, char *name ) {
     break;
   case FREG_TYPE_OPAQUE:
     printf( "%s/%s opaque ", path, name );
-    for( i = 0; i < e.len; i++ ) {
-      printf( "%02x", (uint32_t)(uint8_t)buf[i] );
+    {
+      char *strbuf = malloc( 4*(e.len / 3) + 5 );
+      base64_encode( buf, e.len, strbuf );
+      printf( "%s\n", strbuf );
+      free( strbuf );
     }
-    printf( "\n" );
     break;
   }
  done:
@@ -523,8 +515,7 @@ static void cmd_put( int argc, char **argv, int i ) {
     uint32_t flags, u32;
     uint64_t u64, id, setid;
     char *buf;
-    int len, sts, j;
-    char tmpstr[32];
+    int len, sts;
     char *term;
     int opfile = 0;
     
@@ -561,7 +552,7 @@ static void cmd_put( int argc, char **argv, int i ) {
     switch( flags & FREG_TYPE_MASK ) {
     case FREG_TYPE_KEY:
       sts = freg_subkey( glob.freg, 0, path, FREG_CREATE, &id );
-      if( sts ) usage( "Failed to create subkey" );      
+      if( sts ) usage( "Failed to create subkey %s", path );      
       break;
     case FREG_TYPE_UINT32:
       if( i < argc ) {
@@ -618,17 +609,12 @@ static void cmd_put( int argc, char **argv, int i ) {
 	    mmf_close( &mmf );
 	} else {
 	    len = 0;
-	    buf = malloc( 4096 );
-	    while( i < argc ) {	
-		for( j = 0; j < strlen( argv[i] ) / 2; j++ ) {
-		    tmpstr[0] = argv[i][2*j];
-		    tmpstr[1] = argv[i][2*j + 1];
-		    tmpstr[2] = '\0';
-		    buf[len] = strtoul( tmpstr, NULL, 16 );
-		    len++;
-		}
-		i++;
+	    buf = malloc( 32*1024 );
+	    if( i < argc ) {
+	      len = base64_decode( buf, 32*1024, argv[i] );
+	      if( len < 0 ) usage( "Failed to decode base64" );
 	    }
+	    free( buf );
 	}
       break;
     default:
@@ -639,9 +625,74 @@ static void cmd_put( int argc, char **argv, int i ) {
     if( (flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) {
       if( setid ) sts = freg_set( glob.freg, setid, NULL, NULL, buf, len );
       else sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
-      if( sts ) usage( "Failed to put" );
+      if( sts ) usage( "Failed to put %s", path );
     }
 
     if( ((flags & FREG_TYPE_MASK) == FREG_TYPE_STRING) && buf ) free( buf );
 }
 
+static void cmd_merge( char *filename ) {
+  FILE *f;
+  char line[4096];
+  char *buf, *path, *typestr, *valstr, *term;
+  int len, sts;
+  uint32_t flags;
+  
+  f = fopen( filename, "r" );
+  if( !f ) usage( "Failed to open \"%s\"", filename );
+
+  while( 1 ) {
+    if( !fgets( line, sizeof(line), f ) ) break;
+
+    /* parse the line */
+    path = strtok( line, " \n" );
+    typestr = strtok( NULL, " \n" );
+    valstr = strtok( NULL, "\n" );
+    if( !path || !typestr ) continue;
+
+    flags = 0;
+	buf = NULL;
+    if( strcasecmp( typestr, "u32" ) == 0 ) {
+      if( !valstr ) usage( "Need valstr" );
+      
+      flags = FREG_TYPE_UINT32;
+      buf = malloc( 4 );
+      len = 4;
+      *((uint32_t *)buf) = strtoul( valstr, &term, 0 );
+      if( *term ) usage( "Failed to parse u32 %s", valstr );
+    } else if( strcasecmp( typestr, "u64" ) == 0 ) {
+      if( !valstr ) usage( "Need valstr" );
+      
+      flags = FREG_TYPE_UINT64;
+      buf = malloc( 8 );
+      len = 8;
+      *((uint64_t *)buf) = strtoull( valstr, &term, 0 );
+      if( *term ) usage( "Failed to parse u64 %s", valstr );
+    } else if( strcasecmp( typestr, "str" ) == 0 ) {
+      if( !valstr ) usage( "Need valstr" );
+      
+      flags = FREG_TYPE_STRING;
+      buf = strdup( valstr );
+      len = strlen( valstr ) + 1;
+    } else if( strcasecmp( typestr, "opaque" ) == 0 ) {
+      if( !valstr ) usage( "Need valstr" );
+      
+      flags = FREG_TYPE_OPAQUE;
+      buf = malloc( 4096 );
+      len = base64_decode( buf, 4096, valstr );
+      if( len < 0 ) usage( "Failed to decode opaque %s", valstr );
+    } else if( strcasecmp( typestr, "key" ) == 0 ) {
+      flags = FREG_TYPE_KEY;
+      buf = NULL;
+      len = 0;
+    } else usage( "Failed to parse typestr \"%s\"", typestr );
+        
+    if( flags == FREG_TYPE_KEY ) sts = freg_subkey( glob.freg, 0, path, FREG_CREATE, NULL );
+    else sts = freg_put( glob.freg, 0, path, flags, buf, len, NULL );
+    if( sts < 0 ) printf( ";; Failed to put %s %s %s\n", path, typestr, valstr ? valstr : "" );
+
+    if( buf ) free( buf );
+  }
+  
+  fclose( f );
+}

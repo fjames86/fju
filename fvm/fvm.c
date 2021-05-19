@@ -1,1323 +1,1640 @@
-#/*
- * MIT License
- * 
- * Copyright (c) 2019 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
 
 #ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
 #include <Winsock2.h>
 #include <Windows.h>
+#define strcasecmp _stricmp
 #endif
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #include <fju/fvm.h>
+#include <fju/mmf.h>
 #include <fju/rpc.h>
-#include <fju/rpcd.h>
-#include <fju/sec.h>
-#include <fju/freg.h>
-#include <fju/hrauth.h>
+#include <fju/log.h>
 #include <fju/hostreg.h>
+#include <fju/rpcd.h>
+#include <fju/programs.h>
+#include <fju/freg.h>
+#include <fju/sec.h>
 
 #include "fvm-private.h"
 
-/*
- * Loosely modelled on the LC3 processor. 
- * Layout:
- * 0x0000 - 0x07ff word jump table 
- * 0x0800 - 0x08ff isr table 
- * 0x0900 - 0x0aff shared memory area (512 words, 1024 bytes)
- * 0x0b00 - 0x0fff unused 
- * 0x1000 - 0x17ff rpc buffer (2048 words, 4k bytes)
- * 0x1800 - 0x27ff unused 
- * 0x2800 - 0x2fff return stack 
- * 0x3000 - 0xfdff user program code + data stack 
- * 0xfe00 - 0xffff device registers 
- */
-
-#define FVM_ADDR_WORDTABLE  0x0000
-#define FVM_ADDR_ISRTABLE   0x0800
-#define FVM_ADDR_SHMEM      0x0900
-#define FVM_ADDR_SHMEMHIGH  0x0aff
-#define FVM_ADDR_RPCBUF     0x1000
-#define FVM_ADDR_RPCBUFHIGH 0x17ff 
-#define FVM_ADDR_RSTACKLOW  0x2800
-#define FVM_ADDR_RSTACKHIGH 0x2fff
-#define FVM_ADDR_USER       0x3000
-#define FVM_ADDR_DSTACKHIGH 0xfdff
-#define FVM_ADDR_DEVICE     0xfe00
-
-
-
-#define FVM_PUSH(fvm,val) do { write_mem( fvm, fvm->reg[FVM_REG_SP], val ); fvm->reg[FVM_REG_SP]--; } while( 0 )
-#define FVM_POP(fvm) (fvm->reg[FVM_REG_SP]++, fvm->mem[fvm->reg[FVM_REG_SP]])
-
-static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val );
-static void fvm_set_dirty_page( struct fvm_state *fvm, uint16_t page );
-static void fvm_set_dirty_region( struct fvm_state *fvm, uint16_t startpage, int npage );
-
-void fvm_push_value( struct fvm_state *fvm, uint16_t val ) {
-    FVM_PUSH( fvm, val );
-}
-
-static uint16_t sign_extend( uint16_t x, int bit_count ) {
-  if( (x >> (bit_count - 1)) & 1 ) {
-    x |= (0xFFFF << bit_count);
-  }
-  return x;
-}
-
-static void update_flags( struct fvm_state *state, uint16_t x ) {
-  state->reg[FVM_REG_PSR] &= ~(FVM_PSR_POS|FVM_PSR_ZERO|FVM_PSR_NEG);
-  if( x == 0 ) state->reg[FVM_REG_PSR] |= FVM_PSR_ZERO;
-  else if( x & 0x8000 ) state->reg[FVM_REG_PSR] |= FVM_PSR_NEG;
-  else state->reg[FVM_REG_PSR] |= FVM_PSR_POS;
-}
-
-/* device registers */
-#define FVM_DEVICE_MCR 0xfe00   /* machine control register */
-#define FVM_DEVICE_CDR 0xfe01   /* console data register */
-#define FVM_DEVICE_RNG 0xfe02   /* random number generator */
-#define FVM_DEVICE_TICKCOUNT 0xfe03 /* tick counter */
-#define FVM_DEVICE_CLOCKLOW 0xfe04  /* unix time clock */
-#define FVM_DEVICE_CLOCKHIGH 0xfe05  /* unix time clock */
-#define FVM_DEVICE_INLOG 0xfe06     /* input log register */
-#define FVM_DEVICE_OUTLOG 0xfe07    /* output log register */
-#define FVM_DEVICE_ALARM 0xfe08    /* sleep */
-#define FVM_DEVICE_RPC 0xfe09      /* rpc device */
-#define FVM_DEVICE_IDLOW 0xfe0a
-#define FVM_DEVICE_IDHIGH 0xfe0b
-
-static uint16_t read_mem( struct fvm_state *state, uint16_t offset ) {
-  if( offset >= FVM_ADDR_DEVICE ) {
-    /* memory mapped device registers */
-    switch( offset ) {
-    case FVM_DEVICE_MCR:
-      /* machine control register */
-      return 0x8000;
-    case FVM_DEVICE_RNG:
-      /* random number generator */
-      return sec_rand_uint32() & 0xffff;
-    case FVM_DEVICE_TICKCOUNT:
-      return (uint16_t)state->tickcount;
-    case FVM_DEVICE_CLOCKLOW:
-      return (uint16_t)time( NULL ) & 0xffff;
-    case FVM_DEVICE_CLOCKHIGH:
-      return (uint16_t)((time( NULL ) >> 16) & 0xffff);
-    case FVM_DEVICE_IDLOW:
-      return (state->id & 0xffff);
-    case FVM_DEVICE_IDHIGH:
-      return (state->id >> 16) & 0xffff;
-    default:
-      return 0;
-    }
-  }
-  return state->mem[offset];    
-}
-
-#define FVM_RPCCMD_RESET  0
-#define FVM_RPCCMD_ENCU32 1
-#define FVM_RPCCMD_ENCU64 2
-#define FVM_RPCCMD_ENCSTR 3
-#define FVM_RPCCMD_ENCOPQ 4
-#define FVM_RPCCMD_ENCFIX 5
-#define FVM_RPCCMD_DECU32 6
-#define FVM_RPCCMD_DECU64 7
-#define FVM_RPCCMD_DECSTR 8
-#define FVM_RPCCMD_DECOPQ 9
-#define FVM_RPCCMD_DECFIX 10
-#define FVM_RPCCMD_CALL   11
-#define FVM_RPCCMD_GETTIMEOUT   12
-#define FVM_RPCCMD_SETTIMEOUT   13
-#define FVM_RPCCMD_GETSERVICE   14
-#define FVM_RPCCMD_SETSERVICE   15 
-#define FVM_RPCCMD_GETHOSTID    16
-#define FVM_RPCCMD_SETHOSTID    17 
-#define FVM_RPCCMD_GETOFFSET    18
-
-void fvm_rpc_force_iter( void );
-
-static void rpcdev_donecb( struct xdr_s *res, void *cxt ) {
-  struct fvm_state *fvm = (struct fvm_state *)cxt;
-  int maxlen, startpage, npage;
-
-  fvm->flags |= FVM_FLAG_RUNNING;
-  fvm->flags &= ~FVM_FLAG_RPC;
-  fvm_rpc_force_iter();
-  
-  if( !res ) {
-    fvm->reg[FVM_REG_R0] = 0;
-    return;
-  }
-
-  /* copy into fvm memory at bos */
-  maxlen = res->count - res->offset;
-  if( maxlen > fvm->rpc.buf.buf_size ) {
-    /* not enough space! return error status */
-    fvm->reg[FVM_REG_R0] = 0;
-    return;
-  }
-
-  fvm->reg[FVM_REG_R0] = -1;
-  memcpy( fvm->rpc.buf.buf, res->buf + res->offset, maxlen );
-  
-  /* mark dirty pages */
-  startpage = fvm->rpc.bufaddr / FVM_PAGE_SIZE;
-  npage = (maxlen / FVM_PAGE_SIZE) + ((maxlen % FVM_PAGE_SIZE) ? 1 : 0);  
-  fvm_set_dirty_region( fvm, startpage, npage );
-
-  fvm->rpc.buf.count = maxlen;
-  fvm->rpc.buf.offset = 0;
-}
-
-static int rpcdev_call( struct fvm_state *fvm, uint32_t prog, uint32_t vers, uint32_t proc ) {
-  int sts, maxlen;
-  struct hrauth_call hcall;
-  struct hrauth_call_opts opts;
-  struct xdr_s args, res;
-    
-  memset( &hcall, 0, sizeof(hcall) );
-  hcall.hostid = fvm->rpc.hostid ? fvm->rpc.hostid : hostreg_localid();
-  hcall.prog = prog;
-  hcall.vers = vers;
-  hcall.proc = proc;
-  hcall.donecb = rpcdev_donecb;
-  hcall.cxt = fvm;
-  hcall.timeout = fvm->rpc.timeout ? fvm->rpc.timeout : 1000;
-  hcall.service = (fvm->rpc.service > HRAUTH_SERVICE_PRIV ? -1 : (uint32_t)fvm->rpc.service); // -1 == no auth
-
-  if( fvm->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RPC %u:%u:%u\n", fvm->reg[FVM_REG_PC] - 1, hcall.prog, hcall.vers, hcall.proc );
-  
-  args = fvm->rpc.buf;
-
-  if( rpcdp() ) {
-    /* if running as rpcd then send call and await reply */
-//    hcall.hostid = hostreg_localid();
-    sts = hrauth_call_udp_async( &hcall, &args, NULL );
-    if( sts ) return sts;
-    
-    /* stop execution, continue when reply received */
-    fvm->flags &= ~FVM_FLAG_RUNNING;
-    fvm->flags |= FVM_FLAG_RPC;
-  } else {
-    /* if not running a rpcd then just make a standard call and block */
-
-    memset( &opts, 0, sizeof(opts) );
-    opts.mask |= HRAUTH_CALL_OPT_TMPBUF;
-    xdr_init( &opts.tmpbuf, malloc( 32*1024 ), 32*1024 );  
-    opts.mask |= HRAUTH_CALL_OPT_PORT;
-    opts.port = rpcd_get_default_port();
-    if( !opts.port ) opts.port = 8000; /*  Default to something sane */
-    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
-    if( sts ) {
-      free( opts.tmpbuf.buf );
-      return sts;
-    }
-
-    /* copy into buffer */
-    maxlen = res.count - res.offset;
-    if( maxlen > fvm->rpc.buf.buf_size ) {
-      /* not enough space! return error status */
-      return -1;
-    } else {
-      memcpy( fvm->rpc.buf.buf, res.buf + res.offset, maxlen );
-      fvm->rpc.buf.count = maxlen;
-      fvm->rpc.buf.offset = 0;
-
-      fvm_set_dirty_region( fvm,
-			    fvm->rpc.bufaddr / FVM_PAGE_SIZE,
-			    (maxlen / FVM_PAGE_SIZE) + ((maxlen % FVM_PAGE_SIZE) ? 1 : 0) );
-    }
-    free( opts.tmpbuf.buf );
-  }
-
-  return 0;
-}
-
-static void devrpc_writemem( struct fvm_state *fvm, uint16_t val ) {
-  int sts = 0;
-
-  switch( val ) {
-  case FVM_RPCCMD_RESET:
-    /* reset device */
-    xdr_reset( &fvm->rpc.buf );
-    break;
-  case FVM_RPCCMD_ENCU32:
-    /* encode uint32. (high low --)*/
-    {
-      uint16_t words[2];
-      uint32_t u32;
-      
-      words[0] = FVM_POP(fvm); 
-      words[1] = FVM_POP(fvm); 
-      u32 = ((uint32_t)words[1] << 16) | words[0];
-      sts = xdr_encode_uint32( &fvm->rpc.buf, u32 );
-    }
-    break;
-  case FVM_RPCCMD_ENCU64:
-    /* encode uint32. (high ... low) */
-    {
-      uint16_t words[4];
-      uint64_t u64;
-      
-      words[0] = FVM_POP(fvm); /* lowest */
-      words[1] = FVM_POP(fvm);
-      words[2] = FVM_POP(fvm);
-      words[3] = FVM_POP(fvm);  /* highest */
-      u64 = ((uint64_t)words[3] << 48) |
-	((uint64_t)words[2] << 32) |
-	((uint64_t)words[1] << 16) |
-	(uint64_t)words[0];
-      sts = xdr_encode_uint64( &fvm->rpc.buf, u64 );
-    }
-    break;    
-  case FVM_RPCCMD_ENCSTR:
-    /* encode string. (addr) */
-    {
-      char *str = (char *)&fvm->mem[FVM_POP(fvm)];
-      sts = xdr_encode_string( &fvm->rpc.buf, str );
-    }
-    break;
-  case FVM_RPCCMD_ENCOPQ:
-    /* encode opqque. (addr len) */
-    {
-      int len;
-      uint8_t *opq;
-      len = FVM_POP(fvm);
-      opq = (uint8_t *)&fvm->mem[FVM_POP(fvm)]; 
-      sts = xdr_encode_opaque( &fvm->rpc.buf, opq, len );
-    }
-    break;
-  case FVM_RPCCMD_ENCFIX:
-    /* encode fixed */
-    {
-      int len;
-      uint8_t *opq;
-      len = FVM_POP(fvm);
-      opq = (uint8_t *)&fvm->mem[FVM_POP(fvm)]; 
-      sts = xdr_encode_fixed( &fvm->rpc.buf, opq, len );
-    }    
-    break;
-  case FVM_RPCCMD_DECU32:
-    /* decode u32. (-- high low) */
-    {
-      uint32_t u32 = 0;
-      sts = xdr_decode_uint32( &fvm->rpc.buf, &u32 );
-      if( sts ) u32 = 0;
-      FVM_PUSH(fvm, (u32 >> 16) & 0xffff );
-      FVM_PUSH(fvm, u32 & 0xffff );
-    }
-    break;
-  case FVM_RPCCMD_DECU64:
-    /* decode u64 (-- high ... low */
-    {
-      uint64_t u64 = 0;
-      sts = xdr_decode_uint64( &fvm->rpc.buf, &u64 );
-      if( sts ) u64 = 0;
-      FVM_PUSH(fvm, (u64 >> 48) & 0xffff );
-      FVM_PUSH(fvm, (u64 >> 32) & 0xffff );
-      FVM_PUSH(fvm, (u64 >> 16) & 0xffff );
-      FVM_PUSH(fvm, u64 & 0xffff );
-    }
-    break;
-  case FVM_RPCCMD_DECSTR:
-    /* decode string. (addr len --) */
-    {
-      int len, straddr;
-      char *str;
-      len = FVM_POP(fvm);
-      straddr = FVM_POP(fvm);
-      str = (char *)&fvm->mem[straddr];
-      sts = xdr_decode_string( &fvm->rpc.buf, str, len );
-      if( sts ) *str = 0;
-
-      /* mark dirty pages */
-      len = strlen( str );
-      fvm_set_dirty_region( fvm, straddr / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0) );
-    }
-    break;
-  case FVM_RPCCMD_DECOPQ:
-    /* decode opaque (addr len -- len) */
-    {
-      int len, straddr;
-      uint8_t *ptr;
-      len = FVM_POP(fvm);
-      straddr = FVM_POP(fvm);
-      ptr = (uint8_t *)&fvm->mem[straddr];
-      sts = xdr_decode_opaque( &fvm->rpc.buf, ptr, &len );
-      FVM_PUSH(fvm, sts ? 0 : len);
-
-      /* set dirty pages */
-      len = sts ? 0 : len;
-      fvm_set_dirty_region( fvm, straddr / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0) );
-    }
-    break;
-  case FVM_RPCCMD_DECFIX:
-    /* decode fixed (addr len)*/
-    {
-      int len, straddr;
-      uint8_t *ptr;
-      len = FVM_POP(fvm);
-      straddr = FVM_POP(fvm);
-      ptr = (uint8_t *)&fvm->mem[straddr];
-      sts = xdr_decode_fixed( &fvm->rpc.buf, ptr, len );
-      if( sts ) memset( ptr, 0, len );
-
-      /* set dirty pages */
-      fvm_set_dirty_region( fvm, straddr / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0) );
-    }
-    break;
-  case FVM_RPCCMD_CALL:
-    /* send call, await reply (prog-high prog-low vers proc -- sts) */
-    {
-      uint32_t prog, vers, proc;
-      proc = (uint32_t)FVM_POP(fvm);
-      vers = (uint32_t)FVM_POP(fvm);
-      prog = (uint32_t)FVM_POP(fvm);
-      prog |= ((uint32_t)FVM_POP(fvm)) << 16;
-      sts = rpcdev_call( fvm, prog, vers, proc );
-      /* push error status */
-      FVM_PUSH(fvm,sts ? 0 : -1);
-    }
-    break;
-  case FVM_RPCCMD_GETTIMEOUT:
-    {
-	FVM_PUSH(fvm, fvm->rpc.timeout);
-    }
-    break;
-  case FVM_RPCCMD_SETTIMEOUT:
-    {
-	uint16_t timeout = FVM_POP(fvm);
-	fvm->rpc.timeout = timeout;
-    }
-    break;
-  case FVM_RPCCMD_GETSERVICE:
-    {
-	FVM_PUSH(fvm, fvm->rpc.service);
-    }
-    break;
-  case FVM_RPCCMD_SETSERVICE:
-    {
-	uint16_t service = FVM_POP(fvm);
-	fvm->rpc.service = service > HRAUTH_SERVICE_PRIV ? -1 : service;
-    }
-    break;
-  case FVM_RPCCMD_GETHOSTID:
-    {
-        FVM_PUSH(fvm, (fvm->rpc.hostid >> 48) & 0xffff );
-	FVM_PUSH(fvm, (fvm->rpc.hostid >> 32) & 0xffff );
-	FVM_PUSH(fvm, (fvm->rpc.hostid >> 16) & 0xffff );
-	FVM_PUSH(fvm, (fvm->rpc.hostid) & 0xffff );
-    }
-    break;
-  case FVM_RPCCMD_SETHOSTID:
-    {
-      fvm->rpc.hostid = (uint64_t)FVM_POP(fvm); 
-      fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 16;
-      fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 32;
-      fvm->rpc.hostid |= ((uint64_t)FVM_POP(fvm)) << 48;
-    }
-    break;
-  case FVM_RPCCMD_GETOFFSET:
-    FVM_PUSH( fvm, fvm->rpc.buf.offset );
-    break;
-  default:
-    log_writef( NULL, LOG_LVL_INFO, "fvm rpcdev unknown command %u", val );
-    sts = -1;
-    break;
-  }
-
-}
-
-
-static void write_mem( struct fvm_state *state, uint16_t offset, uint16_t val ) {
-  char *addr;
-  uint32_t count;
-  int sts, ne, memaddr;
-  struct log_entry entry;
-  struct log_iov iov[1];
-	
-  if( offset >= FVM_ADDR_DEVICE ) {
-    /* write to memory mapped device registers */
-    switch( offset ) {
-    case FVM_DEVICE_MCR:
-      /* machine control register */
-      if( !(val & 0x8000) ) {
-	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Halt execution\n" );
-	state->flags &= ~FVM_FLAG_RUNNING;
-	return;
-      }
-      break;
-    case FVM_DEVICE_CDR:
-      /* display data register - write character */
-      printf( "%c", val & 0x7f );
-      return;
-    case FVM_DEVICE_INLOG:
-      /* Input register */
-      switch( val ) {
-      case 0:
-	/* read nex message */
-	if( !state->inlog ) {
-	  state->reg[FVM_REG_R0] = 0;
-	  return;
-	}
-
-	memaddr = state->reg[FVM_REG_R0];
-	addr = (char *)&state->mem[memaddr];
-	count = state->reg[FVM_REG_R1];
-	memset( &entry, 0, sizeof(entry) );
-	iov[0].buf = addr;
-	iov[0].len = count;
-	entry.niov = 1;
-	entry.iov = iov;
-	entry.id = state->inlogid;
-	sts = log_read( state->inlog, state->inlogid, &entry, 1, &ne );
-	if( sts || !ne ) {
-	  state->reg[FVM_REG_R0] = 0; /* R0 receives msglen */
-	} else {
-	  state->inlogid = entry.id;
-	  state->reg[FVM_REG_R0] = entry.msglen;
-	  fvm_set_dirty_region( state,
-			       memaddr / FVM_PAGE_SIZE,
-			       (count / FVM_PAGE_SIZE) + ((count % FVM_PAGE_SIZE) ? 1 : 0) );
-	}
-	break;
-      case 1:
-	/* reset msg id */
-	state->inlogid = 0;
-	break;
-      }
-      
-      break;
-    case FVM_DEVICE_OUTLOG:
-	/* output register */
-        switch( val ) {
-	case 0: /* write string */
-	case 1: /* write binary */
-	  if( !state->outlog ) {
-	    return;
-	  }
-
-	  addr = (char *)&state->mem[state->reg[FVM_REG_R0]];
-	  if( val == 0 ) count = strlen( addr );
-	  else count = state->reg[FVM_REG_R1];
-	  
-	  memset( &entry, 0, sizeof(entry) );
-	  entry.flags = LOG_LVL_INFO|(val == 1 ? LOG_BINARY : 0);
-	  entry.iov = iov;
-	  entry.niov = 1;
-	  entry.iov[0].buf = addr;
-	  entry.iov[0].len = count;
-	  log_write( state->outlog, &entry );
-	  break;
-	default:
-	  break;
-	}
-	break;
-    case FVM_DEVICE_ALARM:
-	state->flags &= ~FVM_FLAG_RUNNING;
-	state->sleep_timeout = rpc_now() + val;
-	break;
-    case FVM_DEVICE_RPC:
-      devrpc_writemem( state, val );
-      break;
-    }
-  } else if( offset < FVM_ADDR_SHMEM ) {
-      /* read only area - do nothing */
-  } else {
-      /* just write into memory */
-      state->mem[offset] = val;
-
-      /* set dirty flag */
-      fvm_set_dirty_page( state, offset / FVM_PAGE_SIZE );
-  }  
-}
-
-/* private function only used in fvm-rpc.c */
-int fvm_write_mem( struct fvm_state *fvm, char *buf, int len, int offset ) {
-    memcpy( &fvm->mem[offset], buf, len );
-    fvm_set_dirty_region( fvm, offset / FVM_PAGE_SIZE, (len / FVM_PAGE_SIZE) + (len % FVM_PAGE_SIZE) ? 1 : 0);
-    return 0;
-}
-
-
-static void set_pc( struct fvm_state *state, uint16_t val ) {
-    if( val <= FVM_ADDR_RSTACKHIGH || val >= FVM_ADDR_DEVICE ) {
-	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Attempt to set PC to invalid address %x\n", val );
-	//fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
-	//state->flags &= ~FVM_FLAG_RUNNING;
-	//return;
-    }
-    state->reg[FVM_REG_PC] = val;
-}
-
-/* conditional branch */
-static void fvm_inst_br( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t flags = (opcode >> 9) & 0x7;
-  uint16_t pcoffset = sign_extend( opcode & 0x1ff, 9 );
-
-  if( state->flags & FVM_FLAG_VERBOSE )
-    printf( ";; %04x BR-%s%s%s %x\n",
-	    state->reg[FVM_REG_PC] - 1,
-	    flags & FVM_PSR_POS ? "P" : "",
-	    flags & FVM_PSR_ZERO ? "Z" : "",
-	    flags & FVM_PSR_NEG ? "N" : "",
-	    pcoffset );
-
-  if( ((flags & (FVM_PSR_POS|FVM_PSR_ZERO|FVM_PSR_NEG)) == (FVM_PSR_POS|FVM_PSR_ZERO|FVM_PSR_NEG)) ||
-      (state->reg[FVM_REG_PSR] & flags) ) {
-    if( pcoffset == 0xffff ) {
-      /* This will cause an infinite loop so it is an invalid instruction */
-      fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
-    } else {
-      state->reg[FVM_REG_PC] += pcoffset;
-    }
-  }
-  
-}
-
-/* arithmetic add. can also be used to move values between registers by adding immediate value 0 */
-static void fvm_inst_add( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t dr, sr1, immp, imm, sr2;
-
-  dr = (opcode >> 9) & 0x7;
-  sr1 = (opcode >> 6) & 0x7;
-  immp = opcode & 0x20;
-  imm = sign_extend( opcode & 0x1f, 5 );
-  sr2 = opcode & 0x7;
-  
-  if( state->flags & FVM_FLAG_VERBOSE ) {
-    if( immp ) {
-      if( imm == 0 )
-	if( dr == sr1 ) printf( ";; %04x TEST R%x\n", state->reg[FVM_REG_PC] - 1, dr );
-	else printf( ";; %04x MOV R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1 );
-      else printf( ";; %04x ADD R%x R%x 0x%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, imm );
-    } else printf( ";; %04x ADD R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
-  }
-  
-  state->reg[dr] = state->reg[sr1] + (immp ? imm : state->reg[sr2]);
-  update_flags( state, state->reg[dr] );
-}
-
-/* load value relative to pc */
-static void fvm_inst_ld( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t dr, pcoffset;
-
-  dr = (opcode >> 9) & 0x7;
-  pcoffset = sign_extend( opcode & 0x1ff, 9 );
-
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x LD R%x [PC + 0x%x]\n", state->reg[FVM_REG_PC] - 1, dr, pcoffset );
-  
-  state->reg[dr] = read_mem( state, state->reg[FVM_REG_PC] + pcoffset );
-  update_flags( state, state->reg[dr] );
-}
-
-/* store value relative to pc */
-static void fvm_inst_st( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t sr, pcoffset;
-
-  sr = (opcode >> 9) & 0x7;
-  pcoffset = sign_extend( opcode & 0x1ff, 9 );
-  
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x ST [PC + 0x%x] R%x\n", state->reg[FVM_REG_PC] - 1, pcoffset, sr );
-  write_mem( state, state->reg[FVM_REG_PC] + pcoffset, state->reg[sr] );
-}
-
-/* jump to subroutine */
-static void fvm_inst_call( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t br, pcoffset, currpc;
-
-  /* push pc to return stack */
-  currpc = state->reg[FVM_REG_PC];
-  write_mem( state, state->reg[FVM_REG_RP], currpc );
-  state->reg[FVM_REG_RP]--;
-
-  if( opcode & 0x800 ) {
-    /* jump to offset stored in word table */
-    pcoffset = opcode & 0x7ff;
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x CALL 0x%x CurrPC = %x RP = %x\n", state->reg[FVM_REG_PC] - 1, pcoffset, currpc, state->reg[FVM_REG_RP] );
-    
-    state->reg[FVM_REG_PC] = read_mem( state, pcoffset );
-  } else {
-    /* jump to offset stored in register */
-    br = (opcode >> 6) & 0x7;
-    if( state->flags & FVM_FLAG_VERBOSE ) {
-      printf( ";; %04x CALL R%x CurrPC = %x RP = %x\n", state->reg[FVM_REG_PC] - 1, br, currpc, state->reg[FVM_REG_RP] );
-    }
-    
-    set_pc( state, state->reg[br] );
-  }
-  
-}
-
-/* bitwise nand. can be used to derive all other bitwise operators */
-static void fvm_inst_nand( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t dr, sr1, immp, imm, sr2;
-
-  dr = (opcode >> 9) & 0x7;
-  sr1 = (opcode >> 6) & 0x7;
-  immp = opcode & 0x20;
-  imm = sign_extend( opcode & 0x1f, 5 );
-  sr2 = opcode & 0x7;
-  
-  if( state->flags & FVM_FLAG_VERBOSE ) {
-    if( immp ) printf( ";; %04x NAND R%x R%x 0x%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, imm );
-    else printf( ";; %04x NAND R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
-  }
-  
-  state->reg[dr] = ~(state->reg[sr1] & (immp ? imm : state->reg[sr2]));
-  update_flags( state, state->reg[dr] );
-}
-
-/* load from register + offset */
-static void fvm_inst_ldr( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t dr, baser, offset;
-  
-  dr = (opcode >> 9) & 0x7;
-  baser = (opcode >> 6) & 0x7;
-  offset = sign_extend( opcode & 0x1f, 5 );
-  
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x LDR R%x [R%x + 0x%x] = %x\n", state->reg[FVM_REG_PC] - 1, dr, baser, offset, read_mem( state, state->reg[baser] + offset ) );
-  
-  state->reg[dr] = read_mem( state, state->reg[baser] + offset );
-  update_flags( state, state->reg[dr] );
-}
-
-/* store to register + offset */
-static void fvm_inst_str( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t sr, baser, offset;
-  
-  sr = (opcode >> 9) & 0x7;
-  baser = (opcode >> 6) & 0x7;
-  offset = sign_extend( opcode & 0x1f, 5 );
-  
-  if( state->flags & FVM_FLAG_VERBOSE )
-    printf( ";; %04x STR [R%x + 0x%x] R%x\n", state->reg[FVM_REG_PC] - 1, baser, offset, sr );
-  
-  write_mem( state, state->reg[baser] + offset, state->reg[sr] );
-}
-
-int fvm_interrupt( struct fvm_state *state, uint16_t ivec, uint16_t priority ) {
-    uint16_t isrpc;
-
-    /* don't interrupt if current priority higher than this interrupts level */
-    if( !(priority & 0x8000) &&
-	((state->reg[FVM_REG_PSR] & FVM_PSR_PL_MASK) >> 12) >= (priority & 0x7) ) {
-	if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Decline interrupt PL %d >= %d\n", (state->reg[FVM_REG_PSR] & FVM_PSR_PL_MASK) >> 12, priority & 0x7 );
-	return -1;
-    }
-
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; Interrupt %x PL %x\n", ivec, priority & 0x7 );
-
-    /* always continue running after an interrupt */
-    state->flags |= FVM_FLAG_RUNNING;	
-
-    /* get jump address */
-    isrpc = read_mem( state, 0x800 + ivec );
-    if( isrpc == 0 ) {
-	/* no isr set, do nothing ? */
-	return -1;
-    }
-    
-    /* save registers */
-    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R5] ); state->reg[FVM_REG_SP]--;
-    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R4] ); state->reg[FVM_REG_SP]--;
-    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R3] ); state->reg[FVM_REG_SP]--;
-    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R2] ); state->reg[FVM_REG_SP]--;
-    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R1] ); state->reg[FVM_REG_SP]--;
-    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_R0] ); state->reg[FVM_REG_SP]--;
-    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_PSR] ); state->reg[FVM_REG_SP]--;
-    write_mem( state, state->reg[FVM_REG_SP], state->reg[FVM_REG_PC] ); state->reg[FVM_REG_SP]--;
-
-    /* set supervisor mode and priority */
-    state->reg[FVM_REG_PSR] &= ~FVM_PSR_USERMODE;
-    if( !(priority & 0x8000) ) {
-	state->reg[FVM_REG_PSR] &= ~FVM_PSR_PL_MASK;
-	state->reg[FVM_REG_PSR] |= ((priority & 0x07) << 12);
-    }
-
-    /* jump */
-    state->reg[FVM_REG_PC] = isrpc;
-
-    return 0;
-}
-
-/* return from interrupt */
-static void fvm_inst_rti( struct fvm_state *state, uint16_t opcode ) {
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RTI\n", state->reg[FVM_REG_PC] - 1 );
-
-  if( state->reg[FVM_REG_PSR] & FVM_PSR_USERMODE ) {
-      printf( ";; Privilege mode exception: Attempt to RTI from user mode\n" ); 
-      fvm_interrupt( state, FVM_INT_PME, FVM_INT_PME_PL );
-  } else {
-      /* restore pc and registers */
-      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_PC] = read_mem( state, state->reg[FVM_REG_SP] );
-      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_PSR] = read_mem( state, state->reg[FVM_REG_SP] );
-      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R0] = read_mem( state, state->reg[FVM_REG_SP] );
-      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R1] = read_mem( state, state->reg[FVM_REG_SP] );
-      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R2] = read_mem( state, state->reg[FVM_REG_SP] );
-      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R3] = read_mem( state, state->reg[FVM_REG_SP] );
-      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R4] = read_mem( state, state->reg[FVM_REG_SP] );
-      state->reg[FVM_REG_SP]++; state->reg[FVM_REG_R5] = read_mem( state, state->reg[FVM_REG_SP] );
-  }
-}
-
-/* stack push/pop */
-static void fvm_inst_push( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t reg, sp;
-
-  reg = (opcode >> 9) & 0x7;
-  sp = (opcode & 0x10) ? FVM_REG_RP : FVM_REG_SP;
-  if( opcode & 0x20 ) {
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPOP R%x = %x %sP = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, read_mem( state, state->reg[sp] + 1 ), sp == FVM_REG_RP ? "R" : "S", state->reg[sp] + 1 );
-    state->reg[sp]++;
-    if( (sp == FVM_REG_SP) && (state->reg[sp] > 0xfdff) ) {
-	/* attempt to set stack pointer out of range so reset */
-	state->reg[reg] = 0;
-	state->reg[sp] = 0xfdff;
-    } else if( (sp == FVM_REG_RP) && (state->reg[sp] > 0x2fff) ) {
-	/* 
-	 * Attempt to set return pointer out of range so reset. 
-	 * XXX This is more serious than data stack overflow - what to do here?
-	 */
-	state->reg[reg] = 0;
-	state->reg[sp] = 0x2fff;
-    } else {
-	state->reg[reg] = read_mem( state, state->reg[sp] );
-	update_flags( state, state->reg[reg] );
-    }
-  } else {
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x %sPUSH R%x = %x %sP = %x\n", state->reg[FVM_REG_PC] - 1, sp == FVM_REG_RP ? "R" : "", reg, state->reg[reg], sp == FVM_REG_RP ? "R" : "S", state->reg[sp] );
-    write_mem( state, state->reg[sp], state->reg[reg] );
-    state->reg[sp]--;
-  }
-  
-}
-
-/* load immediate */
-static void fvm_inst_ldi( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t dr, val;
-
-  dr = (opcode >> 9) & 0x7;
-  val = sign_extend( opcode & 0x1ff, 9 );
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x LDI R%x %04x\n", state->reg[FVM_REG_PC] - 1, dr, val );
-  
-  state->reg[dr] = val;
-  update_flags( state, state->reg[dr] );
-}
-
-/* store immediate */
-static void fvm_inst_sti( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t sr, val;
-
-  sr = (opcode >> 9) & 0x7;
-  val = sign_extend( opcode & 0x1ff, 9 );
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x STI [R%x] R%x => [%04x] = %x\n", state->reg[FVM_REG_PC] - 1, sr, val, state->reg[sr], val );
-  
-  write_mem( state, state->reg[sr], val );
-}
-
-/* return/unconditional jump */
-static void fvm_inst_jmp( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t baser, ret;
-
-  ret = opcode & 0x0800;    /* return flag */
-  /* spare bits: 0x061f i.e. bits 10, 9, 5-0 */
-  
-  if( ret ) {
-    /* pop return address from return stack and jump */
-    state->reg[FVM_REG_RP]++;
-    ret = read_mem( state, state->reg[FVM_REG_RP] );
-
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RET PC = %04x RP = %x\n", state->reg[FVM_REG_PC] - 1, ret, state->reg[FVM_REG_RP] );
-    set_pc( state, ret );
-  } else {
-    /* unconditional jump to address in register */
-    baser = (opcode >> 6) & 0x7;
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x JMP R%x = %x\n", state->reg[FVM_REG_PC] - 1, baser, state->reg[baser] );
-    set_pc( state, state->reg[baser] );
-  }
-  
-
-}
-
-/* mul/div/mod/cmp */
-static void fvm_inst_mul( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t dr, sr1, sr2, flags;
-  dr = (opcode >> 9) & 0x7;
-  sr1 = (opcode >> 6) & 0x7;
-  sr2 = (opcode >> 3) & 0x7;
-  flags = opcode & 0x7;
-  if( flags == 0 ) {
-    /* mul */
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x MUL R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
-    state->reg[dr] = state->reg[sr1] * state->reg[sr2];
-  } else if( flags == 1 ) {
-    /* div */
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x DIV R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
-    if( state->reg[sr2] == 0 ) {
-      printf( ";; Divide by zero exception\n" );
-      //fvm_interrupt( state, FVM_INT_DBZ, FVM_INT_DBZ_PL );
-      //return;
-      
-      state->reg[dr] = 0;
-    } else {
-      state->reg[dr] = state->reg[sr1] / state->reg[sr2];
-    }
-  } else if( flags == 2 ) {
-    /* mod */
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x MOD R%x R%x R%x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2 );
-
-    /*
-    if( state->reg[sr2] == 0 ) {
-	printf( ";; Divide by zero exception\n" );
-	fvm_interrupt( state, FVM_INT_DBZ, FVM_INT_DBZ_PL );
-	return;
-    }
-    */
-    
-    state->reg[dr] = (state->reg[sr2] ? state->reg[sr1] % state->reg[sr2] : 0);
-  } else if( flags == 3 ) {
-    /* cmp */
-    if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x CMP R%x R%x R%x = CMP %x %x\n", state->reg[FVM_REG_PC] - 1, dr, sr1, sr2, state->reg[sr1], state->reg[sr2] );
-    state->reg[dr] = state->reg[sr1] - state->reg[sr2];
-  }
-  
-  update_flags( state, state->reg[dr] );
-}
-
-/* load effective address */
-static void fvm_inst_lea( struct fvm_state *state, uint16_t opcode ) {
-  uint16_t dr, pcoffset;
-  dr = (opcode >> 9) & 0x7;
-  pcoffset = sign_extend( opcode & 0x1ff, 9 );
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x LEA R%x PC + 0x%x\n", state->reg[FVM_REG_PC] - 1, dr, pcoffset );
-  
-  state->reg[dr] = state->reg[FVM_REG_PC] + pcoffset;
-  update_flags( state, state->reg[dr] );
-}
-
-/* reserved opcode */
-static void fvm_inst_res( struct fvm_state *state, uint16_t opcode ) {
-  if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; %04x RES 0x%x\n", state->reg[FVM_REG_PC] - 1, opcode & 0x0fff );
-  fvm_interrupt( state, FVM_INT_IOC, FVM_INT_IOC_PL );
-}
-
-typedef void (*fvm_inst_handler_t)( struct fvm_state *state, uint16_t opcode );
-
-static fvm_inst_handler_t inst_handlers[] = {
-    fvm_inst_br,
-    fvm_inst_add,
-    fvm_inst_ld,
-    fvm_inst_st,
-    fvm_inst_call,
-    fvm_inst_nand,
-    fvm_inst_ldr,
-    fvm_inst_str,
-    fvm_inst_rti,
-    fvm_inst_push,
-    fvm_inst_ldi,
-    fvm_inst_sti,
-    fvm_inst_jmp,
-    fvm_inst_mul,
-    fvm_inst_lea,
-    fvm_inst_res
+log_deflogger(fvm_log,"FVM");
+
+static int fvm_unregister_program( char *modname );
+static void fvm_unregister_iterator( char *modname );
+static int fvm_init_module( char *modname );
+static void fvm_register_iterator( char *modname, int procid, int period );
+static int fvm_register_program( char *modname );
+
+struct fvm_iterator {
+  struct rpc_iterator iter;
+  uint32_t prochandle;
+  struct fvm_iterator *next;
 };
 
-static int fvm_step( struct fvm_state *state ) {
-  uint16_t opcode;
-  uint16_t inst;
+static struct {
+  struct fvm_module *modules;
+  uint32_t max_steps;
+  uint32_t max_runtime;
+  uint32_t debug;
+  struct fvm_iterator *iterators;
+  uint32_t moduletag;
+} glob = { NULL, 1000000, 5000 };
 
-  /* get next opcode and increment pc */
-  opcode = read_mem( state, state->reg[FVM_REG_PC] );
-  state->reg[FVM_REG_PC]++;
+static int fvmc_decode_header( struct xdr_s *xdr, struct fvm_headerinfo *x ) {
+  int i, sts;
+  sts = xdr_decode_uint32( xdr, &x->magic );
+  if( sts ) return sts;
+  sts = xdr_decode_uint32( xdr, &x->version );
+  if( sts ) return sts;  
+  sts = xdr_decode_string( xdr, x->name, sizeof(x->name) );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->progid );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->versid );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->datasize );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->textsize );
+  if( sts ) return sts;  
+  sts = xdr_decode_uint32( xdr, &x->nprocs );
+  if( sts ) return sts;
+  if( x->nprocs > FVM_MAX_PROC ) return -1;
+  for( i = 0; i < x->nprocs; i++ ) {
+    sts = xdr_decode_string( xdr, x->procs[i].name, sizeof(x->procs[i].name) );
+    if( sts ) return sts;    
+    sts = xdr_decode_uint32( xdr, &x->procs[i].address );
+    if( sts ) return sts;    
+    sts = xdr_decode_uint64( xdr, &x->procs[i].siginfo );
+    if( sts ) return sts;    
+  }
+  sts = xdr_decode_uint64( xdr, &x->timestamp );
+  if( sts ) return sts;
+  return 0;
+}
 
-  /* get instruction and invoke handler */
-  inst = (opcode >> 12) & 0xf;
-  inst_handlers[inst]( state, opcode );
-  
-  state->tickcount++;
+static int get_init_proc( struct fvm_module *m, char *procname ) {
+  int sts, procid;
+  char path[256];
+  sprintf( path, "/fju/fvm/modules/%s/init", m->name );
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, procname, FVM_MAX_NAME, NULL );
+  if( !sts ) return 0;
 
-  /* Terminate if return from initial word */
-  if( state->reg[FVM_REG_RP] >= 0x3000 ) {
-      if( state->flags & FVM_FLAG_VERBOSE ) printf( ";; return stack overflow\n" );
-      fvm_reset( state );
-      state->flags &= ~FVM_FLAG_RUNNING;
-      state->flags |= FVM_FLAG_DONE;
+  procid = fvm_procid_by_name( m, "init" );
+  if( procid >= 0 ) {
+    strcpy( procname, m->procs[procid].name );
+    return 0;
   }
   
-  return 0;
+  return -1;
 }
 
-int fvm_run( struct fvm_state *state ) {  
+static int get_exit_proc( struct fvm_module *m, char *procname ) {
+  int sts, procid;
+  char path[256];
+  sprintf( path, "/fju/fvm/modules/%s/exit", m->name );
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, procname, FVM_MAX_NAME, NULL );
+  if( !sts ) return 0;
 
-  while( state->flags & FVM_FLAG_RUNNING ) {
-    fvm_step( state );
+  procid = fvm_procid_by_name( m, "exit" );
+  if( procid >= 0 ) {
+    strcpy( procname, m->procs[procid].name );
+    return 0;
+  }
+  
+  return -1;
+}
+
+static int get_service_proc( struct fvm_module *m, char *procname, int *service_period ) {
+  int sts, procid;
+  char path[256];
+
+  sprintf( path, "/fju/fvm/modules/%s/service-period", m->name );  
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_UINT32, (char *)service_period, 4, NULL );
+  if( sts ) *service_period = 1000;
+
+  sprintf( path, "/fju/fvm/modules/%s/service", m->name );  
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, procname, FVM_MAX_NAME, NULL );
+  if( !sts ) return 0;
+
+  procid = fvm_procid_by_name( m, "service" );
+  if( procid >= 0 ) {
+    strcpy( procname, m->procs[procid].name );
+    return 0;
+  }
+  
+  return -1;
+}
+
+static void fvm_module_postload( struct fvm_module *module ) {
+  int sts;
+  char procname[FVM_MAX_NAME];
+
+  /* Run init proc */
+  sts = get_init_proc( module, procname );
+  if( !sts ) {
+    fvm_log( LOG_LVL_TRACE, "fvm_module_postload: %s running init proc %s", module->name, procname );
+    sts = fvm_run( module, fvm_procid_by_name( module, procname ), NULL, NULL );
+    if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_postload: init routine failed" );
   }
 
-  return 0;
-}
+  /* register service routine if rpcdp=true and procedure named "Service" exists */
+  if( rpcdp() ) {
+    int service_period;
+    sts = get_service_proc( module, procname, &service_period );
+    if( !sts ) {
+      fvm_log( LOG_LVL_TRACE, "fvm_module_postload %s registering service proc %s", module->name, procname );
+      fvm_register_iterator( module->name, fvm_procid_by_name( module, procname ), service_period );      
+    }
 
-int fvm_run_nsteps( struct fvm_state *state, int nsteps ) {
-  int i = 0;
-  while( (state->flags & FVM_FLAG_RUNNING) && (i < nsteps) ) {
-    fvm_step( state );
-    i++;
+    if( module->progid ) {
+      fvm_log( LOG_LVL_TRACE, "fvm_module_postload %s register as rpc program", module->name );
+      fvm_register_program( module->name );
+    }
   }
-  return 0;
 }
 
-int fvm_run_timeout( struct fvm_state *state, int timeout ) {
-  uint64_t end;
-  end = rpc_now() + timeout;  
-  while( state->flags & FVM_FLAG_RUNNING ) {
-    fvm_run_nsteps( state, 100 );
-    if( rpc_now() >= end ) break;
+int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep ) {
+  /* parse header, load data and text segments */
+  struct fvm_headerinfo hdr;
+  struct fvm_module *module;
+  int i, sts;
+  struct xdr_s xdr;
+  
+  xdr_init( &xdr, (uint8_t *)buf, size );
+  sts = fvmc_decode_header( &xdr, &hdr );
+	      
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "Failed to decode header" );
+    return -1;
   }
-  return 0;
-}
+  
+  if( hdr.magic != FVM_MAGIC ) {
+    fvm_log( LOG_LVL_ERROR, "Bad magic" );
+    return -1;
+  }
+  
+  if( hdr.version != FVM_VERSION ) {
+    fvm_log( LOG_LVL_ERROR, "Bad version" );
+    return -1;
+  }
+  
+  if( xdr.count != (xdr.offset + hdr.textsize) ) {
+    fvm_log( LOG_LVL_ERROR, "Bad size buffer size" );
+    return -1;
+  }
+  
+  for( i = 0; i < hdr.nprocs; i++ ) {
+    if( (hdr.procs[i].address < FVM_ADDR_TEXT) ||
+	(hdr.procs[i].address >= (FVM_ADDR_TEXT + hdr.textsize)) ) {
+      fvm_log( LOG_LVL_ERROR, "Proc address outsize text" );
+      return -1;
+    }
 
-int fvm_load( struct fvm_state *state, char *progdata, int proglen ) {
-  int i, j;
-  uint16_t offset, count;
-  uint16_t bos = 0;
-  uint16_t *program;
-  struct fvm_program_header *hdr;
-  uint32_t crc;
-
-  fvm_dirty_reset( state );  
-  memset( state->mem, 0, sizeof(state->mem) );
-
-  hdr = NULL;
-  if( proglen >= sizeof(*hdr) ) {
-    hdr = (struct fvm_program_header *)progdata;
-    program = (uint16_t *)(progdata + sizeof(*hdr) );
-    proglen -= sizeof(*hdr);
-    proglen /= 2; /* convert to number of uint16_t */
-    
-    /* check header */
-    if( hdr->magic != FVM_PROGRAM_MAGIC ) return -1;
-    
-    i = 0;
-    crc = 0xffffffff;
-    while( i < proglen ) {
-      if( (i + 1) >= proglen ) {
+    /* opaque params must be preceeded by a u32 param that receives the length */
+    if( FVM_SIGINFO_VARTYPE(hdr.procs[i].siginfo, i) == VAR_TYPE_OPAQUE ) {
+      if( i == 0 ) {
+	fvm_log( LOG_LVL_ERROR, "Bad parameter" );
 	return -1;
       }
       
-      offset = program[i];
-      count = program[i+1];
-      i += 2;
-      if( ((uint32_t)offset + (uint32_t)count) >= 0xffff ) {
+      if( FVM_SIGINFO_VARTYPE(hdr.procs[i].siginfo, i - 1) != VAR_TYPE_U32 ) {
+	fvm_log( LOG_LVL_ERROR, "Bad parameter" );
 	return -1;
       }
       
-      if( (offset + count) > bos ) bos = offset + count;
-      crc = sec_crc32( crc, (char *)&program[i], 2 * count );      
-      for( j = 0; j < count; j++ ) {
-	if( i >= proglen ) {
-	  return -1;
-	}
-	
-	state->mem[offset + j] = program[i];
-	i++;
+      if( FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i) && !FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i - 1) ) {
+	fvm_log( LOG_LVL_ERROR, "Bad parameter" );	
+	return -1;
       }
       
-      fvm_set_dirty_region( state, offset / FVM_PAGE_SIZE, (count / FVM_PAGE_SIZE) + (count % FVM_PAGE_SIZE ? 1 : 0) );
+      if( !FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i) && FVM_SIGINFO_ISVAR(hdr.procs[i].siginfo, i - 1) ) {
+	fvm_log( LOG_LVL_ERROR, "Bad parameter" );	
+	return -1;
+      }
     }
   }
 
-  fvm_reset( state );
-  state->bos = bos;
-
-  /* set rpc buffer */
-  xdr_init( &state->rpc.buf, (uint8_t *)&state->mem[FVM_ADDR_RPCBUF], 4096 );
-  state->rpc.bufaddr = FVM_ADDR_RPCBUF;
   
-  /* set other rpc parameters: default to no authentication and talking to local fjud */
-  state->rpc.service = -1; 
-  state->rpc.hostid = hostreg_localid();
- 
-  state->id = 0xffffffff;
-
-  if( hdr && (crc != hdr->crc32) ) {
-      printf( ";; crc32 mismatch hdr=0x%08x calculated=0x%08x\n", hdr->crc32, crc );
+  if( fvm_module_by_name( hdr.name ) ) {
+    if( flags & FVM_RELOAD ) {
+      sts = fvm_module_unload( hdr.name );
+      if( sts ) {
+	fvm_log( LOG_LVL_ERROR, "Failed to unload existing module %s", hdr.name );
+	return -1;
+      }
+    } else {
+      fvm_log( LOG_LVL_ERROR, "Module %s already registered", hdr.name );
       return -1;
+    }
   }
   
+  module = malloc( sizeof(*module) + hdr.datasize + hdr.textsize );
+  memset( module, 0, sizeof(*module) );
+  strcpy( module->name, hdr.name );
+  module->progid = hdr.progid;
+  module->versid = hdr.versid;
+  module->nprocs = hdr.nprocs;
+  for( i = 0; i < module->nprocs; i++ ) {
+    strcpy( module->procs[i].name, hdr.procs[i].name );
+    module->procs[i].address = hdr.procs[i].address;
+    module->procs[i].siginfo = hdr.procs[i].siginfo;
+  }
+  module->textsize = hdr.textsize;
+  module->datasize = hdr.datasize;
+  module->data = (char *)module + sizeof(*module);
+  module->text = (char *)module + sizeof(*module) + hdr.datasize;
+  module->timestamp = hdr.timestamp;
+  memset( module->data, 0, hdr.datasize );
+  memcpy( module->text, xdr.buf + xdr.offset, hdr.textsize );
+
+  {
+    char timestr[64];
+    fvm_log( LOG_LVL_INFO, "fvm_module_load %s timestamp=%s", module->name, sec_timestr( hdr.timestamp, timestr ) );
+  }
+
+  /* register module with system */
+  sts = fvm_module_register( module );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_module_load failed to register %s", module->name );
+    free( module );    
+    return -1;
+  }
+  
+  if( modulep ) *modulep = module;
+
   return 0;
 }
 
-int fvm_load_freg( struct fvm_state *fvm, uint64_t hreg ) {
-  int sts;
-  uint32_t flags;
-  char *buf;
-  int len;
-  
-  sts = freg_get( NULL, hreg, &flags, NULL, 0, &len );
-  if( sts ) return sts;
-  if( (flags & FREG_TYPE_MASK) != FREG_TYPE_OPAQUE ) return -1;
+int fvm_module_register( struct fvm_module *mod ) {
 
-  buf = malloc( len );
-  sts = freg_get( NULL, hreg, NULL, buf, len, NULL );
-  if( sts ) {
-    free( buf );
+  fvm_log( LOG_LVL_INFO, "fvm_module_register %s", mod->name );
+  
+  /* forbid if name conflict */
+  if( fvm_module_by_name( mod->name ) ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_module_register %s exists", mod->name );
     return -1;
   }
 
-  sts = fvm_load( fvm, buf, len );
-  free( buf );
+  /* 
+   * Choose a tag not already taken.
+   * Note that this would cause an infinite loop if we hit 64k modules but that isn't a realistic scenario.
+   */  
+  do {
+    mod->tag = (glob.moduletag + 1) % 0x10000;
+  } while( fvm_module_by_tag( mod->tag ) );
+  glob.moduletag = mod->tag;
+
+  /* register module */
+  mod->next = glob.modules;
+  glob.modules = mod;
+
+  fvm_module_postload( mod );
+  
+  return 0;
+}
+
+int fvm_module_load_file( char *filename, uint32_t flags, struct fvm_module **modulep ) {
+  struct mmf_s mmf;
+  int sts;
+  sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) return sts;
+  mmf_remap( &mmf, mmf.fsize );
+  sts = fvm_module_load( mmf.file, mmf.fsize, flags, modulep );
+  mmf_close( &mmf );
   return sts;
 }
 
-int fvm_reset( struct fvm_state *fvm ) {
-    int i;
-    
-    /* clear registers */
-    for( i = 0; i < FVM_REG_MAX; i++ ) {
-	fvm->reg[i] = 0;
+int fvm_module_unregister( struct fvm_module *module ) {
+  struct fvm_module *m, *prev;
+  int sts;
+  char procname[FVM_MAX_NAME];
+  
+  prev = NULL;
+  m = glob.modules;
+  while( m ) {
+    if( m == module ) {
+      /* Run exit proc */
+      sts = get_exit_proc( m, procname );
+      if( !sts ) {
+	fvm_log( LOG_LVL_TRACE, "fvm_module_unregister: %s running exit proc %s", m->name, procname );
+	sts = fvm_run( m, fvm_procid_by_name( m, procname ), NULL, NULL );
+	if( sts ) fvm_log( LOG_LVL_TRACE, "fvm_module_unregister: exit routine failed" );
+      }
+      
+      /* unload any rpc program, if any */
+      fvm_unregister_program( module->name );
+
+      /* unregister any iterator */
+      fvm_unregister_iterator( module->name );
+      
+      if( prev ) prev->next = m->next;
+      else glob.modules = m->next;
+      return 0;
     }
-    /* set pc to start of program */
-    fvm->reg[FVM_REG_PC] = 0x3000;
-    fvm->reg[FVM_REG_SP] = 0xfdff;
-    fvm->reg[FVM_REG_RP] = 0x2fff;
-    fvm->reg[FVM_REG_PSR] = FVM_PSR_ZERO;
-    fvm->flags = FVM_FLAG_RUNNING;
-    fvm->flags &= ~FVM_FLAG_DONE;
+    prev = m;
+    m = m->next;
+  }
+  return -1;
+}
+
+int fvm_module_unload( char *modname ) {
+  struct fvm_module *m, *prev;
+  
+  m = glob.modules;
+  prev = NULL;
+  while( m ) {
+    if( strcasecmp( m->name, modname ) == 0 ) {
+      fvm_log( LOG_LVL_INFO, "fvm_module_unload %s", modname );
+
+      if( m->flags & FVM_MODULE_STATIC ) {
+	fvm_log( LOG_LVL_ERROR, "Attempt to unload static module" );
+	return -1;
+      }
+
+      fvm_module_unregister( m );
+
+      free( m );
+      return 0;
+    }
+    prev = m;
+    m = m->next;
+  }
+  return -1;
+}
+
+struct fvm_module *fvm_module_by_name( char *name ) {
+  struct fvm_module *m;
+  m = glob.modules;
+  while( m ) {
+    if( strcasecmp( m->name, name ) == 0 ) return m;
+    m = m->next;
+  }
+  return NULL;
+}
+
+struct fvm_module *fvm_module_by_progid( uint32_t progid, uint32_t versid ) {
+  struct fvm_module *m;
+  m = glob.modules;
+  while( m ) {
+    if( m->progid == progid && m->versid == versid ) return m;
+    m = m->next;
+  }
+  return NULL;
+}
+    
+struct fvm_module *fvm_module_by_tag( int tag ) {
+  struct fvm_module *m;
+  m = glob.modules;
+  while( m ) {
+    if( m->tag == tag ) return m;
+    m = m->next;
+  }
+  return NULL;
+}
+    
+
+int fvm_procid_by_name( struct fvm_module *module, char *procname ) {
+  int i;
+  for( i = 0; i < module->nprocs; i++ ) {
+    if( strcasecmp( module->procs[i].name, procname ) == 0 ) return i;
+  }
+  return -1;
+}
+
+int fvm_procid_by_addr( struct fvm_module *module, int address ) {
+  int i;
+  for( i = 0; i < module->nprocs; i++ ) {
+    if( module->procs[i].address == address ) return i;
+  }
+  return -1;
+}
+
+int fvm_handle_by_name( char *modname, char *procname, uint32_t *phandle ) {
+  struct fvm_module *m;
+  int procid;
+
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  procid = fvm_procid_by_name( m, procname );
+  if( procid < 0 ) return -1;
+
+  *phandle = (m->tag << 16) | procid;
+  return 0;
+}
+
+int fvm_handle_by_procid( char *modname, int procid, uint32_t *phandle ) {
+  struct fvm_module *m;
+
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  if( (procid < 0) || (procid >= m->nprocs) ) return -1;
+
+  *phandle = (m->tag << 16) | procid;
+  return 0;
+}
+
+int fvm_proc_by_handle( uint32_t phandle, struct fvm_module **m, int *procid ) {
+  uint32_t mtag, pid;
+  struct fvm_module *mp;
+  
+  mtag = (phandle >> 16) & 0xffff;
+  pid = (phandle & 0xffff);
+
+  mp = fvm_module_by_tag( mtag );
+  if( !mp ) return -1;
+
+  if( pid >= mp->nprocs ) return -1;
+
+  *m = mp;
+  *procid = pid;
+  return 0;
+}
+
+
+
+/* --------------- runtime ------------------- */
+
+static int fvm_push( struct fvm_state *state, uint32_t u32 ) {
+  if( state->sp >= FVM_MAX_STACK ) return -1;
+  memcpy( &state->stack[state->sp], &u32, 4 );
+  state->sp += 4;
+  return 0;
+}
+
+static uint32_t fvm_pop( struct fvm_state *state ) {
+  uint32_t u32;
+  if( state->sp < 4 ) return -1;
+  state->sp -= 4;  
+  memcpy( &u32, &state->stack[state->sp], 4 );
+  return u32;
+}
+
+char *fvm_getptr( struct fvm_state *state, uint32_t addr, int len, int writeable ) {
+  if( len < 0 ) return NULL;
+  
+  if( (addr >= FVM_ADDR_DATA) && ((addr + len) <= (FVM_ADDR_DATA + state->module->datasize)) ) {
+    return &state->module->data[addr - FVM_ADDR_DATA];
+  }
+
+  if( !writeable ) {
+    if( (addr >= FVM_ADDR_TEXT) && ((addr + len) <= (FVM_ADDR_TEXT + state->module->textsize)) ) {
+      return &state->module->text[addr - FVM_ADDR_TEXT];
+    }
+  }
+  
+  if( (addr >= FVM_ADDR_STACK) && ((addr + len) <= (FVM_ADDR_STACK + FVM_MAX_STACK)) ) {
+    return &state->stack[addr - FVM_ADDR_STACK];
+  }
+  return NULL;  
+}
+
+char *fvm_getstr( struct fvm_state *state, uint32_t addr ) {
+  char *ptr, *p;
+  
+  ptr = fvm_getptr( state, addr, 1, 0 );
+  if( !ptr ) return NULL;
+
+  /* check string is null terminated within memory bounds */
+  p = ptr;
+  while( 1 ) {
+    if( !*p ) break;
+    
+    addr++;
+    if( !fvm_getptr( state, addr, 1, 0 ) ) return NULL;    
+    p++;
+  }
+  
+  return ptr;
+}
+
+uint32_t fvm_read_u32( struct fvm_state *state, uint32_t addr ) {
+  uint32_t u;
+  if( (addr >= FVM_ADDR_DATA) && (addr < (FVM_ADDR_DATA + state->module->datasize)) ) {
+    memcpy( &u, &state->module->data[addr - FVM_ADDR_DATA], 4 );
+    return u;
+  }
+  if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    memcpy( &u, &state->module->text[addr - FVM_ADDR_TEXT], 4 );
+    return u;
+  }
+  if( (addr >= FVM_ADDR_STACK) && (addr < (FVM_ADDR_STACK + FVM_MAX_STACK)) ) {
+    memcpy( &u, &state->stack[addr - FVM_ADDR_STACK], 4 );
+    return u;
+  }
+  
+  return 0;  
+}
+static uint16_t fvm_read_pcu16( struct fvm_state *state ) {
+  uint16_t u;
+  uint32_t addr = state->pc;
+  u = 0;
+  if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    memcpy( &u, &state->module->text[addr - FVM_ADDR_TEXT], 2 );
+  }
+  state->pc += 2;  
+  return u;
+}
+static uint32_t fvm_read_pcu32( struct fvm_state *state ) {
+  uint32_t u;
+  uint32_t addr = state->pc;
+  u = 0;
+  if( (addr >= FVM_ADDR_TEXT) && (addr < (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    memcpy( &u, &state->module->text[addr - FVM_ADDR_TEXT], 4 );
+  }
+  state->pc += 4;  
+  return u;
+}
+
+int fvm_write_u32( struct fvm_state *state, uint32_t addr, uint32_t u ) {
+
+  if( (addr >= FVM_ADDR_DATA) && (addr <= (FVM_ADDR_DATA + state->module->datasize - 4)) ) {
+    memcpy( &state->module->data[addr - FVM_ADDR_DATA], &u, 4 );
+    return 0;
+  }
+  if( (addr >= FVM_ADDR_STACK) && (addr <= (FVM_ADDR_STACK + FVM_MAX_STACK - 4)) ) {
+    memcpy( &state->stack[addr - FVM_ADDR_STACK], &u, 4 );
+    return 0;
+  }
+
+  printf( " WARNING attempt to set invalid address %x\n", addr );
+  return -1;  
+}
+
+uint32_t fvm_stack_read( struct fvm_state *state, uint32_t depth ) {
+  return fvm_read_u32( state, FVM_ADDR_STACK + state->sp - depth );
+}
+
+
+struct opinfo {  
+  op_t op;
+  char *name;
+  uint32_t pcdata;
+  int32_t stackadjust;
+};
+
+static struct opinfo opcodeinfo[] =
+  {
+   { OP_NOP, "NOP", 0, 0 },
+   { OP_LDI32, "LDI32", 4, 4 },
+   { OP_LEA, "LEA", 2, 4 },
+   { OP_ADDSP, "ADDSP", 2, 0 }, /* opcode adjusts sp directly */
+   { OP_SUBSP, "SUBSP", 2, 0 }, /* ditto */
+   { OP_CALL, "CALL", 2, 0 }, /* ( -- retaddr ) */
+   { OP_RET, "RET", 0, 0 }, /* ( retaddr -- ) */
+   { OP_LEASP, "LEASP", 2, 4 }, /* ( -- address ) */
+   { OP_LDSP, "LDSP", 2, 4 }, /* ( -- value ) */
+   { OP_STSP, "STSP", 2, -4 }, /* (value -- )*/
+   { OP_BR, "BR", 2, -4 },  /* (test --) */
+   { OP_EQ, "EQ", 0, -4 }, /* (a b -- test) */
+   { OP_NEQ, "NEQ", 0, -4 },
+   { OP_GT, "GT", 0, -4 },
+   { OP_GTE, "GTE", 0, -4 },
+   { OP_LT, "LT", 0, -4 },
+   { OP_LTE, "LTE", 0, -4 },
+   { OP_JMP, "JMP", 2, 0 },
+   { OP_ADD, "ADD", 0, -4 },
+   { OP_SUB, "SUB", 0, -4 },
+   { OP_MUL, "MUL", 0, -4 },
+   { OP_DIV, "DIV", 0, -4 },      
+   { OP_MOD, "MOD", 0, -4 },      
+   { OP_AND, "AND", 0, -4 },
+   { OP_OR, "OR", 0, -4 },
+   { OP_XOR, "XOR", 0, -4 }, /* (a b -- a^b )*/
+   { OP_NOT, "NOT", 0, 0 },
+   { OP_SHL, "SHL", 0, -4 }, /* (value shift -- value) */
+   { OP_SHR, "SHR", 0, -4 }, /* (value shift -- value) */
+   { OP_LD, "LD", 0, 0 },  /* ( address -- value ) */
+   { OP_ST, "ST", 0, -8 },  /* (address value -- ) */
+   { OP_SYSCALL, "SYSCALL", 2, 0 },
+   { OP_BRZ, "BRZ", 2, 0 }, /* branch if zero */
+   { OP_LD8, "LD8", 0, 0 },
+   { OP_ST8, "ST8", 0, -8 },
+   { OP_LDIZ, "LDIZ", 0, 4 }, /* load zero */
+   { OP_LDI16, "LDI16", 2, 4 }, /* load 16 bit immediate */
+   { OP_INC, "INC", 0, 0 }, /* increment by 1 */
+   { OP_DEC, "DEC", 0, 0 }, /* decrement by 1 */
+   { 0, NULL, 0, 0 }
+  };
+static struct opinfo *getopinfo( op_t op ) {
+  int i;
+  for( i = 0; opcodeinfo[i].name; i++ ) {
+    if( opcodeinfo[i].op == op ) return &opcodeinfo[i];
+  }
+  return NULL;
+}
+
+
+static int fvm_step( struct fvm_state *state ) {
+  op_t op;  
+  uint8_t u8;
+  uint16_t u16;
+  int16_t i16;
+  uint32_t u32, addr;  
+  struct opinfo *oinfo;
+  int i, sts;
+  
+  if( (state->pc < FVM_ADDR_TEXT) || (state->pc >= (FVM_ADDR_TEXT + state->module->textsize)) ) {
+    printf( "bad pc %04x\n", state->pc );
+    fvm_log( LOG_LVL_ERROR, "fvm_step bad pc" );
+    return -1;
+  }
+
+  u8 = state->module->text[state->pc - FVM_ADDR_TEXT];
+  op = u8;
+
+  if( glob.debug ) {
+    oinfo = getopinfo( op );
+    if( oinfo->pcdata == 0 ) {
+      printf( "PC=%04x SP=%04x %s Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown" );
+    } else if( oinfo->pcdata == 2 ) {
+      memcpy( &u16, &state->module->text[state->pc - FVM_ADDR_TEXT + 1], 2 );
+      printf( "PC=%04x SP=%04x %s %d|%x Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown", (int32_t)(int16_t)u16, (uint32_t)u16 );
+    } else if( oinfo->pcdata == 4 ) {
+      memcpy( &u32, &state->module->text[state->pc - FVM_ADDR_TEXT + 1], 4 );      
+      printf( "PC=%04x SP=%04x %s %d|%x Stack: ", state->pc, state->sp, oinfo ? oinfo->name : "unknown", u32, u32 );
+    }
+    
+    u32 = (state->sp > 64) ? state->sp - 64 : 0;
+    printf( "%04x: ", u32 );
+    for( i = u32; i < state->sp; i += 4 ) {
+      printf( "%x ", *((uint32_t *)&state->stack[i]) );
+    }
+    printf( "\n" );
+  }
+  
+  state->pc++;
+  switch( op ) {
+  case OP_NOP:
+    break;
+  case OP_LDI32:
+    u32 = fvm_read_pcu32( state );
+    fvm_push( state, u32 );
+    break;
+  case OP_LDI16:
+    i16 = (int16_t)fvm_read_pcu16( state );
+    fvm_push( state, (uint32_t)(int32_t)i16 );
+    break;    
+  case OP_LDIZ:
+    fvm_push( state, 0 );
+    break;    
+  case OP_LEA:
+    i16 = (int16_t)fvm_read_pcu16( state );
+    fvm_push( state, ((int)state->pc) + i16 );
+    break;
+  case OP_ADDSP:
+    u16 = fvm_read_pcu16( state );
+    state->sp += u16;
+    break;
+  case OP_SUBSP:
+    u16 = fvm_read_pcu16( state );
+    state->sp -= u16;
+    break;
+  case OP_CALL:
+    u16 = fvm_read_pcu16( state );
+    fvm_push( state, state->pc );
+    state->pc = u16;
+    state->frame++;
+    break;
+  case OP_RET:
+    u32 = fvm_pop( state );
+    if( u32 < FVM_ADDR_TEXT || (u32 >= (FVM_ADDR_TEXT + state->module->textsize)) ) {
+      if( (u32 == 0) && (state->frame == 1) ) {
+	//printf( "Returning from entry point routine\n" );
+      } else {
+	printf( "Attempt to return to invalid address %04x\n", u32 );
+	fvm_log( LOG_LVL_ERROR, "fvm_step return to invalid address %x frame %u", u32, state->frame );
+	return -1;
+      }
+    }
+    state->pc = u32;
+    state->frame--;
+    break;
+  case OP_LEASP:
+    u16 = fvm_read_pcu16( state );
+    fvm_push( state, FVM_ADDR_STACK + state->sp - u16 );    
+    break;
+  case OP_LDSP:
+    u16 = fvm_read_pcu16( state );
+    u32 = fvm_read_u32( state, FVM_ADDR_STACK + state->sp - u16 );
+    fvm_push( state, u32 );
+    break;
+  case OP_STSP:
+    u16 = fvm_read_pcu16( state );
+    addr = FVM_ADDR_STACK + state->sp - u16;
+    u32 = fvm_pop( state );
+    if( fvm_write_u32( state, addr, u32 ) < 0 ) return -1;
+    break;
+  case OP_BR:
+    u16 = fvm_read_pcu16( state );
+    u32 = fvm_pop( state );
+    if( u32 ) {
+      state->pc = u16;
+    }
+    break;
+  case OP_BRZ:
+    u16 = fvm_read_pcu16( state );
+    u32 = fvm_pop( state );
+    if( !u32 ) {
+      state->pc = u16;
+    }
+    break;
+  case OP_EQ:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 == addr ? 1 : 0 );
+    break;
+  case OP_NEQ:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 != addr ? 1 : 0 );
+    break;
+  case OP_GT:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr > u32 ? 1 : 0 );
+    break;
+  case OP_GTE:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr >= u32 ? 1 : 0 );
+    break;    
+  case OP_LT:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr < u32 ? 1 : 0 );
+    break;    
+  case OP_LTE:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr <= u32 ? 1 : 0 );
+    break;
+  case OP_JMP:
+    u16 = fvm_read_pcu16( state );
+    state->pc = u16;
+    break;
+  case OP_ADD:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 + addr );
+    break;
+  case OP_SUB:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr - u32 );
+    break;
+  case OP_MUL:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 * addr );
+    break;
+  case OP_DIV:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 ? addr / u32 : 0 );
+    break;
+  case OP_MOD:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, u32 ? addr % u32 : 0 );
+    break;
+  case OP_AND:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr & u32 );
+    break;
+  case OP_OR:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr | u32 );
+    break;
+  case OP_XOR:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr ^ u32 );
+    break;
+  case OP_NOT:
+    u32 = fvm_pop( state );
+    fvm_push( state, ~u32 );
+    break;
+  case OP_SHL:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr << u32 );
+    break;
+  case OP_SHR:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    fvm_push( state, addr >> u32 );
+    break;
+  case OP_INC:
+    u32 = fvm_pop( state );
+    fvm_push( state, u32 + 1 );      
+    break;
+  case OP_DEC:
+    u32 = fvm_pop( state );
+    fvm_push( state, u32 - 1 );      
+    break;        
+  case OP_LD:
+    u32 = fvm_pop( state );
+    u32 = fvm_read_u32( state, u32 );
+    fvm_push( state, u32 );
+    break;
+  case OP_ST:
+    u32 = fvm_pop( state );
+    addr = fvm_pop( state );
+    if( fvm_write_u32( state, addr, u32 ) < 0 ) return -1;
+    break;
+  case OP_LD8:
+    {
+      uint8_t *ptr;
+      addr = fvm_pop( state );
+      ptr = (uint8_t *)fvm_getptr( state, addr, 1, 0 );
+      u32 = ptr ? *ptr : 0;
+      fvm_push( state, u32 );
+    }
+    break;
+  case OP_ST8:
+    {
+      uint8_t *ptr;      
+      u32 = fvm_pop( state ) & 0xff;
+      addr = fvm_pop( state );
+      ptr = (uint8_t *)fvm_getptr( state, addr, 1, 1 );
+      if( ptr ) *ptr = u32;
+      else printf( ";; WARNING ST8 attempt to set invalid address %x\n", addr );
+    }
+    break;    
+  case OP_SYSCALL:
+    u16 = fvm_read_pcu16( state );
+    sts = fvm_syscall( state, u16 );
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "fvm_step syscall %u failed", u16 );
+      return -1;
+    }
+    break;
+  default:
+    printf( "Invalid opcode %u\n", op );
+    fvm_log( LOG_LVL_ERROR, "fvm_step invalid opcode" );
+    return -1;
+  }
 
   return 0;
 }
 
-static void fvm_set_dirty_page( struct fvm_state *fvm, uint16_t page ) {
-  int idx, off;
-  idx = page / 32;
-  off = page % 32;
-  fvm->dirty[idx] |= (1 << off);
+
+static int fvm_run_proc( struct fvm_module *module, uint32_t procaddr, uint64_t siginfo, struct xdr_s *argbuf , struct xdr_s *resbuf, uint32_t *nsteps ) {
+  struct fvm_state state;
+  uint64_t start, now;
+  int sts;
+  uint32_t isvar[FVM_MAX_PARAM], vartype[FVM_MAX_PARAM], u32[FVM_MAX_PARAM];
+  uint32_t u;
+  int i, nargs, len;
+  char *str, *buf;
+
+  if( (procaddr < FVM_ADDR_TEXT) || (procaddr >= (FVM_ADDR_TEXT + module->textsize)) ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_run bad procaddr %x", procaddr );
+    return -1;
+  }
+
+  memset( &state, 0, sizeof(state) );
+  state.module = module;
+  state.sp = 0;
+  state.pc = procaddr;
+
+  /* 
+   * prepare args on stack:
+   * <string/opaque buffers><u32 args and pointers to the string/opaque args><dummy return address> 
+   */
+
+  nargs = FVM_SIGINFO_NARGS(siginfo);
+
+  for( i = 0; i < nargs; i++ ) {
+    isvar[i] = FVM_SIGINFO_ISVAR(siginfo,i);
+    vartype[i] = FVM_SIGINFO_VARTYPE(siginfo,i);
+
+    if( isvar[i] ) {
+      /* output arg: reserve space for result pointer */
+      u32[i] = FVM_ADDR_STACK + state.sp; /* address of result value */
+      state.sp += 4;
+    } else {
+      if( !argbuf ) {
+	fvm_log( LOG_LVL_ERROR, "fvm_run need args" );
+	return -1;
+      }
+      
+      /* input arg */
+      switch( vartype[i] ) {
+      case VAR_TYPE_U32:
+	if( (i < (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo, i + 1) == VAR_TYPE_OPAQUE) ) {
+	  /* don't decode the u32 if the next param is opaque. that's because this will receive the length */
+	} else {
+	  sts = xdr_decode_uint32( argbuf, &u32[i] );
+	  if( sts ) {
+	    fvm_log( LOG_LVL_ERROR, "fvm_run xdr error u32 i=%d", i );
+	    return sts;
+	  }
+	}
+	break;
+      case VAR_TYPE_STRING:
+	sts = xdr_decode_string( argbuf, state.stack + state.sp, FVM_MAX_STACK - state.sp );
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error string i=%d argbuf=%d/%d", i, argbuf->offset, argbuf->count );
+	  return sts;
+	}
+	u32[i] = FVM_ADDR_STACK + state.sp;
+	len = strlen( state.stack + state.sp ) + 1;
+	if( len % 4 ) len += 4 - (len % 4);
+	state.sp += len;
+	break;	
+      case VAR_TYPE_OPAQUE:
+	len = FVM_MAX_STACK - state.sp;
+	sts = xdr_decode_opaque( argbuf, (uint8_t *)state.stack + state.sp, &len );
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error opaque i=%d argbuf=%d/%d", i, argbuf->offset, argbuf->count );
+	  return sts;
+	}
+	u32[i - 1] = len;
+	u32[i] = FVM_ADDR_STACK + state.sp;
+	if( len % 4 ) len += 4 - (len % 4);
+	state.sp += len;
+	break;
+      }      
+    }
+  }
+
+  /* push args values */
+  for( i = 0; i < nargs; i++ ) {
+    fvm_push( &state, u32[i] ); 
+  }
+  fvm_push( &state, 0 ); /* push dummy return address */
+    
+  start = rpc_now();
+  state.frame = 1;
+  while( state.frame ) {
+    sts = fvm_step( &state );
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "fvm_run step failed" );
+      return -1;
+    }
+    state.nsteps++;
+    
+    if( (state.nsteps % 1000) == 0 ) {
+      if( state.nsteps > glob.max_steps ) {
+	fvm_log( LOG_LVL_WARN, "fvm_run exited due to max steps %u", state.nsteps, glob.max_steps );
+	return -1;
+      }
+      
+      now = rpc_now();
+      if( (now - start) > glob.max_runtime ) {
+	fvm_log( LOG_LVL_WARN, "fvm_run exited due to timeout %u", (now - start), glob.max_runtime );
+	return -1;
+      }
+    }
+  }
+
+  if( nsteps ) *nsteps = state.nsteps;
+  
+  /* decode results */
+  if( !resbuf ) return 0;
+
+  for( i = 0; i < nargs; i++ ) {
+    if( isvar[i] ) {
+      switch( vartype[i] ) {
+      case VAR_TYPE_U32:
+	if( (i < (nargs - 1)) && (vartype[i + 1] == VAR_TYPE_OPAQUE) ) {
+	  u = u32[i];
+	  u32[i] = fvm_read_u32( &state, u );
+	} else {
+	  /* get result */
+	  u = fvm_read_u32( &state, u32[i] );
+	  sts = xdr_encode_uint32( resbuf, u );
+	  if( sts ) {
+	    fvm_log( LOG_LVL_ERROR, "fvm_run xdr error decoding result" );	    
+	    return sts;
+	  }
+	}
+	break;
+      case VAR_TYPE_STRING:
+	u = fvm_read_u32( &state, u32[i] );
+	str = fvm_getstr( &state, u );
+	sts = xdr_encode_string( resbuf, str ? str : "" );
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error decoding result" );	    	  
+	  return sts;
+	}
+	break;
+      case VAR_TYPE_OPAQUE:
+	u = fvm_read_u32( &state, u32[i] );
+	len = u32[i - 1];	
+	buf = fvm_getptr( &state, u, len, 0 );
+	if( !buf ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run failed to get opaque pointer" );
+	}
+	
+	sts = xdr_encode_opaque( resbuf, (uint8_t *)buf, buf ? len : 0 );
+	if( sts ) {
+	  fvm_log( LOG_LVL_ERROR, "fvm_run xdr error decoding result" );	    	  
+	  return sts;
+	}
+	break;
+      }
+    }
+  }
+
+  resbuf->count = resbuf->offset;
+  resbuf->offset = 0;
+  
+  return 0;
+  
 }
 
-static void fvm_set_dirty_region( struct fvm_state *fvm, uint16_t startpage, int npage ) {
+int fvm_run( struct fvm_module *module, uint32_t procid, struct xdr_s *argbuf , struct xdr_s *resbuf ) {
+  uint32_t nsteps;
+  int sts;
+
+  if( module->flags & FVM_MODULE_DISABLED ) {
+    fvm_log( LOG_LVL_WARN, "fvm_run module %s disabled", module->name );
+    return -1;
+  }
+  
+  if( (procid < 0) || (procid >= module->nprocs) ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_run bad procid" );
+    return -1;
+  }
+
+  if( module->flags & FVM_MODULE_NATIVE ) {
+    if( !module->procs[procid].nativeproc ) return -1;
+    sts = module->procs[procid].nativeproc( argbuf, resbuf );
+    module->procs[procid].perfdata.rcount++;
+    return sts;
+  }
+  
+  sts = fvm_run_proc( module, module->procs[procid].address, module->procs[procid].siginfo, argbuf, resbuf, &nsteps );
+  module->procs[procid].perfdata.rcount++;
+  module->procs[procid].perfdata.nsteps += nsteps;
+
+  return sts;
+}
+
+int fvm_run_by_name( char *modname, char *procname, struct xdr_s *args, struct xdr_s *res ) {
+  struct fvm_module *m;
+  int procid;
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+  procid = fvm_procid_by_name( m, procname );
+  if( procid < 0 ) return -1;
+  return fvm_run( m, procid, args, res );
+}
+
+int fvm_run_by_handle( int handle, struct xdr_s *args, struct xdr_s *res ) {
+  struct fvm_module *m;
+  int procid;
+  int sts;
+  sts = fvm_proc_by_handle( handle, &m, &procid );
+  if( sts ) return -1;
+  return fvm_run( m, procid, args, res );
+}
+
+
+/* ------------------- rpc interface ---------------- */
+
+static struct rpc_program *alloc_program( uint32_t prog, uint32_t vers, int nprocs, rpc_proc_t proccb ) {
+  struct rpc_program *pg;
+  struct rpc_version *vs;
+  struct rpc_proc *pc;
   int i;
-  for( i = 0; i < npage; i++ ) {
-    fvm_set_dirty_page( fvm, startpage + i );
+  
+  pg = malloc( sizeof(*pg) );
+  memset( pg, 0, sizeof(*pg) );
+  pg->prog = prog;
+  vs = malloc( sizeof(*vs) );
+  memset( vs, 0, sizeof(*vs) );
+  vs->vers = vers;
+  pg->vers = vs;
+
+  pc = malloc( sizeof(*pc) * (nprocs + 1) );
+  memset( pc, 0, sizeof(*pc) * (nprocs + 1) );
+  for( i = 0; i < nprocs; i++ ) {
+    pc[i].proc = i;
+    pc[i].fn = proccb;
+  }
+  vs->procs = pc;
+  
+  return pg;    
+}
+
+
+#define RPCPROC_SIGINFO 0x800000000000d10L
+/* only export the rpc procedures with names of format Procxxx that have correct signature */
+static int get_rpc_procid( struct fvm_module *m, int rpcid ) {
+  int i, procid;
+  char name[8];
+  
+  procid = 0;
+  for( i = 0; i < m->nprocs; i++ ) {    
+    memcpy( name, m->procs[i].name, 4 );
+    name[4] = '\0';
+    if( (strcasecmp( name, "proc" ) == 0) && (m->procs[i].siginfo == RPCPROC_SIGINFO) ) {
+      if( procid == rpcid ) {
+	return i;
+      }
+      procid++;
+    }
+  }
+  
+  return -1;
+}
+
+static int fvm_rpc_proc( struct rpc_inc *inc ) {
+  uint32_t procid;
+  int sts, handle;
+  struct fvm_module *m;
+  struct rpc_conn *conn;
+  struct xdr_s argbuf, resbuf;
+
+  m = fvm_module_by_progid( inc->msg.u.call.prog, inc->msg.u.call.vers );
+  if( !m ) {
+    fvm_log( LOG_LVL_TRACE, "Unknown module progid=%u", inc->msg.u.call.prog );
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROG_UNAVAIL, NULL, NULL );
+  }
+
+  procid = get_rpc_procid( m, inc->msg.u.call.proc );
+  if( (procid < 0) || (procid >= m->nprocs) ) {
+    fvm_log( LOG_LVL_TRACE, "Unknown proc %u", inc->msg.u.call.proc );
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_PROC_UNAVAIL, NULL, NULL );
+  }
+
+  fvm_log( LOG_LVL_DEBUG, "fvm_rpc_proc %s %s", m->name, m->procs[procid].name );
+
+  if( (inc->xdr.offset + 4) > inc->xdr.buf_size ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_rpc_proc out of buffer space" );
+    return -1;
+  }
+  
+  memmove( inc->xdr.buf + inc->xdr.offset + 4, inc->xdr.buf + inc->xdr.offset, inc->xdr.count - inc->xdr.offset );
+  xdr_init( &argbuf, inc->xdr.buf + inc->xdr.offset, inc->xdr.count - inc->xdr.offset + 4 );
+  xdr_encode_uint32( &argbuf, inc->xdr.count - inc->xdr.offset );
+  argbuf.offset = 0;
+  
+  conn = rpc_conn_acquire();
+  xdr_init( &resbuf, conn->buf, conn->count );
+  sts = fvm_run( m, procid, &argbuf, &resbuf );
+  if( sts ) {
+    rpc_conn_release( conn );
+    return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  }
+	      
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  sts = xdr_encode_fixed( &inc->xdr, resbuf.buf + 4, resbuf.count - 4 );
+  rpc_complete_accept_reply( inc, handle );
+
+  rpc_conn_release( conn );
+  
+  return 0;
+}
+
+static int fvm_register_program( char *modname ) {
+  struct fvm_module *m;
+  struct rpc_program *pg;
+  
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  if( !m->progid || !m->versid ) return -1;
+  
+  pg = alloc_program( m->progid, m->versid, m->nprocs, fvm_rpc_proc );
+  rpc_program_register( pg );
+  return 0;
+}
+
+static int fvm_unregister_program( char *modname ) {
+  struct fvm_module *m;
+  struct rpc_program *p;
+  struct rpc_version *vs;
+  struct rpc_proc *pc;
+  
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+  
+  rpc_program_find( m->progid, m->versid, 0, &p, &vs, &pc );
+  if( !p ) return -1;
+
+  rpc_program_unregister( p );
+  free( p->vers->procs );
+  free( p->vers );
+  free( p );
+  return 0;  
+}
+
+static int fvm_proc_null( struct rpc_inc *inc ) {
+  int handle;
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
+static int fvm_proc_list( struct rpc_inc *inc ) {
+  int handle, i;
+  struct fvm_module *m;
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );  
+  m = glob.modules;
+  while( m ) {
+    xdr_encode_boolean( &inc->xdr, 1 );
+    xdr_encode_string( &inc->xdr, m->name );
+    xdr_encode_uint32( &inc->xdr, m->progid );
+    xdr_encode_uint32( &inc->xdr, m->versid );
+    xdr_encode_uint32( &inc->xdr, m->datasize );
+    xdr_encode_uint32( &inc->xdr, m->textsize );
+    xdr_encode_uint64( &inc->xdr, m->timestamp );
+    xdr_encode_uint32( &inc->xdr, m->flags );
+    xdr_encode_uint32( &inc->xdr, m->nprocs );
+    for( i = 0; i < m->nprocs; i++ ) {
+      xdr_encode_string( &inc->xdr, m->procs[i].name ); 
+      xdr_encode_uint32( &inc->xdr, m->procs[i].address );     
+      xdr_encode_uint64( &inc->xdr, m->procs[i].siginfo );
+      xdr_encode_uint64( &inc->xdr, m->procs[i].perfdata.nsteps );
+      xdr_encode_uint64( &inc->xdr, m->procs[i].perfdata.rcount );
+    }
+    
+    m = m->next;
+  }
+  xdr_encode_boolean( &inc->xdr, 0 );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_load( struct rpc_inc *inc ) {
+  int handle, registerp;
+  char *bufp;
+  int lenp, sts;
+  struct fvm_module *modulep;
+  uint32_t flags;
+  
+  sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+  if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
+  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &registerp );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  sts = fvm_module_load( bufp, lenp, flags, &modulep );
+  if( sts ) goto done;
+  
+  if( registerp ) {
+    /* register as rpc program */
+    fvm_unregister_program( modulep->name );
+    fvm_register_program( modulep->name );
+  }
+
+ done:
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );  
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_unload( struct rpc_inc *inc ) {
+  int handle, sts;
+  char name[FVM_MAX_NAME];
+
+  sts = xdr_decode_string( &inc->xdr, name, sizeof(name) );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  sts = fvm_module_unload( name );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );  
+  rpc_complete_accept_reply( inc, handle );
+  return 0;
+}
+
+static int fvm_proc_run( struct rpc_inc *inc ) {
+  int handle, sts;
+  char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
+  char *bufp = NULL;
+  int lenp;
+  struct rpc_conn *conn = NULL;
+  struct xdr_s argbuf, resbuf;
+  uint32_t procid;
+  struct fvm_module *m;
+    
+  sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
+  if( !sts ) sts = xdr_decode_string( &inc->xdr, procname, sizeof(procname) );
+  if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  fvm_log( LOG_LVL_DEBUG, "fvm_proc_run mod=%s proc=%s buflen=%u", modname, procname, lenp );
+
+  m = fvm_module_by_name( modname );
+  if( !m ) {
+    sts = -1;
+    goto done;
+  }
+  
+  procid = fvm_procid_by_name( m, procname );
+  if( procid < 0 ) {
+    sts = -1;
+    goto done;
+  }
+
+  xdr_init( &argbuf, (uint8_t *)bufp, lenp );
+  conn = rpc_conn_acquire();
+  xdr_init( &resbuf, conn->buf, conn->count );
+  sts = fvm_run( m, procid, &argbuf, &resbuf );
+
+ done:  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  if( !sts ) xdr_encode_opaque( &inc->xdr, (uint8_t *)resbuf.buf, resbuf.count );
+  rpc_complete_accept_reply( inc, handle );
+
+  if( conn ) rpc_conn_release( conn );
+    
+  return 0;
+}
+
+static int fvm_proc_reload( struct rpc_inc *inc ) {
+  int handle, sts;
+  char modname[FVM_MAX_NAME];
+
+  sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  sts = fvm_init_module( modname );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );  
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_data( struct rpc_inc *inc ) {
+  int handle, sts;
+  struct fvm_module *m;
+  char modname[FVM_MAX_NAME];
+  
+  sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  m = fvm_module_by_name( modname );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, m ? 1 : 0 );
+  if( m ) xdr_encode_opaque( &inc->xdr, (uint8_t *)m->data, m->datasize );
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static int fvm_proc_enable( struct rpc_inc *inc ) {
+  int handle, sts;
+  int enable, prev;
+  char modname[FVM_MAX_NAME];
+
+  sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
+  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &enable );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+  sts = fvm_module_enable( modname, enable, &prev );
+
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+  if( !sts ) xdr_encode_boolean( &inc->xdr, prev );
+  rpc_complete_accept_reply( inc, handle );
+
+  return 0;
+}
+
+static int fvm_proc_getprocinfo( struct rpc_inc *inc ) {
+  int handle, sts, procid;
+  struct fvm_module *m;
+  char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
+  
+  sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
+  if( !sts ) sts = xdr_decode_string( &inc->xdr, procname, sizeof(procname) );
+  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+  
+  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+  m = fvm_module_by_name( modname );
+  if( m ) {
+    procid = fvm_procid_by_name( m, procname );
+    if( procid >= 0 ) {
+      xdr_encode_boolean( &inc->xdr, 1 );
+      xdr_encode_uint32( &inc->xdr, m->procs[procid].address );     
+      xdr_encode_uint64( &inc->xdr, m->procs[procid].siginfo );
+      xdr_encode_uint64( &inc->xdr, m->procs[procid].perfdata.nsteps );
+      xdr_encode_uint64( &inc->xdr, m->procs[procid].perfdata.rcount );      
+    } else {
+      xdr_encode_boolean( &inc->xdr, 0 );
+    }
+  } else {
+    xdr_encode_boolean( &inc->xdr, 0 );
+  }
+  rpc_complete_accept_reply( inc, handle );
+  
+  return 0;
+}
+
+static struct rpc_proc fvm_procs[] = {
+  { 0, fvm_proc_null },
+  { 1, fvm_proc_list },
+  { 2, fvm_proc_load },
+  { 3, fvm_proc_unload },
+  { 4, fvm_proc_run },
+  // { 5, NULL }, // unused 
+  { 6, fvm_proc_reload },
+  { 7, fvm_proc_data },
+  { 8, fvm_proc_enable },
+  { 9, fvm_proc_getprocinfo },
+  
+  { 0, NULL }
+};
+
+static struct rpc_version fvm_vers = {
+  NULL, FVM_RPC_VERS, fvm_procs
+};
+
+static struct rpc_program fvm_prog = {
+  NULL, FVM_RPC_PROG, &fvm_vers
+};
+
+
+static void fvm_module_iter( struct rpc_iterator *iter ) {
+  struct fvm_iterator *fiter;
+  struct fvm_module *m;
+  int sts, procid;
+  
+  fiter = (struct fvm_iterator *)iter;
+  sts = fvm_proc_by_handle( fiter->prochandle, &m, &procid );
+  if( sts ) return;
+
+  sts = fvm_run( m, procid, NULL, NULL );
+  if( sts ) fvm_log( LOG_LVL_ERROR, "fvm iter failed" );
+}
+
+static void fvm_register_iterator( char *modname, int procid, int period ) {
+  struct fvm_iterator *iter;
+  int sts;
+  
+  fvm_log( LOG_LVL_INFO, "fvm register iterator %s %u", modname, procid );
+
+  iter = malloc( sizeof(*iter) );
+  memset( iter, 0, sizeof(*iter) );
+  iter->iter.cb = fvm_module_iter;
+  iter->iter.period = period;
+
+  sts = fvm_handle_by_procid( modname, procid, &iter->prochandle );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_register_iterator bad proc %s/%u", modname, procid );
+    free( iter );
+    return;
+  }
+  
+  iter->next = glob.iterators;
+  glob.iterators = iter;
+  
+  rpc_iterator_register( &iter->iter );
+}
+
+static void fvm_unregister_iterator( char *modname ) {
+  struct fvm_iterator *it, *prev;
+  struct fvm_module *m;
+
+  m = fvm_module_by_name( modname );
+  if( !m ) return;
+  
+  it = glob.iterators;
+  prev = NULL;
+  while( it ) {
+    if( ((it->prochandle & 0xffff0000) >> 16) == m->tag ) {
+      fvm_log( LOG_LVL_TRACE, "fvm unregister iterator %s %u", modname, it->prochandle & 0xffff );
+      
+      if( prev ) prev->next = it->next;
+      else glob.iterators = it->next;
+      rpc_iterator_unregister( &it->iter );
+      free( it );
+      return;
+    }
+    prev = it;
+    it = it->next;
   }
 }
 
-static int fvm_is_dirty_page( struct fvm_state *fvm, uint16_t page ) {
-  int idx, off;
-  idx = page / 32;
-  off = page % 32;
-  return fvm->dirty[idx] & (1 << off);
-}
 
-
-void fvm_dirty_reset( struct fvm_state *fvm ) {
-    memset( fvm->dirty, 0, sizeof(fvm->dirty) );
-}
-
-int fvm_dirty_regions( struct fvm_state *fvm, struct fvm_dirty *dirty, int nd ) {
-    int page, n, started;
-
-    n = 0;
-    started = 0;
-    for( page = 0; page < (FVM_MAX_MEM / FVM_PAGE_SIZE); page++ ) {      
-
-	
-	if( started ) {
-  	    if( fvm_is_dirty_page( fvm, page ) ) {
-		/* currently reading a region, so append */
-		if( n < nd ) dirty[n].count += FVM_PAGE_SIZE;
-	    } else {
-		/* currently reading a region but this is a clean page */
-		n++;
-		started = 0;
-	    }
-	} else {
- 	    if( fvm_is_dirty_page( fvm, page ) ) {
-		/* start a new region */
-		started = 1;
-		if( n < nd ) {
- 		    dirty[n].offset = page * FVM_PAGE_SIZE;
-		    dirty[n].count = FVM_PAGE_SIZE;
-		}
-	    } else {
-		/* not started a region and not dirty either -  do nothing */
-	    }
-	}
-    }
-    
-    return n;
-}
-
-int fvm_shmem_read( struct fvm_state *fvm, char *buf, int n, int offset ) {
-    int len;
-    
-    n &= 0x3ff;
-    offset &= 0x3ff;
-    len = n;
-    if( offset > FVM_MAX_SHMEM ) return -1;
-    if( len >= (FVM_MAX_SHMEM - offset) ) len = FVM_MAX_SHMEM - offset;
-    memcpy( buf, &fvm->mem[FVM_ADDR_SHMEM], len );
-    return len;
-}
-int fvm_shmem_write( struct fvm_state *fvm, char *buf, int n, int offset ) {
-    int len, startpage, npage, i;
-    
-    n &= 0x3ff;
-    offset &= 0x3ff;
-    len = n;
-    if( offset > FVM_MAX_SHMEM ) return -1;
-    if( len >= (FVM_MAX_SHMEM - offset) ) len = FVM_MAX_SHMEM - offset;    
-    memcpy( &fvm->mem[0x900], buf, len );
-
-    startpage = FVM_ADDR_SHMEM / FVM_PAGE_SIZE;
-    npage = (len / FVM_PAGE_SIZE) + ((len % FVM_PAGE_SIZE) ? 1 : 0);
-    for( i = 0; i < npage; i++ ) {
-      fvm_set_dirty_page( fvm, startpage + i );
-    }
-    
-    return len;
-}
-
-#if 0
-
-#define FVM_PERSIST_MAGIC 0xf491a91c
-#define FVM_PERSIST_VERSION 1
-
-static int fvm_encode_state( struct xdr_s *xdr, struct fvm_state *fvm ) {
-    int sts;
-    sts = xdr_encode_uint32( xdr, FVM_PERSIST_MAGIC );
-    if( sts ) return sts;
-    sts = xdr_encode_uint32( xdr, FVM_PERSIST_VERSION );
-    if( sts ) return sts;
-    sts = xdr_encode_fixed( xdr, (uint8_t *)fvm->reg, sizeof(fvm->reg) );
-    if( sts ) return sts;
-    sts = xdr_encode_fixed( xdr, (uint8_t *)fvm->mem, sizeof(fvm->mem) );
-    if( sts ) return sts;
-    sts = xdr_encode_uint32( xdr, fvm->flags );
-    if( sts ) return sts;
-    sts = xdr_encode_uint64( xdr, fvm->tickcount );
-    if( sts ) return sts;
-    sts = xdr_encode_uint64( xdr, fvm->inlogid );
-    if( sts ) return sts;
-    sts = xdr_encode_uint32( xdr, fvm->bos );
-    if( sts ) return sts;
-    sts = xdr_encode_uint32( xdr, fvm->rpc.timeout );
-    if( sts ) return sts;
-    sts = xdr_encode_uint32( xdr, fvm->rpc.service );
-    if( sts ) return sts;
-    sts = xdr_encode_uint64( xdr, fvm->rpc.hostid );
-    if( sts ) return sts;
-    sts = xdr_encode_uint32( xdr, fvm->rpc.buf.offset );
-    if( sts ) return sts;
-    sts = xdr_encode_uint32( xdr, fvm->rpc.buf.count );
-    if( sts ) return sts;
-    sts = xdr_encode_uint32( xdr, fvm->id );
-    return 0;
-}
-static int fvm_decode_state( struct xdr_s *xdr, struct fvm_state *fvm ) {
-    int sts;
-    uint32_t u32;
-
-    memset( fvm, 0, sizeof(*fvm) );
-    
-    sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) return sts;
-    if( u32 != FVM_PERSIST_MAGIC ) return -1;
-    if( !sts ) sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) return sts;
-    if( u32 != FVM_PERSIST_VERSION ) return -1;
-    if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)fvm->reg, sizeof(fvm->reg) );
-    if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)fvm->mem, sizeof(fvm->mem) );
-    if( !sts ) sts = xdr_decode_uint32( xdr, &fvm->flags );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &fvm->tickcount );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &fvm->inlogid );
-    if( !sts ) sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) return sts;
-    fvm->bos = (uint16_t)u32;
-    if( !sts ) sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) return sts;
-    fvm->rpc.timeout = (uint16_t)u32;
-    if( !sts ) sts = xdr_decode_uint32( xdr, &u32 );
-    if( sts ) return sts;
-    fvm->rpc.service = (uint16_t)u32;
-    if( !sts ) sts = xdr_decode_uint64( xdr, &fvm->rpc.hostid );
-    if( !sts ) sts = xdr_decode_uint32( xdr, (uint32_t *)&fvm->rpc.buf.offset );
-    if( !sts ) sts = xdr_decode_uint32( xdr, (uint32_t *)&fvm->rpc.buf.count );
-    if( !sts ) sts = xdr_decode_uint32( xdr, &fvm->id );
-    return 0;    
-}
-
-int fvm_persist( char *path, struct fvm_state *fvm, void *reserved ) {
-    int sts;
-    struct mmf_s mmf;
-    struct xdr_s xdr;
-    
-    sts = mmf_open( path, &mmf );
-    if( sts ) return sts;
-
-    sts = mmf_remap( &mmf, 256*1024 );
+static int fvm_init_module( char *modname ) {
+  char path[256];
+  int sts, service_period, registerp;
+  struct freg_entry entry;
+  struct fvm_module *m;
+  
+  /* unload if already existing */
+  if( fvm_module_by_name( modname) ) {
+    sts = fvm_module_unload( modname );
     if( sts ) {
-	mmf_close( &mmf );
-	return -1;
+      fvm_log( LOG_LVL_ERROR, "fvm_init_module failed to unload %s", modname );
+      return sts;
     }
+  }
+  
+  sprintf( path, "/fju/fvm/modules/%s", modname );
+  sts = freg_entry_by_name( NULL, 0, path, &entry, NULL );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "Failed to load registry entry for module %s", modname );
+    return -1;
+  }
 
-    xdr_init( &xdr, mmf.file, 256*1024 );
-    fvm_encode_state( &xdr, fvm );
-    mmf_truncate( &mmf, xdr.offset );
-    
-    mmf_close( &mmf );
+  sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path), NULL );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "No module path configured" );
+    return -1;
+  }
+  sts = fvm_module_load_file( path, 0, &m );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "Failed to load module file %s", path );
+    return -1;
+  }
 
-    return 0;
+  strcpy( path, "" );
+  sts = freg_get_by_name( NULL, entry.id, "service", FREG_TYPE_STRING, path, sizeof(path), NULL );
+  if( sts && (fvm_procid_by_name( m, "service" ) >= 0) ) {
+    strcpy( path, "service" );
+    sts = 0;
+  }
+
+  service_period = 1000;
+  sts = freg_get_by_name( NULL, entry.id, "service-period", FREG_TYPE_UINT32, (char *)&service_period, 4, NULL );
+  if( sts ) service_period = 1000;
+  
+  if( path[0] ) {
+    fvm_register_iterator( m->name, fvm_procid_by_name( m, path ), service_period );
+  }
+  
+  registerp = (m->progid ? 1 : 0);
+  sts = freg_get_by_name( NULL, entry.id, "register", FREG_TYPE_UINT32, (char *)&registerp, sizeof(registerp), NULL );
+  if( registerp ) {
+    fvm_log( LOG_LVL_INFO, "Registering program %s", m->name );
+    fvm_register_program( m->name );
+  }
+
+  return 0;
 }
 
-int fvm_restore( char *path, struct fvm_state *fvm, void *reserved ) {
-    int sts;
-    struct mmf_s mmf;
-    struct xdr_s xdr;
-    
-    sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
-    if( sts ) return sts;
+void fvm_rpc_register( void ) {
+  int sts;
+  uint64_t id, key;
+  struct freg_entry entry;
+  
+  rpc_program_register( &fvm_prog );
 
-    mmf_remap( &mmf, mmf.fsize );
-    xdr_init( &xdr, mmf.file, mmf.fsize );
+  /* 
+   * load modules registered in /fju/fvm/modules/MODNAME/path str 
+   * Run initialization routine /fju/fvm/modules/MODNAME/initproc str 
+   * Setup service routines /fju/fvm/modules/MODNAME/service str procname 
+   * Register rpc programs /fju/fvm/modules/MODNAME/register u32 
+   */
 
-    sts = fvm_decode_state( &xdr, fvm );
+  sts = freg_subkey( NULL, 0, "/fju/fvm/modules", FREG_CREATE, &key );
+  if( sts ) return;
+  id = 0;
+  while( !freg_next( NULL, key, id, &entry ) ) {
+    if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
+      fvm_log( LOG_LVL_INFO, "fvm load registry module %s", entry.name );
+      fvm_init_module( entry.name );
+    }
+    id = entry.id;
+  }
 
-    mmf_close( &mmf );
+  sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxruntime", FREG_TYPE_UINT32, (char *)&glob.max_runtime, 4, NULL );
+  sts = freg_get_by_name( NULL, 0, "/fju/fvm/maxsteps", FREG_TYPE_UINT32, (char *)&glob.max_steps, 4, NULL );
 
-    return sts;
 }
 
-#else
-
-int fvm_persist( char *path, struct fvm_state *fvm, void *reserved ) {
-  return -1;
+void fvm_setdebug( int debugmode ) {
+  glob.debug = debugmode;
 }
 
-int fvm_restore( char *path, struct fvm_state *fvm, void *reserved ) {
-  return -1;
+int fvm_module_enable( char *modname, int enable, int *prev ) {
+  struct fvm_module *m;
+  
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  /* return previous enabled state */
+  if( prev ) {
+    *prev = (m->flags & FVM_MODULE_DISABLED) ? 0 : 1;
+  }
+
+  /* set/clear disabled flag */
+  m->flags = (m->flags & ~FVM_MODULE_DISABLED) | (enable ? 0 : FVM_MODULE_DISABLED);
+  return 0;
 }
-
-#endif
-

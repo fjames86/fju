@@ -1,12 +1,10 @@
 
-hlc: ${BINDIR}/hlc ${LIBDIR}/libhlc.a 
+hlc: hlc/hlc.c 
 
-${LIBDIR}/libhlc.a: hlc/hlc.c include/fju/hlc.h 
-	${CC} -c hlc/hlc.c ${CFLAGS} 
-	${AR} rcs $@ hlc.o 
+${BINDIR}/hlc.fvm: hlc/hlc.pas ${BINDIR}/fju 
+	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib hlc/hlc.pas
 
-${BINDIR}/hlc: hlc/hlc-main.c ${LIBFJU}
-	${CC} -o $@ hlc/hlc-main.c ${CFLAGS} ${LFLAGS}
+hlc/hlc.c: ${BINDIR}/hlc.fvm ${BINDIR}/fju 
+	${BINDIR}/fju fvmc -o hlc/hlc.c -C ${BINDIR}/hlc.fvm 
 
-PROGRAMS+=hlc
-LIBRARIES+=hlc
+FVMMODULES += hlc/hlc.c

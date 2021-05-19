@@ -1,5 +1,5 @@
 
-ftab: ${LIBDIR}/libftab.a ${BINDIR}/ftab ${BINDIR}/fdtab
+ftab: ${LIBDIR}/libftab.a #${BINDIR}/ftab ${BINDIR}/fdtab
 
 ${LIBDIR}/libftab.a: ftab/ftab.c include/fju/ftab.h ftab/fdtab.c include/fju/fdtab.h 
 	${CC} -c ${CFLAGS} ftab/ftab.c ftab/fdtab.c 

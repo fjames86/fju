@@ -1,27 +1,5 @@
-/*
- * MIT License
- *
- * Copyright (c) 2018 Frank James
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- */
+
+/* Copyright Frank James 2018 */
 
 #ifndef LOG_H
 #define LOG_H
@@ -32,6 +10,7 @@
 #include <fju/mmf.h>
 
 #define LOG_LBASIZE 64               /* lba size fixed to 64 bytes */
+#define LOG_MAX_COOKIE 16
 
 /* caller data */
 struct log_s {
@@ -51,13 +30,15 @@ struct log_s {
 struct log_opts {
   uint32_t mask;                   /* bitmask of opening options */
 #define LOG_OPT_LBACOUNT 0x0001
-#define LOG_OPT_FLAGS    0x0002 
+#define LOG_OPT_FLAGS    0x0002
+#define LOG_OPT_COOKIE   0x0004 
   uint32_t lbacount;               /* if creating log (opening for first time), use this many blocks */
   uint32_t flags;                  /* log flags - persistent properties of the log itself */
 #define LOG_FLAG_CIRCULAR 0x0000   /* default - circular log */
 #define LOG_FLAG_FIXED    0x0001   /* opposite of circular - only append entries at end */
 #define LOG_FLAG_GROW     0x0002   /* dynamically grow, requires LOG_FLAG_FIXED */
 #define LOG_FLAG_LVLMASK  0x00f0   /* only log messages with at least this level */
+  char cookie[LOG_MAX_COOKIE];
 };
 
 struct log_prop {
@@ -70,6 +51,7 @@ struct log_prop {
   uint64_t last_id;
   uint32_t flags;
   uint64_t tag;
+  char cookie[LOG_MAX_COOKIE];
 };
 
 struct log_iov {
@@ -143,6 +125,38 @@ int log_write_buf( struct log_s *log, int lvl, char *buf, int len, uint64_t *id 
 
 /* set minimum lvl */
 int log_set_lvl( struct log_s *log, int lvl );
+
+/* set log cookie */
+int log_set_cookie( struct log_s *log, char *cookie, int size );
+
+#define _ltag_by_name(place,name) 
+#define log_deflogger(_name,_tag) \
+int _name( int lvl, char *fmt, ... ) {\
+  va_list args;\
+  char *tstr;\
+  struct log_entry entry;\
+  struct log_iov iov[1];\
+  char buf[1024];\
+\
+  va_start(args,fmt);\
+  vsnprintf( buf, sizeof(buf) - 1, fmt, args );  \
+  va_end(args);\
+  memset( &entry, 0, sizeof(entry) );\
+  iov[0].buf = buf;\
+  iov[0].len = (int)strlen( buf );\
+  entry.iov = iov;\
+  entry.niov = 1;\
+  entry.flags = lvl & (~LOG_BINARY);\
+  tstr = _tag;\
+  strncpy( (char *)&entry.ltag, tstr, 4 );\
+  return log_write( NULL, &entry );  \
+}
+
+#define LOG_TRUNC_START 0x0000
+#define LOG_TRUNC_END   0x0001
+int log_truncate( struct log_s *log, uint64_t id, uint32_t flags );
+
+
 
 #endif
 

@@ -1,27 +1,3 @@
-/*
- * MIT License
- * 
- * Copyright (c) 2018 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
 
 #ifndef RPC_H
 #define RPC_H
@@ -202,6 +178,7 @@ struct rpc_program {
   struct rpc_program *next;
   uint32_t prog;
   struct rpc_version *vers;
+  uint32_t *auth; /* mandatory authentication flavours: must be called with one of these */
 };
 void rpc_program_register( struct rpc_program *p );
 void rpc_program_unregister( struct rpc_program *p );
@@ -281,6 +258,8 @@ struct rpc_iterator {
   rpc_iterator_t cb;
   void *cxt;
 };
+#define RPC_ITERATOR(name,period,cb) struct rpc_iterator name = { NULL, 0, period, cb, NULL }
+
 void rpc_iterator_register( struct rpc_iterator *it );
 void rpc_iterator_unregister( struct rpc_iterator *it );
 int rpc_iterator_timeout( int timeout );
@@ -326,6 +305,10 @@ struct rpc_reply_data {
   uint32_t raddr_len;
 };
 void rpc_get_reply_data( struct rpc_inc *inc, struct rpc_reply_data *rdata );
-				   
+
+char *rpc_errmsg( char *msg );
+
+typedef uint64_t rpc_ptr64;
+
 #endif
 

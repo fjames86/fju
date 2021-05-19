@@ -1,27 +1,3 @@
-/*
- * MIT License
- * 
- * Copyright (c) 2018 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
 
 #ifndef HRAUTH_H
 #define HRAUTH_H
@@ -91,18 +67,18 @@ struct hrauth_call {
   uint32_t prog;
   uint32_t vers;
   uint32_t proc;
-  void (*donecb)( struct xdr_s *res, void *cxt );
-  void *cxt;
+  void (*donecb)( struct xdr_s *res, struct hrauth_call *hcallp );
+  uint64_t cxt[8];  /* private data */
   int timeout;
   int service;
 };
 
 struct hrauth_call_opts {
   uint32_t mask;
-#define HRAUTH_CALL_OPT_FD           0x0001
-#define HRAUTH_CALL_OPT_TMPBUF       0x0002
-#define HRAUTH_CALL_OPT_PORT         0x0004
-#define HRAUTH_CALL_OPT_ADDRMASK     0x0008
+#define HRAUTH_CALL_OPT_FD           0x0001   /* use this file descriptor to send on */
+#define HRAUTH_CALL_OPT_TMPBUF       0x0002   /* encode xdr using this buffer */
+#define HRAUTH_CALL_OPT_PORT         0x0004   /* send to this port */
+#define HRAUTH_CALL_OPT_ADDRMASK     0x0008   /* bitmask indicating which host addresses to send to */
 #ifdef WIN32
   SOCKET fd;
 #else
@@ -112,15 +88,52 @@ struct hrauth_call_opts {
   int port;
   uint32_t addrmask;
 };
-int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, struct hrauth_call_opts *opts );
+int hrauth_call_udp_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs, struct hrauth_call_opts *opts );
 
 //int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args );
 
-int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args );
+/* forward this call to the specified host */
+int hrauth_call_udp_proxy( struct rpc_inc *inc, uint64_t hostid, struct xdr_s *args, int nargs );
 
-/* synchronous rpc call */
+/* synchronous rpc call - don't use these in service routines */
 int hrauth_call_udp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
 int hrauth_call_tcp( struct hrauth_call *hcall, struct xdr_s *args, struct xdr_s *res, struct hrauth_call_opts *opts );
+
+
+
+/* 
+ * TCP connection handling. This allows connecting to remote servers and sending RPC calls to them.
+ * Hosts are registered to have connections established. Connections are reestablished if dropped.
+ * Only a single RPC can be sent at a time, no queuing is implemented. This means if an RPC is 
+ * currently being sent then a new RPC cannot be sent until the previous send has completed. 
+ * Furthermore, if a reply is expected no futher calls can be sent until that reply is received. 
+ * This is because receive and transmit share the same buffer (!). Maybe that should be fixed...
+ * 
+ * Because of these limitations the following is best practice: 
+ * - Both services should establish connections to each other.
+ * - These connections are outgoing only i.e. only RPC calls can be made, there are never any 
+ * replies sent back. 
+ * - A message oriented architecture needs to be used where RPCs procs are always silent and may 
+ * reply only be sending back a new call on the outgoing connection.
+ * 
+ */
+#define HRAUTH_CONN_PINGTIMEOUT (30000)
+
+struct hrauth_conn_opts {
+  uint32_t mask;
+#define HRAUTH_CONN_OPT_ADDR 0x0001
+#define HRAUTH_CONN_OPT_PINGTIMEOUT 0x0002 
+  struct sockaddr_storage addr;
+  int addrlen;
+  uint32_t pingtimeout;
+};
+int hrauth_conn_register( uint64_t hostid, struct hrauth_conn_opts *opts );
+int hrauth_conn_unregister( uint64_t hostid );
+int hrauth_conn_list( uint64_t *hostid, int n );
+int hrauth_call_tcp_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs );
+int hrauth_call_async( struct hrauth_call *hcall, struct xdr_s *args, int nargs );
+int hrauth_reply_tcp( struct hrauth_context *hcxt, uint32_t xid, int acceptstat, struct xdr_s *res, int nres );
+int hrauth_reply( struct rpc_inc *inc, struct xdr_s *res, int nres );
 
 #endif
 

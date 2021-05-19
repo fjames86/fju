@@ -1,27 +1,3 @@
-/*
- * MIT License
- *
- * Copyright (c) 2018 Frank James
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- */
 
 /*
  * This file defines an example rpc daemon which can listen on a set of TCP/UDP ports or
@@ -34,15 +10,65 @@
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS
+#include <WinSock2.h>
+#include <Windows.h>
 #endif
 
 #include <fju/rpcd.h>
 #include "rpc-private.h"
 #include <fju/freg.h>
+#include <fju/mmf.h>
+#include <inttypes.h>
+
+#define RPCD_MAX_IOCB 256
 
 #ifdef WIN32
+
+struct rpcd_iocb {
+  struct rpcd_iocb *next;
+
+  OVERLAPPED overlap;
+  struct mmf_s *mmf;
+  void (*donecb)();
+  void *prv;
+  char *buf;
+  int len;
+  
+};
+
 #else
 #include <dlfcn.h>
+#endif
+
+#ifdef __FreeBSD__
+#include <sys/event.h>
+#include <sys/aio.h>
+
+struct rpcd_iocb {
+  struct rpcd_iocb *next;
+  
+  struct mmf_s *mmf;
+  struct aiocb aiocb;
+  void (*donecb)();
+  void *prv;
+  char *buf;
+  int len;
+};
+#endif
+
+#ifdef __linux__
+#include <libaio.h>
+
+struct rpcd_iocb {
+  struct rpcd_iocb *next;
+  
+  struct mmf_s *mmf;
+  struct iocb aiocb;
+  void (*donecb)();
+  void *prv;
+  char *buf;
+  int len;
+};
 #endif
 
 static struct {
@@ -74,10 +100,34 @@ static struct {
 	uint8_t buftab[RPC_MAX_CONN][RPC_MAX_BUF];
 
 	uint64_t connid;
-        struct rpcd_subscriber *rpcd_subcs;
-
+  
         struct rpcd_active_conn aconn;
+#ifdef __FreeBSD__
+  int kq;
+#endif
+#ifdef __linux__
+  io_context_t iocxt;
+  int eventfd;
+#endif
+  
+  struct rpcd_iocb iocb[RPCD_MAX_IOCB];
+  struct rpcd_iocb *iocbfl;
 } rpc;
+
+static struct rpcd_iocb *rpcd_iocb_alloc( void ) {
+  struct rpcd_iocb *iocb;
+  
+  if( !rpc.iocbfl ) return NULL;
+  iocb = rpc.iocbfl;
+  rpc.iocbfl = iocb->next;
+  memset( iocb, 0, sizeof(*iocb) );
+  return iocb;
+}
+
+static void rpcd_iocb_free( struct rpcd_iocb *iocb ) {
+  iocb->next = rpc.iocbfl;
+  rpc.iocbfl = iocb;
+}
 
 #ifdef WIN32
 typedef int socklen_t;
@@ -288,7 +338,7 @@ int rpcd_main( int argc, char **argv, rpcd_main_t main_cb, void *main_cxt ) {
 	sigaction( SIGIO, &sa, NULL );
 	sigaction( SIGUSR1, &sa, NULL );
 	sigaction( SIGHUP, &sa, NULL );
-	sigaction( SIGBUS, &sa, NULL );
+	//sigaction( SIGBUS, &sa, NULL );
 	sigaction( SIGPIPE, &sa, NULL );
 #endif
 
@@ -356,18 +406,7 @@ int rpcd_get_default_port( void ) {
 
 static void rpc_init_listen( void ) {
 	int i, sts, j;
-	struct rpc_conn *c;
 	int prot_ports[16];
-
-	/* setup connection table */
-	for( i = 0; i < RPC_MAX_CONN; i++ ) {
-		c = &rpc.conntab[i];
-		memset( c, 0, sizeof(*c) );
-		c->next = rpc.flist;
-		c->buf = rpc.buftab[i];
-		c->count = sizeof(rpc.buftab[i]);
-		rpc.flist = c;
-	}
 
 	if( !rpc.nlisten ) {
 	    uint32_t port = rpcd_get_default_port();
@@ -486,7 +525,7 @@ static void rpc_init_listen( void ) {
 	}
 	rpcbind_set_laddrs( prot_ports, j );
 
-
+	
 }
 
 #ifdef WIN32
@@ -501,7 +540,91 @@ static void rpc_init_listen( void ) {
 #define RPC_POLLHUP       POLLHUP
 #endif
 
-static void rpc_poll( int timeout ) {
+
+
+
+
+#ifdef __FreeBSD__
+
+/*
+ * We need to use kqueue on bsd systems so that we can suppor aio.
+ * Linux we can use eventfd and poll that using standard poll() mechanism
+ * Win32 we can use overlapped IO (and WriteFileEx etc) so no need to change there
+ */
+
+static int bsd_poll( struct pollfd *pfd, int npfd, int timeout ) {
+
+  int sts, i, ni, no;
+  struct timespec ts;
+  struct kevent ievent[RPC_MAX_LISTEN + RPC_MAX_CONN], oevent[RPC_MAX_LISTEN + RPC_MAX_CONN];
+
+  if( rpc.kq == 0 ) {
+    rpc.kq = kqueue();
+  }
+  
+  /* set events for all connections */
+  ni = 0;
+  for( i = 0; i < npfd; i++ ) {
+    if( pfd[i].fd == -1 ) continue;
+    
+    if( pfd[i].events & POLLIN ) {
+      EV_SET( &ievent[ni], pfd[i].fd, EVFILT_READ, EV_ADD|EV_CLEAR|EV_ENABLE, 0, 0, (void *)(long)i );
+      ni++;
+    } else if( pfd[i].events & POLLOUT ) {
+      EV_SET( &ievent[ni], pfd[i].fd, EVFILT_WRITE, EV_ADD|EV_CLEAR|EV_ENABLE, 0, 0, (void *)(long)i );
+      ni++;
+    }
+  }
+
+  memset( oevent, 0, sizeof(oevent) );
+  ts.tv_sec = timeout / 1000;
+  ts.tv_nsec = (timeout % 1000) * 1000000;
+  sts = kevent( rpc.kq, ievent, ni, oevent, RPC_MAX_LISTEN + RPC_MAX_CONN, &ts );
+  if( sts < 0 ) {
+    rpc_log( RPC_LOG_ERROR, "kevent error %s", strerror( errno ) );
+    return -1;
+  }
+  if( sts == 0 ) {
+    //rpc_log( RPC_LOG_INFO, "kevent timeout" );
+    return 0;
+  }
+
+  for( no = 0; no < sts; no++ ) {
+    i = (int)oevent[no].udata;
+
+    /* translate to POLLIN/POLLOUT flags */
+    switch( oevent[no].filter ) {
+    case EVFILT_READ:
+      pfd[i].revents = POLLIN | (oevent[no].flags & EV_EOF ? POLLHUP : 0) | (oevent[no].flags & EV_ERROR ? POLLERR : 0);
+      break;
+    case EVFILT_WRITE:
+      pfd[i].revents = POLLOUT | (oevent[no].flags & EV_EOF ? POLLHUP : 0) | (oevent[no].flags & EV_ERROR ? POLLERR : 0);      
+      break;
+    case EVFILT_AIO:
+      rpc_log( RPC_LOG_INFO, "kevent aio" );
+      {
+	struct rpcd_iocb *iocb;
+	rpcd_aio_donecb donecb;
+
+	iocb = (struct rpcd_iocb *)oevent[no].udata;
+	donecb = (rpcd_aio_donecb)iocb->donecb;
+	if( donecb ) donecb( iocb->mmf, (char *)iocb->aiocb.aio_buf, aio_return( &iocb->aiocb ), iocb->prv );
+	rpcd_iocb_free( iocb );
+      }      
+      break;
+    default:
+      rpc_log( RPC_LOG_INFO, "kevent filter %u", oevent[no].filter );
+      break;
+    }
+  }
+
+  return sts;
+}
+
+#endif /* freebsd */
+
+
+void rpc_poll( int timeout ) {
 	int i, sts;
 	int npfd;
 #ifdef WIN32
@@ -582,8 +705,16 @@ static void rpc_poll( int timeout ) {
 		npfd++;
 	}
 
+#ifdef __linux__
+	pfd[i].fd = rpc.eventfd;
+	pfd[i].events = POLLIN;
+	pfd[i].revents = 0;
+	npfd++;
+#endif
+	
 #ifdef WIN32
-	sts = WSAWaitForMultipleEvents( 1, &rpc.evt, FALSE, timeout, FALSE );
+	/* Wait for something to happen - note we set bAlertable to true so that IO completion routines may run */
+	sts = WSAWaitForMultipleEvents( 1, &rpc.evt, FALSE, timeout, TRUE );
 	if( sts == WSA_WAIT_TIMEOUT ) {
 	    return;
 	}
@@ -591,7 +722,12 @@ static void rpc_poll( int timeout ) {
 	    return;
 	}
 #else
+	/* not windows */
+#ifdef __FreeBSD__
+	sts = bsd_poll( pfd, npfd, timeout );
+#else
 	sts = poll( pfd, npfd, timeout );
+#endif
 	if( sts <= 0 ) return;
 #endif
 
@@ -644,8 +780,12 @@ static void rpc_poll( int timeout ) {
 	c = rpc.clist;
 	while( c ) {
 		if( (revents[i] & RPC_POLLERR) || (revents[i] & RPC_POLLHUP) ) {
-			c->cstate = RPC_CSTATE_CLOSE;
+		  rpc_log( RPC_LOG_DEBUG, "Connection connid=%"PRIx64" %s", c->connid,
+			   (revents[i] & RPC_POLLERR) ? "POLLERR" : "POLLHUP" );
+
+		  rpc_conn_close( c );
 		}
+		
 		else if( revents[i] & RPC_POLLIN ) {
 			c->timestamp = rpc_now();
 
@@ -658,23 +798,28 @@ static void rpc_poll( int timeout ) {
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-					c->cstate = RPC_CSTATE_CLOSE;
+					rpc_log( RPC_LOG_DEBUG, "connid=%"PRIx64" recv: %s", c->connid, rpc_strerror( rpc_errno() ) );
+					rpc_conn_close( c );
 					break;
 				}
 				else if( sts == 0 ) {
-					c->cstate = RPC_CSTATE_CLOSE;
-				}
+				  rpc_log( RPC_LOG_DEBUG, "Connection graceful close connid=%"PRIx64"", c->connid );
+				  rpc_conn_close( c );
+				} 
 				else {
+				  if( sts != 4 ) rpc_log( RPC_LOG_ERROR, "recvlen %d != 4", sts );
+				  
+				  c->cdata.rx += sts;
 					xdr_init( &tmpx, c->buf, 4 );
 					xdr_decode_uint32( &tmpx, &c->cdata.count );
 					if( !(c->cdata.count & 0x80000000) ) {
-						c->cstate = RPC_CSTATE_CLOSE;
+					  rpc_conn_close( c );
 						break;
 					}
 
 					c->cdata.count &= ~0x80000000;
 					if( c->cdata.count > RPC_MAX_BUF ) {
-						c->cstate = RPC_CSTATE_CLOSE;
+					  rpc_conn_close( c );
 						break;
 					}
 
@@ -683,20 +828,21 @@ static void rpc_poll( int timeout ) {
 				}
 				break;
 			case RPC_CSTATE_RECV:
-				sts = recv( c->fd, c->buf + c->cdata.offset, RPC_MAX_BUF - c->cdata.offset, 0 );
+				sts = recv( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
 				if( sts < 0 ) {
 #ifdef WIN32
 					if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-					c->cstate = RPC_CSTATE_CLOSE;
+					rpc_conn_close( c );
 					break;
 				}
 				else if( sts == 0 ) {
-					c->cstate = RPC_CSTATE_CLOSE;
+				  rpc_conn_close( c );
 					break;
 				}
+				c->cdata.rx += sts;
 				c->timestamp = rpc_now();
 				
 				c->cdata.offset += sts;
@@ -704,15 +850,22 @@ static void rpc_poll( int timeout ) {
 					/* msg complete - process */
 					xdr_init( &c->inc.xdr, c->buf, RPC_MAX_BUF );
 					c->inc.xdr.count = c->cdata.count;
-					
+
+					memcpy( &c->inc.raddr, &c->addr, c->addrlen );
+					c->inc.raddr_len = c->addrlen;
 					rpc.aconn.listen = NULL;
 					rpc.aconn.conn = c;
+
+					/* If the msg is a reply and the reply handler wants to send back on this connection then it 
+					 * can't because the connection is still in recv state. we can safely set it back to recvlen here */
+					c->cstate = RPC_CSTATE_RECVLEN;
+					c->nstate = RPC_NSTATE_RECV;
+					c->cdata.offset = 0;
+
 					sts = rpc_process_incoming( &c->inc );
 					memset( &rpc.aconn, 0, sizeof(rpc.aconn) );
 					
 					if( sts == 0 ) {
-					        rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
-
 					        c->cdata.count = c->inc.xdr.offset;
 						c->cdata.offset = 0;
 						c->cstate = RPC_CSTATE_SENDLEN;
@@ -726,13 +879,16 @@ static void rpc_poll( int timeout ) {
 						sts = send( c->fd, tmpbuf, 4, 0 );
 						if( sts < 0 ) {
 #ifdef WIN32
-							if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
+						  if( WSAGetLastError() == WSAEWOULDBLOCK ) break;
 #else
-							if( (errno == EAGAIN) || (errno == EINTR) ) break;
+						  if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-							c->cstate = RPC_CSTATE_CLOSE;
-							break;
+						  rpc_conn_close( c );
+						  break;
+						} else if( sts != 4 ) {
+						  rpc_log( RPC_LOG_ERROR, "Failed to send count %d != 4", sts );
 						}
+						c->cdata.tx += sts;
 
 						c->cstate = RPC_CSTATE_SEND;
 						sts = send( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
@@ -742,19 +898,27 @@ static void rpc_poll( int timeout ) {
 #else
 							if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-							c->cstate = RPC_CSTATE_CLOSE;
+							rpc_conn_close( c );
 							break;
 						}
-
+						c->cdata.tx += sts;
+						
 						c->cdata.offset += sts;
 						if( c->cdata.offset == c->cdata.count ) {
 							c->nstate = RPC_NSTATE_RECV;
 							c->cstate = RPC_CSTATE_RECVLEN;
+							if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
 						}
 					} else if( sts > 0 ) {
 					  rpc_log( RPC_LOG_TRACE, "rpc_process_incoming noresponse" );
+					  c->cstate = RPC_CSTATE_RECVLEN;
+					  c->nstate = RPC_NSTATE_RECV;
+					  if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
 					} else {
 					  rpc_log( RPC_LOG_ERROR, "rpc_process_incoming failed" );
+					  c->cstate = RPC_CSTATE_RECVLEN;
+					  c->nstate = RPC_NSTATE_RECV;
+					  if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
 					}
 
 				}
@@ -779,9 +943,13 @@ static void rpc_poll( int timeout ) {
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-					c->cstate = RPC_CSTATE_CLOSE;
+					rpc_conn_close( c );
 					break;
+				} else if( sts != 4 ) {
+				  rpc_log( RPC_LOG_ERROR, "Failed to send count %d != 4", sts );
 				}
+				
+				c->cdata.tx += sts;
 				c->cstate = RPC_CSTATE_SEND;
 
 				/* fall through */
@@ -793,14 +961,16 @@ static void rpc_poll( int timeout ) {
 #else
 					if( (errno == EAGAIN) || (errno == EINTR) ) break;
 #endif
-					c->cstate = RPC_CSTATE_CLOSE;
+					rpc_conn_close( c );
 					break;
 				}
-
+				c->cdata.tx += sts;
+				
 				c->cdata.offset += sts;
 				if( c->cdata.offset == c->cdata.count ) {
 					c->nstate = RPC_NSTATE_RECV;
 					c->cstate = RPC_CSTATE_RECVLEN;
+					if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
 				}
 				break;
 			case RPC_CSTATE_CONNECT:
@@ -812,13 +982,14 @@ static void rpc_poll( int timeout ) {
 									   getsockopt( c->fd, SOL_SOCKET, SO_ERROR, (char *)&sts, &slen );
 									   if( sts ) {
 										   rpc_log( RPC_LOG_ERROR, "Connect failed: %s", rpc_strerror( rpc_errno() ) );
-										   c->cstate = RPC_CSTATE_CLOSE;
+										   rpc_conn_close( c );
 									   }
 									   else {
 										   c->nstate = RPC_NSTATE_RECV;
 										   c->cstate = RPC_CSTATE_RECVLEN;
 									   }
 
+									   rpc_log( RPC_LOG_INFO, "Nonblocking connect completed" );
 									   if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CONNECT, c );
 			}
 				break;
@@ -839,6 +1010,28 @@ static void rpc_poll( int timeout ) {
 		}
 	}
 
+#ifdef __linux__
+	if( revents[eventfdidx] & POLLIN ) {
+	  uint64_t nevents;
+	  struct timespec tm;
+	  struct io_event event;
+	  
+	  sts = read( rpc.eventfd, (char *)&nevents, sizeof(nevents) );
+
+	  while( nevents > 0 ) {
+	    memset( &tms, 0, sizeof(tims) );
+	    sts = io_getevents( rpc.iocxt, 0, 1, &event, &tms );
+	    if( sts > 0 ) {
+	      iocb = (struct rpcd_iocb *)event.data;
+	      if( iocb->donecb ) iocb->donecb( iocb->mmf, iocb->buf, event.res, iocb->prv );
+	      rpcd_iocb_free( iocb );
+	    }
+	    nevents--;
+	  }
+	      
+	}
+#endif
+	
 	/* Close pending connections */
 	rpc_close_connections();
 
@@ -847,6 +1040,12 @@ static void rpc_poll( int timeout ) {
 static void rpc_close_connections( void ) {
 	struct rpc_conn *c, *prev, *next;
 
+	c = rpc.clist;
+	while( c ) {
+	  if( c->cstate == RPC_CSTATE_CLOSE && c->cdata.cb ) c->cdata.cb( RPC_CONN_CLOSE, c );
+	  c = c->next;
+	}
+	
 	/* Close pending connections */
 	c = rpc.clist;
 	prev = NULL;
@@ -860,7 +1059,7 @@ static void rpc_close_connections( void ) {
 			close( c->fd );
 #endif
 			/* invoke callback if required */
-			if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CLOSE, c );
+			rpc_log( RPC_LOG_DEBUG, "Closing connection %"PRIu64"", c->connid );
 
 			if( prev ) prev->next = c->next;
 			else rpc.clist = c->next;
@@ -932,7 +1131,6 @@ static void rpc_accept( struct rpc_listen *lis ) {
       
       rpc.flist = c;
       if( sts == 0 ) {
-	rpcd_event_publish( RPCD_EVENT_CATEGORY, RPCD_EVENT_RPCCALL, NULL, 0 );
 	sts = sendto( lis->fd, c->buf, c->inc.xdr.offset, 0, (struct sockaddr *)&c->inc.raddr, c->inc.raddr_len );
 	if( sts < 0 ) rpc_log( RPC_LOG_ERROR, "sendto: %s", rpc_strerror( rpc_errno() ) );
       } else if( sts > 0 ) {
@@ -958,10 +1156,16 @@ static void rpc_accept( struct rpc_listen *lis ) {
 
       c->inc.raddr_len = sizeof(c->inc.raddr);
       c->fd = accept( lis->fd, (struct sockaddr *)&c->inc.raddr, &c->inc.raddr_len );
+      memcpy( &c->addr, &c->inc.raddr, c->inc.raddr_len );
+      c->addrlen = c->inc.raddr_len;
+      
       c->cstate = RPC_CSTATE_RECVLEN;
       c->nstate = RPC_NSTATE_RECV;
       c->connid = ++rpc.connid;
       c->timestamp = rpc_now();
+      c->listen = lis;
+      c->listype = lis->type;
+      c->dirtype = RPC_CONN_DIR_INCOMING;
       
 #ifdef WIN32
 	  {
@@ -983,6 +1187,66 @@ static void rpc_accept( struct rpc_listen *lis ) {
   }
 }
 
+void rpcd_init( void ) {
+	int i;
+	struct rpc_conn *c;
+	struct rpcd_iocb *iocb;
+	
+	/* setup connection table */
+	for( i = 0; i < RPC_MAX_CONN; i++ ) {
+		c = &rpc.conntab[i];
+		memset( c, 0, sizeof(*c) );
+		c->next = rpc.flist;
+		c->buf = rpc.buftab[i];
+		c->count = sizeof(rpc.buftab[i]);
+		rpc.flist = c;
+	}
+
+	for( i = 0; i < RPCD_MAX_IOCB; i++ ) {
+	  iocb = &rpc.iocb[i];
+	  iocb->next = rpc.iocbfl;
+	  rpc.iocbfl = iocb;
+	}
+
+#ifdef WIN32
+	rpc.evt = WSACreateEvent();
+#endif
+
+#ifdef __linux__
+	io_setup( RPCD_MAX_IOCB, &rpc.iocxt );
+	rpc.eventfd = eventfd( 0, EFD_NONBLOCK );
+#endif
+}
+
+#ifdef WIN32
+HANDLE rpcd_win32event( void ) {
+	return rpc.evt;
+}
+#endif
+
+void rpc_service( int timeout ) {
+	struct rpc_conn *c;
+	uint64_t now;
+
+	/* detect stale connections */
+	c = rpc.clist;
+	now = rpc_now();
+	while( c ) {
+		if( now > (c->timestamp + RPC_CONNECTION_TIMEOUT) ) {
+		        rpc_log( RPC_LOG_DEBUG, "Closing stale connection fd=%d", (int)c->connid );
+			rpc_conn_close( c );
+		}
+
+		c = c->next;
+	}
+	rpc_close_connections();
+
+	/* service networking/iterators/waiters etc */
+	rpc_poll( timeout );
+	rpc_iterator_service();
+	rpc_waiter_service();
+}
+
 static void rpcd_run( void ) {
 	struct rpc_conn *c;
 	int i;
@@ -997,10 +1261,12 @@ static void rpcd_run( void ) {
 	{
 		WSADATA wsadata;
 		WSAStartup( MAKEWORD( 2, 2 ), &wsadata );
-		rpc.evt = WSACreateEvent();
 	}
 #endif
 
+	/* setup connection table etc */
+	rpcd_init();
+	
 	/* register programs and initialize */
 	if( rpc.main_cb ) rpc.main_cb( RPCD_EVT_INIT, NULL, rpc.main_cxt );
 
@@ -1056,8 +1322,8 @@ static void rpcd_run( void ) {
 		now = rpc_now();
 		while( c ) {
 			if( now > (c->timestamp + RPC_CONNECTION_TIMEOUT) ) {
-			        rpc_log( RPC_LOG_INFO, "closing stale connection fd=%d", (int)c->connid );
-				c->cstate = RPC_CSTATE_CLOSE;
+			        rpc_log( RPC_LOG_DEBUG, "Closing stale connection fd=%d", (int)c->connid );
+				rpc_conn_close( c );
 			}
 
 			c = c->next;
@@ -1113,11 +1379,14 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 	/* start by allocating a connection descriptor */
 	c = rpc.flist;
 	if( !c ) return -1;
+
 	rpc.flist = c->next;
 
-
 	c->fd = socket( addr->sa_family, SOCK_STREAM, 0 );
-	if( c->fd < 0 ) goto failure;
+	if( c->fd < 0 ) {
+	  rpc_log( RPC_LOG_ERROR, "socket: %s", rpc_strerror( rpc_errno() ) );
+	  goto failure;
+	}
 
 	/* set non-blocking */
 #ifdef WIN32
@@ -1131,7 +1400,22 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 #endif
 	c->cdata.cb = cb;
 	c->cdata.cxt = cxt;
-
+	switch( addr->sa_family ) {
+	case AF_INET:
+	  c->listype = RPC_LISTEN_TCP;
+	  break;
+#ifndef WIN32
+	case AF_UNIX:
+	  c->listype = RPC_LISTEN_UNIX;
+	  break;
+#endif
+	default:
+	  c->listype = 0;
+	  break;
+	}
+	memcpy( &c->addr, addr, alen );
+	c->addrlen = alen;
+	       
 	sts = connect( c->fd, addr, alen );
 	if( sts < 0 ) {
 #ifdef WIN32
@@ -1140,11 +1424,14 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 			goto failure;
 		}
 #else
-		if( errno != EWOULDBLOCK ) {
-			close( c->fd );
-			goto failure;
+		/* tcp returns EINPROGRESS, unix domain sockets return EAGAIN */
+		if( errno != EINPROGRESS && errno != EAGAIN ) {
+		  rpc_log( RPC_LOG_ERROR, "connect: %s", rpc_strerror( errno ) );
+		  close( c->fd );
+		  goto failure;
 		}
 #endif
+		rpc_log( RPC_LOG_DEBUG, "connect nonblocking in progress" );
 		c->cstate = RPC_CSTATE_CONNECT;
 		c->nstate = RPC_NSTATE_CONNECT;
 		c->connid = ++rpc.connid;
@@ -1153,28 +1440,79 @@ int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *
 		c->cstate = RPC_CSTATE_RECVLEN;
 		c->nstate = RPC_NSTATE_RECV;
 		c->connid = ++rpc.connid;
-		
+
+		rpc_log( RPC_LOG_DEBUG, "connect completed immediately" );
 		if( c->cdata.cb ) c->cdata.cb( RPC_CONN_CONNECT, c );
 	}
 
 	if( connid ) *connid = c->connid;
-	
+
+	c->timestamp = rpc_now();
+	c->dirtype = RPC_CONN_DIR_OUTGOING;
 	c->next = rpc.clist;
 	rpc.clist = c;
-	
+
 	return 0;
 
 failure:
+	rpc_log( RPC_LOG_INFO, "rpc_connect failure" );
 	c->next = rpc.flist;
 	rpc.flist = c;
 	return -1;
 }
 
 int rpc_send( struct rpc_conn *c, int count ) {
+  int sts;
+  char tmpbuf[4];
+  struct xdr_s tmpx;
+  
+  /* unless the connection is idle we can't start sending */
+  if( c->cstate != RPC_CSTATE_RECVLEN ) return -1;
+  
   c->cstate = RPC_CSTATE_SENDLEN;
   c->nstate = RPC_NSTATE_SEND;
   c->cdata.count = count;
   c->cdata.offset = 0;
+
+  /* optimistically send count */
+  xdr_init( &tmpx, (uint8_t *)tmpbuf, 4 );
+  xdr_encode_uint32( &tmpx, c->cdata.count | 0x80000000 );
+  c->timestamp = rpc_now();
+  
+  sts = send( c->fd, tmpbuf, 4, 0 );
+  if( sts < 0 ) {
+#ifdef WIN32
+    if( WSAGetLastError() == WSAEWOULDBLOCK ) return 0;
+#else
+    if( (errno == EAGAIN) || (errno == EINTR) ) return 0;
+#endif
+    rpc_conn_close( c );
+    return 0;
+  } else if( sts != 4 ) {
+    rpc_log( RPC_LOG_ERROR, "Failed to send count %d != 4", sts );
+  }
+  c->cdata.tx += sts;
+  
+  c->cstate = RPC_CSTATE_SEND;
+  sts = send( c->fd, c->buf + c->cdata.offset, c->cdata.count - c->cdata.offset, 0 );
+  if( sts < 0 ) {
+#ifdef WIN32
+    if( WSAGetLastError() == WSAEWOULDBLOCK ) return 0;
+#else
+    if( (errno == EAGAIN) || (errno == EINTR) ) return 0;
+#endif
+    rpc_conn_close( c );
+    return 0;
+  }
+  c->cdata.tx += sts;
+  
+  c->cdata.offset += sts;
+  if( c->cdata.offset == c->cdata.count ) {
+    c->nstate = RPC_NSTATE_RECV;
+    c->cstate = RPC_CSTATE_RECVLEN;
+    if( c->cdata.cb ) c->cdata.cb( RPC_CONN_DONE_SEND, c );
+  }
+  
   return 0;
 }
 
@@ -1196,8 +1534,54 @@ struct rpc_conn *rpc_conn_by_connid( uint64_t connid ) {
 	return NULL;
 }
 
+struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen ) {
+  struct rpc_conn *c;
+  c = rpc.clist;
+  while( c ) {
+    if( c->dirtype == RPC_CONN_DIR_INCOMING && c->listen->type == type ) {
+      switch( type ) {
+      case RPC_LISTEN_TCP:
+	{
+	  struct sockaddr_in *sinp = (struct sockaddr_in *)&c->addr;
+	  if( addrlen == sizeof(sinp->sin_addr) &&
+	      (memcmp( &sinp->sin_addr, addr, addrlen ) == 0) ) {
+	    return c;
+	  }
+	}
+	break;
+      case RPC_LISTEN_TCP6:
+	{
+	  struct sockaddr_in6 *sin6p = (struct sockaddr_in6 *)&c->addr;
+	  if( addrlen == sizeof(sin6p->sin6_addr) &&
+	      (memcmp( &sin6p->sin6_addr, addr, addrlen ) == 0) ) {
+	    return c;
+	  }
+	}
+	break;
+#ifndef WIN32
+      case RPC_LISTEN_UNIX:
+	{
+	  /* TODO */
+	}
+	break;
+#endif
+      default:
+	break;
+      }
+    }
+    c = c->next;
+  }
+  return NULL;
+}
+
+
 void rpc_conn_close( struct rpc_conn *c ) {
-    c->cstate = RPC_CSTATE_CLOSE;
+  rpc_log( RPC_LOG_DEBUG, "Close connection %"PRIu64"", c->connid );
+  c->cstate = RPC_CSTATE_CLOSE;
+}
+
+struct rpc_conn *rpc_conn_list( void ) {
+  return rpc.clist;
 }
 
     
@@ -1261,7 +1645,7 @@ static void rpcd_load_service( char *svcname, char *path, char *mainfn ) {
   
   hdl = dlopen( path, 0 );
   if( !hdl ) {
-    rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\"", svcname, path );
+    rpc_log( RPC_LOG_ERROR, "Failed to load service %s from \"%s\": %s", svcname, path, rpc_strerror( errno ) );
     return;
   }
 
@@ -1279,6 +1663,7 @@ static void rpcd_load_services( void ) {
   uint64_t hkey, id;
   struct freg_entry entry;
   char path[256], mainfn[64];
+  int enabled;
   
   rpc_log( RPC_LOG_DEBUG, "Loading dynamic services" );
   
@@ -1293,6 +1678,7 @@ static void rpcd_load_services( void ) {
     if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
       memset( path, 0, sizeof(path) );
       memset( mainfn, 0, sizeof(mainfn) );
+      enabled = 1;
       
       sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path) - 1, NULL );
       if( !sts ) {
@@ -1303,6 +1689,10 @@ static void rpcd_load_services( void ) {
 	}
       }
       if( !sts ) {
+	freg_get_by_name( NULL, entry.id, "enabled", FREG_TYPE_UINT32, (char *)&enabled, sizeof(enabled), NULL );
+      }
+      
+      if( !sts && enabled ) {
 	rpc_log( RPC_LOG_DEBUG, "Loading service %s from \"%s\"", entry.name, path );
 	rpcd_load_service( entry.name, path, mainfn[0] ? mainfn : NULL );
       }
@@ -1318,57 +1708,195 @@ void rpcd_stop( void ) {
 }
 
 
-void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int parmsize ) {
-    struct rpcd_subscriber *sc, *next;
-    int i, found;
-    sc = rpc.rpcd_subcs;
-    while( sc ) {
-	found = 0;
-	if( sc->category == NULL ) found = 1;
-	else {
-	    i = 0;
-	    while( sc->category[i] ) {
-		if( sc->category[i] == category ) {
-		    found = 1;
-		    break;
-		}
-		i++;
-	    }
-	}
-	
-	if( found && sc->cb ) {
-	    next = sc->next;
-	    sc->cb( sc, category, eventid, parm, parmsize );
-	    sc = next;
-	} else {
-	    sc = sc->next;
-	}
-	
-    }
-}
-
-void rpcd_event_subscribe( struct rpcd_subscriber *sc ) {
-    sc->next = rpc.rpcd_subcs;
-    rpc.rpcd_subcs = sc;
-}
-
-int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc ) {
-    struct rpcd_subscriber *sc, *prev;
-    sc = rpc.rpcd_subcs;
-    prev = NULL;
-    while( sc ) {
-	if( sc == subsc ) {
-	    if( prev ) prev->next = sc->next;
-	    else rpc.rpcd_subcs = sc->next;
-	    return 0;
-	}
-	prev = sc;
-	sc = sc->next;
-    }
-    return -1;
-}
-
 int rpcd_active_conn( struct rpcd_active_conn *aconn ) {
     *aconn = rpc.aconn;
     return 0;
 }
+
+#ifdef __FreeBSD__
+int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  struct rpcd_iocb *iocb;
+  int sts;
+  
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  iocb->aiocb.aio_fildes = mmf->fd;
+  iocb->aiocb.aio_offset = offset;
+  iocb->aiocb.aio_buf = buf;
+  iocb->aiocb.aio_nbytes = len;
+  iocb->aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
+  iocb->aiocb.aio_sigevent.sigev_notify_kqueue = rpc.kq;
+  iocb->aiocb.aio_sigevent.sigev_value.sigval_ptr = iocb;
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+  
+  sts = aio_read( &iocb->aiocb );
+  if( sts < 0 ) return -1;
+
+  return 0;
+}
+
+int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  struct rpcd_iocb *iocb;
+  int sts;
+  
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  iocb->aiocb.aio_fildes = mmf->fd;
+  iocb->aiocb.aio_offset = offset;
+  iocb->aiocb.aio_buf = buf;
+  iocb->aiocb.aio_nbytes = len;
+  iocb->aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
+  iocb->aiocb.aio_sigevent.sigev_notify_kqueue = rpc.kq;
+  iocb->aiocb.aio_sigevent.sigev_value.sigval_ptr = iocb;
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+		    
+  sts = aio_write( &iocb->aiocb );
+  if( sts < 0 ) return -1;
+
+  return 0;  
+}
+
+
+#endif
+
+#ifdef __linux__
+
+int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  struct rpcd_iocb *iocb;
+  int sts;
+  
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  memset( iocb, 0, sizeof(*iocb) );
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+    
+  io_prep_pread( &iocb->aiocb, mmf->fd, buf, len, offset );
+  io_set_eventfd( &iocb->aiocb, rpc.eventfd );
+  
+  sts = io_submit( rpc.iocxt, 1, &iocb->aiocb );
+  if( sts < 0 ) {
+    rpcd_iocb_free( iocb );
+    return -1;
+  }
+
+  return 0;
+}
+
+int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  struct rpcd_iocb *iocb;
+  int sts;
+  
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  memset( iocb, 0, sizeof(*iocb) );
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+  
+  io_prep_pwrite( &iocb->aiocb, mmf->fd, buf, len, offset );
+  io_set_eventfd( &iocb->aiocb, rpc.eventfd );
+  
+  sts = io_submit( rpc.iocxt, 1, &iocb->aiocb );
+  if( sts < 0 ) {
+    rpcd_iocb_free( iocb );
+    return -1;
+  }
+
+  return 0;
+
+
+#endif
+
+#ifdef WIN32
+
+static void win32_iocb_done( DWORD errorcode, DWORD nbytes, OVERLAPPED *overlap ) {
+  struct rpcd_iocb *iocb;
+
+  iocb = (struct rpcd_iocb *)overlap->hEvent;
+  if( iocb->donecb ) iocb->donecb( iocb->mmf, iocb->buf, nbytes, iocb->prv );
+  rpcd_iocb_free( iocb );
+}
+
+int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+  OVERLAPPED *overlap;
+  int sts;
+  struct rpcd_iocb *iocb;
+
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  overlap = &iocb->overlap;
+  
+  memset( iocb, 0, sizeof(iocb) );
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  
+  memset( overlap, 0, sizeof(*overlap) );
+  overlap->Offset = offset & 0xffffffff;
+  overlap->OffsetHigh = offset >> 32;
+  overlap->hEvent = (HANDLE)iocb;
+  
+  sts = ReadFileEx( mmf->fd, buf, len, overlap, win32_iocb_done );
+  if( sts == 0 ) {
+    rpcd_iocb_free( iocb );
+    return -1;
+  }
+  
+  return 0;
+}
+
+int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv ) {
+    OVERLAPPED *overlap;
+  int sts;
+  struct rpcd_iocb *iocb;
+
+  iocb = rpcd_iocb_alloc();
+  if( !iocb ) return -1;
+
+  overlap = &iocb->overlap;
+  
+  memset( iocb, 0, sizeof(iocb) );
+  iocb->mmf = mmf;
+  iocb->buf = buf;
+  iocb->len = len;
+  iocb->donecb = donecb;
+  iocb->prv = prv;
+  
+  memset( overlap, 0, sizeof(*overlap) );
+  overlap->Offset = offset & 0xffffffff;
+  overlap->OffsetHigh = offset >> 32;
+  overlap->hEvent = (HANDLE)iocb;
+  
+  sts = WriteFileEx( mmf->fd, buf, len, overlap, win32_iocb_done );
+  if( sts == 0 ) {
+    rpcd_iocb_free( iocb );
+    return -1;
+  }
+  
+  return 0;
+}
+
+
+#endif
+

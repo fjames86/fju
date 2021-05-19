@@ -1,12 +1,10 @@
 
-nls: ${BINDIR}/nls ${LIBDIR}/libnls.a 
+nls: ${BINDIR}/nls.fvm nls/nls.c
 
-${LIBDIR}/libnls.a: nls/nls.c nls/nls-rpc.c include/fju/nls.h 
-	${CC} -c nls/nls.c nls/nls-rpc.c ${CFLAGS} 
-	${AR} rcs $@ nls.o nls-rpc.o 
+${BINDIR}/nls.fvm: ${BINDIR}/fju nls/nls.pas 
+	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib nls/nls.pas
 
-${BINDIR}/nls: nls/nls-main.c ${LIBFJU}
-	${CC} -o $@ nls/nls-main.c ${CFLAGS} ${LFLAGS} 
+nls/nls.c: ${BINDIR}/nls.fvm
+	${BINDIR}/fju fvmc -o nls/nls.c -C ${BINDIR}/nls.fvm
 
-PROGRAMS+=nls
-LIBRARIES+=nls
+FVMMODULES += nls/nls.c

@@ -1,124 +1,154 @@
-/*
- * MIT License
- * 
- * Copyright (c) 2019 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
- 
+
 #ifndef RAFT_H
 #define RAFT_H
 
 #include <stdint.h>
-#include <fju/programs.h>
+#include <fju/log.h>
+
+#define RAFT_MAX_MEMBER  8
+#define RAFT_MAX_CLUSTER 32
+#define RAFT_MAX_COOKIE  16  /* private data */
+#define RAFT_MAX_SNAPSHOT (64*1024)
 
 struct raft_member {
-    uint64_t clid;                     /* cluster id */
-    uint64_t hostid;                   /* host identifier */
-    uint64_t lastseen;                 /* last time received a msg */
-    uint32_t flags;                    /* member state+flags */
-#define RAFT_MEMBER_VOTED    0x0001    /* true if this member voted for us this election */
-#define RAFT_MEMBER_OFFLINE  0x0002    /* true if member not heard from in a while */
-    uint32_t retry;
-    uint64_t nextseq;                  /* (when leader only) seqno of next state to send to member */
-    uint64_t stateseq;                 /* (when leader only) last known state ack'ed by member */
+  uint64_t hostid;      /* host identifier */
+  uint64_t lastseen;    /* when last received a message from this host */
+  uint64_t storedseq;   /* (leader only) highest command seq acked by member */
+  uint32_t flags;       /* member flags */
+#define RAFT_MEMBER_VOTED  0x0001    /* (leader only) received vote this election */
   
-    uint32_t spare[4];                 /* future expansion */
+  uint32_t spare[5];
 };
 
 struct raft_cluster {
-    uint64_t id;                       /* cluster identifier */
-    uint64_t leaderid;                 /* current leader, if any */
-    uint64_t termseq;                  /* cluster term seqno */
-    uint64_t voteid;                   /* member we voted for this election */
-    uint64_t timeout;                  /* election/term timeout */
-    uint32_t state;                    /* local state */
-#define RAFT_STATE_FOLLOWER    0x0000  /* we are follower */
-#define RAFT_STATE_CANDIDATE   0x0001  /* we are candidate */
-#define RAFT_STATE_LEADER      0x0002  /* we are leader */
-    uint32_t flags;                    /* cluster flags */
-#define RAFT_CLUSTER_WITNESS   0x0001  /* follower only, never become candidate/leader */
-    uint32_t votes;                    /* number of votes received this election */
-    uint32_t typeid;                   /* custom field to store a cluster type identifier */  
-    uint64_t commitseq;                /* seqno of last state commited to storage */
-    uint64_t stateseq;                 /* seqno of last state applied to state machine */
-    uint64_t stateterm;                /* term seqno of last state applied to state machine */
+  uint64_t clid;         /* cluster identifier */
+  uint64_t leaderid;     /* current leader. 0 indicates no leader */
+  uint64_t voteid;       /* who we voted for this term */
+  uint64_t term;         /* current term seqno */
+  uint64_t appliedseq;   /* highest state seqno applied to local state machine */
+  uint64_t commitseq;    /* (leader only) highest seq command saved by quorum of cluster */
+  uint64_t timeout;      /* when current term/election ends */
+  uint32_t state;        /* current state */
+#define RAFT_STATE_FOLLOWER     0
+#define RAFT_STATE_CANDIDATE    1
+#define RAFT_STATE_LEADER       2
   
-    uint32_t spare[12];                /* future expansion */
+  /* members */
+  uint32_t nmember;
+  struct raft_member member[RAFT_MAX_MEMBER];
+
+  uint32_t appid;
+  uint32_t flags;
+#define RAFT_CLUSTER_WITNESS  0x0001
+  char cookie[RAFT_MAX_COOKIE];
+  
+  uint32_t spare[2];
+};
+
+struct raft_prop {
+  uint32_t magic;
+#define RAFT_MAGIC 0x22defc03
+  uint32_t version;
+#define RAFT_VERSION 1
+  uint64_t seq;
+  uint32_t count;
+  uint32_t flags;
+  uint16_t elec_low;
+  uint16_t elec_high;
+  uint16_t term_low;
+  uint16_t term_high;
+  uint32_t rpc_timeout;
+  
+  uint32_t spare[8];
 };
 
 int raft_open( void );
 int raft_close( void );
-int raft_reset( void );
-
-struct raft_prop {
-    uint32_t version;
-#define RAFT_VERSION 1
-    uint64_t seq;
-    uint32_t cluster_max;
-    uint32_t cluster_count;
-    uint32_t member_max;
-    uint32_t member_count;    
-    uint32_t elec_low;
-    uint32_t elec_high;
-    uint32_t term_low;
-    uint32_t term_high;
-    uint32_t rpc_timeout;
-    uint32_t rpc_retry;
-};
 int raft_prop( struct raft_prop *prop );
-int raft_set_timeouts( uint32_t *elec_low, uint32_t *elec_high, uint32_t *term_low, uint32_t *term_high );
-int raft_set_rpc_timeout( uint32_t rpc_timeout );
-int raft_set_rpc_retry( uint32_t rpc_retry );
 
-int raft_cluster_list( struct raft_cluster *cl, int n );
-int raft_cluster_by_id( uint64_t clid, struct raft_cluster *cl );
+#define RAFT_PROP_ELEC_LOW     0x0001
+#define RAFT_PROP_ELEC_HIGH    0x0002
+#define RAFT_PROP_TERM_LOW     0x0004
+#define RAFT_PROP_TERM_HIGH    0x0008
+#define RAFT_PROP_RPC_TIMEOUT  0x0010
+#define RAFT_PROP_FLAGS        0x0020
+int raft_prop_set( uint32_t mask, struct raft_prop *prop );
+
+/* database functions */
+int raft_cluster_list( struct raft_cluster *cl, int ncl );
+int raft_clid_list( uint64_t *clid, int n );
+int raft_cluster_by_clid( uint64_t clid, struct raft_cluster *cl );
+uint64_t raft_clid_by_appid( uint32_t appid );
+uint64_t raft_clid_by_cookie( char *cookie );
 int raft_cluster_set( struct raft_cluster *cl );
 int raft_cluster_rem( uint64_t clid );
-int raft_cluster_quorum( uint64_t clid );
 
-int raft_member_list( uint64_t clid, struct raft_member *member, int n );
-int raft_member_by_hostid( uint64_t clid, uint64_t hostid, struct raft_member *member );
-int raft_member_set( struct raft_member *member );
-int raft_member_rem( uint64_t clid, uint64_t hostid );
-int raft_member_clear_voted( uint64_t clid );
+/* list info about the commands in the log */
+struct raft_command_info {
+  uint64_t term;  /* term when command issued */
+  uint64_t seq;   /* command seqno */
+  uint64_t when; /* when command stored */
+  uint32_t len;  /* size of command buffer */
+};
+int raft_command_list( uint64_t clid, struct raft_command_info *clist, int n );
 
+/* ----------- functions below only valid when called from within rpcd ------ */
+
+/* register rpc service */
 void raft_register( void );
 
-typedef enum {
-    RAFT_NOTIFY_FOLLOWER = 1,    /* we are now a follower */
-    RAFT_NOTIFY_CANDIDATE = 2,   /* we are now a candidate */
-    RAFT_NOTIFY_LEADER = 3,      /* we are now a leader */
-    RAFT_NOTIFY_SEND_PING = 4,   /* (leader) time to send a ping */
-    RAFT_NOTIFY_SEND_VOTE = 5,   /* (candidate) time to send a vote */
-    RAFT_NOTIFY_RECV_PING = 6,   /* (follower/candidate) received a ping from leader */
-    RAFT_NOTIFY_RECV_VOTE = 7,   /* (candidate) received a vote */
-} raft_notify_t;
+/* applications must register to process commands */
+struct raft_app {
+  struct raft_app *next;
+  uint32_t appid;
+  char *name;
+  
+  /* apply command to state machine */
+  void (*command)( struct raft_app *app, struct raft_cluster *cl, uint64_t cmdseq, char *buf, int len );
 
-typedef void (*raft_notify_cb_t)( raft_notify_t evt, struct raft_cluster *cl, void *cxt, void *reserved );
-struct raft_notify_context {
-  struct raft_notify_context *next;
-  raft_notify_cb_t cb;
-  void *cxt;
+  /* 
+   * Tell application to generate a snapshot of its state machine at this seqno 
+   * Application should call raft_snapshot_save() repeatedly, completing with len=0
+   */
+  void (*snapsave)( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq );
+
+  /* Instruct application to reload state from this snapshot buffer */
+  void (*snapload)( struct raft_app *app, struct raft_cluster *cl, char *buf, int len );
 };
-void raft_notify_register( struct raft_notify_context *ncxt );
+int raft_app_register( struct raft_app *app );
+int raft_app_unregister( struct raft_app *app );
+struct raft_app *raft_app_by_appid( uint32_t appid );
+
+/* max size of a command buffer */
+#define RAFT_MAX_COMMAND (32*1024)
+
+/* 
+ * Start process of initiating command:
+ * - only valid when called on leader node (forwards call to leader otherwise)
+ * - save command buffer locally and distribute to remote nodes
+ * - function returns at this point 
+ * - when quorum of nodes has received the command, command is commited and app->command 
+ * is called on all nodes
+ */
+int raft_command( uint64_t clid, char *buf, int len, uint64_t *cseq );
+int raft_command2( uint64_t clid, char *buf, int len, uint64_t *cseq, void (*donecb)( uint64_t, void *), void *prv );
+
+/* get last command stored */
+int raft_command_seq( uint64_t clid, uint64_t *term, uint64_t *seq );
+
+struct raft_snapshot_info {
+  uint64_t seq;
+  uint64_t when;
+  uint32_t len;
+  uint64_t term;
+};
+int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, struct log_iov *iov, int niov );
+int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info );
+int raft_snapshot_load( uint64_t clid, char *buf, int len, struct raft_snapshot_info *info );
+
+int raft_change_config( uint64_t clid, uint64_t *members, int nmember, char *cookie );
+
+int raft_replay( uint64_t clid );
 
 #endif
 

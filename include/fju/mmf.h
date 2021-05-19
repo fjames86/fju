@@ -1,27 +1,3 @@
-/*
- * MIT License
- *
- * Copyright (c) 2018 Frank James
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- */
 
 #ifndef MMF_H
 #define MMF_H
@@ -53,17 +29,26 @@ struct mmf_s {
 int mmf_open( char *path, struct mmf_s *mmf );
 #define MMF_OPEN_ALWAYS   0x0000
 #define MMF_OPEN_EXISTING 0x0001
+#define MMF_OPEN_ASYNC    0x0002 
 int mmf_open2( char *path, struct mmf_s *mmf, uint32_t flags );
 int mmf_close( struct mmf_s *mmf );
 int mmf_lock( struct mmf_s *mmf );
 int mmf_unlock( struct mmf_s *mmf );
 int mmf_remap( struct mmf_s *mmf, int size );
+
+/* flush changes to disk. if sync=1 do it synchronously, otherwise initiate async flushing */
+#define MMF_SYNC_NOW   1
+#define MMF_SYNC_LATER 0
 int mmf_sync( struct mmf_s *mmf, int sync );
+
 char *mmf_default_path( char *filename, ... );
 int mmf_ensure_dir( char *path );
 int mmf_read( struct mmf_s *mmf, char *buf, int size, uint64_t offset );
 int mmf_write( struct mmf_s *mmf, char *buf, int size, uint64_t offset );
 int mmf_truncate( struct mmf_s *mmf, int size );
+int mmf_delete_file( char *path );
+int mmf_rename( char *dirpath, char *oldname, char *newname );
+int mmf_fsize( struct mmf_s *mmf );
 
 #endif
 

@@ -1,27 +1,3 @@
-/*
- * MIT License
- * 
- * Copyright (c) 2018 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
 
 /*
  * This file defines a very simple ONC/RPC ("SunRPC") implementation. 
@@ -195,6 +171,7 @@ int xdr_decode_opaque( struct xdr_s *xdr, uint8_t *buf, int *n ) {
   if( sts ) return sts;
   xlen = len;
   if( xlen % 4 ) xlen += 4 - (xlen % 4);
+  if( (xdr->offset + xlen) > (uint32_t)xdr->count ) return -1;
   memcpy( buf, xdr->buf + xdr->offset, (int)len > *n ? *n : (int)len );
   xdr->offset += xlen;
   *n = (int)len;
@@ -209,6 +186,7 @@ int xdr_decode_opaque_ref( struct xdr_s *xdr, uint8_t **buf, int *n ) {
   if( sts ) return sts;
   xlen = len;
   if( xlen % 4 ) xlen += 4 - (xlen % 4);
+  if( (xdr->offset + xlen) > (uint32_t)xdr->count ) return -1;
   *buf = xdr->buf + xdr->offset;
   *n = len;
   xdr->offset += xlen;
@@ -499,6 +477,7 @@ int rpc_init_call( struct rpc_inc *inc, int32_t prog, uint32_t vers, uint32_t pr
 
   if( handle ) *handle = inc->xdr.offset;
 
+  rpc_log( RPC_LOG_TRACE, "rpc_init_call XID=%u", inc->msg.xid );
   return sts;    
 }
 
@@ -572,7 +551,10 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     
   switch( inc->msg.tag ) {
   case RPC_CALL:
-    rpc_log( RPC_LOG_DEBUG, "CALL %d:%d:%d AUTH=%u", inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc, inc->msg.u.call.auth.flavour );
+    rpc_log( RPC_LOG_DEBUG, "CALL XID=%u %d:%d:%d AUTH=%u Count=%u",
+	     inc->msg.xid,
+	     inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,
+	     inc->msg.u.call.auth.flavour, inc->xdr.count );
 
     /* lookup function */
     sts = rpc_program_find( inc->msg.u.call.prog, inc->msg.u.call.vers, inc->msg.u.call.proc,
@@ -630,6 +612,25 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
       }
     }
 
+    /* check mandatory authentication */
+    if( p->auth && pc->proc ) {
+      int ii = 0;
+      uint32_t aid = inc->pvr ? inc->pvr->flavour : 0;
+      int found = 0;
+      
+      for( ii = 0; p->auth[ii]; ii++ ) {
+	if( p->auth[ii] == aid ) {
+	  found = 1;
+	  break;
+	}
+      }
+      if( !found ) {
+	rpc_log( RPC_LOG_INFO, "Mandatory authentication failure" );
+	rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
+	return 0;
+      }
+    }
+    
     /* invoke handler function */
     sts = pc->fn( inc );
     if( sts < 0 ) {
@@ -642,7 +643,7 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
     break;
   case RPC_REPLY:
     /* check for a waiter or drop */
-    rpc_log( RPC_LOG_DEBUG, "REPLY %u %s %s",
+    rpc_log( RPC_LOG_DEBUG, "REPLY %u %s %s Count=%u",
 	     inc->msg.xid,
 	     inc->msg.u.reply.tag == RPC_MSG_ACCEPT ? "Accept" : "Reject",
 	     inc->msg.u.reply.tag == RPC_MSG_ACCEPT ?
@@ -659,7 +660,8 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_BADVERF ? "BadVerf" :
 	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_REJECTEDVERF ? "RejectedVerf" :
 	      inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_TOOWEAK ? "TooWeak" :
-	      "Other") );
+	      "Other"),
+	     inc->xdr.count );
 	     
     rpc_waiter_invoke( inc->msg.xid, inc );
     return 1;
@@ -669,20 +671,51 @@ int rpc_process_incoming( struct rpc_inc *inc ) {
 }
 
 
+static char *rpc_getreplystr( struct rpc_inc *inc, char *msgstr ) {
+  sprintf( msgstr, "%s %s",
+	   inc->msg.u.reply.tag == RPC_MSG_ACCEPT ? "Accept" : "Reject",
+	   inc->msg.u.reply.tag == RPC_MSG_ACCEPT ?
+	   (inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_SUCCESS ? "Success" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROG_UNAVAIL ? "ProgUnavail" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROG_MISMATCH ? "ProgMismatch" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_PROC_UNAVAIL ? "ProcUnavail" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_GARBAGE_ARGS ? "GarbageArgs" :
+	    inc->msg.u.reply.u.accept.tag == RPC_ACCEPT_SYSTEM_ERROR ? "SystemError" :
+	    "Other") :
+	   (inc->msg.u.reply.u.reject.tag == RPC_REJECT_RPCMISMATCH ? "RPCMismatch" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_BADCRED ? "AuthError BadCred" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_REJECTED ? "AuthError Rejected" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_BADVERF ? "AuthError BadVerf" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_REJECTEDVERF ? "AuthError RejectedVerf" :
+	    inc->msg.u.reply.u.reject.u.auth_error == RPC_AUTH_ERROR_TOOWEAK ? "AuthError TooWeak" :
+	    "Other") );
+  return msgstr;
+}
+
 int rpc_process_reply( struct rpc_inc *inc ) {
   int sts;
+  char msgstr[256];
 
+  rpc_getreplystr( inc, msgstr );
+  rpc_errmsg( msgstr );
+  
   if( inc->msg.tag != RPC_REPLY ) return -1;
   if( inc->msg.u.reply.tag != RPC_MSG_ACCEPT ) return -1;
   if( inc->msg.u.reply.u.accept.tag != RPC_ACCEPT_SUCCESS ) return -1;
   
   if( inc->pvr ) {
     sts = inc->pvr->cverf( inc->pvr, &inc->msg, inc->pcxt );
-    if( sts ) return sts;
+    if( sts ) {
+      rpc_errmsg( "Auth verf failure" );
+      return sts;
+    }
 
     if( inc->pvr->cmres ) {
       sts = inc->pvr->cmres( inc->pvr, &inc->xdr, inc->xdr.offset, inc->xdr.count, inc->pcxt );
-      if( sts ) return sts;
+      if( sts ) {
+	rpc_errmsg( "Auth cmres failure" );
+	return sts;
+      }
     }
   }
   
@@ -806,13 +839,34 @@ static int bind_list( struct rpc_inc *inc ) {
   struct rpc_program *p;
   struct rpc_version *v;
   struct sockaddr_in laddr;
-  int lport, handle;
+  int handle;
 
   memset( &laddr, 0, sizeof(laddr) );
   if( inc->laddr_len == sizeof(laddr) ) memcpy( &laddr, &inc->laddr, sizeof(laddr) );
-  lport = ntohs( laddr.sin_port );
 
   i = 0;
+#if 0
+  /* list ordered by listening address */
+  for( j = 0; j < 16; j++ ) {
+    if( bind_laddrs[j].port == 0 ) break;
+    p = rpc_program_list();
+    while( p ) {
+      v = p->vers;
+      while( v ) {
+	if( i < 64 ) {
+	  mlist[i].prog = p->prog;
+	  mlist[i].vers = v->vers;
+	  mlist[i].prot = bind_laddrs[j].prot;
+	  mlist[i].port = bind_laddrs[j].port;
+	  i++;
+	}
+	v = v->next;
+      }
+      p = p->next;
+    }
+  }
+#else
+  /* list ordered by program */
   p = rpc_program_list();
   while( p ) {
     v = p->vers;
@@ -834,7 +888,8 @@ static int bind_list( struct rpc_inc *inc ) {
     }
     p = p->next;
   }
-
+#endif
+  
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   rpcbind_encode_mapping_list( &inc->xdr, mlist, i > 64 ? 64 : i );
   rpc_complete_accept_reply( inc, handle );
@@ -985,11 +1040,11 @@ static int rpc_dobroadcast( struct rpc_inc *inc, int timeout, rpc_broadcast_cb_t
 #else
   int fd;
   struct pollfd pfd[1];
+  int64_t tmo;
 #endif
   int sts, bc;
   struct sockaddr_in sin;
   uint64_t to;
-  int64_t tmo;
   uint32_t xid;
 
   xid = inc->msg.xid;
@@ -1003,7 +1058,7 @@ static int rpc_dobroadcast( struct rpc_inc *inc, int timeout, rpc_broadcast_cb_t
   if( sts < 0 ) goto done;
 
   bc = 1;
-  sts = setsockopt( fd, SOL_SOCKET, SO_BROADCAST, &bc, sizeof(bc) );
+  sts = setsockopt( fd, SOL_SOCKET, SO_BROADCAST, (char *)&bc, sizeof(bc) );
   if( sts < 0 ) goto done;
   
   sts = sendto( fd, inc->xdr.buf, inc->xdr.offset, 0,
@@ -1303,17 +1358,21 @@ void rpc_iterator_unregister( struct rpc_iterator *it ) {
 }
 
 void rpc_iterator_service( void ) {
-  struct rpc_iterator *it;
+  struct rpc_iterator *it, *next;
   uint64_t now;
 
   now = rpc_now();
   it = itlist;
   while( it ) {
+    /* save next pointer so that it->cb can unregister itself */
+    next = it->next;
+    
     if( (it->timeout == 0) || (now >= it->timeout) ) {
       it->timeout = now + it->period;
       it->cb( it );
     }
-    it = it->next;
+    
+    it = next;
   }
 
 }
@@ -1488,4 +1547,10 @@ void rpc_get_reply_data( struct rpc_inc *inc, struct rpc_reply_data *rdata ) {
 
 
 
+
+char *rpc_errmsg( char *msg ) {
+  static char msgbuf[256];
+  if( msg ) strncpy( msgbuf, msg, sizeof(msgbuf) - 1 );
+  return msgbuf;
+}
 

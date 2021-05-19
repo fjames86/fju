@@ -1,4 +1,8 @@
 
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <fju/freg.h>
 #include <fju/rpc.h>
 #include <fju/hrauth.h>
@@ -7,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static log_deflogger(freg_log,"FREG")
+  
 static int freg_proc_null( struct rpc_inc *inc ) {
   int handle;
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -17,14 +23,14 @@ static int freg_proc_null( struct rpc_inc *inc ) {
 static int freg_check_auth = 1;
 static int freg_authenticated( struct rpc_inc *inc ) {
   if( !freg_check_auth ) {
-    log_writef( NULL, LOG_LVL_INFO, "freg_authenticated freg_check_auth=true ignoring auth" );
+    freg_log( LOG_LVL_INFO, "freg_authenticated freg_check_auth=true ignoring auth" );
     return 1;
   }
   if( inc->msg.u.call.auth.flavour != RPC_AUTH_HRAUTH ) {
-    log_writef( NULL, LOG_LVL_INFO, "freg_authenticated flavour=%d rejecting", inc->msg.u.call.auth.flavour );
+    freg_log( LOG_LVL_INFO, "freg_authenticated flavour=%d rejecting", inc->msg.u.call.auth.flavour );
     return 0;
   }
-  log_writef( NULL, LOG_LVL_INFO, "freg_authencticated allowing" );
+  freg_log( LOG_LVL_INFO, "freg_authencticated allowing" );
   return 1;
 }
 
@@ -288,7 +294,7 @@ void freg_register( void ) {
     /* load authentication configuration from registry */
     sts = freg_get_by_name( NULL, 0, "/fju/freg/checkauth", FREG_TYPE_UINT32, (char *)&b, sizeof(b), NULL );
     if( !sts && !b ) {
-	log_writef( NULL, LOG_LVL_INFO, "freg-rpc: disabling authentication" );
+	freg_log( LOG_LVL_INFO, "freg-rpc: disabling authentication" );
 	freg_check_auth = 0;
     }
   

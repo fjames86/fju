@@ -1,32 +1,9 @@
-/*
- * MIT License
- * 
- * Copyright (c) 2019 Frank James
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- * 
-*/
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_WARNINGS 
 #include <Winsock2.h>
 #include <Windows.h>
+#define strcasecmp _stricmp
 #endif
 
 #include <stdio.h>
@@ -38,17 +15,18 @@
 #ifndef WIN32
 #include <arpa/inet.h>
 #endif
+#include <ctype.h>
 
 #include <fju/rpc.h>
 #include <fju/hrauth.h>
 #include <fju/hostreg.h>
-#include <fju/raft.h>
-#include <fju/rex.h>
-#include <fju/nls.h>
 #include <fju/freg.h>
 #include <fju/sec.h>
-#include <fju/fvm.h>
 #include <fju/programs.h>
+#include <fju/raft.h>
+#include <fju/fvm.h>
+#include <fju/dmb.h>
+#include <fju/dlm.h>
 
 struct clt_info {
     uint32_t prog;
@@ -61,79 +39,72 @@ struct clt_info {
 };
 
 static void rpcbind_results( struct xdr_s *xdr );
-static void raft_list_results( struct xdr_s *xdr );
-static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void rex_read_results( struct xdr_s *xdr );
-static void rex_write_results( struct xdr_s *xdr );
-static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
 static void hrauth_local_results( struct xdr_s *xdr );
+static void hrauth_list_results( struct xdr_s *xdr );
 static void clt_call( struct clt_info *info, int argc, char **argv, int i );
 static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i );
-static void raft_add_results( struct xdr_s *xdr );
-static void nls_list_results( struct xdr_s *xdr );
-static void nls_read_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void nls_read_results( struct xdr_s *xdr );
-static void nls_write_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void nls_write_results( struct xdr_s *xdr );
-static void freg_list_results( struct xdr_s *xdr );
-static void freg_list_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void freg_get_results( struct xdr_s *xdr );
-static void freg_get_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void freg_put_results( struct xdr_s *xdr );
-static void freg_put_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void freg_rem_results( struct xdr_s *xdr );
-static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_load_results( struct xdr_s *xdr );
-static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_unload_results( struct xdr_s *xdr );
-static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_list_results( struct xdr_s *xdr );
-static void fvm_pause_results( struct xdr_s *xdr );
-static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_msg_results( struct xdr_s *xdr );
-static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_shmemread_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_shmemread_results( struct xdr_s *xdr );
-static void fvm_shmemwrite_results( struct xdr_s *xdr );
-static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_read_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_read_dirty_results( struct xdr_s *xdr );
-static void fvm_write_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr );
-static void fvm_write_dirty_results( struct xdr_s *xdr );
 
+/* macrology shorthand for arg/result procedures */
+#define RESULTPROC(name) static void name##_results( struct xdr_s *xdr )
+#define ARGPROC(name) static void name##_args( int argc, char **argv, int i, struct xdr_s *xdr )
+#define ARGRESULTPROC(name) \
+  RESULTPROC(name);\
+  ARGPROC(name)
 
-
+ARGRESULTPROC(freg_list);
+ARGRESULTPROC(freg_get);
+ARGRESULTPROC(freg_put);
+ARGRESULTPROC(freg_rem);
+RESULTPROC(cmdprog_licinfo);
+RESULTPROC(cmdprog_connlist);
+ARGRESULTPROC(rawmode);
+ARGRESULTPROC(raft_command);
+ARGRESULTPROC(raft_snapshot);
+ARGRESULTPROC(raft_change);
+RESULTPROC(fvm_list);
+ARGRESULTPROC(fvm_load);
+ARGRESULTPROC(fvm_unload);
+ARGRESULTPROC(fvm_run);
+ARGRESULTPROC(fvm_reload);
+ARGPROC(dmb_invoke);
+ARGRESULTPROC(dmb_publish);
+RESULTPROC(dlm_list);
+ARGRESULTPROC(dlm_acquire);
+ARGPROC(dlm_release);
+RESULTPROC(fvm_data);
+ARGRESULTPROC(fvm_enable);
+RESULTPROC(raft_applist);
 
 static struct clt_info clt_procs[] = {
+    { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
     { 100000, 2, 0, NULL, NULL, "rpcbind.null", NULL },
     { 100000, 2, 4, NULL, rpcbind_results, "rpcbind.list", NULL },
     { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 1, NULL, hrauth_local_results, "hrauth.local", NULL },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 3, NULL, raft_list_results, "raft.list", NULL },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 4, raft_add_args, raft_add_results, "raft.add", "clid=CLID" },
-    { RAFT_RPC_PROG, RAFT_RPC_VERS, 5, raft_rem_args, NULL, "raft.rem", "clid=CLID" },
-    { REX_RPC_PROG, REX_RPC_VERS, 1, rex_read_args, rex_read_results, "rex.read", "clid=CLID" },
-    { REX_RPC_PROG, REX_RPC_VERS, 2, rex_write_args, rex_write_results, "rex.write", "clid=CLID data=DATA" },
-    { NLS_RPC_PROG, NLS_RPC_VERS, 1, NULL, nls_list_results, "nls.list", NULL },
-    { NLS_RPC_PROG, NLS_RPC_VERS, 3, nls_read_args, nls_read_results, "nls.read", "hshare=HSHARE [id=ID]" },
-    { NLS_RPC_PROG, NLS_RPC_VERS, 4, nls_write_args, nls_write_results, "nls.write", "hshare=HSHARE [str=string]" },
+    { HRAUTH_RPC_PROG, HRAUTH_RPC_VERS, 2, NULL, hrauth_list_results, "hrauth.list", NULL },
     { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS [u32=*] [u64=*] [str=*] [opaque-file=*]" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 1, fvm_load_args, fvm_load_results, "fvm.load", "program=PATH [autounload=false] [start=no] [inlog=INLOGID] [outlog=OUTLOGID]" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 2, fvm_unload_args, fvm_unload_results, "fvm.unload", "id=ID" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 3, NULL, fvm_list_results, "fvm.list", "" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 4, fvm_pause_args, fvm_pause_results, "fvm.pause", "id=ID [cont|stop|reset]" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 6, fvm_msg_args, fvm_msg_results, "fvm.msg", "id=ID msgid=ID msg=*" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 7, fvm_shmemread_args, fvm_shmemread_results, "fvm.read", "id=ID len=*" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 8, fvm_shmemwrite_args, fvm_shmemwrite_results, "fvm.write", "id=ID [int=*] [str=*] [buf=*]" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 9, fvm_read_dirty_args, fvm_read_dirty_results, "fvm.read_dirty", "id=ID [path=*]" },
-    { FVM_RPC_PROG, FVM_RPC_VERS, 10, fvm_write_dirty_args, fvm_write_dirty_results, "fvm.write_dirty", "id=ID path=*" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
-    { FJUD_RPC_PROG, 1, 2, cmdprog_event_args, NULL, "fjud.event", "category=* eventid=* parm=*" },
+    { FJUD_RPC_PROG, 1, 3, NULL, cmdprog_licinfo_results, "fjud.licinfo", "" },
+    { FJUD_RPC_PROG, 1, 4, NULL, cmdprog_connlist_results, "fjud.connlist", "" },        
+    { RAFT_RPC_PROG, 1, 3, raft_command_args, raft_command_results, "raft.command", "clid=* [command=base64]" },
+    { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
+    { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*] [distribute]" },
+    { RAFT_RPC_PROG, 1, 8, NULL, raft_applist_results, "raft.applist", NULL },
+    { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
+    { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
+    { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
+    { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname/procname [args]" },
+    { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
+    { FVM_RPC_PROG, 1, 7, fvm_reload_args, fvm_data_results, "fvm.data", "modname" },
+    { FVM_RPC_PROG, 1, 8, fvm_enable_args, fvm_enable_results, "fvm.enable", "modname=* [enable] [disable]" },
+    { DMB_RPC_PROG, 1, 1, dmb_invoke_args, NULL, "dmb.invoke", "msgid=* [seq=*] [flags=*] [buf=base64]" },
+    { DMB_RPC_PROG, 1, 3, dmb_publish_args, dmb_publish_results, "dmb.publish", "msgid=* [flags=*] [buf=base64]" },
+    { DLM_RPC_PROG, 1, 1, NULL, dlm_list_results, "dlm.list", NULL },
+    { DLM_RPC_PROG, 1, 2, dlm_acquire_args, dlm_acquire_results, "dlm.acquire", "resid=* [shared]" },
+    { DLM_RPC_PROG, 1, 3, dlm_release_args, NULL, "dlm.release", "lockid=*" },                
+    
     { 0, 0, 0, NULL, NULL, NULL }
 };
 
@@ -144,6 +115,8 @@ static void usage( char *fmt, ... ) {
   
   printf( "Usage: rpclt [OPTIONS] <HOSTID|addr|local|broadcast BCADDR> program.vers.proc [args...]\n"
 	  "\n"
+	  "             raw <prog> <vers> <proc> [u32=] [str=] [fixed=] [opaque=] [resb64]\n" 
+	  "\n"
 	  "Where OPTIONS:\n"
 	  "      -p port             Port\n"
 	  "      -L none|integ|priv  Service level\n"
@@ -153,7 +126,7 @@ static void usage( char *fmt, ... ) {
 	  "\n" );
   info = clt_procs;
   printf( "Procedures:\n" );
-  while( info->prog ) {
+  while( info->procname ) {
       sprintf( procstr, "%u:%u:%u", info->prog, info->vers, info->proc );
       printf( "    %-16s %-16s %s\n",
 	      procstr, info->procname, info->procargs ? info->procargs : "" );
@@ -232,9 +205,11 @@ static struct {
     uint32_t addr;
     int tcp;
     int reporttime;
+    int rawmodeb64;
+  uint64_t siginfo;
 } glob;
 
-int main( int argc, char **argv ) {
+int rpc_main( int argc, char **argv ) {
   int i, sts, idx;
     struct clt_info *info;
     char *term;
@@ -248,15 +223,16 @@ int main( int argc, char **argv ) {
 #endif
 
     hostreg_open();
-    raft_open();
     freg_open( NULL, NULL );
-
+    raft_open();
+    
     glob.hostid = hostreg_localid();
     glob.port = 8000;
     sts = freg_ensure( NULL, 0, "/fju/rpc/port", FREG_TYPE_UINT32, (char *)&glob.port, sizeof(glob.port), NULL );
     glob.timeout = 1000;
     sts = freg_ensure( NULL, 0, "/fju/rpc/timeout", FREG_TYPE_UINT32, (char *)&glob.timeout, sizeof(glob.timeout), NULL );
-
+    glob.service = HRAUTH_SERVICE_PRIV;
+    
     i = 1;
     while( i < argc ) {
 	if( strcmp( argv[i], "-p" ) == 0 ) {
@@ -294,10 +270,11 @@ int main( int argc, char **argv ) {
 
     if( i >= argc ) glob.addr = htonl( INADDR_LOOPBACK );
     else {
-      glob.hostid = strtoull( argv[i], &term, 16 );
+      uint64_t hid = strtoull( argv[i], &term, 16 );
+      if( !*term ) glob.hostid = hid;
+      
       if( *term ) {
 	struct hostreg_host host;
-	glob.hostid = 0;
 	if( strcmp( argv[i], "local" ) == 0 ) {
 	  glob.hostid = 0;
 	  glob.addr = htonl( INADDR_LOOPBACK );
@@ -320,9 +297,10 @@ int main( int argc, char **argv ) {
 	    sts = inet_pton( AF_INET, argv[i], &glob.addr );
 	    //sts = mynet_pton( argv[i], (uint8_t *)&glob.addr );
 	    if( sts == 1 ) {
+	      glob.hostid = 0;	      
 	      i++;
 	    } else {
-	      glob.addr = htonl( INADDR_LOOPBACK );	    
+	      //glob.addr = htonl( INADDR_LOOPBACK );	    
 	    }
 	  }
 	}
@@ -333,9 +311,23 @@ int main( int argc, char **argv ) {
     else procname = argv[i]; 
     
     idx = 0;
-    while( clt_procs[idx].prog ) {
+    while( clt_procs[idx].procname ) {
       info = &clt_procs[idx];
       if( strcmp( procname, info->procname ) == 0 ) {
+
+	if( info->prog == 0 ) {
+	  /* rawmode expect args: prog vers proc */
+	  i++;
+	  if( i >= argc ) usage( "Need prog" );
+	  info->prog = strtoul( argv[i], NULL, 0 );
+	  i++;
+	  if( i >= argc ) usage( "Need vers" );
+	  info->vers = strtoul( argv[i], NULL, 0 );
+	  i++;
+	  if( i >= argc ) usage( "Need proc" );
+	  info->proc = strtoul( argv[i], NULL, 0 );
+	}
+	
 	if( glob.broadcast ) {
 	  clt_broadcast( info, argc, argv, i );
 	} else {
@@ -395,14 +387,18 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
 
   tstart = rpc_now();
   if( glob.hostid ) {
-    sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+    if( glob.tcp ) {
+      sts = hrauth_call_tcp( &hcall, &args, &res, &opts );
+    } else {
+      sts = hrauth_call_udp( &hcall, &args, &res, &opts );
+    }
   } else if( glob.tcp ) {
     sts = rpc_call_tcp( &pars, &args, &res );
   } else {
     sts = rpc_call_udp( &pars, &args, &res );
   }
   tend = rpc_now();
-  if( sts ) usage( "RPC call failed" );
+  if( sts ) usage( "RPC call failed: %s", rpc_errmsg( NULL ) );
   if( glob.reporttime ) printf( ";; Time: %dms\n", (int)(tend - tstart) );
   if( info->results ) info->results( &res );
   free( argbuf );
@@ -460,30 +456,30 @@ static void clt_broadcast( struct clt_info *info, int argc, char **argv, int i )
   free( tmpbuf );
 }
 
-static struct {
-  uint32_t prog;
-  char *name;
-} rpcbind_name_list[] = {
-  { HRAUTH_RPC_PROG, "hrauth" },
-  { RAFT_RPC_PROG, "raft" },
-  { REX_RPC_PROG, "rex" },
-  { NLS_RPC_PROG, "nls" },
-  { FREG_RPC_PROG, "freg" },
-  { FVM_RPC_PROG, "fvm" },
-  { RPCBIND_RPC_PROG, "rpcbind" },
-  { FJUD_RPC_PROG, "fjud" },
-  { SVCTEST_RPC_PROG, "svctest" },
-  { 0, NULL }
-};
-
 static char *rpcbind_name_by_prog( uint32_t prog ) {
-  int i;
-  i = 0;
-  while( 1 ) {
-    if( !rpcbind_name_list[i].name ) break;
-    if( rpcbind_name_list[i].prog == prog ) return rpcbind_name_list[i].name;
-    i++;
+  static struct freg_entry entry;
+  
+  int sts;
+  uint32_t progid;
+  uint64_t id, hkey;
+
+  sts = freg_subkey( NULL, 0, "/fju/rpc/progreg", FREG_CREATE, &hkey );
+  if( !sts ) {
+    id = 0;
+    sts = freg_next( NULL, hkey, id, &entry );
+    while( !sts ) {
+      if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_UINT32 ) {
+	sts = freg_get( NULL, entry.id, NULL, (char *)&progid, sizeof(progid), NULL );
+	if( !sts && progid == prog ) {
+	  return entry.name;
+	}
+      }
+      
+      id = entry.id;
+      sts = freg_next( NULL, hkey, id, &entry );
+    }
   }
+  
   return "";
 }
 
@@ -514,163 +510,6 @@ static void rpcbind_results( struct xdr_s *xdr ) {
   usage( "XDR error" );
 }
 
-static void raft_list_results( struct xdr_s *xdr ) {
-    int i, n, j, m;
-    struct raft_cluster cl;
-    struct raft_member member;
-    char timestr[64];
-    
-    xdr_decode_uint32( xdr, (uint32_t *)&n );
-    for( i = 0; i < n; i++ ) {
-	xdr_decode_uint64( xdr, &cl.id );
-	xdr_decode_uint64( xdr, &cl.leaderid );
-	xdr_decode_uint64( xdr, &cl.termseq );
-	xdr_decode_uint64( xdr, &cl.voteid );
-	xdr_decode_uint32( xdr, &cl.state );
-	xdr_decode_uint32( xdr, &cl.typeid );
-	xdr_decode_uint64( xdr, &cl.commitseq );
-	xdr_decode_uint64( xdr, &cl.stateseq );
-	xdr_decode_uint64( xdr, &cl.stateterm );
-	// TODO: print
-	printf( "Cluster ID=%"PRIx64" leader=%"PRIx64" termseq=%"PRIu64"\n"
-		"        state=%s typeid=%u commitseq=%"PRIu64" stateseq=%"PRIu64" stateterm=%"PRIu64"\n",
-		cl.id, cl.leaderid, cl.termseq,
-		cl.state == RAFT_STATE_FOLLOWER ? "FOLLOWER" :
-		cl.state == RAFT_STATE_CANDIDATE ? "CANDIDATE" :
-		cl.state == RAFT_STATE_LEADER ? "LEADER" :
-		"Unknown",
-		cl.typeid, cl.commitseq, cl.stateseq, cl.stateterm );
-	
-	xdr_decode_uint32( xdr, (uint32_t *)&m );
-	for( j = 0; j < m; j++ ) {
-	    xdr_decode_uint64( xdr, &member.hostid );
-	    xdr_decode_uint64( xdr, &member.lastseen );
-	    xdr_decode_uint32( xdr, &member.flags );
-	    xdr_decode_uint64( xdr, &member.nextseq );	    
-	    xdr_decode_uint64( xdr, &member.stateseq );
-
-	    if( member.lastseen ) {
-	      sec_timestr( member.lastseen, timestr );
-	    } else {
-	      strcpy( timestr, "Never" );
-	    }
-	  	    
-	    printf( "    Member ID=%"PRIx64" lastseen=%s flags=%x nextseq=%"PRIu64" stateseq=%"PRIu64"\n",
-		    member.hostid, timestr, member.flags, member.nextseq, member.stateseq );
-	}
-    }
-    
-}
-
-static void rex_read_results( struct xdr_s *xdr ) {
-  int sts, len;
-  uint8_t *buf;
-
-  sts = xdr_decode_opaque_ref( xdr, &buf, &len );
-  if( sts ) usage( "XDR error" );
-  if( len > 0 ) {
-    if( buf[len - 1] && len < xdr->count ) buf[len] = '\0';
-    printf( "%s\n", buf );
-  }
-  
-}
-
-static void rex_write_results( struct xdr_s *xdr ) {
-  int sts, b;
-  uint64_t leaderid;
-
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  sts = xdr_decode_uint64( xdr, &leaderid );
-  if( sts ) usage( "xdr error" );
-  
-  printf( "Success=%s Leader=%"PRIx64"\n", b ? "True" : "False", leaderid );
-}
-
-static void rex_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  uint64_t clid = 0;
-  char argname[64], *argval;
-  
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "clid" ) == 0 ) {
-      clid = strtoull( argval, NULL, 16 );
-    } else usage( "Unknown arg \"%s\"", argname );
-    i++;
-  }
-  if( !clid ) usage( "Need CLID" );
-  
-  xdr_encode_uint64( xdr, clid );
-}
-
-static void rex_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  uint64_t clid = 0;
-  char argname[64], *argval;
-  char data[REX_MAX_BUF];
-  int len;
-  
-  memset( data, 0, sizeof(data) );
-  
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "clid" ) == 0 ) {
-      clid = strtoull( argval, NULL, 16 );
-    } else if( strcmp( argname, "data" ) == 0 ) {
-      len = strlen( argval );
-      memcpy( data, argval, len );
-    } else usage( "Unknown arg \"%s\"", argname );
-    i++;
-  }
-  if( !clid ) usage( "Need CLID" );
-  
-  xdr_encode_uint64( xdr, clid );
-  xdr_encode_opaque( xdr, (uint8_t *)data, len );
-}
-
-static void raft_add_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  int sts;
-  struct raft_cluster cl;
-  struct raft_member member[32];
-  int nmember, j;
-  uint64_t clid = 0;
-  char argname[64], *argval;
-  
-  while( i < argc ) {
-      argval_split( argv[i], argname, &argval );
-      if( strcmp( argname, "clid" ) == 0 ) {
-	  clid = strtoull( argval, NULL, 16 );
-      } else usage( "Unknown arg \"%s\"", argname );
-      i++;
-  }
-  if( !clid ) usage( "Need CLID" );
-  
-  sts = raft_cluster_by_id( clid, &cl );
-  if( sts ) usage( "Unknown cluster %"PRIx64"", clid );
-  nmember = raft_member_list( clid, member, 32 );
-  
-  xdr_encode_uint64( xdr, clid );
-  xdr_encode_uint32( xdr, cl.typeid ); 
-  xdr_encode_uint32( xdr, 0 ); // flags 
-  
-  xdr_encode_uint32( xdr, nmember );
-  for( j = 0; j < nmember; j++ ) {
-    xdr_encode_uint64( xdr, member[j].hostid == glob.hostid ? hostreg_localid() : member[j].hostid );
-  }
-    
-}
-static void raft_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    uint64_t clid = 0;
-    char argname[64], *argval;
-    while( i < argc ) {
-	argval_split( argv[i], argname, &argval );
-	if( strcmp( argname, "clid" ) == 0 ) {
-	    clid = strtoull( argval, NULL, 16 );
-	} else usage( "Unknown arg \"%s\"", argname );
-	i++;
-    }
-    if( !clid ) usage( "Need CLID" );
-    xdr_encode_uint64( xdr, clid );
-}
 
 static void bn2hex( char *bn, char *hex, int len ) {
   int i;
@@ -728,136 +567,39 @@ bad:
     usage( "XDR error" );
 }
 
-static void raft_add_results( struct xdr_s *xdr ) {
-  int sts, b;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) goto bad;
-  printf( "Success=%s\n", b ? "True" : "False" );
-  return;
-  
- bad:
-  usage( "XDR error" );
-}
-
-static int nls_decode_prop( struct xdr_s *xdr, uint64_t *hshare, struct log_prop *prop ) {
-  int sts;
-  sts = xdr_decode_uint64( xdr, hshare );
-  sts = xdr_decode_uint32( xdr, &prop->version );
-  sts = xdr_decode_uint64( xdr, &prop->seq );
-  sts = xdr_decode_uint32( xdr, &prop->lbacount );
-  sts = xdr_decode_uint32( xdr, &prop->start );
-  sts = xdr_decode_uint32( xdr, &prop->count );
-  sts = xdr_decode_uint64( xdr, &prop->last_id );
-  sts = xdr_decode_uint32( xdr, &prop->flags );
-  return sts;
-}
-  
-static void nls_list_results( struct xdr_s *xdr ) {
-  uint64_t hshare;
-  struct log_prop prop;
-  int sts, b;
-
-  sts = xdr_decode_boolean( xdr, &b );
-  printf( "%-16s %-8s %-6s %-6s %-6s %-16s %-4s\n", "hshare", "seq", "lbac", "start", "count", "lastid", "flags" );
-  
-  while( !sts && b ) {
-    nls_decode_prop( xdr, &hshare, &prop );
-    printf( "%-16"PRIx64" %-8"PRIu64" %-6u %-6u %-6u %-16"PRIx64" %-4x\n",
-	    hshare, prop.seq, prop.lbacount, prop.start, prop.count, prop.last_id, prop.flags );
+static void hrauth_list_results( struct xdr_s *xdr ) {
+    struct hostreg_host x;
+    int sts, i, b;
 
     sts = xdr_decode_boolean( xdr, &b );
-  }
-}
+    if( sts ) goto bad;
+    while( b ) {      
+      sts = xdr_decode_uint64( xdr, &x.id );
+      if( sts ) goto bad;
+      sts = xdr_decode_string( xdr, x.name, sizeof(x.name) );
+      if( sts ) goto bad;
+      x.publen = sizeof(x.pubkey);
+      sts = xdr_decode_opaque( xdr, x.pubkey, (int *)&x.publen );
+      if( sts ) goto bad;
+      sts = xdr_decode_uint32( xdr, &x.naddr );
+      if( sts ) goto bad;
+      if( x.naddr > HOSTREG_MAX_ADDR ) goto bad;
+      for( i = 0; i < x.naddr; i++ ) {
+	sts = xdr_decode_uint32( xdr, &x.addr[i] );
+	if( sts ) goto bad;
+      }
+      print_host( &x );
 
-static void nls_read_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  uint64_t hshare, id;
-
-  hshare = 0;
-  id = 0;
-  while( i < argc ) {
-      argval_split( argv[i], argname, &argval );
-      if( strcmp( argname, "hshare" ) == 0 ) {
-	  hshare = strtoull( argval, NULL, 16 );
-      } else if( strcmp( argname, "id" ) == 0 ) {
-	id = strtoull( argval, NULL, 16 );
-      } else usage( "Unknown arg \"%s\"", argname );
-      i++;
-  }
-  if( !hshare ) usage( "Need hshare" );
-  
-  xdr_encode_uint64( xdr, hshare );
-  xdr_encode_uint64( xdr, id ); 
-  xdr_encode_uint32( xdr, 8*1024 ); // xdr count    
-}
-
-static void nls_read_results( struct xdr_s *xdr ) {
-  int sts, b;
-  uint64_t hshare;
-  struct log_prop prop;
-  uint64_t id, prev_id, seq;
-  uint32_t flags;
-  char *bufp;
-  int lenp;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "XDR error" );
-  if( !b ) usage( "Unknown share" );
-  sts = nls_decode_prop( xdr, &hshare, &prop );
-  if( sts ) usage( "XDR error" );
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "XDR error" );
-  printf( "%-16s %-8s %-8s\n", "ID", "Seq", "Flags" );
-  while( !sts && b ) {
-    sts = xdr_decode_uint64( xdr, &id );
-    sts = xdr_decode_uint64( xdr, &prev_id );
-    sts = xdr_decode_uint64( xdr, &seq );
-    sts = xdr_decode_uint32( xdr, &flags );
-    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
-    if( sts ) usage( "XDR error" );
-    printf( "%-16"PRIx64" %-8"PRIu64" %-8x %s\n",
-	    id, seq, flags, flags & LOG_BINARY ? "Binary" : bufp );
+      sts = xdr_decode_boolean( xdr, &b );
+      if( sts ) goto bad;
+    }
     
-    sts = xdr_decode_boolean( xdr, &b );
-  }
-  
+    return;
+bad:
+    usage( "XDR error" );
 }
 
-static void nls_write_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  uint64_t hshare;
-  char *str;
-  uint32_t flags;
-  
-  hshare = 0;
-  str = "";
-  flags = 0;
-  while( i < argc ) {
-      argval_split( argv[i], argname, &argval );
-      if( strcmp( argname, "hshare" ) == 0 ) {
-	  hshare = strtoull( argval, NULL, 16 );
-      } else if( strcmp( argname, "str" ) == 0 ) {
-	str = argval;
-      } else if( strcmp( argname, "flags" ) == 0 ) {
-	flags = strtoul( argval, NULL, 16 );
-      } else usage( "Unknown arg \"%s\"", argname );
-      i++;
-  }
-  if( !hshare ) usage( "Need hshare" );
-  
-  xdr_encode_uint64( xdr, hshare );
-  xdr_encode_uint32( xdr, flags & ~LOG_BINARY ); 
-  xdr_encode_opaque( xdr, (uint8_t *)str, strlen( str ) );
-}
 
-static void nls_write_results( struct xdr_s *xdr ) {
-  int sts, b;
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "XDR error" );
-  printf( "%s\n", b ? "Success" : "Failure" );  
-}
 
 static void freg_list_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
     char argname[64], *argval;
@@ -1043,421 +785,849 @@ static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   xdr_encode_uint64( xdr, id );  
 }
 
-static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+static void rawmode_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
-  int sts;
-  uint32_t flags;
-  uint64_t inlog_id, outlog_id;
-  char *filepath;
-  struct mmf_s mmf;
-  char name[64];
-
-  filepath = NULL;
-  flags = FVM_RPC_AUTOUNLOAD|FVM_RPC_START;
-  inlog_id = 0;
-  outlog_id = 0;
-  strcpy( name, "" );
+  
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "program" ) == 0 ) {
-      if( !argval ) usage( "Need file path" );
-      filepath = argval;
-    } else if( strcmp( argname, "start" ) == 0 ) {
-      if( argval && (strcmp( argval, "no" ) == 0) ) flags &= ~FVM_RPC_START;
-    } else if( strcmp( argname, "autounload" ) == 0 ) {
-      if( argval && (strcmp( argval, "false" ) == 0) ) flags &= ~0x0001;
-    } else if( strcmp( argname, "inlog" ) == 0 ) {
-      if( !argval ) usage( "Need inlog value" );
-      inlog_id = strtoull( argval, NULL, 16 );
-    } else if( strcmp( argname, "outlog" ) == 0 ) {
-      if( !argval ) usage( "Need outlog value" );
-      outlog_id = strtoull( argval, NULL, 16 );
-    } else if( strcmp( argname, "name" ) == 0 ) {
-      if( !argval ) usage( "Need name value" );
-      strncpy( name, argval, sizeof(name) - 1 );
-    } else usage( "Unknown arg \"%s\"", argname );    
+    if( strcmp( argname, "u32" ) == 0 ) {
+      xdr_encode_uint32( xdr, strtoul( argval, NULL, 0 ) );
+    } else if( strcmp( argname, "u64" ) == 0 ) {
+      xdr_encode_uint64( xdr, strtoull( argval, NULL, 0 ) );
+    } else if( strcmp( argname, "str" ) == 0 ) {
+      xdr_encode_string( xdr, argval );
+    } else if( strcmp( argname, "bool" ) == 0 ) {
+      xdr_encode_boolean( xdr, strcmp( argval, "true" ) == 0 );
+    } else if( strcmp( argname, "fixed" ) == 0 ) {
+      int sts = base64_decode( (char *)(xdr->buf + xdr->offset), xdr->count - xdr->offset, argval );
+      if( sts < 0 ) usage( "Failed to decode fixed base64" );
+      xdr->offset += sts;
+    } else if( strcmp( argname, "resb64" ) == 0 ) {
+      glob.rawmodeb64 = 1;
+    } else usage( NULL );
     i++;
   }
 
-  if( filepath ) {
-    sts = mmf_open2( filepath, &mmf, MMF_OPEN_EXISTING );
-    if( sts ) usage( "Failed to open program" );
-    sts = mmf_remap( &mmf, mmf.fsize );
-    if( sts ) usage( "Failed to map program" );
-    xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
-    mmf_close( &mmf );
+}
+
+static void rawmode_results( struct xdr_s *xdr ) {
+  int i, count, j, c;
+
+  if( glob.rawmodeb64 ) {
+    char *str;
+    c = xdr->count - xdr->offset;
+    str = malloc( (4*(c / 3)) + 5 );
+    base64_encode( (char *)(xdr->buf + xdr->offset), xdr->count - xdr->offset, str );
+    printf( "%s\n", str );
+    free( str );
+  } else {    
+    count = xdr->count - xdr->offset;
+    
+    for( i = 0; i < count; i += 16 ) {
+      for( j = 0; j < 16; j++ ) {
+	if( (i + j) < count ) {
+	  printf( "%02x ", (uint32_t)xdr->buf[xdr->offset + i + j] );
+	}
+      }
+      for( j = 0; j < 16; j++ ) {
+	if( (i + j) < count ) {
+	  c = xdr->buf[xdr->offset + i + j];
+	  if( !isalnum( c ) ) c = '.';
+	  printf( "%c", c );
+	}
+      }
+      
+      printf( "\n" );
+    }
+  }
+  
+}
+
+static void cmdprog_licinfo_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t u64;
+  uint32_t u32;
+  char str[256];
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  if( b ) {
+    sts = xdr_decode_uint64( xdr, &u64 );
+    if( sts ) usage( "xdr error" );
+    printf( "Hostid     %" PRIx64 "\n", u64 );
+    sts = xdr_decode_uint64( xdr, &u64 );
+    if( sts ) usage( "xdr error" );
+    sec_timestr( u64, str );
+    printf( "Expiry     %s\n", str );
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );
+    printf( "Version    %u\n", u32 );
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );
+    printf( "Flags      %u\n", u32 );    
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );    
+    sts = xdr_decode_uint32( xdr, &u32 );
+    if( sts ) usage( "xdr error" );    
+  } else {
+    printf( "License check failed" );
+  }
+}
+
+static void cmdprog_connlist_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t connid, rx, tx;
+  uint32_t dirtype, type, addr, port, cstate, coffset, ccount;
+  char ip[256];
+
+  printf( "%-8s %-4s %-8s %-8s %-8s %-12s %-4s\n", "ConnID", "Dir", "State", "RX", "TX", "Offset/Count", "Type" );
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr error" );
+  while( b ) {
+    sts = xdr_decode_uint64( xdr, &connid );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &dirtype );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &cstate );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &rx );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &tx );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &coffset );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &ccount );    
+    if( !sts ) sts = xdr_decode_uint32( xdr, &type );
+    if( sts ) usage( "xdr error" );
+    if( type == RPC_LISTEN_TCP ) {
+      sts = xdr_decode_uint32( xdr, &addr );
+      if( !sts ) sts = xdr_decode_uint32( xdr, &port );
+    }
+    if( sts ) usage( "xdr error" );
+    printf( "%-8"PRIu64" %-4s %-8s %-8"PRIu64" %-8"PRIu64" %4u/%4u %-4s",
+	    connid,
+	    dirtype == RPC_CONN_DIR_INCOMING ? "IN" : "OUT",
+	    cstate == RPC_CSTATE_RECVLEN ? "RecvLen" :
+	    cstate == RPC_CSTATE_RECV ? "Recv" :
+	    cstate == RPC_CSTATE_SENDLEN ? "SendLen" :
+	    cstate == RPC_CSTATE_SEND ? "Send" :
+	    cstate == RPC_CSTATE_CONNECT ? "Connect" :
+	    cstate == RPC_CSTATE_CLOSE ? "Close" :
+	    "Other",
+	    rx, tx, coffset, ccount,
+	    type == RPC_LISTEN_TCP ? "TCP" :
+	    type == RPC_LISTEN_UNIX ? "UNIX" : 
+	    "Other" );
+    if( type == RPC_LISTEN_TCP ) {
+      strcpy( ip, "" );
+      mynet_ntop( addr, ip );
+      sprintf( ip + strlen( ip ), ":%u", port );
+      printf( "%s", ip );
+    }
+    printf( "\n" );
+	    
+
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "xdr error" );    
+  }
+
+}
+
+static void raft_command_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t cseq;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( !sts ) sts = xdr_decode_uint64( xdr, &cseq );
+  if( sts ) usage( "XDR error" );
+  if( !b ) printf( "Failure\n" );
+  else printf( "Success cseq=%"PRIu64"\n", cseq );
+}
+
+static void raft_command_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  char *term;
+  uint64_t clid = 0;
+  char *cmdstr = NULL;
+  int sts;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, &term, 16 );
+      if( *term ) usage( "Failed to parse CLID" );
+    } else if( strcmp( argname, "command" ) == 0 ) {
+      cmdstr = argval;
+    } else usage( NULL );
+    i++;
+  }
+
+  if( !clid ) usage( "Need CLID" );
+  xdr_encode_uint64( xdr, clid );
+  if( cmdstr ) {
+    sts = base64_decode( (char *)(xdr->buf + xdr->offset + 4), (xdr->count - xdr->offset) - 4, cmdstr );
+    if( sts < 0 ) usage( "Failed to decode base64 command buffer" );
+    xdr_encode_uint32( xdr, sts );
+    xdr->offset += sts;
+    if( sts % 4 ) xdr->offset += 4 - (sts % 4);
   } else {
     xdr_encode_opaque( xdr, NULL, 0 );
   }
+}
+
+static void raft_snapshot_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
   
-  xdr_encode_uint32( xdr, flags );
-  xdr_encode_uint64( xdr, inlog_id );
-  xdr_encode_uint64( xdr, outlog_id );
-  xdr_encode_string( xdr, name );  
+  if( !b ) printf( "Failure\n" );
+  else printf( "Success\n" );
 }
 
-static void fvm_load_results( struct xdr_s *xdr ) {
-  uint32_t id;
-  xdr_decode_uint32( xdr, &id );
-  if( id == 0 ) printf( "Failed to load program" );
-  else printf( "id=%u\n", id );
-}
-
-static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+static void raft_snapshot_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
-  uint32_t id = 0;
+  char *term;
+  uint64_t clid = 0;
   
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "id" ) == 0 ) {
-      if( !argval ) usage( "Need id" );
-      id = strtoul( argval, NULL, 10 );
-    } else usage( "Unknown arg \"%s\"", argname );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, &term, 16 );
+      if( *term ) usage( "Failed to parse CLID" );
+    } else usage( NULL );
     i++;
   }
-  if( !id ) usage( "Need id" );
-  xdr_encode_uint32( xdr, id );
+
+  if( !clid ) usage( "Need CLID" );
+  xdr_encode_uint64( xdr, clid );
 }
 
-static void fvm_unload_results( struct xdr_s *xdr ) {
+static void raft_change_results( struct xdr_s *xdr ) {
 }
+
+static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  char *term;  
+  uint64_t clid;
+  int bcookie, bmembers, bappid, bdistribute;
+  char cookie[RAFT_MAX_COOKIE];
+  uint32_t nmember, appid;
+  uint64_t members[RAFT_MAX_MEMBER];
+  struct raft_cluster cl;
+  int sts;
+  
+  bcookie = 0;
+  bmembers = 0;
+  clid = 0;
+  memset( cookie, 0, sizeof(cookie) );
+  nmember = 0;
+  bappid = 0;
+  appid = 0;
+  bdistribute = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "clid" ) == 0 ) {
+      clid = strtoull( argval, &term, 16 );
+      if( *term ) usage( "Failed to parse CLID" );
+    } else if( strcmp( argname, "cookie" ) == 0 ) {
+      strncpy( cookie, argval, RAFT_MAX_COOKIE - 1 );
+      bcookie = 1;
+    } else if( strcmp( argname, "member" ) == 0 ) {
+      if( nmember >= RAFT_MAX_MEMBER ) usage( "Max members" );
+      members[nmember] = strtoull( argval, &term, 16 );
+      if( *term ) {
+	members[nmember] = hostreg_hostid_by_name( argval );
+	if( !members[nmember] ) usage( "Failed to parse hostid or lookup hostname \"%s\"", argval );
+      }
+      nmember++;
+      bmembers = 1;
+    } else if( strcmp( argname, "appid" ) == 0 ) {
+      appid = strtol( argval, NULL, 10 );
+      bappid = 1;
+    } else if( strcmp( argname, "distribute" ) == 0 ) {
+      bdistribute = 1;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !clid ) usage( "Need CLID" );
+
+  if( bdistribute ) {
+    sts = raft_cluster_by_clid( clid, &cl );
+    if( sts ) usage( "Failed to lookup cluster %"PRIx64"", clid );
+    
+    bcookie = 1;
+    memcpy( cookie, cl.cookie, RAFT_MAX_COOKIE );
+    bmembers = 1;
+    nmember = 0;
+    for( i = 0; i < cl.nmember; i++ ) {
+      members[i] = cl.member[i].hostid;
+      nmember++;
+    }
+    members[nmember] = hostreg_localid();
+    nmember++;
+    
+    bappid = 1;
+    appid = cl.appid;
+  }
+  
+  xdr_encode_uint64( xdr, clid );
+  xdr_encode_boolean( xdr, bcookie );
+  if( bcookie ) xdr_encode_fixed( xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
+  xdr_encode_boolean( xdr, bmembers );
+  if( bmembers ) {
+    xdr_encode_uint32( xdr, nmember );
+    for( i = 0; i < nmember; i++ ) xdr_encode_uint64( xdr, members[i] );
+  }
+  xdr_encode_boolean( xdr, bappid );
+  if( bappid ) xdr_encode_uint32( xdr, appid );
+
+}
+
 
 static void fvm_list_results( struct xdr_s *xdr ) {
-  int sts, b;
-  uint32_t id, flags;
-  uint64_t tickcount, inlog_id, outlog_id, runtime;
+  int sts, b, i;
   char name[64];
+  uint32_t progid, versid, datasize, textsize, nprocs, address, flags;
+  uint64_t siginfo, timestamp, nsteps, rcount;
+  int vartype, isvar, nargs, j;
+  char timestr[64];
   
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
   while( b ) {
-    sts = xdr_decode_uint32( xdr, &id );
-    if( !sts ) sts = xdr_decode_uint32( xdr, &flags );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &tickcount );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &runtime );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &inlog_id );
-    if( !sts ) sts = xdr_decode_uint64( xdr, &outlog_id );
-    if( !sts ) sts = xdr_decode_string( xdr, name, sizeof(name) );
-    
-    if( sts ) usage( "XDR error" );
-    printf( "name=%s id=%u Flags=%s%s (%x) ticks=%"PRIu64" runtime=%"PRIu64"ms inlog=%"PRIx64" outlog=%" PRIx64 "\n",
-	    name,
-	    id,
-	    flags & FVM_FLAG_RUNNING ? "Running" : "",
-	    flags & FVM_FLAG_DONE ? "Done" : "",
-	    flags,
-	    tickcount, runtime,
-	    inlog_id,
-	    outlog_id );
-    
-    sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) usage( "XDR error" );
-  }
-}
-
-static void fvm_pause_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  int stop;
-  uint32_t id;
-  
-  stop = 0;
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "id" ) == 0 ) {
-      if( !argval ) usage( "Need ID" );
-      id = strtoul( argval, NULL, 10 );
-    } else if( strcmp( argname, "cont" ) == 0 ) {
-      stop = 0;
-    } else if( strcmp( argname, "stop" ) == 0 ) {
-      stop = 1;
-    } else if( strcmp( argname, "reset" ) == 0 ) {
-      stop = 2;
-    } else usage( "Unknown arg \"%s\"", argname );
-    i++;
-  }
-
-  xdr_encode_uint32( xdr, id );
-  xdr_encode_boolean( xdr, stop );
-}
-
-static void fvm_pause_results( struct xdr_s *xdr ) {
-}
-
-static void cmdprog_event_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  uint32_t category, eventid;
-  uint8_t parm[1024];
-  int parmlen, j;
-  char tmp[4];
-  
-  category = 0;
-  eventid = 0;
-  parmlen = 0;
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "category" ) == 0 ) {
-      if( !argval ) usage( "Need category" );
-      category = strtoul( argval, NULL, 10 );
-    } else if( strcmp( argname, "eventid" ) == 0 ) {
-      if( !argval ) usage( "Need eventid" );
-      eventid = strtoul( argval, NULL, 10 );
-    } else if( strcmp( argname, "parm" ) == 0 ) {
-	parmlen = strlen( argval ) / 2;
-	memset( tmp, 0, 4 );
-	for( j = 0; j < parmlen; j++ ) {
-	    tmp[0] = argval[2*j];
-	    tmp[1] = argval[2*j + 1];
-	    parm[j] = (uint8_t)strtoul( tmp, NULL, 16 );
-	}
-    } else usage( "Unknown arg \"%s\"", argname );
-    i++;
-  }
-
-  xdr_encode_uint32( xdr, category );
-  xdr_encode_uint32( xdr, eventid );
-  xdr_encode_opaque( xdr, parm, parmlen );
-}
-
-static void fvm_msg_results( struct xdr_s *xdr ) {
-}
-
-static void fvm_msg_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  uint32_t id, msgid;
-  char *bufp = "";
-  int buflen = 1;
-  
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "id" ) == 0 ) {
-      if( !argval ) usage( "Need id" );
-      id = strtoul( argval, NULL, 10 );
-    } else if( strcmp( argname, "msgid" ) == 0 ) {
-      if( !argval ) usage( "Need msgid" );
-      msgid = strtoul( argval, NULL, 10 );
-    } else if( strcmp( argname, "msg" ) == 0 ) {
-      if( !argval ) usage( "Need msg" );
-      bufp = argval;
-      buflen = strlen( argval ) + 1;
-    } else usage( "Unknown arg \"%s\"", argname );
-    i++;
-  }
-
-  xdr_encode_uint32( xdr, id );
-  xdr_encode_uint32( xdr, msgid );
-  xdr_encode_opaque( xdr, (uint8_t *)bufp, buflen );
-}
-
-static void fvm_shmemread_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    char argname[64], *argval;
-    uint32_t id, len, offset;
-
-    len = 0;
-    offset = 0;
-    while( i < argc ) {
-	argval_split( argv[i], argname, &argval );
-	if( strcmp( argname, "id" ) == 0 ) {
-	    id = strtoul( argval, NULL, 10 );
-	} else if( strcmp( argname, "len" ) == 0 ) {
-	    len = strtoul( argval, NULL, 10 );
-	} else if( strcmp( argname, "offset" ) == 0 ) {
-	    offset = strtoul( argval, NULL, 10 );	    
-	} else usage( NULL );
-	i++;
-    }
-    xdr_encode_uint32( xdr, id );
-    xdr_encode_uint32( xdr, len );
-    xdr_encode_uint32( xdr, offset );
-}
-
-static void fvm_shmemread_results( struct xdr_s *xdr ) {
-    int sts, len, i, b;
-    char shmem[1024];
-
-    sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) usage( "xdr error" );
-    if( b ) {
-	len = sizeof(shmem);
-	sts = xdr_decode_opaque( xdr, (uint8_t *)shmem, &len );
-	if( sts ) usage( "xdr error" );
-	for( i = 0; i < len; i++ ) {
-	    printf( "%02x", (uint32_t)((uint8_t)shmem[i]) );
-	}
-	printf( "\n" );
-    } else {
-	printf( "Failed to read\n" );
-    }
-
-}
-
-static void fvm_shmemwrite_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    char argname[64], *argval;
-    uint32_t id;
-    char shmem[1024];
-    int len, off = 0, offset = 0, interruptp = 0;
-    char tmp[4];
-    
-    while( i < argc ) {
-	argval_split( argv[i], argname, &argval );
-	if( strcmp( argname, "id" ) == 0 ) {
-	    id = strtoul( argval, NULL, 10 );
-	} else if( strcmp( argname, "offset" ) == 0 ) {
-	    offset = strtoul( argval, NULL, 10 );
-	} else if( strcmp( argname, "interrupt" ) == 0 ) {
-	    interruptp = 1;
-	} else if( strcmp( argname, "int" ) == 0 ) {
-	    uint16_t u16 = strtoul( argval, NULL, 10 );
-	    memcpy( &shmem[off], &u16, 2 );
-	    off += 2;
-	} else if( strcmp( argname, "str" ) == 0 ) {
-	    len = strlen( argval );	    
-	    memcpy( &shmem[off], argval, len + 1 );
-	    off += len + 1 + ((len + 1) % 2);
-	} else if( strcmp( argname, "buf" ) == 0 ) {
-	    memset( tmp, 0, sizeof(tmp) );
-	    len = strlen( argval ) / 2;
-	    for( i = 0; i < len; i++ ) {
-		memcpy( tmp, &argval[2*i], 2 );
-		shmem[off] = strtoul( tmp, NULL, 16 );
-		off++;
-	    }
-	} else usage( NULL );
-	i++;
-    }
-    
-    xdr_encode_uint32( xdr, id );
-    xdr_encode_uint32( xdr, offset );
-    xdr_encode_opaque( xdr, (uint8_t *)shmem, off );
-    xdr_encode_boolean( xdr, interruptp );
-}
-
-static void fvm_shmemwrite_results( struct xdr_s *xdr ) {
-    int sts, b;
-    sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) usage( "xdr error" );
-    printf( "%s\n", b ? "Success" : "Failure" );
-}
-
-static struct {
-  char *results_path;
-} dirty_read_prv;
-
-static void fvm_read_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    char argname[64], *argval;
-    uint32_t id;
-    
-    while( i < argc ) {
-	argval_split( argv[i], argname, &argval );
-	if( strcmp( argname, "id" ) == 0 ) {
-	    id = strtoul( argval, NULL, 10 );
-	} else if( strcmp( argname, "path" ) == 0 ) {
-  	    dirty_read_prv.results_path = argval;
-	} else usage( NULL );
-	i++;
-    }
-    
-    xdr_encode_uint32( xdr, id );
-}
-
-static void fvm_read_dirty_results( struct xdr_s *xdr ) {
-  int b, lenp, sts, i;
-  char *bufp;
-  uint32_t offset;
-  int save = 0;
-  struct mmf_s mmf;
-  int file_offset = 0;
-  
-  if( dirty_read_prv.results_path ) save = 1;
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  if( !b ) usage( "Invalid ID" );
-
-  if( save ) {
-    sts = mmf_open( dirty_read_prv.results_path, &mmf );
-    if( sts ) usage( "Failed to open results file" );
-    mmf_truncate( &mmf, 0 );
-  }
-  
-  sts = xdr_decode_boolean( xdr, &b );
-  if( sts ) usage( "xdr error" );
-  while( b ) {
-    sts = xdr_decode_uint32( xdr, &offset );
-    if( sts ) usage( "xdr error" );
-    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
-    if( sts ) usage( "xdr error" );
-
-    if( save ) {
-      mmf_write( &mmf, (char *)&offset, sizeof(offset), file_offset );
-      file_offset += 4;
-      mmf_write( &mmf, (char *)&lenp, sizeof(lenp), file_offset );
-      file_offset += 4;
+    xdr_decode_string( xdr, name, sizeof(name) );
+    xdr_decode_uint32( xdr, &progid );
+    xdr_decode_uint32( xdr, &versid );
+    xdr_decode_uint32( xdr, &datasize );
+    xdr_decode_uint32( xdr, &textsize );
+    xdr_decode_uint64( xdr, &timestamp );
+    xdr_decode_uint32( xdr, &flags );
+    xdr_decode_uint32( xdr, &nprocs );
+    printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x (%s%s%s)\n",
+	    name, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ), flags,
+	    flags & FVM_MODULE_STATIC ? "Static " : "",
+	    flags & FVM_MODULE_NATIVE ? "Native " : "",
+	    flags & FVM_MODULE_DISABLED ? "Disabled " : "" );
+    for( i = 0; i < nprocs; i++ ) {
+      xdr_decode_string( xdr, name, sizeof(name) ); 
+      xdr_decode_uint32( xdr, &address );     
+      xdr_decode_uint64( xdr, &siginfo );
+      xdr_decode_uint64( xdr, &nsteps );
+      xdr_decode_uint64( xdr, &rcount );      
       
-      mmf_write( &mmf, bufp, lenp, file_offset );
-      file_offset += lenp;
-    } else {
-      printf( ";; 0x%04x: ", offset );
-      for( i = 0; i < lenp; i++ ) {
-	printf( "%02x", (uint32_t)(uint8_t)bufp[i] );
+      printf( "    [%d] %s(", i, name );
+      nargs = FVM_SIGINFO_NARGS(siginfo);
+      for( j = 0; j < nargs; j++ ) {
+	isvar = FVM_SIGINFO_ISVAR(siginfo,j);
+	vartype = FVM_SIGINFO_VARTYPE(siginfo,j);
+	printf( "%s%s%s", j ? ", " : "", isvar ? "var " : "",
+		vartype == 0 ? "Int" :
+		vartype == 1 ? "String" :
+		vartype == 2 ? "Opaque" : 
+		"Other" );
       }
-      printf( "\n" );
+      printf( ") RunCount=%"PRIu64" NSteps=%"PRIu64"\n", rcount, nsteps );
     }
+    printf( "\n" );
     
     sts = xdr_decode_boolean( xdr, &b );
-    if( sts ) usage( "xdr error" );
+    if( sts ) usage( "XDR error" );
   }
-
-  if( save ) mmf_close( &mmf );
 }
 
-static void fvm_write_dirty_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-    char argname[64], *argval;
-    uint32_t id = 0, off, len, sts, file_offset;
-    char *path = NULL;
-    char *buf;
-    struct mmf_s mmf;
-    
-    buf = malloc( 32*1024 );
-    
-    while( i < argc ) {
-	argval_split( argv[i], argname, &argval );
-	if( strcmp( argname, "id" ) == 0 ) {
-	    id = strtoul( argval, NULL, 10 );
-	} else if( strcmp( argname, "path" ) == 0 ) {
-  	    path = argval;
-	} else usage( NULL );
-	i++;
-    }
-
-    if( !path ) usage( "Must provide path" );
-    
-    xdr_encode_uint32( xdr, id );
-    file_offset = 0;
-    
-    sts = mmf_open2( path, &mmf, MMF_OPEN_EXISTING );
-    if( sts ) usage( "Failed to open" );
-    file_offset = 0;
-    while( file_offset < mmf.fsize ) {
-      xdr_encode_boolean( xdr, 1 );
-      
-      mmf_read( &mmf, (char *)&off, 4, file_offset );
-      file_offset += 4;
-      xdr_encode_uint32( xdr, off );
-      mmf_read( &mmf, (char *)&len, 4, file_offset );
-      file_offset += 4;
-      mmf_read( &mmf, buf, len, file_offset );
-      file_offset += len;
-      xdr_encode_opaque( xdr, (uint8_t *)buf, len );      
-    }
-    xdr_encode_boolean( xdr, 0 );
-    
-    mmf_close( &mmf );
-    free( buf );
-}
-
-static void fvm_write_dirty_results( struct xdr_s *xdr ) {
+static void fvm_load_results( struct xdr_s *xdr ) {
   int sts, b;
   sts = xdr_decode_boolean( xdr, &b );
-  
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );
 }
 
+static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *filename;
+  int sts;
+  int registerp;
+  struct mmf_s mmf;
+  uint32_t flags;
+  
+  filename = NULL;
+  registerp = 0;
+  flags = 0;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "filename" ) == 0 ) {
+      filename = argval;
+    } else if( strcmp( argname, "register" ) == 0 ) {
+      registerp = 1;
+    } else if( strcmp( argname, "reload" ) == 0 ) {
+      flags |= FVM_RELOAD;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !filename ) usage( "Need filename" );
+
+  sts = mmf_open2( filename, &mmf, MMF_OPEN_EXISTING );
+  if( sts ) usage( "Failed to open file" );
+
+  mmf_remap( &mmf, mmf.fsize );
+  xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
+  xdr_encode_uint32( xdr, flags );
+  xdr_encode_boolean( xdr, registerp );
+  mmf_close( &mmf );
+}
+
+static void fvm_unload_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static void fvm_unload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *modname;
+
+  modname = NULL;
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "name" ) == 0 ) {
+      modname = argval;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !modname ) usage( "Need module name" );
+
+  xdr_encode_string( xdr, modname );
+}
+
+static void fvm_run_results( struct xdr_s *xdr ) {
+  int sts, b;
+  char *bufp;
+  int lenp;
+  char str[2048];
+  int i32, nargs, i;
+  uint64_t siginfo;
+  struct xdr_s rxdr;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error decoding bool" );
+  if( !b ) usage( "FVM run failed" );
+
+  sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&bufp, &lenp );
+  if( sts ) usage( "XDR error decoding result buffer" );
+
+  xdr_init( &rxdr, (uint8_t *)bufp, lenp );
+  siginfo = glob.siginfo;
+  nargs = FVM_SIGINFO_NARGS(siginfo);
+  for( i = 0; i < nargs; i++ ) {
+    if( FVM_SIGINFO_ISVAR(siginfo,i) ) {
+      switch( FVM_SIGINFO_VARTYPE(siginfo,i) ) {
+      case FVM_VARTYPE_INT:
+	if( (i != (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,i+1) == FVM_VARTYPE_OPAQUE) ) {
+	} else {
+	  sts = xdr_decode_int32( &rxdr, &i32 );
+	  if( sts ) usage( "Xdr decode error result %d", i );
+	  printf( "%d (0x%x)\n", i32, i32 );
+	}
+	break;
+      case FVM_VARTYPE_STRING:
+	sts = xdr_decode_string( &rxdr, str, sizeof(str) );
+	if( sts ) usage( "Xdr decode error result %d", i );
+	printf( "%s\n", str );
+	break;
+      case FVM_VARTYPE_OPAQUE:
+	sts = xdr_decode_opaque_ref( &rxdr, (uint8_t **)&bufp, &lenp );
+	if( sts ) usage( "Xdr decode error result %d", i );
+	base64_encode( bufp, lenp, str );
+	printf( "[%u] %s\n", lenp, str );
+	break;
+      }
+    }
+  }
+}
+
+static void getprocinfo_getargs( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  xdr_encode_string( xdr, argv[0] );
+  xdr_encode_string( xdr, argv[1] );
+}
+
+static void getprocinfo_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint32_t u32;
+
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "xdr decode error" );
+  if( !b ) usage( "Failed to get proc info" );
+  
+  sts = xdr_decode_uint32( xdr, &u32 );
+  if( sts ) usage( "Xdr decode error" );
+  sts = xdr_decode_uint64( xdr, &glob.siginfo );
+  if( sts ) usage( "Xdr decode error" );
+}
+
+static void call_getprocinfo( char *modname, char *procname ) {
+  struct clt_info cinfo;
+  char *argv[2];
+  argv[0] = modname;
+  argv[1] = procname;
+  
+  memset( &cinfo, 0, sizeof(cinfo) );
+  cinfo.prog = FVM_RPC_PROG;
+  cinfo.vers = FVM_RPC_VERS;
+  cinfo.proc = 9;
+  cinfo.getargs = getprocinfo_getargs;
+  cinfo.results = getprocinfo_results;
+  cinfo.procname = "getprocinfo";
+  cinfo.procargs = NULL;
+  clt_call( &cinfo, 2, argv, 0 );
+}
+
+static void fvm_run_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char modname[FVM_MAX_NAME], procname[FVM_MAX_NAME];
+  int sts;
+  char *p, *q, *terminator;
+  struct xdr_s axdr;
+  int nargs, n, i32;
+  uint64_t siginfo;
+  
+  if( i >= argc ) usage( "Need modname/procname" );
+
+  p = strchr( argv[i], '/' );
+  if( !p ) usage( "Expect modname/procname" );
+
+  p = argv[i];
+  q = modname;
+  while( *p != '0' && *p != '/' ) {
+    *q = *p;
+    p++;
+    q++;
+  }
+  *q = '\0';
+  strncpy( procname, p + 1, FVM_MAX_NAME - 1 );
+  i++;
+  
+  call_getprocinfo( modname, procname );
+  siginfo = glob.siginfo;
+  
+  nargs = FVM_SIGINFO_NARGS(siginfo);
+  xdr_init( &axdr, malloc( 32*1024 ), 32*1024 );
+  for( n = 0; n < nargs; n++ ) {
+    if( !FVM_SIGINFO_ISVAR(siginfo,n) ) {
+      if( i >= argc ) {
+	char argstr[1024];
+	for( i = 0; i < nargs; i++ ) {
+	  if( !FVM_SIGINFO_ISVAR(siginfo,i) ) {
+	    switch( FVM_SIGINFO_VARTYPE(siginfo,i) ) {
+	    case FVM_VARTYPE_INT:
+	      sprintf( argstr + strlen(argstr), "int " );
+	      break;
+	    case FVM_VARTYPE_STRING:
+	      sprintf( argstr + strlen(argstr), "string " );	      
+	      break;
+	    case FVM_VARTYPE_OPAQUE:
+	      sprintf( argstr + strlen(argstr), "opaque " );	      
+	      break;
+	    }
+	  }
+	}
+	
+	usage( "Expected args: %s", argstr );
+      }
+      
+      switch( FVM_SIGINFO_VARTYPE(siginfo,n) ) {
+      case FVM_VARTYPE_INT:
+	/* int */
+	if( (n != (nargs - 1)) && (FVM_SIGINFO_VARTYPE(siginfo,n+1) == FVM_VARTYPE_OPAQUE) ) {
+	  /* next arg is opaque so do nothing here */
+	} else {
+	  i32 = strtol( argv[i], &terminator, 0 );
+	  if( *terminator ) usage( "Failed to parse int" );
+	  xdr_encode_int32( &axdr, i32 );
+	  i++;
+	}
+	break;
+      case FVM_VARTYPE_STRING:
+	/* string */
+	xdr_encode_string( &axdr, argv[i] );
+	i++;
+	break;
+      case FVM_VARTYPE_OPAQUE:
+	/* opaque */
+	{
+	  char *bufp;
+	  bufp = malloc( 32*1024 );
+	  sts = base64_decode( bufp, 32*1024, argv[i] );
+	  if( sts < 0 ) usage( "Failed to parse base64" );
+	  xdr_encode_opaque( &axdr, (uint8_t *)bufp, sts );
+	  free( bufp );
+	}
+	i++;
+	break;
+      }
+    }
+  }
+  
+  xdr_encode_string( xdr, modname );
+  xdr_encode_string( xdr, procname );
+  xdr_encode_opaque( xdr, (uint8_t *)axdr.buf, axdr.offset );
+  free( axdr.buf );
+}
+
+
+static void fvm_reload_results( struct xdr_s *xdr ) {
+  int sts, b;
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  printf( "%s\n", b ? "Success" : "Failure" );
+}
+
+static void fvm_reload_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char *modname;
+
+  if( i >= argc ) usage( "Need modname" );
+  modname = argv[i];
+  xdr_encode_string( xdr, modname );
+}
+
+static void dmb_invoke_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  uint32_t msgid, flags;
+  char *buf;
+  int len, sts;
+  uint64_t seq;
+  
+  msgid = 0;
+  flags = 0;
+  buf = NULL;
+  len = 0;
+  seq = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "msgid" ) == 0 ) {
+      msgid = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "flags" ) == 0 ) {
+      flags = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "seq" ) == 0 ) {
+      seq = strtoull( argval, NULL, 0 );      
+    } else if( strcmp( argname, "buf" ) == 0 ) {
+      buf = malloc( DMB_MAX_MSG );
+      len = DMB_MAX_MSG;
+      sts = base64_decode( buf, len, argval );
+      if( sts < 0 ) usage( "Base64 decode error" );
+      len = sts;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !msgid ) usage( "Need msgid" );
+
+  xdr_encode_uint64( xdr, hostreg_localid() );
+  xdr_encode_uint64( xdr, seq );  
+  xdr_encode_uint32( xdr, msgid );
+  xdr_encode_uint32( xdr, flags );
+  xdr_encode_opaque( xdr, (uint8_t *)buf, len );
+}
+
+static void dmb_publish_results( struct xdr_s *xdr ) {
+  int sts;
+  uint64_t seq;
+  
+  sts = xdr_decode_uint64( xdr, &seq );
+  if( sts ) usage( "XDR error" );
+  printf( "%"PRIu64"\n", seq );
+}
+
+static void dmb_publish_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  uint32_t msgid, flags;
+  char *buf;
+  int len, sts;
+
+  msgid = 0;
+  flags = 0;
+  buf = NULL;
+  len = 0;
+
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "msgid" ) == 0 ) {
+      msgid = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "flags" ) == 0 ) {
+      flags = strtoul( argval, NULL, 0 );
+    } else if( strcmp( argname, "buf" ) == 0 ) {
+      buf = malloc( DMB_MAX_MSG );
+      len = DMB_MAX_MSG;
+      sts = base64_decode( buf, len, argval );
+      if( sts < 0 ) usage( "Base64 decode error" );
+      len = sts;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !msgid ) usage( "Need msgid" );
+
+  xdr_encode_uint32( xdr, msgid );
+  xdr_encode_uint32( xdr, flags );
+  xdr_encode_opaque( xdr, (uint8_t *)buf, len );
+}
+
+static void dlm_list_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint64_t lockid, resid, hostid;
+  uint32_t state;
+  char tmpstr[64], hostnamestr[64];
+  
+  printf( "%-16s %-16s %-16s %-10s\n", "LockID", "HostID", "ResID", "State" );
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  while( b ) {
+    sts = xdr_decode_uint64( xdr, &lockid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &hostid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &resid );    
+    if( !sts ) sts = xdr_decode_uint32( xdr, &state );
+    if( sts ) usage( "XDR error" );
+
+    sprintf( tmpstr, "Other (%u)", state );
+    if( !hostreg_name_by_hostid( hostid, hostnamestr ) ) sprintf( hostnamestr, "%"PRIx64"", hostid );
+    
+    printf( "%-16"PRIx64" %-16s %-16"PRIx64" %-10s\n", lockid, hostnamestr, resid,
+	    state == DLM_EX ? "Exclusive" :
+	    state == DLM_SH ? "Shared" :
+	    state == DLM_BLOCKEX ? "BlockedEX" :
+	    state == DLM_BLOCKSH ? "BlockedSH" :	    
+	    tmpstr );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "XDR error" );
+  }
+}
+
+static void dlm_acquire_results( struct xdr_s *xdr ) {
+  int sts;
+  uint64_t lockid;
+  sts = xdr_decode_uint64( xdr, &lockid );
+  if( sts ) usage( "XDR error" );
+  printf( "%"PRIx64"\n", lockid );
+}
+
+static void dlm_acquire_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  uint64_t resid;
+  int shared;
+
+  resid = 0;
+  shared = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "resid" ) == 0 ) {
+      resid = strtoull( argval, NULL, 16 );
+    } else if( strcmp( argname, "shared" ) == 0 ) {
+      shared = 1;
+    } else if( strcmp( argname, "exclusive" ) == 0 ) {
+      shared = 0;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  xdr_encode_uint64( xdr, resid );
+  xdr_encode_boolean( xdr, shared );
+}
+
+static void dlm_release_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  uint64_t lockid;
+
+  lockid = 0;
+    
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "lockid" ) == 0 ) {
+      lockid = strtoull( argval, NULL, 16 );
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  xdr_encode_uint64( xdr, lockid );
+}
+
+static void fvm_data_results( struct xdr_s *xdr ) {
+  int sts, b, len, i;
+  char *buf;
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  if( b ) {
+    sts = xdr_decode_opaque_ref( xdr, (uint8_t **)&buf, &len );
+    if( sts ) usage( "XDR error" );
+    for( i = 0; i < len; i++ ) {
+      if( (i % 16) == 0 ) printf( "\n%04x ", i );
+      printf( "%02x ", (uint32_t)(uint8_t)buf[i] );
+    }
+  } else printf( "Failure\n" );
+}
+
+static void fvm_enable_results( struct xdr_s *xdr ) {
+  int sts, prev, success;
+
+  sts = xdr_decode_boolean( xdr, &success );
+  if( sts ) usage( "Xdr error" );
+  if( !success ) printf( "Failure\n" );
+  sts = xdr_decode_boolean( xdr, &prev );
+  if( sts ) usage( "Xdr error" );
+  printf( "Previous: %s\n", prev ? "Enabled" : "Disabled" );
+}
+
+static void fvm_enable_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;  
+  char *modname;
+  int enable;
+
+  modname = NULL;
+  enable = 0;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "modname" ) == 0 ) {
+      modname = argval;
+    } else if( strcmp( argname, "enable" ) == 0 ) {
+      enable = 1;
+    } else if( strcmp( argname, "disable" ) == 0 ) {
+      enable = 0;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+  if( !modname ) usage( "Need module name" );
+  
+  xdr_encode_string( xdr, modname );
+  xdr_encode_boolean( xdr, enable );
+}
+
+static void raft_applist_results( struct xdr_s *xdr ) {
+  int sts, b;
+  uint32_t appid;
+  char name[64];
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "Xdr error" );
+  while( b ) {
+    sts = xdr_decode_uint32( xdr, &appid );
+    if( sts ) usage( "Xdr error" );
+    sts = xdr_decode_string( xdr, name, sizeof(name) );
+    if( sts ) usage( "Xdr error" );
+    printf( "%-12u (0x%08x) %s\n", appid, appid, name );
+    
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "Xdr error" );
+  }
+}

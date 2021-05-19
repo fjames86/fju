@@ -27,6 +27,7 @@
 #endif
 
 #include <fju/rpc.h>
+#include <fju/mmf.h>
 
 #define RPC_MAX_BUF (1024*1024)
 #define RPC_MAX_CONN 32 
@@ -75,10 +76,16 @@ typedef enum {
 
 struct rpc_conn;
 typedef enum {
-    RPC_CONN_CLOSE = 0,
-    RPC_CONN_CONNECT = 1,
+    RPC_CONN_CLOSE = 0,  /* connection is closing */
+    RPC_CONN_CONNECT = 1, /* connect completed successfully */
+    RPC_CONN_DONE_SEND = 2, /* send operation completed, connetion reverted to recvlen (idle) */
 } rpc_conn_event_t;
 typedef void (*rpc_conn_cb_t)( rpc_conn_event_t event, struct rpc_conn *conn );
+
+typedef enum {
+    RPC_CONN_DIR_INCOMING = 0,
+    RPC_CONN_DIR_OUTGOING = 1,
+} rpc_conn_dir_t;
 
 struct rpc_conn {
 	struct rpc_conn *next;
@@ -101,6 +108,9 @@ struct rpc_conn {
 		/* callback on completion */
 	        rpc_conn_cb_t cb;
 		void *cxt;
+
+	  uint64_t rx;
+	  uint64_t tx;
 	} cdata;
 
 	struct rpc_inc inc;
@@ -109,6 +119,13 @@ struct rpc_conn {
 	uint8_t *buf;
 
 	uint64_t timestamp;
+
+  rpc_listen_t listype;
+  struct rpc_listen *listen;
+  struct sockaddr_storage addr;
+  int addrlen;
+
+  rpc_conn_dir_t dirtype;
 };
 
 typedef enum {
@@ -126,6 +143,9 @@ int rpc_send( struct rpc_conn *c, int count );
 struct rpc_conn *rpc_conn_acquire( void );
 void rpc_conn_release( struct rpc_conn *c );
 struct rpc_conn *rpc_conn_by_connid( uint64_t connid );
+
+/* find incoming connection by address */
+struct rpc_conn *rpc_conn_by_addr( rpc_listen_t type, char *addr, int addrlen );
 void rpc_conn_close( struct rpc_conn *c );
 
 /* dynamically loaded service entry point */
@@ -138,35 +158,24 @@ void rpcd_stop( void );
 int rpcdp( void );
 int rpcd_get_default_port( void );
 
-struct rpcd_subscriber;
-struct rpcd_subscriber {
-    struct rpcd_subscriber *next;
-
-    uint32_t *category;     /* 0-terminated list of event categories. NULL implies all categories */
-
-    /* callback and private data */
-    void (*cb)( struct rpcd_subscriber *sc, uint32_t category, uint32_t eventid, void *parm, int parmsize );
-    void *prv;
-};
-
-/*
- * Publish an event to all subscribers. 
- * parm must be a single contiguous buffer of parsize length. 
- * If pointers are required, they must be encoded as offsets within this buffer.
- * Actual layout of this structure is left unspecified. 
- */
-void rpcd_event_publish( uint32_t category, uint32_t eventid, void *parm, int parmsize );
-void rpcd_event_subscribe( struct rpcd_subscriber *sc );
-int rpcd_event_unsubscribe( struct rpcd_subscriber *subsc );
-
-#define RPCD_EVENT_CATEGORY 0x00001000  /* event category for rpcd itself */
-#define RPCD_EVENT_RPCCALL  0           /* received an rpc call */
 
 struct rpcd_active_conn {
     struct rpc_listen *listen;
     struct rpc_conn *conn;
 };
 int rpcd_active_conn( struct rpcd_active_conn *aconn );
+
+void rpcd_init( void );
+void rpc_service( int timeout );
+
+#ifdef WIN32
+HANDLE rpcd_win32event( void );
+#endif
+
+typedef void (*rpcd_aio_donecb)( struct mmf_s *mmf, char *buf, int len, void *prv );
+int rpcd_aio_read( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv );
+int rpcd_aio_write( struct mmf_s *mmf, char *buf, int len, uint64_t offset, rpcd_aio_donecb donecb, void *prv );
+
 
 #endif
 

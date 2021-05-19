@@ -23,8 +23,9 @@ LIBRARIES=
 BINDIR=bin
 LIBDIR=lib
 CFLAGS=-Iinclude -Wall -fPIC -g 
-LFLAGS += -lcrypto 
-LFLAGS += -ldl -laio # Linux only 
+LFLAGS += -lcrypto
+LFLAGS_LINUX != if [ `uname` = "Linux" ]; then echo "-ldl -laio"; fi
+LFLAGS += ${LFLAGS_LINUX}
 
 LIBFJU=${LIBDIR}/libfju.so
 

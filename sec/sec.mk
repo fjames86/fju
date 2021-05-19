@@ -5,7 +5,7 @@ ${LIBDIR}/libsec.a: sec/sec.c sec/sec-shamir.c include/fju/sec.h sec/sec-utils.c
 	${CC} -c sec/sec.c sec/sec-shamir.c sec/sec-utils.c ${CFLAGS} 
 	${AR} rcs $@ sec.o sec-shamir.o sec-utils.o 
 
-${BINDIR}/fjlic: sec/fjlic.c ${LIBDIR}/libsec.a hostreg freg ftab
+${BINDIR}/fjlic: sec/fjlic.c ${LIBDIR}/libsec.a ${LIBDIR}/libhostreg.a ${LIBDIR}/libfreg.a ${LIBDIR}/libftab.a ${LIBDIR}/libmmf.a 
 	${CC} -o $@ sec/fjlic.c ${CFLAGS} -L${LIBDIR} -lsec -lcrypto -lhostreg -lfreg -lftab -lmmf 
 
 LIBRARIES+=sec

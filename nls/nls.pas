@@ -171,7 +171,7 @@ Begin
 	
 	Syscall FregNext("/fju/nls/logs","",ename,etype,result);
 	i = 0;
-	While ename[0] Do Begin
+	While result && ename[0] Do Begin
 	    If etype = FregTypeString Then
 	    Begin
 		p = LogEntries[i];

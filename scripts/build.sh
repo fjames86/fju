@@ -2,16 +2,19 @@
 
 set -e
 
-remoteip=$1
-if [ ! $remoteip ]; then
-    remoteip=$(fju reg get /remotehost)
+if [ -e bin/fju ]; then
+    remoteip=$1
+    if [ ! $remoteip ]; then
+	remoteip=$(bin/fju reg get /remotehost)
+    fi
+
+    # backup registry in case something goes wrong! 
+    bin/fju reg dump > /opt/fju/freg-backup.txt
+
+    ## stop services and rebuild all
+    bin/fju rpc fjud.stop 
 fi
 
-# backup registry in case something goes wrong! 
-fju reg dump > /opt/fju/freg-backup.txt
-
-## stop services and rebuild all 
-sh scripts/fjud.sh stop 
 make clean all install
 
 ## stop remote service
@@ -23,8 +26,8 @@ ssh root@${remoteip} mkdir -p /opt/fju
 ssh root@${remoteip} mkdir -p /usr/local/bin
 ssh root@${remoteip} mkdir -p /usr/local/lib
 scp bin/fju bin/fjud root@${remoteip}:/usr/local/bin
-scp lib/libfju.so root@${remoteip}:/usr/local/lib
-scp bin/*.fvm root@${remoteip}:/root
+#scp lib/libfju.so root@${remoteip}:/usr/local/lib
+#scp bin/*.fvm root@${remoteip}:/root
 
 ## restart remote services
 sh scripts/fjud.sh start

@@ -12,8 +12,8 @@ Instead its aim is to facilitate the following:
 Implementation overview:
 Fvm is implemented as a stack machine. 64kb of virtual memory divided up into the following regions:
  - 0x0000-0x0fff : reserved (4kb)
- - 0x1000-0x3fff : data segment (global variables) (16kb)
- - 0x4000-0xbfff : text segment (read only data, i.e. executable code and constant data) (28kb)
+ - 0x1000-0x4fff : data segment (global variables) (16kb)
+ - 0x5000-0xbfff : text segment (read only data, i.e. executable code and constant data) (28kb)
  - 0xc000-0xffff : stack (16kb)
 
 Opcodes are variable length of 8 bit opcode followed by 0,2 or 4 bytes of payload.
@@ -21,13 +21,15 @@ Opcodes are variable length of 8 bit opcode followed by 0,2 or 4 bytes of payloa
 ## Compiler
 Generating fvm programs is done by writing a language similar to Pascal.
 It defines a module name, RPC program and version numbers (optional, only needed if implementing
-and RPC interface) and a list of exported procedures (max 32 exported procedures).
+an RPC interface) and a list of exported procedures (max 32 exported procedures).
 
 There is no limit on number of private procedures.
 Code sharing is done by static linking (i.e. Including another file).
 
 There is a hard coded set of system calls which are routines provided by the runtime.
 These provide the mechanism for fvm programs to call out to other fju apis.
+ - Syscalls can be dynamically registered to extend the hardcoded list. There is a maximum
+ of 64k syscall ids so these need to be carefully chosen to avoid clashes.
 
 The images generated should be fairly compact (a hello world program comes in at around 30 bytes, 90 bytes including header).
 So the 28kb limit on text space should be enough for reasonably large programs.
@@ -36,7 +38,7 @@ So the 28kb limit on text space should be enough for reasonably large programs.
 There are restrictions on exported procedures.
  - Max number of parameters limited to FVM_MAX_PARAM (19). This is because the procedure signature
  is encoded into a uint64 (3 bits per parameter, 5 bits of length, 2 bits spare).
- - This information is required so that the runtime can correctly encoded/decode args/results
+ - This information is required so that the runtime can correctly encode/decode args/results
  - var type parameters are output parameters and must be set once the procedure returns. They can
  be set to either local or global variables e.g. a procedure like
  Procedure Hello(var h : string)
@@ -45,22 +47,23 @@ There are restrictions on exported procedures.
  End;
  Would be valid and indicate returning "Hello world".
  - opaque parameters MUST be preceded by an int paramter which is interpreted as a length parameter.
- var opaque parameters must have a var in and similarly for non-var opaques must have a non-var int.
+ var opaque parameters must have a var int and similarly for non-var opaques must have a non-var int.
  
 ## Cross calling
 There is a facility for cross-module calling (so called x-calls). The runtime automatically marshalls args across the
 module boundary.
 
 { define the procedire as normal, except prefix the procedure name with modulename/ like so:  }
-Declare Procedure Modulename/Procedurename(params...);
+Declare Procedure Modulename/Procedurename(x : int, var y : string);
 
 { call it like any other procedure }
-Call Modulename/procedurename(args...);
+Call Modulename/procedurename(123,mystringvar);
 
 Works the same as any other procedure call with the following exceptions:
  - var parameters are output only.
  - string/opaque output parameters are allocated into temporary space on the stack.
- This means they must be copied away immediately.
+ This means they must be copied away immediately and will be destroyed by any subsequent
+ call/syscall or procedure return.
 
 
 

@@ -31,34 +31,32 @@ LIBFJU=${LIBDIR}/libfju.so
 
 .PHONY: all strip clean tar install uninstall strip ${PROJECTS} installer 
 
-all: ${PROJECTS} ${LIBFJU} ${BINDIR}/fju ${BINDIR}/fjud 
+all: ${PROJECTS} ${BINDIR}/fju ${BINDIR}/fjud 
 	rm -f *.o
 
 clean:
 	rm -f ${BINDIR}/* ${LIBDIR}/* *.o fvm/test/*.fvm ${FVMMODULES}
 
-tar:
+tar: all ${LIBFJU}
 	tar -czvf fju.tar.gz scripts/* ${BINDIR}/* ${LIBFJU}
 
-strip:
+strip: all ${LIBFJU}
 	strip -s ${LIBFJU} ${BINDIR}/fju ${BINDIR}/fjud ${BINDIR}/fjlic 
 
 .for proj in ${PROJECTS}
 .include "${proj}/${proj}.mk"
 .endfor
 
-install: all #strip
+install: all strip
 	mkdir -p /opt/fju
 	sh scripts/fjud.sh stop 
 	cp bin/fju bin/fjud /usr/local/bin
-	cp ${LIBFJU} /usr/local/lib
 	mkdir -p /opt/fju/fvm
 	cp ${BINDIR}/*.fvm /opt/fju/fvm
 	for fname in $$(find /opt/fju/fvm -name \*.fvm); do sh scripts/regfvm.sh -p $$fname; done 
 
 uninstall:
 	cd /usr/local/bin && rm fju fjud 
-	cd /usr/local/lib && rm libfju.so
 
 FJU_DEPS=
 FJU_LIBS=
@@ -96,12 +94,11 @@ fjud_files += fvm/test/test-aio.c
 ${BINDIR}/fjud: ${FJU_DEPS} ${fjud_files}
 	${CC} -o $@ ${CFLAGS} ${fjud_files} -L${LIBDIR} ${FJU_LIBS} ${LFLAGS}
 
-installer: ${BINDIR}/fju ${BINDIR}/fjud ${LIBFJU}
+installer: ${BINDIR}/fju ${BINDIR}/fjud 
 	mkdir -p opt/fju/bin
 	mkdir -p opt/fju/lib
 	mkdir -p opt/fju/fvm 
 	cp ${BINDIR}/fju ${BINDIR}/fjud opt/fju/bin
-	cp ${LIBFJU} opt/fju/lib
 	cp ${BINDIR}/*.fvm opt/fju/fvm
 	cp scripts/freg-defaults.reg opt/fju/freg-defaults.reg 
 	tar czvf fju.tar.gz opt

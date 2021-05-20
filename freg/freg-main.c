@@ -50,6 +50,7 @@ static void usage( char *fmt, ... ) {
 	     "               set path|id [name=NAME] [flags=FLAGS]\n" 
 	     "               rem path\n"
 	     "               dump [path]\n"
+	     "               merge [path]\n" 
 	     "               populate [count]\n"
 	     "               reset\n"
 	     "               prop\n"

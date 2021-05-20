@@ -16,7 +16,7 @@
 
 static struct mmf_s gmmf;
 static struct fvm_module mod;
-static char gbuf[256];
+static char gbuf[4096*2];
 
 static int testaio_init( struct xdr_s *args, struct xdr_s *res ) {
   int sts;
@@ -31,8 +31,11 @@ static void read_donecb( struct mmf_s *mmf, char *buf, int nbytes, void *prv ) {
 
 static int testaio_read( struct xdr_s *args, struct xdr_s *res ) {
   int sts;
+  char *gbufp;
   
-  sts = rpcd_aio_read( &gmmf, gbuf, sizeof(gbuf), 0, read_donecb, NULL );
+  gbufp = gbuf;
+  if( (uint64_t)gbufp % 4096 ) gbufp += 4096 - ((uint64_t)gbufp % 4096);
+  sts = rpcd_aio_read( &gmmf, gbufp, 4096, 0, read_donecb, NULL );
   log_writef( NULL, LOG_LVL_INFO, "testaio_read sts=%d", sts );
 
   res->offset = 0;
@@ -47,12 +50,17 @@ static void write_donecb( struct mmf_s *mmf, char *buf, int nbytes, void *prv ) 
 static int testaio_write( struct xdr_s *args, struct xdr_s *res ) {
   int sts;
   int len;
+  char *gbufp;
 
-  len = sizeof(gbuf);
-  sts = xdr_decode_opaque( args, (uint8_t *)gbuf, &len );
+  gbufp = gbuf;
+  if( (uint64_t)gbufp % 4096 ) gbufp += 4096 - ((uint64_t)gbufp % 4096);
+
+  len = 4096;
+  sts = xdr_decode_opaque( args, (uint8_t *)gbufp, &len );
   if( sts ) return sts;
-  
-  sts = rpcd_aio_write( &gmmf, gbuf, len, 0, write_donecb, NULL );
+  if( len < 4096 ) memset( gbufp + len, 0, 4096 - len );
+
+  sts = rpcd_aio_write( &gmmf, gbufp, 4096, 0, write_donecb, NULL );
   log_writef( NULL, LOG_LVL_INFO, "testaio_write sts=%d len=%u now=%"PRIu64"", sts, len, rpc_now() );
 
   res->offset = 0;

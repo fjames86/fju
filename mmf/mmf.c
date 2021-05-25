@@ -229,7 +229,7 @@ int mmf_unlock( struct mmf_s *mmf ) {
 	return 0;
 }
 int mmf_sync( struct mmf_s *mmf, int sync ) {
-  if( mmf->file ) msync( mmf->file, mmf->msize, MS_SYNC );
+  if( mmf->file ) msync( mmf->file, mmf->msize, sync ? MS_SYNC : MS_ASYNC );
   
   if( sync ) {
     if( mmf->fd ) fsync( mmf->fd );

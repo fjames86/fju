@@ -11,7 +11,7 @@
 #include <fju/fdtab.h>
 
 /* set to use synchronous flushing, 0 uses async flushing */
-#define FREG_SYNC 1
+#define FREG_SYNC 0 //1
 
 struct entry_s {
   char name[FREG_MAX_NAME];
@@ -365,6 +365,10 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
 	    sts = fdtab_write( &freg->fdt, entry.id, buf, len, sizeof(e) );
 	    
 	    if( id ) *id = entry.id;
+
+	    /* schedule flushing */
+	    mmf_sync( &freg->fdt.ftab.mmf, FREG_SYNC );
+
 	    return 0;
 	  }
 	}

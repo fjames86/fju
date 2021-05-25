@@ -630,7 +630,6 @@ void fjui_call_regrem( uint64_t hostid, uint64_t parentid, uint64_t itemid ) {
   hcall.service = HRAUTH_SERVICE_PRIV;
 
   xdr_init( &args[0], bb, sizeof(bb) );
-  xdr_encode_uint64( &args[0], parentid );
   xdr_encode_uint64( &args[0], itemid );
   sts = hrauth_call_tcp_async( &hcall, args, 1 );
   if( sts ) {

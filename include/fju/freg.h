@@ -19,6 +19,7 @@ struct freg_entry {
 #define FREG_TYPE_STRING 0x0003    /* data contains string */
 #define FREG_TYPE_KEY    0x0004    /* data contains id of child node */
     uint32_t len;
+    uint64_t parentid;
 };
 
 struct freg_s {
@@ -39,7 +40,7 @@ int freg_get( struct freg_s *freg, uint64_t id, uint32_t *flags, char *buf, int 
 int freg_get_by_name( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, char *buf, int len, int *lenp );
 int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags, char *buf, int len, uint64_t *id );
 int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, char *buf, int len );
-int freg_rem( struct freg_s *freg, uint64_t parentid, uint64_t id );
+int freg_rem( struct freg_s *freg, uint64_t id );
 
 #define FREG_CREATE    0x0001        /* create all keys in the path */
 #define FREG_VALUEPATH 0x0002        /* final name represents a value not a key */

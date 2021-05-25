@@ -88,7 +88,7 @@ int hostreg_reset( int full ) {
     sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH, 0, &parentid );
     if( !sts ) {
       sts = freg_subkey( NULL, parentid, "hosts", 0, &id );
-      if( !sts ) freg_rem( NULL, parentid, id );
+      if( !sts ) freg_rem( NULL, id );
     }
    
     sts = freg_subkey( NULL, 0, HOSTREG_ROOTPATH "/local", FREG_CREATE, &parentid );
@@ -290,7 +290,7 @@ int hostreg_host_rem( uint64_t id ) {
   sts = freg_subkey( NULL, parentid, name, 0, &id );
   if( sts ) return sts;
 
-  sts = freg_rem( NULL, parentid, id );
+  sts = freg_rem( NULL, id );
   return sts;
 }
 

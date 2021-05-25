@@ -84,7 +84,7 @@ static struct clt_info clt_procs[] = {
     { FREG_RPC_PROG, FREG_RPC_VERS, 1, freg_list_args, freg_list_results, "freg.list", "parentid=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 2, freg_get_args, freg_get_results, "freg.get", "id=PARENTID" },
     { FREG_RPC_PROG, FREG_RPC_VERS, 3, freg_put_args, freg_put_results, "freg.put", "parentid=PARENTID name=NAME flags=FLAGS [u32=*] [u64=*] [str=*] [opaque-file=*]" },
-    { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "parentid=PARENTID id=ID" },
+    { FREG_RPC_PROG, FREG_RPC_VERS, 4, freg_rem_args, freg_rem_results, "freg.rem", "id=ID" },
     { FJUD_RPC_PROG, 1, 1, NULL, NULL, "fjud.stop", NULL },
     { FJUD_RPC_PROG, 1, 3, NULL, cmdprog_licinfo_results, "fjud.licinfo", "" },
     { FJUD_RPC_PROG, 1, 4, NULL, cmdprog_connlist_results, "fjud.connlist", "" },        
@@ -398,7 +398,7 @@ static void clt_call( struct clt_info *info, int argc, char **argv, int i ) {
     sts = rpc_call_udp( &pars, &args, &res );
   }
   tend = rpc_now();
-  if( sts ) usage( "RPC call failed: %s", rpc_errmsg( NULL ) );
+  if( sts ) usage( "RPC call %s failed: %s", info->procname, rpc_errmsg( NULL ) );
   if( glob.reporttime ) printf( ";; Time: %dms\n", (int)(tend - tstart) );
   if( info->results ) info->results( &res );
   free( argbuf );
@@ -770,18 +770,15 @@ static void freg_rem_results( struct xdr_s *xdr ) {
 
 static void freg_rem_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;
-  uint64_t id = 0, parentid = 0;
+  uint64_t id = 0;
     
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "id" ) == 0 ) {
       id = strtoull( argval, NULL, 16 );
-    } else if( strcmp( argname, "parentid" ) == 0 ) {
-      parentid = strtoull( argval, NULL, 16 );
     } else usage( "Unknown arg \"%s\"", argname );
     i++;
   }
-  xdr_encode_uint64( xdr, parentid );  
   xdr_encode_uint64( xdr, id );  
 }
 

@@ -279,7 +279,7 @@ int reg_main( int argc, char **argv ) {
 	  sts = freg_entry_by_name( glob.freg, 0, argv[i], &e, &parentid );
 	  if( sts ) printf( "Failed to find entry \"%s\"\n", argv[i] );
 	  if( !sts ) {
-	      sts = freg_rem( glob.freg, parentid, e.id );
+	      sts = freg_rem( glob.freg, e.id );
 	      if( sts ) printf( "Failed to remove value\n" );
 	  }
 	  i++;

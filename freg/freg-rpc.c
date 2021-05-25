@@ -187,15 +187,14 @@ static int freg_proc_put( struct rpc_inc *inc ) {
 
 static int freg_proc_rem( struct rpc_inc *inc ) {
   int sts, handle;
-  uint64_t parentid, id;
+  uint64_t id;
 
   if( !freg_authenticated( inc ) ) return rpc_init_reject_reply( inc, inc->msg.xid, RPC_AUTH_ERROR_TOOWEAK );
   
-  sts = xdr_decode_uint64( &inc->xdr, &parentid );
-  if( !sts ) sts = xdr_decode_uint64( &inc->xdr, &id );
+  sts = xdr_decode_uint64( &inc->xdr, &id );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  sts = freg_rem( NULL, parentid, id );
+  sts = freg_rem( NULL, id );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );

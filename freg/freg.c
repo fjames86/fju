@@ -17,6 +17,8 @@ struct entry_s {
   char name[FREG_MAX_NAME];
   uint32_t flags;
   uint32_t spare;
+  uint64_t parentid;
+  uint32_t spare2[4];
 };
 
 
@@ -104,7 +106,8 @@ int freg_entry_by_id( struct freg_s *freg, uint64_t id, struct freg_entry *entry
     strncpy( entry->name, e.name, FREG_MAX_NAME - 1 );
     entry->len = fdtab_size( &freg->fdt, id ) - sizeof(e);
     entry->flags = e.flags;
-
+    entry->parentid = e.parentid;
+    
     return 0;
 }
 
@@ -374,6 +377,7 @@ int freg_put( struct freg_s *freg, uint64_t parentid, char *name, uint32_t flags
     if( !freg_valid_name( tmpname ) ) return -1;
     strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
     e.flags = flags;
+    e.parentid = parentid;
     sts = fdtab_alloc( &freg->fdt, sizeof(e) + len, &tid );
     if( sts ) return sts;
     sts = fdtab_write( &freg->fdt, tid, (char *)&e, sizeof(e), 0 );
@@ -437,27 +441,30 @@ int freg_set( struct freg_s *freg, uint64_t id, char *name, uint32_t *flags, cha
     return 0;
 }
 
-int freg_rem( struct freg_s *freg, uint64_t parentid, uint64_t id ) {
+int freg_rem( struct freg_s *freg, uint64_t id ) {
     int sts, nentry, i, j, n;
     struct freg_entry parent, entry;
     uint64_t buf[32];
     struct entry_s e;
-    uint64_t tmpid;
+    uint64_t parentid, tmpid;
 
     if( !freg ) {
       if( !glob.ocount ) return -1;
       freg = &glob.freg;
     }
-    if( !parentid ) parentid = freg->rootid;
 
+    /* lookup entry */
+    sts = freg_entry_by_id( freg, id, &entry );
+    if( sts ) return sts;
+
+    /* lookup parent */
+    parentid = entry.parentid;
     sts = freg_entry_by_id( freg, parentid, &parent );
     if( sts ) return sts;
+    
     if( (parent.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
     nentry = parent.len / sizeof(uint64_t);
     if( !nentry ) return -1;
-    
-    sts = freg_entry_by_id( freg, id, &entry );
-    if( sts ) return sts;
 
     if( (entry.flags & FREG_TYPE_MASK) == FREG_TYPE_KEY ) {
       /* recursively delete all child items first */
@@ -466,7 +473,7 @@ int freg_rem( struct freg_s *freg, uint64_t parentid, uint64_t id ) {
 	
 	sts = fdtab_read( &freg->fdt, id, (char *)&tmpid, sizeof(tmpid), sizeof(e) );
 	if( sts < sizeof(tmpid) ) break;
-	freg_rem( freg, id, tmpid );
+	freg_rem( freg, tmpid );
 	
 	sts = freg_entry_by_id( freg, id, &entry );
 	if( sts < 0 ) break;
@@ -592,6 +599,7 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
 	memset( &e, 0, sizeof(e) );
 	strncpy( e.name, tmpname, FREG_MAX_NAME - 1 );
 	e.flags = FREG_TYPE_KEY;
+	e.parentid = parentid;
 	sts = fdtab_write( &freg->fdt, tmpid, (char *)&e, sizeof(e), 0 );
 
 	/* append id to parent */
@@ -639,7 +647,7 @@ int freg_ensure( struct freg_s *freg, uint64_t parentid, char *path, uint32_t fl
     sts = freg_put( freg, 0, path, flags, buf, len, id );
     if( sts ) return sts;
   } else if( (entry.flags & FREG_TYPE_MASK) != (flags & FREG_TYPE_MASK) ) {
-    sts = freg_rem( freg, pid, entry.id );
+    sts = freg_rem( freg, entry.id );
     if( sts ) return sts;
     sts = freg_put( freg, 0, path, flags, buf, len, id );
     if( sts ) return sts;

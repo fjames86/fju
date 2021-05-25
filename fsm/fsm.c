@@ -145,7 +145,7 @@ int fsm_delete( uint64_t fsmid ) {
     if( fsm->fsmid == fsmid ) {
       log_close( &fsm->log );      
       mmf_delete_file( fsm_logpath( fsmid ) );
-      freg_rem( NULL, glob.rootid, fsm->fregid );
+      freg_rem( NULL, fsm->fregid );
 
       /* delete snapshot files */
       sprintf( idstr, "%"PRIx64"-snapshot.dat.new", fsmid );

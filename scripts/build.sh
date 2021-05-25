@@ -12,7 +12,9 @@ if [ -e bin/fju ]; then
     bin/fju reg dump > /opt/fju/freg-backup.txt
 
     ## stop services and rebuild all
-    bin/fju rpc fjud.stop 
+    set +e 
+    bin/fju rpc fjud.stop
+    set -e
 fi
 
 make clean all install

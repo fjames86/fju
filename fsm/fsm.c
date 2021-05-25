@@ -78,6 +78,7 @@ int fsm_open( void ) {
 	if( !sts ) {
 	  i++;
 	  glob.nfsm++;
+	  fsm->log.flags |= LOG_NOLOCK;
 	}
       }
     }

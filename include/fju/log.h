@@ -21,6 +21,7 @@ struct log_s {
 #define LOG_VOLATILE     0x0000    /* writes are not guaranteed to flush until log_close or log_sync (unsafe but fastest) */
 #define LOG_SYNC         0x0001    /* all writes are synchronously written (safest but slow) */
 #define LOG_ASYNC        0x0002    /* all writes are asynchronously written (safeish but fast). LOG_SYNC takes priority over LOG_ASYNC */
+#define LOG_NOLOCK       0x0004    /* no locks taken when writing to log */
   /*
    * typical time per write : volatile==1u, async==10us, sync==500us.
    */
@@ -155,6 +156,7 @@ int _name( int lvl, char *fmt, ... ) {\
 #define LOG_TRUNC_START 0x0000
 #define LOG_TRUNC_END   0x0001
 int log_truncate( struct log_s *log, uint64_t id, uint32_t flags );
+uint32_t log_default_set_flags( uint32_t mask, uint32_t flags );
 
 
 

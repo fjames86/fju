@@ -58,6 +58,9 @@ void FvmCluster_register( void );
 void testaio_register( void );
 
 static void init_cb( void ) {
+
+  log_default_set_flags( 0xffffffff, LOG_NOLOCK|LOG_VOLATILE );
+  
   /* 
    * Register programs, auth providers and other initialization. 
    */
@@ -108,6 +111,7 @@ static void rpcd_logger_cb( int lvl, char *fmt, va_list args ) {
 #endif
   }
   logger.pid = mypid;
+  logger.flags = LOG_NOLOCK|LOG_VOLATILE;
   
   if( lvl == RPC_LOG_TRACE ) loglvl = LOG_LVL_TRACE;
   else if( lvl == RPC_LOG_INFO ) loglvl = LOG_LVL_INFO;

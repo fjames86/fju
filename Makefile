@@ -47,7 +47,7 @@ strip: all ${LIBFJU}
 .include "${proj}/${proj}.mk"
 .endfor
 
-install: all strip
+install: all #strip
 	mkdir -p /opt/fju
 	sh scripts/fjud.sh stop 
 	cp bin/fju bin/fjud /usr/local/bin

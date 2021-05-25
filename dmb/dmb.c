@@ -377,7 +377,8 @@ int dmb_open( void ) {
   strcpy( opts.cookie, "dmb" );
   sts = log_open( mmf_default_path( "dmb.log", NULL ), &opts, &glob.log );
   if( sts ) return sts;
-
+  glob.log.flags |= LOG_NOLOCK;
+  
   log_prop( &glob.log, &prop );
   glob.local.lastid = prop.last_id;
   

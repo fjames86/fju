@@ -49,10 +49,10 @@ static uint64_t raft_elec_timeout( void ) {
 }
 
 static void raft_lock( void ) {
-  mmf_lock( &glob.mmf );
+  //mmf_lock( &glob.mmf );
 }
 static void raft_unlock( void ) {
-  mmf_unlock( &glob.mmf );
+  //mmf_unlock( &glob.mmf );
 }
 
 int raft_open( void ) {

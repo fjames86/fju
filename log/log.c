@@ -65,6 +65,8 @@ struct _entry {
 
 static int log_lock( struct log_s *log ) {
   struct _header *hdr;
+
+  if( log->flags & LOG_NOLOCK ) return 0;
   
   int sts = mmf_lock( &log->mmf );
   if( sts ) printf( "log_lock: %d\n", sts );
@@ -77,7 +79,11 @@ static int log_lock( struct log_s *log ) {
   return sts;
 }
 static int log_unlock( struct log_s *log ) {
-  int sts = mmf_unlock( &log->mmf );
+  int sts;
+  
+  if( log->flags & LOG_NOLOCK ) return 0;
+  
+  sts = mmf_unlock( &log->mmf );
   if( sts ) printf( "log_unlock: %d\n", sts );
   return sts;
 }
@@ -748,4 +754,13 @@ int log_truncate( struct log_s *log, uint64_t id, uint32_t flags ) {
   log_unlock( log );
 
   return sts;
+}
+
+uint32_t log_default_set_flags( uint32_t mask, uint32_t flags ) {
+  struct log_s *logp;
+  uint32_t fflags;
+  logp = default_log();
+  fflags = logp->flags;
+  logp->flags = (logp->flags & ~mask) | (flags & mask);
+  return fflags;
 }

@@ -670,13 +670,13 @@ static void cmd_merge( char *filename ) {
       *((uint64_t *)buf) = strtoull( valstr, &term, 0 );
       if( *term ) usage( "Failed to parse u64 %s", valstr );
     } else if( strcasecmp( typestr, "str" ) == 0 ) {
-      if( !valstr ) usage( "Need valstr" );
+      if( !valstr ) valstr = "";
       
       flags = FREG_TYPE_STRING;
       buf = strdup( valstr );
       len = strlen( valstr ) + 1;
     } else if( strcasecmp( typestr, "opaque" ) == 0 ) {
-      if( !valstr ) usage( "Need valstr" );
+      if( !valstr ) valstr = "";
       
       flags = FREG_TYPE_OPAQUE;
       buf = malloc( 4096 );

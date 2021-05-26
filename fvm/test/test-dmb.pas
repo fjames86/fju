@@ -45,7 +45,8 @@ Begin
 	var timestr : string[64];
 	var valstr : string[128];
 	var nowh, nowl : int;
-
+	var vallen : int;
+	
 {
 	Syscall DmbMsgInfo(hostH,hostL,seqH,seqL);
 	Call LogWritef(LogLvlInfo,"DmbTest Host %x%x Msgid %x Len %u", hostH, hostL, msgid, len);
@@ -59,7 +60,8 @@ Begin
 	   Syscall TimeNow(nowh,nowl);
 	   Syscall Timestr(nowh,nowl,timestr);
 	   Syscall Sprintf(valstr,"DmbTest Received reply %s", timestr,0,0,0);
-	   Syscall FregWriteString("/dmbtest",valstr);
+	   Call Strlen(valstr,vallen);
+	   Syscall FregPut(0,0,0,"/dmbtest",FregTypeString,vallen,valstr,0,0);
 	End;
 
    End;
@@ -72,7 +74,7 @@ Begin
 	Call LogWritef(LogLvlInfo,"DmbTest Send test message",0,0,0,0);
 
 	{ Clear an freg entry }
-	Syscall FregWriteString("/dmbtest","");
+	Syscall FregPut(0,0,0,"/dmbtest",FregTypeString,1,"",0,0);	
 	
 	Syscall DmbPublish(MsgPing,DmbRemote,0,0,seqH, seqL);
    End;

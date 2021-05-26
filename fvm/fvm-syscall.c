@@ -71,7 +71,9 @@ static struct fvmlog *fvmlog_open( char *name ) {
       if( sts ) return NULL;
 
       loghandles[i].refcount = 1;
-      loghandles[i].handle = sec_rand_uint32();
+      do {
+	loghandles[i].handle = sec_rand_uint32();
+      } while( !loghandles[i].handle );
       strncpy( loghandles[i].name, name, sizeof(loghandles[i].name) - 1 );
       return &loghandles[i];
     }
@@ -91,7 +93,86 @@ static void fvmlog_close( int handle ) {
     }
   }
 }
-	
+
+
+
+struct fvmreg {
+  int handle;
+  int refcount;
+  char name[64];  
+  struct freg_s reg;
+};
+#define FVM_MAX_REGHANDLE 16 
+static struct fvmreg reghandles[FVM_MAX_REGHANDLE];
+
+static struct fvmreg *fvmreg_get( int handle ) {
+  int i;
+  
+  if( handle == 0 ) return NULL;
+  
+  for( i = 0; i < FVM_MAX_REGHANDLE; i++ ) {
+    if( reghandles[i].handle == handle ) return &reghandles[i];
+  }
+  return NULL;
+}
+
+static struct fvmreg *fvmreg_open( char *name ) {
+  int i;
+  for( i = 0; i < FVM_MAX_REGHANDLE; i++ ) {
+    if( strcmp( reghandles[i].name, name ) == 0 ) {
+      reghandles[i].refcount++;
+      return &reghandles[i];
+    }
+  }
+  for( i = 0; i < FVM_MAX_REGHANDLE; i++ ) {
+    if( reghandles[i].handle == 0 ) {
+      char path[256];
+      int sts;
+  
+      sprintf( path, "%s.dat", name );
+      sts = freg_open( mmf_default_path( path, NULL ), &reghandles[i].reg );
+      if( sts ) return NULL;
+
+      reghandles[i].refcount = 1;
+      do {
+	reghandles[i].handle = sec_rand_uint32();
+      } while( !reghandles[i].handle );
+      strncpy( reghandles[i].name, name, sizeof(reghandles[i].name) - 1 );
+      return &reghandles[i];
+    }
+  }
+  return NULL;
+}
+static void fvmreg_close( int handle ) {
+  int i;
+  for( i = 0; i < FVM_MAX_REGHANDLE; i++ ) {
+    if( reghandles[i].handle == handle ) {
+      reghandles[i].refcount--;
+      if( reghandles[i].refcount == 0 ) {
+	freg_close( &reghandles[i].reg );
+	memset( &reghandles[i], 0, sizeof(reghandles[i]) );
+	return;
+      }
+    }
+  }
+}
+static void fvmreg_entry_write( struct fvm_state *state, struct freg_entry *entry, uint32_t addr ) {
+  char *str;
+  
+  fvm_write_u32( state, addr, entry->id >> 32 );
+  fvm_write_u32( state, addr + 4, entry->id & 0xffffffff );
+  fvm_write_u32( state, addr + 8, entry->len );
+  fvm_write_u32( state, addr + 12, entry->flags );
+  fvm_write_u32( state, addr + 16, entry->parentid >> 32 );
+  fvm_write_u32( state, addr + 20, entry->parentid & 0xffffffff );
+  str = fvm_getptr( state, addr + 24, FVM_MAX_NAME, 1 );
+  if( str ) strncpy( str, entry->name, FVM_MAX_NAME );
+}
+
+
+
+
+
 
 #define FVM_MAX_FD 256
 struct fvm_fd {
@@ -1549,6 +1630,183 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       clid = raft_clid_by_appid( pars[0] );
       fvm_write_u32( state, pars[1], clid >> 32 );
       fvm_write_u32( state, pars[2], clid & 0xffffffff );
+    }
+    break;
+  case 54:
+    /* Freg2Open(name,var handle) */
+    {
+      uint32_t pars[2];
+      char *name;
+      struct fvmreg *fvmreg;
+      
+      read_pars( state, pars, 2 );
+      name = fvm_getstr( state, pars[0] );
+      fvmreg = fvmreg_open( name );
+      fvm_write_u32( state, pars[1], fvmreg ? fvmreg->handle : 0 );      
+    }
+    break;
+  case 55:
+    /* Freg2Close(handle) */
+    {
+      uint32_t pars[1];
+
+      read_pars( state, pars, 1 );
+      fvmreg_close( pars[0] );
+    }
+    break;
+  case 56:
+    /* Freg2EntryByName(handle,parentH,parentL,name,entryp,var result) */
+    {
+      uint32_t pars[6];
+      struct fvmreg *fvmreg;
+      char *name;
+      struct freg_entry entry;
+      int sts;
+      uint64_t parentid;
+      
+      read_pars( state, pars, 6 );
+      fvmreg = fvmreg_get( pars[0] );
+      parentid = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      name = fvm_getstr( state, pars[3] );
+      if( name ) sts = freg_entry_by_name( fvmreg ? &fvmreg->reg : NULL, parentid, name, &entry, NULL );
+      else sts = -1;
+      
+      if( sts ) memset( &entry, 0, sizeof(entry) );
+      fvmreg_entry_write( state, &entry, pars[4] );
+    }
+    break;
+  case 57:
+    /* Freg2Get(handle,idH,idL,len,buf,var flags, var lenp) */
+    {
+      uint32_t pars[7];
+      struct fvmreg *fvmreg;
+      int sts;
+      char *buf;
+      int lenp;
+      uint64_t id;
+      uint32_t flags;
+      
+      read_pars( state, pars, 7 );
+      fvmreg = fvmreg_get( pars[0] );
+      id = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      buf = fvm_getptr( state, pars[4], pars[3], 1 ); 
+      if( buf ) sts = freg_get( fvmreg ? &fvmreg->reg : NULL, id, &flags, buf, pars[3], &lenp );
+      else sts = -1;
+      fvm_write_u32( state, pars[5], sts ? 0 : flags );
+      fvm_write_u32( state, pars[6], sts ? 0 : lenp );
+    }
+    break;
+  case 58:
+    /* Freg2Put(handle,parentH,parentL,name,flags,len,buf,var idH, var idL) */
+    {
+      uint32_t pars[9];
+      struct fvmreg *fvmreg;
+      int sts;
+      uint64_t parentid, id;
+      char *buf;
+      char *name;
+      
+      read_pars( state, pars, 9 );
+      fvmreg = fvmreg_get( pars[0] );
+      parentid = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      name = fvm_getstr( state, pars[3] );
+      buf = fvm_getptr( state, pars[6], pars[5], 0 );
+      if( buf && name ) sts = freg_put( fvmreg ? &fvmreg->reg : NULL, parentid, name, pars[4], buf, pars[5], &id );
+      else sts = -1;
+      fvm_write_u32( state, pars[7], sts ? 0 : id >> 32 );
+      fvm_write_u32( state, pars[8], sts ? 0 : id & 0xffffffff );
+    }
+    break;
+  case 59:
+    /* Freg2Subkey(handle,parentH,parentL,name,var idH, var idL) */
+    {
+      uint32_t pars[6];
+      struct fvmreg *fvmreg;
+      int sts;
+      uint64_t parentid, id;
+      char *name;
+      
+      read_pars( state, pars, 6 );
+      fvmreg = fvmreg_get( pars[0] );
+      parentid = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      name = fvm_getstr( state, pars[3] );
+      if( name ) sts = freg_subkey( fvmreg ? &fvmreg->reg : NULL, parentid, name, FREG_CREATE, &id );
+      else sts = -1;
+      fvm_write_u32( state, pars[4], sts ? 0 : id >> 32 );
+      fvm_write_u32( state, pars[5], sts ? 0 : id & 0xffffffff );
+    }
+    break;
+  case 60:
+    /* Freg2Rem(handle,idH,idL,var result) */
+    {
+      uint32_t pars[4];
+      struct fvmreg *fvmreg;
+      uint64_t id;
+      int sts;
+      
+      read_pars( state, pars, 4 );
+      fvmreg = fvmreg_get( pars[0] );
+      id = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      sts = freg_rem( fvmreg ? &fvmreg->reg : NULL, id );
+      fvm_write_u32( state, pars[3], sts ? 0 : 1 );
+    }
+    break;
+  case 61:
+    /* Freg2EntryByID(handle,idH,idL,entryp) */
+    {
+      uint32_t pars[4];
+      struct fvmreg *fvmreg;
+      uint64_t id;
+      struct freg_entry entry;
+      int sts;
+      
+      read_pars( state, pars, 4 );
+      fvmreg = fvmreg_get( pars[0] );
+      id = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      
+      sts = freg_entry_by_id( fvmreg ? &fvmreg->reg : NULL, id, &entry );
+      if( sts ) memset( &entry, 0, sizeof(entry) );
+      fvmreg_entry_write( state, &entry, pars[3] );
+    }
+    break;
+  case 62:
+    /* Freg2GetByName(handle,parentH,parentL,name,flags,len,buf,var lenp) */
+    {
+      uint32_t pars[8];
+      struct fvmreg *fvmreg;
+      uint64_t parentid;
+      int lenp, sts;
+      char *buf;
+      char *name;
+      
+      read_pars( state, pars, 8 );
+      fvmreg = fvmreg_get( pars[0] );
+      parentid = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      name = fvm_getstr( state, pars[3] );
+      buf = fvm_getptr( state, pars[6], pars[5], 1 );
+      sts = freg_get_by_name( fvmreg ? &fvmreg->reg : NULL, parentid, name, pars[4], buf, buf ? pars[5] : 0, &lenp );
+      fvm_write_u32( state, pars[7], sts ? 0 : lenp );
+    }
+    break;
+  case 63:
+    /* Freg2Next(handle,parentH,parentL,idH,idL,entryp,var result) */
+    {
+      uint32_t pars[7];
+      struct fvmreg *fvmreg;
+      uint64_t parentid, id;
+      int sts;
+      struct freg_entry entry;
+      
+      read_pars( state, pars, 7 );
+      fvmreg = fvmreg_get( pars[0] );
+      parentid = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      id = ((uint64_t)pars[3] << 32) | (uint64_t)pars[4];
+      sts = freg_next( fvmreg ? &fvmreg->reg : NULL, parentid, id, &entry );
+      if( sts ) fvm_write_u32( state, pars[6], 0 );
+      else {
+	fvm_write_u32( state, pars[6], 1 );
+	fvmreg_entry_write( state, &entry, pars[5] );
+      }
     }
     break;
   case 0xffff:

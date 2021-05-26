@@ -168,26 +168,31 @@ Begin
 	var idhigh, idlow : int;
 	var p : ^LogEntry;
 	var logh : int;
+	var entry : FregEntry;
+	var parentH, parentL : int;
+	var idH, idL : int;
 	
-	Syscall FregNext("/fju/nls/logs","",ename,etype,result);
+	Syscall FregEntryByName(0,0,0,"/fju/nls/logs",entry,result);
+	parentH = entry.idH;
+	parentL = entry.idL;
+	idH = 0;
+	idL = 0;
 	i = 0;
-	While result && ename[0] Do Begin
-	    If etype = FregTypeString Then
-	    Begin
-		p = LogEntries[i];
-  	        Call Strcpy(p.Name, ename);
-
-		Syscall LogOpen(p.Name,logh);
-		Syscall LogLastId(logh, idhigh, idlow);
-		
-		
-		p.IDHigh = idhigh;
-		p.IDLow = idlow;
-		p.logh = logh;
-	        i = i + 1;
-		If i > MaxLog Then Break;
-            End;
-	    Syscall FregNext("/fju/nls/logs",ename,ename,etype,result);	
+	While result Do
+	Begin
+		Syscall FregNext(0,parentH,parentL,idH,idL,entry,result);
+		If result && ((entry.Flags & FregTypeMask) = FregTypeString) Then
+		Begin
+			p = LogEntries[i];
+			Call Strcpy(p.Name, entry.Name);
+			Syscall LogOpen(p.Name,logh);
+			Syscall LogLastId(logh,idhigh,idlow);
+			p.IDHigh = idhigh;
+			p.IDLow = idlow;
+			p.logh = logh;
+			i = i + 1;
+			If i > MaxLog Then Break;
+		End;
 	End;
 	nlogs = i;
 

@@ -26,9 +26,9 @@ Begin
    Procedure Init()
    Begin
 	var result : int;
-	Syscall FregReadInt(StateSeqPath, stateseq, result);
+	Syscall FregGetByName(0,0,0,StateSeqPath,FregTypeU32,4,&stateseq,0);
 	stateseq = stateseq + 1;
-	Syscall FregWriteInt(StateSeqPath,stateseq);
+	Syscall FregPut(0,0,0,StateSeqPath,FregTypeU32,4,&stateseq,0,0);
 
 	Syscall DmbPublish(StateSeqMsg,DmbRemote,4,&stateseq,0,0);
    End;

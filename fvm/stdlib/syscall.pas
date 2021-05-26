@@ -14,12 +14,7 @@ Declare Syscall LogNext(handle : int, previdHigh : u32, previdLow : u32, var idH
 Declare Syscall LogRead(handle : int, idHigh : u32, idLow : u32, len : u32, buf : opaque, var flags : int, var lenp : u32 ) : 3;
 Declare Syscall LogLastId(handle : int, var idHigh : int, var idLow : int) : 4;
 
-Const FregTypeOpaque = 0;
-Const FregTypeU32 = 1;
-Const FregTypeU64 = 2;
-Const FregTypeString = 3;
-Const FregTypeKey = 4;
-Const FregMaxName = 64;
+{
 Declare Syscall FregNext(path : string, name : string, entryname : string, var entryType : u32, var result : u32) : 5;
 Declare Syscall FregReadInt(path : string, var val : u32, var result : int) : 6;
 Declare Syscall FregReadString(path : string, val : string, len : int, var result : int) : 7;
@@ -30,6 +25,7 @@ Declare Syscall FregWriteOpaque(path : string, len : u32, val : opaque) : 11;
 Declare Syscall FregSubkey(path : string) : 12;
 Declare Syscall FregReadU64(path : string, var resultHigh : u32, var resultLow : u32) : 13;
 Declare Syscall FregWriteU64(path : string, valHigh : u32, valLow : u32) : 14;
+}
 Declare Syscall HostregLocalId(var idHigh : u32, var idLow : u32) : 15;
 Declare Syscall HostregNameById(idHigh : u32, idLow : u32, name : string) : 16;
 Declare Syscall HostregIdByName(name : string, var idHigh : u32, var idLow : u32 ) : 17;
@@ -120,3 +116,32 @@ Declare Syscall RaftAppRegister(appid : int, name : string, command : int, snaps
 Declare Syscall RaftAppUnregister(appid : int) : 52;
 Declare Syscall RaftClidByAppid(appid : int, var clidH : int, var clidL : int) : 53;
 
+Declare Syscall FregOpen(path : string, var handle : int) : 54;
+Declare Syscall FregClose(handle : int) : 55;
+
+Const FregTypeOpaque = 0;
+Const FregTypeU32 = 1;
+Const FregTypeU64 = 2;
+Const FregTypeString = 3;
+Const FregTypeKey = 4;
+Const FregTypeMask = 0xf;
+Const FregMaxName = 64;
+
+Record FregEntry =
+  IDH : int;
+  IDL : int;
+  Len : int;
+  Flags : int;
+  ParentIDH : int;
+  ParentIDL : int;
+  Name : string[FregMaxName];
+End;
+
+Declare Syscall FregEntryByName(handle : int, parentH : int, parentL : int, name : string, entry : int, var result : int) : 56;
+Declare Syscall FregGet(handle : int, idH : int, idL : int, len : int, buf : opaque, var flags : int, var lenp : int) : 57;
+Declare Syscall FregPut(handle : int, parentH : int, parentL : int, name : string, flags : int, len : int, buf : opaque, var idH : int, var idL : int) : 58;
+Declare Syscall FregSubkey(handle : int, parentH : int, parentL : int, name : string, var idH : int, var idL : int) : 59;
+Declare Syscall FregRem(handle : int, idH : int, idL : int, var result : int) : 60;
+Declare Syscall FregEntryByID(handle : int, idH : int, idL : int, entry : int) : 61;
+Declare Syscall FregGetByName(handle : int, parentH : int, parentL : int, name : string, flags : int, len : int, buf : opaque, var lenp : int) : 62;
+Declare Syscall FregNext(handle : int, parentH : int, parentL : int, idH : int, idL : int, entry : int, var result : int) : 63;

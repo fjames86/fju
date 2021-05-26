@@ -69,60 +69,6 @@ Begin
 
    End;
 
-   const var TestFregPath = "/test";
-   
-   Procedure TestFreg()
-   Begin
-	var val, result, entrytype, cont : int;
-	var path, name, entryname : string[64];
-
-	val = 0;
-	result = 0;
-	
-	Syscall FregSubkey(TestFregPath);
-
-	Syscall Sprintf(path,"%s/testu32", TestFregPath, 0, 0, 0);
-	Syscall FregReadInt(path,val,result);
-	if result Then Begin
-	   Syscall Sprintf(path,"FregReadInt Success %u", val,0,0,0);
-	   Syscall Puts(path);
-	End Else Begin
-	    Syscall Puts("FregReadInt Failure");
-	End;
-
-	Syscall Sprintf(path,"%s/testu32", TestFregPath, 0, 0, 0);
-	Syscall FregWriteInt(path,123);
-
-	Syscall Sprintf(path,"%s/teststr", TestFregPath,0,0,0);
-	Syscall FregWriteString(path,"testval");
-
-	Call Strcpy(name,"");
-	cont = 1;
-	Do Begin
-	
-	   Syscall FregNext(TestFregPath,name,entryname,entrytype,result);
-	   If result Then Begin
-	       Syscall Sprintf(path,"%s/%s type=%u (%s)",
-	       	       TestFregPath,
-		       entryname,
-		       entrytype,
-		       (entrytype = FregTypeU32) ? "U32" :
-		        ((entrytype = FregTypeString) ? "String" :
-		         ((entrytype = FregTypeOpaque) ? "Opaque" :
-		          ((entrytype = FregTypeKey) ? "Key" :
-		           "Other"))));
-	       Syscall Puts(path);
-	       Call Strcpy(name,entryname);
-	   End Else Begin
-	       cont = 0;
-	   End;
-		
-	End While cont;
-
-	Syscall FregNext("/fju/nls/logs","",entryname,entrytype,result);
-	Call Printf("/fju/nls/logs/%s", entryname,0,0,0);
-   End;
-
    Procedure TestXCallCB(var s : string)
    Begin
 	s = "Hello from xcall";
@@ -230,7 +176,6 @@ Begin
 	
 	Call TestStr();
         Call TestAdd();
-	Call TestFreg();
 	Call TestXCall();
 	Call TestLoop();
 	Call TestStrcpy();

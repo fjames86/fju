@@ -11,6 +11,7 @@
 #define DMB_CAT_HLC                0x00000400
 #define DMB_CAT_DLM                0x00000500
 #define DMB_CAT_STATESEQ           0x00000600
+#define DMB_CAT_RAFTMGT            0x00000700
 
 #endif
 

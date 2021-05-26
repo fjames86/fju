@@ -3004,21 +3004,43 @@ static void parsefile( FILE *f ) {
   
   /* parse data segment - i.e. global variables */
   while( acceptkeyword( f, "var" ) ) {
-    char varname[FVM_MAX_NAME];
     var_t vartype;
     uint32_t arraylen;
     struct var *global;
     struct record *rec;
+    struct label *nl, *nlp, *nlnext;
     
     /* var name : type; */
-    if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
-    strncpy( varname, glob.tok.val, FVM_MAX_NAME - 1 );
-    expecttok( f, TOK_NAME );
+    nl = NULL;
+    nlnext = NULL;
+    
+    do {
+      if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
+      nlp = malloc( sizeof(*nlp) );
+      memset( nlp, 0, sizeof(*nlp) );
+      strncpy( nlp->name, glob.tok.val, FVM_MAX_NAME - 1 );
+
+      /* append to end of list */
+      if( nlnext ) nlnext->next = nlp;
+      else nl = nlp;
+      nlnext = nlp;
+      
+      expecttok( f, TOK_NAME );
+    } while( accepttok( f, TOK_COMMA ) );
     expecttok( f, TOK_COLON );
     parsevartype( f, &vartype, &arraylen, &rec );
     expecttok( f, TOK_SEMICOLON );
 
-    global = addglobal( varname, vartype, arraylen );
+    /* add globals */
+    nlp = nl;
+    while( nlp ) {
+      nlnext = nlp->next;
+      
+      global = addglobal( nlp->name, vartype, arraylen );
+      free( nlp );
+      nlp = nlnext;
+    }
+    
     global->record = rec;
   }
 

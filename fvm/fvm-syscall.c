@@ -1809,6 +1809,54 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       }
     }
     break;
+  case 64:
+    /* RaftSnapshotSave(clidH,clidL,termH,termL,seqH,seqL,len,buf) */
+    {
+      uint32_t pars[8];
+      uint64_t clid, term, seq;
+      char *buf;
+      struct log_iov iov[1];
+      int sts;
+      
+      read_pars( state, pars, 8 );
+      clid = ((uint64_t)pars[0] << 32) | (uint64_t)pars[1];
+      term = ((uint64_t)pars[2] << 32) | (uint64_t)pars[3];
+      seq = ((uint64_t)pars[4] << 32) | (uint64_t)pars[5];
+      buf = fvm_getptr( state, pars[7], pars[6], 0 );
+
+      iov[0].buf = buf;
+      iov[0].len = buf ? 0 : pars[6];
+      sts = raft_snapshot_save( clid, term, seq, iov, 1 );
+    }
+    break;
+  case 65:
+    /* RaftClusterAdd(clidH,clidL,nmember,members) */
+    {
+      uint32_t pars[4];
+      uint64_t clid;
+      uint32_t h, l, addr;
+      int i, sts;
+      struct raft_cluster cl;
+      
+      read_pars( state, pars, 4 );
+      clid = ((uint64_t)pars[0] << 32) | (uint64_t)pars[1];
+
+      sts = raft_cluster_by_clid( clid, &cl );
+      if( sts ) {
+	memset( &cl, 0, sizeof(cl) );
+	cl.clid = clid;
+	cl.nmember = pars[2];
+	addr = pars[3];
+	for( i = 0; i < pars[2]; i++ ) {
+	  h = fvm_read_u32( state, addr );
+	  l = fvm_read_u32( state, addr + 4 );
+	  cl.member[i].hostid = ((uint64_t)h << 32) | (uint64_t)l;
+	  addr += 8;
+	}
+	raft_cluster_set( &cl );
+      }
+    }
+    break;
   case 0xffff:
     /* Cross module call */
     {

@@ -56,6 +56,7 @@ void LHT_register( void );
 void test_native_register( void );
 void FvmCluster_register( void );
 void testaio_register( void );
+void RaftMgt_register( void );
 
 static void init_cb( void ) {
 
@@ -75,6 +76,7 @@ static void init_cb( void ) {
   test_native_register();
   FvmCluster_register();
   testaio_register();
+  RaftMgt_register();
   
   /* 
    * These could be moved out to separate modules and dynamically loaded but for now 

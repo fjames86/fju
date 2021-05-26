@@ -146,4 +146,6 @@ Declare Syscall FregEntryByID(handle : int, idH : int, idL : int, entry : int) :
 Declare Syscall FregGetByName(handle : int, parentH : int, parentL : int, name : string, flags : int, len : int, buf : opaque, var lenp : int) : 62;
 Declare Syscall FregNext(handle : int, parentH : int, parentL : int, idH : int, idL : int, entry : int, var result : int) : 63;
 Declare Syscall RaftSnapshotSave(clidH : int, clidL : int, termH : int, term : int, seqH : int, seqL : int, len : int, buf : opaque) : 64;
-Declare Syscall RaftClusterAdd(clidH : int, clidL : int, nmember : int, members : opaque) : 65;
+Declare Syscall RaftClusterAddMember(clidH : int, clidL : int, hostH : int, hostL : int) : 65;
+Declare Syscall RaftClusterRemMember(clidH : int, clidL : int, hostH : int, hostL : int) : 66;
+

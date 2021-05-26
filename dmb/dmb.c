@@ -186,7 +186,7 @@ static void dmb_iter_cb( struct rpc_iterator *iter ) {
       /* send this entry to the host */
       if( !glob.host[i].sent ) {
 	if( !(hdr.flags & DMB_LOCAL) ) {
-	  dmb_log( LOG_LVL_INFO, "dmb call invoke hostid=%"PRIx64" entryid=%"PRIx64" msgid=%x len=%u", glob.host[i].hostid, entry.id, hdr.msgid, iov[1].len );
+	  dmb_log( LOG_LVL_INFO, "dmb call invoke hostid=%"PRIx64" entryid=%"PRIx64" msgid=%08x len=%u", glob.host[i].hostid, entry.id, hdr.msgid, iov[1].len );
 	  
 	  sts = dmb_call_invoke( glob.host[i].hostid, entry.seq, entry.id, hdr.msgid, hdr.flags, msgbuf, iov[1].len );
 	  if( !sts ) glob.host[i].sent = 1;
@@ -331,7 +331,7 @@ static int dmb_proc_publish( struct rpc_inc *inc ) {
   if( !sts ) sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, &handle );
 
-  dmb_log( LOG_LVL_INFO, "dmb_proc_publish msgid=%x flags=%x len=%u", msgid, flags, lenp );
+  dmb_log( LOG_LVL_INFO, "dmb_proc_publish msgid=%08x flags=%x len=%u", msgid, flags, lenp );
   sts = dmb_publish( msgid, flags, bufp, lenp, &seq );
   
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
@@ -518,7 +518,7 @@ int dmb_publish( uint32_t msgid, uint32_t flags, char *buf, int size, uint64_t *
     return -1;
   }
 
-  dmb_log( LOG_LVL_TRACE, "dmb_publish msgid=%x flags=%x len=%u entryid=%"PRIx64"", msgid, flags, size, entry.id );  
+  dmb_log( LOG_LVL_TRACE, "dmb_publish msgid=%08x flags=%x len=%u entryid=%"PRIx64"", msgid, flags, size, entry.id );  
   dmb_iter.timeout = 0;
 
   if( seq ) *seq = entry.seq;

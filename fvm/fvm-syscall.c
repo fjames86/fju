@@ -1830,33 +1830,74 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 65:
-    /* RaftClusterAdd(clidH,clidL,nmember,members) */
+    /* RaftClusterAddMember(clidH,clidL,hostH,hostL) */
     {
       uint32_t pars[4];
-      uint64_t clid;
-      uint32_t h, l, addr;
+      uint64_t clid, hostid;
       int i, sts;
       struct raft_cluster cl;
       
       read_pars( state, pars, 4 );
       clid = ((uint64_t)pars[0] << 32) | (uint64_t)pars[1];
+      hostid = ((uint64_t)pars[2] << 32) | (uint64_t)pars[3];
 
+      fvm_log( LOG_LVL_TRACE, "RaftClusterAddMember clid=%"PRIx64" host=%"PRIx64"", clid, hostid );
+      
       sts = raft_cluster_by_clid( clid, &cl );
       if( sts ) {
 	memset( &cl, 0, sizeof(cl) );
 	cl.clid = clid;
-	cl.nmember = pars[2];
-	addr = pars[3];
-	for( i = 0; i < pars[2]; i++ ) {
-	  h = fvm_read_u32( state, addr );
-	  l = fvm_read_u32( state, addr + 4 );
-	  cl.member[i].hostid = ((uint64_t)h << 32) | (uint64_t)l;
-	  addr += 8;
+	cl.member[0].hostid = hostreg_localid();
+	cl.nmember++;
+	if( hostid != hostreg_localid() ) {
+	  cl.member[1].hostid = hostid;
+	  cl.nmember++;
 	}
 	raft_cluster_set( &cl );
+      } else {
+	sts = 0;
+	for( i = 0; i < cl.nmember; i++ ) {
+	  if( cl.member[i].hostid == hostid ) {
+	    sts = 1;
+	    break;
+	  }
+	}
+	if( !sts ) {
+	  if( cl.nmember < RAFT_MAX_MEMBER ) {
+	    cl.member[cl.nmember].hostid = hostid;
+	    cl.nmember++;
+	    raft_cluster_set( &cl );
+	  }
+	}
       }
     }
     break;
+  case 66:
+    /* RaftClusterRemMember(clidH,clidL,hostH,hostL) */
+    {
+      uint32_t pars[4];
+      uint64_t clid, hostid;
+      int i, sts;
+      struct raft_cluster cl;
+      
+      read_pars( state, pars, 4 );
+      clid = ((uint64_t)pars[0] << 32) | (uint64_t)pars[1];
+      hostid = ((uint64_t)pars[2] << 32) | (uint64_t)pars[3];
+      
+      sts = raft_cluster_by_clid( clid, &cl );
+      if( !sts ) {
+	sts = 0;
+	for( i = 0; i < cl.nmember; i++ ) {
+	  if( cl.member[i].hostid == hostid ) {
+	    if( i != (cl.nmember - 1) )  cl.member[i] = cl.member[cl.nmember - 1];	    
+	    cl.nmember--;
+	    raft_cluster_set( &cl );
+	    break;
+	  }
+	}
+      }
+    }
+    break;    
   case 0xffff:
     /* Cross module call */
     {

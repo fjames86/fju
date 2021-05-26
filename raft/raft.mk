@@ -9,4 +9,8 @@ ${LIBDIR}/libraft.a: raft/raft.c include/fju/raft.h raft/raft-example.c
 ${BINDIR}/raft-mgt.fvm: ${BINDIR}/fju raft/raft-mgt.pas
 	${BINDIR}/fju fvmc -o $@ -I fvm/stdlib raft/raft-mgt.pas
 
+raft/raft-mgt.c: ${BINDIR}/raft-mgt.fvm ${BINDIR}/fju
+	${BINDIR}/fju fvmc -o raft/raft-mgt.c -C ${BINDIR}/raft-mgt.fvm
+
 LIBRARIES+=raft
+FVMMODULES+=raft/raft-mgt.c

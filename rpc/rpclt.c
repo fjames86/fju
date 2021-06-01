@@ -74,6 +74,8 @@ ARGPROC(dlm_release);
 RESULTPROC(fvm_data);
 ARGRESULTPROC(fvm_enable);
 RESULTPROC(raft_applist);
+RESULTPROC(raft_list);
+ARGRESULTPROC(raft_remove);
 
 static struct clt_info clt_procs[] = {
     { 0, 0, 0, rawmode_args, rawmode_results, "raw", "prog vers proc [u32=*] [u64=*] [str=*] [bool=*] [fixed=*]" },
@@ -92,6 +94,8 @@ static struct clt_info clt_procs[] = {
     { RAFT_RPC_PROG, 1, 5, raft_snapshot_args, raft_snapshot_results, "raft.snapshot", "clid=*" },
     { RAFT_RPC_PROG, 1, 6, raft_change_args, raft_change_results, "raft.change", "clid=* [cookie=*] [member=*]* [appid=*] [distribute]" },
     { RAFT_RPC_PROG, 1, 8, NULL, raft_applist_results, "raft.applist", NULL },
+    { RAFT_RPC_PROG, 1, 7, NULL, raft_list_results, "raft.list", NULL },
+    { RAFT_RPC_PROG, 1, 9, raft_remove_args, raft_remove_results, "raft.remove", "clid" },
     { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
@@ -1628,4 +1632,74 @@ static void raft_applist_results( struct xdr_s *xdr ) {
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "Xdr error" );
   }
+}
+
+static void raft_list_results( struct xdr_s *xdr ) {
+  int sts, b;
+  int j;
+  struct raft_cluster cl;
+  char hname[64], timestr[64];
+  
+  sts = xdr_decode_boolean( xdr, &b );
+  if( sts ) usage( "XDR error" );
+  while( b ) {
+    sts = xdr_decode_uint64( xdr, &cl.clid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &cl.leaderid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &cl.voteid );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &cl.term );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &cl.appliedseq );
+    if( !sts ) sts = xdr_decode_uint64( xdr, &cl.commitseq );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &cl.state );    
+    if( !sts ) sts = xdr_decode_uint32( xdr, &cl.appid );
+    if( !sts ) sts = xdr_decode_uint32( xdr, &cl.flags );    
+    if( !sts ) sts = xdr_decode_fixed( xdr, (uint8_t *)cl.cookie, RAFT_MAX_COOKIE );
+    if( !sts ) xdr_decode_uint32( xdr, &cl.nmember );
+    if( sts ) usage( "XDR Error" );
+    for( j = 0; j < cl.nmember; j++ ) {
+      sts = xdr_decode_uint64( xdr, &cl.member[j].hostid );
+      if( !sts ) xdr_decode_uint64( xdr, &cl.member[j].lastseen );
+      if( !sts ) xdr_decode_uint64( xdr, &cl.member[j].storedseq );
+      if( !sts ) xdr_decode_uint32( xdr, &cl.member[j].flags );
+      if( sts ) usage( "Xdr error" );
+    }
+
+    printf( "CLID=%"PRIx64" Leader=%s Term=%"PRIu64" Seq=%"PRIu64"/%"PRIu64" State=%s Cookie=%s\n",
+	    cl.clid,
+	    hostreg_name_by_hostid( cl.leaderid, hname ),
+	    cl.term,
+	    cl.appliedseq,
+	    cl.commitseq,
+	    cl.state == RAFT_STATE_LEADER ? "Leader" :
+	    cl.state == RAFT_STATE_CANDIDATE ? "Candidate" :
+	    "Follower", cl.cookie );
+    for( j = 0; j < cl.nmember; j++ ) {
+      printf( "    Member %s Seq=%"PRIu64" LastSeen=%s\n",
+	      hostreg_name_by_hostid( cl.member[j].hostid, hname ),
+	      cl.member[j].storedseq,
+	      sec_timestr( cl.member[j].lastseen, timestr ) );
+    }
+
+    sts = xdr_decode_boolean( xdr, &b );
+    if( sts ) usage( "XDR error" );
+  }
+}
+
+static void raft_remove_results( struct xdr_s *xdr ) {
+  int sts, success;
+  
+  sts = xdr_decode_boolean( xdr, &success );
+  if( sts ) usage( "Xdr error" );
+  printf( "%s\n", success ? "Success" : "Failure" );
+}
+
+static void raft_remove_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  uint64_t clid;
+  char *term;
+  
+  if( i >= argc ) usage( "Need clid" );
+
+  clid = strtoull( argv[i], &term, 16 );
+  if( *term ) usage( "faileud to parse clid" );
+  
+  xdr_encode_uint64( xdr, clid );
 }

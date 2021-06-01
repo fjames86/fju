@@ -1550,6 +1550,22 @@ static int raft_proc_applist( struct rpc_inc *inc ) {
 	return 0;
 }
 
+static int raft_proc_remove( struct rpc_inc *inc ) {
+  int handle, sts;
+  uint64_t clid;
+  
+  sts = xdr_decode_uint64( &inc->xdr, &clid );
+	if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
+
+	sts = raft_cluster_rem( clid );
+	
+	rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
+	xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
+	rpc_complete_accept_reply( inc, handle );
+  
+	return 0;
+}
+
 static struct rpc_proc raft_procs[] = {
   { 0, raft_proc_null },
   { 1, raft_proc_append },
@@ -1560,6 +1576,7 @@ static struct rpc_proc raft_procs[] = {
   { 6, raft_proc_change },
   { 7, raft_proc_list },
   { 8, raft_proc_applist },
+  { 9, raft_proc_remove },
   { 0, NULL }
 };
 

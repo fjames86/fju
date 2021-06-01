@@ -1533,7 +1533,7 @@ static void fvm_unregister_iterator( char *modname ) {
 
 static int fvm_init_module( char *modname ) {
   char path[256];
-  int sts, service_period, registerp;
+  int sts;
   struct freg_entry entry;
   struct fvm_module *m;
   
@@ -1562,28 +1562,6 @@ static int fvm_init_module( char *modname ) {
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "Failed to load module file %s", path );
     return -1;
-  }
-
-  strcpy( path, "" );
-  sts = freg_get_by_name( NULL, entry.id, "service", FREG_TYPE_STRING, path, sizeof(path), NULL );
-  if( sts && (fvm_procid_by_name( m, "service" ) >= 0) ) {
-    strcpy( path, "service" );
-    sts = 0;
-  }
-
-  service_period = 1000;
-  sts = freg_get_by_name( NULL, entry.id, "service-period", FREG_TYPE_UINT32, (char *)&service_period, 4, NULL );
-  if( sts ) service_period = 1000;
-  
-  if( path[0] ) {
-    fvm_register_iterator( m->name, fvm_procid_by_name( m, path ), service_period );
-  }
-  
-  registerp = (m->progid ? 1 : 0);
-  sts = freg_get_by_name( NULL, entry.id, "register", FREG_TYPE_UINT32, (char *)&registerp, sizeof(registerp), NULL );
-  if( registerp ) {
-    fvm_log( LOG_LVL_INFO, "Registering program %s", m->name );
-    fvm_register_program( m->name );
   }
 
   return 0;

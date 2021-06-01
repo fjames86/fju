@@ -22,7 +22,7 @@ static log_deflogger(dlm_log,"DLM")
 #define DLM_MAX_LOCK 512
 #define DLM_MAX_HOST RAFT_MAX_MEMBER
 #define DLM_HBTIMEOUT 5000
-#define DLM_MSGID_HEARTBEAT 0x00000201
+#define DLM_MSGID_HEARTBEAT (DMB_CAT_DLM + 1)
   
 struct dlm_lockcxt {
   uint64_t lockid;
@@ -123,7 +123,7 @@ static struct dlm_host *host_by_hostid( uint64_t hostid ) {
 
 
 static void dlm_iter_cb( struct rpc_iterator *iter );
-static RPC_ITERATOR(dlm_iter,1000,dlm_iter_cb);
+static RPC_ITERATOR(dlm_iter,5000,dlm_iter_cb);
 
 static void dlm_command( struct raft_app *app, struct raft_cluster *cl, uint64_t cmdseq, char *buf, int len );
 static void dlm_snapsave( struct raft_app *app, struct raft_cluster *cl, uint64_t term, uint64_t seq );

@@ -60,11 +60,15 @@ Begin
    Procedure Snapsave(clidH : int, clidL : int, termH : int, termL : int, seqH : int, seqL : int)
    Begin
 	{ TODO }
+
+	{ walk the entire tree, appending a command to the snapshot for each value found }
    End;
 
    Procedure Snapload(clidH : int, clidL : int, len : int, buf : opaque)
    Begin
 	{ TODO }
+
+	{ the snapshot consists of a list of entries, each of which is a standard command buffer }
    End;
    
    Procedure Init()

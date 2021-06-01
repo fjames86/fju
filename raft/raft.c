@@ -1645,16 +1645,6 @@ static void raft_set_iter_timeout( void ) {
   raft_iter.timeout = to;  
 }
 
-#if 0
-static struct raft_app raft_app =
-{
-   NULL,
-   RAFT_RPC_PROG,
-   raft_app_command,
-};
-#endif
-
-
 void raft_register( void ) {
   int i;
   
@@ -1671,7 +1661,6 @@ void raft_register( void ) {
 
   rpc_program_register( &raft_prog );
   rpc_iterator_register( &raft_iter );
-  //raft_app_register( &raft_app );
 }
 
 int raft_app_register( struct raft_app *app ) {
@@ -1919,124 +1908,6 @@ int raft_snapshot_load( uint64_t clid, char *buf, int len, struct raft_snapshot_
     
   return sinfo.len - sizeof(term);
 }
-
-
-
-/* --------------------------- raft app ----------------------- */
-
-/*
- * We register our own application to facilitate distributing raft cluster configuration changes
- * across clusters.
- */
-
-#if 0
-static void raft_app_command( struct raft_app *app, struct raft_cluster *cl, uint64_t seq, char *buf, int len ) {
-  struct xdr_s xdr;
-  int sts, i, bcookie, bmembers, bappid, breset;
-  uint64_t clid;
-  char cookie[RAFT_MAX_COOKIE];
-  uint32_t nmember, appid;
-  uint64_t member[RAFT_MAX_MEMBER];
-  struct raft_cluster *clp;
-  
-  xdr_init( &xdr, (uint8_t *)buf, len );
-  sts = xdr_decode_uint64( &xdr, &clid );
-  if( sts ) return;
-
-  sts = xdr_decode_boolean( &xdr, &bcookie );
-  if( sts ) return;
-  if( bcookie ) {
-    sts = xdr_decode_fixed( &xdr, (uint8_t *)cookie, RAFT_MAX_COOKIE );
-    if( sts ) return;
-  }
-
-  sts = xdr_decode_boolean( &xdr, &bmembers );
-  if( sts ) return;
-  if( bmembers ) {
-    sts = xdr_decode_uint32( &xdr, &nmember );
-    if( sts ) return;
-    if( nmember > RAFT_MAX_MEMBER ) return;
-    for( i = 0; i < nmember; i++ ) {
-      sts = xdr_decode_uint64( &xdr, &member[i] );
-      if( sts ) return;
-    }
-  }
-
-  sts = xdr_decode_boolean( &xdr, &bappid );
-  if( sts ) return;
-  if( bappid ) {
-    sts = xdr_decode_uint32( &xdr, &appid );
-    if( sts ) return;
-  }
-  sts = xdr_decode_boolean( &xdr, &breset );
-  if( sts ) return;
-  
-  raft_log( LOG_LVL_INFO, "raft change %"PRIx64" %s %s %s %s",
-	    clid,
-	    bcookie ? "cookie" : "", bmembers ? "members" : "",
-	    bappid ? "appid" : "", breset ? "reset" : "" );
-  
-  clp = cl_by_id( clid );
-  if( !clp ) {
-    struct raft_cluster clpp;
-    memset( &clpp, 0, sizeof(clpp) );
-    clpp.clid = clid;
-    if( bcookie ) memcpy( clpp.cookie, cookie, RAFT_MAX_COOKIE );
-    if( bmembers ) {
-      clpp.nmember = 0;
-      for( i = 0; i < nmember; i++ ) {
-	if( member[i] != hostreg_localid() ) {
-	  clpp.member[clpp.nmember].hostid = member[i];
-	  clpp.nmember++;
-	}
-      }
-    }
-    if( bappid ) clpp.appid = appid;
-    raft_cluster_set( &clpp );
-    return;
-  }
-
-  if( bcookie ) {
-    if( memcmp( clp->cookie, (uint8_t *)cookie, RAFT_MAX_COOKIE ) != 0 ) {
-      raft_log( LOG_LVL_INFO, "Raft cookie changing" );
-      memcpy( clp->cookie, cookie, RAFT_MAX_COOKIE );
-    }
-  }
-
-  if( bmembers ) {
-    clp->nmember = 0;
-    for( i = 0; i < nmember; i++ ) {
-      if( (member[i] != hostreg_localid()) ) {
-	raft_log( LOG_LVL_INFO, "Raft member changing %"PRIx64" -> %"PRIx64"", clp->member[clp->nmember].hostid, member[i] );
-	
-	clp->member[clp->nmember].hostid = member[i];
-	clp->nmember++;
-      }
-    }
-  }
-
-  if( bappid ) {
-    clp->appid = appid;
-  }
-
-  if( breset ) {
-    
-    clp->term = 1;
-    clp->commitseq = 0;
-    clp->appliedseq = 0;
-    clp->state = RAFT_STATE_FOLLOWER;
-    clp->leaderid = 0;
-    clp->voteid = 0;
-    
-    /* delete log entries */
-    fsm_command_truncate( clid, 0 );    
-  }
-  
-  raft_cluster_set( clp );
-  
-}
-#endif
-
 
 int raft_replay( uint64_t clid ) {
   int sts;

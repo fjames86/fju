@@ -3037,11 +3037,11 @@ static void parsefile( FILE *f ) {
       nlnext = nlp->next;
       
       global = addglobal( nlp->name, vartype, arraylen );
+	  global->record = rec;
       free( nlp );
       nlp = nlnext;
     }
     
-    global->record = rec;
   }
 
   /* everything else following this is in the text segment */

@@ -26,6 +26,7 @@
     <ClCompile Include="..\..\hlc\hlc.c" />
     <ClCompile Include="..\..\lht\lht.c" />
     <ClCompile Include="..\..\nls\nls.c" />
+    <ClCompile Include="..\..\raft\raft-mgt.c" />
     <ClCompile Include="..\..\rpc\cmdprog.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

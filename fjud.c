@@ -83,13 +83,12 @@ static void init_cb( void ) {
    * they are included in libfju so can be called directly from here.
    */     
   freg_register();
-  fvm_rpc_register();
   cmdprog_register();
   raft_register();
   rex_register();
   dmb_open();
   dlm_open();
-  
+  fvm_rpc_register();
 
   
   //rpc_iterator_register( &rusage_iter );

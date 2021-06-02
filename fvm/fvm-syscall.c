@@ -326,7 +326,10 @@ static int fvm_xcall( struct fvm_state *state ) {
     }
   }
 
-  fvm_log( LOG_LVL_TRACE, "fvm_xcall %s/%s args=%u", m->name, m->procs[procid].name, args.offset );
+  args.count = args.offset;
+  args.offset = 0;
+  
+  fvm_log( LOG_LVL_TRACE, "fvm_xcall %s/%s args=%u", m->name, m->procs[procid].name, args.count );
   sts = fvm_run( m, procid, &args, &res );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "fvm_xcall failed to run %s/%s", m->name, m->procs[procid].name );
@@ -476,23 +479,32 @@ static void fvm_raft_command_cb( struct raft_app *rapp, struct raft_cluster *cl,
   int sts, procid;
   struct fvm_module *m;
   struct xdr_s args;
-  char *argbuf;
+  char argbuf[4096];
   
   /* get proc */
   sts = fvm_proc_by_handle( app->command, &m, &procid );
-  if( sts ) return;
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_raft_command_cb failed to get command proc" );
+    return;
+  }
   
   /* encode args */
-  argbuf = malloc( len + 32 );
-  xdr_init( &args, (uint8_t *)argbuf, len + 32 );
-  xdr_encode_uint64( &args, cl->clid );
-  xdr_encode_uint64( &args, cmdseq );
-  xdr_encode_opaque( &args, (uint8_t *)buf, len );
+  xdr_init( &args, (uint8_t *)argbuf, sizeof(argbuf) );
+  sts = xdr_encode_uint64( &args, cl->clid );
+  if( !sts ) sts = xdr_encode_uint64( &args, cmdseq );
+  if( !sts ) sts = xdr_encode_opaque( &args, (uint8_t *)buf, len );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_raft_command_cb failed to encode args" );
+    return;
+  }
+  args.count = args.offset;
+  args.offset = 0;
   
   /* run */
   sts = fvm_run( m, procid, &args, NULL );
-
-  free( argbuf );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "fvm_raft_command_cb failed to run command proc %s/%s", m->name, m->procs[procid].name );
+  }
 }
 
 static void fvm_raft_snapsave_cb( struct raft_app *rapp, struct raft_cluster *cl, uint64_t term, uint64_t seq ) {
@@ -511,6 +523,8 @@ static void fvm_raft_snapsave_cb( struct raft_app *rapp, struct raft_cluster *cl
   xdr_encode_uint64( &args, cl->clid );
   xdr_encode_uint64( &args, term );  
   xdr_encode_uint64( &args, seq );
+  args.count = args.offset;
+  args.offset = 0;
 
   /* run */
   sts = fvm_run( m, procid, &args, NULL );
@@ -531,7 +545,9 @@ static void fvm_raft_snapload_cb( struct raft_app *rapp, struct raft_cluster *cl
   xdr_init( &args, (uint8_t *)argbuf, len + 32 );
   xdr_encode_uint64( &args, cl->clid );
   xdr_encode_opaque( &args, (uint8_t *)buf, len );
-  
+  args.count = args.offset;
+  args.offset = 0;
+
   /* run */
   sts = fvm_run( m, procid, &args, NULL );
 

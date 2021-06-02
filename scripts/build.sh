@@ -25,11 +25,12 @@ ssh root@${remoteip} sh ~/fjud.sh stop
 
 ## install remote
 ssh root@${remoteip} mkdir -p /opt/fju
+ssh root@${remoteip} mkdir -p /opt/fju/fvm
 ssh root@${remoteip} mkdir -p /usr/local/bin
 ssh root@${remoteip} mkdir -p /usr/local/lib
 scp bin/fju bin/fjud root@${remoteip}:/usr/local/bin
 #scp lib/libfju.so root@${remoteip}:/usr/local/lib
-#scp bin/*.fvm root@${remoteip}:/root
+scp bin/*.fvm root@${remoteip}:/opt/fju/fvm 
 
 ## restart remote services
 sh scripts/fjud.sh start

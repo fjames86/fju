@@ -61,7 +61,7 @@ ARGRESULTPROC(rawmode);
 ARGRESULTPROC(raft_command);
 ARGRESULTPROC(raft_snapshot);
 ARGRESULTPROC(raft_change);
-RESULTPROC(fvm_list);
+ARGRESULTPROC(fvm_list);
 ARGRESULTPROC(fvm_load);
 ARGRESULTPROC(fvm_unload);
 ARGRESULTPROC(fvm_run);
@@ -96,7 +96,7 @@ static struct clt_info clt_procs[] = {
     { RAFT_RPC_PROG, 1, 8, NULL, raft_applist_results, "raft.applist", NULL },
     { RAFT_RPC_PROG, 1, 7, NULL, raft_list_results, "raft.list", NULL },
     { RAFT_RPC_PROG, 1, 9, raft_remove_args, raft_remove_results, "raft.remove", "clid" },
-    { FVM_RPC_PROG, 1, 1, NULL, fvm_list_results, "fvm.list", NULL },
+    { FVM_RPC_PROG, 1, 1, fvm_list_args, fvm_list_results, "fvm.list", "[modname=*] [all]" },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname/procname [args]" },
@@ -1048,7 +1048,10 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
     i++;
   }
 
-  if( !clid ) usage( "Need CLID" );
+  if( !clid ) {
+    sec_rand( &clid, sizeof(clid) );
+    printf( ";; No CLID provided - using random clid %"PRIx64"\n", clid );
+  }
 
   if( bdistribute ) {
     sts = raft_cluster_by_clid( clid, &cl );
@@ -1082,10 +1085,33 @@ static void raft_change_args( int argc, char **argv, int i, struct xdr_s *xdr ) 
 
 }
 
+static int fvmlist_mode;
+#define FVMLIST_MODE_NAMES 0
+#define FVMLIST_MODE_ALL   1
+#define FVMLIST_MODE_FILTER 2
+static char fvmlist_modname[FVM_MAX_NAME];
+
+static void fvm_list_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
+  char argname[64], *argval;
+  
+  while( i < argc ) {
+    argval_split( argv[i], argname, &argval );
+    if( strcmp( argname, "modname" ) == 0 ) {
+      strncpy( fvmlist_modname, argval, sizeof(fvmlist_modname) );
+      fvmlist_mode = FVMLIST_MODE_FILTER;
+    } else if( strcmp( argname, "all" ) == 0 ) {
+      fvmlist_mode = FVMLIST_MODE_ALL;
+    } else usage( NULL );
+    
+    i++;
+  }
+
+}
+
 
 static void fvm_list_results( struct xdr_s *xdr ) {
   int sts, b, i;
-  char name[64];
+  char name[64], modname[64];
   uint32_t progid, versid, datasize, textsize, nprocs, address, flags;
   uint64_t siginfo, timestamp, nsteps, rcount;
   int vartype, isvar, nargs, j;
@@ -1094,7 +1120,7 @@ static void fvm_list_results( struct xdr_s *xdr ) {
   sts = xdr_decode_boolean( xdr, &b );
   if( sts ) usage( "XDR error" );
   while( b ) {
-    xdr_decode_string( xdr, name, sizeof(name) );
+    xdr_decode_string( xdr, modname, sizeof(modname) );
     xdr_decode_uint32( xdr, &progid );
     xdr_decode_uint32( xdr, &versid );
     xdr_decode_uint32( xdr, &datasize );
@@ -1102,32 +1128,43 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     xdr_decode_uint64( xdr, &timestamp );
     xdr_decode_uint32( xdr, &flags );
     xdr_decode_uint32( xdr, &nprocs );
-    printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x (%s%s%s)\n",
-	    name, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ), flags,
-	    flags & FVM_MODULE_STATIC ? "Static " : "",
-	    flags & FVM_MODULE_NATIVE ? "Native " : "",
-	    flags & FVM_MODULE_DISABLED ? "Disabled " : "" );
+    if( fvmlist_mode == FVMLIST_MODE_NAMES ) {
+      printf( "%s\n", modname );
+    } else if( (fvmlist_mode == FVMLIST_MODE_ALL) ||
+	       ((fvmlist_mode == FVMLIST_MODE_FILTER) && (strcasecmp( fvmlist_modname, modname ) == 0)) ) {
+      printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x (%s%s%s)\n",
+	      modname, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ), flags,
+	      flags & FVM_MODULE_STATIC ? "Static " : "",
+	      flags & FVM_MODULE_NATIVE ? "Native " : "",
+	      flags & FVM_MODULE_DISABLED ? "Disabled " : "" );
+    }
     for( i = 0; i < nprocs; i++ ) {
       xdr_decode_string( xdr, name, sizeof(name) ); 
       xdr_decode_uint32( xdr, &address );     
       xdr_decode_uint64( xdr, &siginfo );
       xdr_decode_uint64( xdr, &nsteps );
       xdr_decode_uint64( xdr, &rcount );      
-      
-      printf( "    [%d] %s(", i, name );
-      nargs = FVM_SIGINFO_NARGS(siginfo);
-      for( j = 0; j < nargs; j++ ) {
-	isvar = FVM_SIGINFO_ISVAR(siginfo,j);
-	vartype = FVM_SIGINFO_VARTYPE(siginfo,j);
-	printf( "%s%s%s", j ? ", " : "", isvar ? "var " : "",
-		vartype == 0 ? "Int" :
-		vartype == 1 ? "String" :
-		vartype == 2 ? "Opaque" : 
-		"Other" );
+
+      if( (fvmlist_mode == FVMLIST_MODE_ALL) ||
+	  ((fvmlist_mode == FVMLIST_MODE_FILTER) && (strcasecmp( fvmlist_modname, modname ) == 0)) ) {
+	printf( "    [%d] %s(", i, name );
+	nargs = FVM_SIGINFO_NARGS(siginfo);
+	for( j = 0; j < nargs; j++ ) {
+	  isvar = FVM_SIGINFO_ISVAR(siginfo,j);
+	  vartype = FVM_SIGINFO_VARTYPE(siginfo,j);
+	  printf( "%s%s%s", j ? ", " : "", isvar ? "var " : "",
+		  vartype == 0 ? "Int" :
+		  vartype == 1 ? "String" :
+		  vartype == 2 ? "Opaque" : 
+		  "Other" );
+	}
+	printf( ") RunCount=%"PRIu64" NSteps=%"PRIu64"\n", rcount, nsteps );
       }
-      printf( ") RunCount=%"PRIu64" NSteps=%"PRIu64"\n", rcount, nsteps );
     }
-    printf( "\n" );
+    if( (fvmlist_mode == FVMLIST_MODE_ALL) ||
+	((fvmlist_mode == FVMLIST_MODE_FILTER) && (strcasecmp( fvmlist_modname, modname ) == 0 )) ) {
+      printf( "\n" );
+    }
     
     sts = xdr_decode_boolean( xdr, &b );
     if( sts ) usage( "XDR error" );

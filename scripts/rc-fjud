@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+
+# PROVIDE: fjud 
+# REQUIRE: 
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="fjud"
+desc="fju daemon"
+rcvar="${name}_enable"
+command="/usr/local/bin/${name}"
+
+load_rc_config $name
+run_rc_command "$1"

@@ -59,9 +59,10 @@ struct fvm_module {
   uint64_t timestamp;
   int tag;
   uint32_t flags;
-#define FVM_MODULE_STATIC   0x0001 /* module cannot be unloaded */
-#define FVM_MODULE_DISABLED 0x0002 /* module cannot run any procedures */
-#define FVM_MODULE_NATIVE   0x0004 
+#define FVM_MODULE_STATIC   0x0001 /* module cannot be unloaded (may be set using fvm_module_setstatic) */
+#define FVM_MODULE_DISABLED 0x0002 /* module cannot run any procedures (may be set using fvm_module_enable) */
+#define FVM_MODULE_NATIVE   0x0004 /* native module - implemented in C */
+#define FVM_MODULE_DYNAMIC  0x0008 /* dynamically loaded module */
 };
 
 
@@ -102,6 +103,7 @@ void fvm_rpc_register( void );
 
 /* enable/disable the module */
 int fvm_module_enable( char *modname, int enable, int *prev );
+int fvm_module_setstatic( char *modname, int s, int *prev );
 
 /* dynamically registering syscalls */
 struct fvm_state;

@@ -40,6 +40,8 @@ static void fvmc_printf( char *fmt, ... ) {
   }
 }
 
+static uint32_t gencfile_flags = 0;
+
 int fvmc_main( int argc, char **argv ) {
   int i;
   char *outpath = NULL;
@@ -67,6 +69,8 @@ int fvmc_main( int argc, char **argv ) {
       disass = 1;
     } else if( strcmp( argv[i], "-C" ) == 0 ) {
       gencfile = 1;
+    } else if( strcmp( argv[i], "--static" ) == 0 ) {
+      gencfile_flags |= FVM_MODULE_STATIC;
     } else if( strcmp( argv[i], "--siginfo" ) == 0 ) {
       uint64_t siginfo = 0;
       int nargs = 0;
@@ -3703,7 +3707,9 @@ static void usage( char *fmt, ... ) {
 	    "  -I            Add include path\n"
 	    "  -v            Verbose mode\n"
 	    "  -d            Disassemble file. filename names a compiled fvm module.\n"
-	    "  -C            Generate static module. filename names a compiled fvm module.\n" 
+	    "  -C [--static] Generate static module. filename names a compiled fvm module.\n"
+	    "                output names generated c file.\n"
+	    "                --static option indicates generating a static module, default is non-static.\n" 
 	    );
   }
 
@@ -3794,7 +3800,7 @@ static void gen_cfile( char *outpath, char *fvmpath ) {
   fprintf( f, "  mod.text = textsegment;\n" );
   fprintf( f, "  mod.textsize = %u;\n", hdr.textsize );
   fprintf( f, "  mod.timestamp = %"PRIu64"LL;\n", hdr.timestamp );
-  fprintf( f, "  mod.flags = FVM_MODULE_STATIC;\n" );
+  fprintf( f, "  mod.flags = %s;\n", gencfile_flags & FVM_MODULE_STATIC ? "FVM_MODULE_STATIC" : "0" );
   fprintf( f, "  if( fvm_module_register( &mod ) ) return -1;\n" );
   
   if( serviceprocid >= 0 ) {

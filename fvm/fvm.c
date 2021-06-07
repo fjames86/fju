@@ -1278,7 +1278,7 @@ static int fvm_proc_list( struct rpc_inc *inc ) {
 }
 
 static int fvm_proc_load( struct rpc_inc *inc ) {
-  int handle, registerp;
+  int handle;
   char *bufp;
   int lenp, sts;
   struct fvm_module *modulep;
@@ -1286,18 +1286,11 @@ static int fvm_proc_load( struct rpc_inc *inc ) {
   
   sts = xdr_decode_opaque_ref( &inc->xdr, (uint8_t **)&bufp, &lenp );
   if( !sts ) sts = xdr_decode_uint32( &inc->xdr, &flags );
-  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &registerp );
   if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
 
   sts = fvm_module_load( bufp, lenp, flags, &modulep );
   if( sts ) goto done;
   
-  if( registerp ) {
-    /* register as rpc program */
-    fvm_unregister_program( modulep->name );
-    fvm_register_program( modulep->name );
-  }
-
  done:
   rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
   xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );  

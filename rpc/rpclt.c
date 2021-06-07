@@ -97,7 +97,7 @@ static struct clt_info clt_procs[] = {
     { RAFT_RPC_PROG, 1, 7, NULL, raft_list_results, "raft.list", NULL },
     { RAFT_RPC_PROG, 1, 9, raft_remove_args, raft_remove_results, "raft.remove", "clid" },
     { FVM_RPC_PROG, 1, 1, fvm_list_args, fvm_list_results, "fvm.list", "[modname=*] [all]" },
-    { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [register] [reload]" },
+    { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname/procname [args]" },
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
@@ -1184,19 +1184,15 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   char argname[64], *argval;  
   char *filename;
   int sts;
-  int registerp;
   struct mmf_s mmf;
   uint32_t flags;
   
   filename = NULL;
-  registerp = 0;
   flags = 0;
   while( i < argc ) {
     argval_split( argv[i], argname, &argval );
     if( strcmp( argname, "filename" ) == 0 ) {
       filename = argval;
-    } else if( strcmp( argname, "register" ) == 0 ) {
-      registerp = 1;
     } else if( strcmp( argname, "reload" ) == 0 ) {
       flags |= FVM_RELOAD;
     } else usage( NULL );
@@ -1212,7 +1208,6 @@ static void fvm_load_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
   mmf_remap( &mmf, mmf.fsize );
   xdr_encode_opaque( xdr, mmf.file, mmf.fsize );
   xdr_encode_uint32( xdr, flags );
-  xdr_encode_boolean( xdr, registerp );
   mmf_close( &mmf );
 }
 

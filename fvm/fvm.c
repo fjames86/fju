@@ -1647,6 +1647,8 @@ int fvm_module_setstatic( char *modname, int s, int *prev ) {
   m = fvm_module_by_name( modname );
   if( !m ) return -1;
 
+  if( m->flags & FVM_MODULE_NATIVE ) return -1;
+  
   if( prev ) {
     *prev = (m->flags & FVM_MODULE_STATIC) ? 0 : 1;
   }

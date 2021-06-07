@@ -22,7 +22,17 @@ Begin
    Const CmdRem = 3;
    
    { declarations }
-	  	  
+   Record SnapInfo = 
+   	  clidH : int;
+	  clidL : int;
+	  termH : int;
+	  termL : int;
+	  seqH : int;
+	  seqL : int;
+	  snapOffset : int;
+   End;
+   
+
    { globals }
    var regh : int;
    var regclidH, regclidL : int;
@@ -77,12 +87,75 @@ Begin
      
    End;
 
+   Procedure SnapsaveValue(snapInfo : int, entryp : int)
+   Begin
+	var path : string[1024];
+	var buf : opaque[4096];
+	var offset, type : int;
+	var entry : ^FregEntry;
+	var sinfo : ^SnapInfo;
+	
+	entry = entryp;
+	sinfo = snapInfo;
+	Syscall FregPath(regh, entry.idH, entry.idL, path, 1024);
+	
+	offset = 0;
+	Call XdrEncodeU32(buf,offset,CmdPut);
+	Call XdrEncodeString(buf,offset,path);
+
+	Call XdrEncodeU32(buf,offset,entry.len);
+	Syscall FregGet(regh,entry.idH,entry.idL,entry.len,buf + offset, 0,0);
+
+	{ append to snapshot }
+	Syscall RaftSnapshotSave(sinfo.clidH,sinfo.clidL,sinfo.termH,sinfo.termL,sinfo.seqH,sinfo.seqL,offset,buf,sinfo.snapOffset);
+	sinfo.snapOffset = sinfo.snapOffset + offset;
+   End;
+   
+   Procedure SnapsaveKey(snapInfo : int, parentH : int,parentL : int)
+   Begin
+	var idH, idL : int;
+	var entryp : FregEntry;
+	var result : int;
+	
+	Syscall FregNext(regh, parentH, parentL, 0, 0, entryp, result);
+	While result Do
+	Begin
+		If (entryp.Flags & FregTypeMask) = FregTypeKey Then
+		Begin
+		   { recurse to save child key }
+		   Call SnapsaveKey(snapInfo,entryp.idH,entryp.idL);
+		End Else Begin
+		   Call SnapsaveValue(snapinfo,entryp);
+		End;
+		
+		Syscall FregNext(regh, parentH, parentL, entryp.idH, entryp.IdL, entryp, result);
+	End;
+	
+   End;
+   
+   
    Procedure Snapsave(clidH : int, clidL : int, termH : int, termL : int, seqH : int, seqL : int)
    Begin
-	{ TODO }
-
+	var snapinfo : SnapInfo;
+	
 	{ walk the entire tree, appending a command to the snapshot for each value found }
 	Call LogWritef(LogLvlTrace,"ClReg Snapsave",0,0,0,0);
+
+	Syscall RaftSnapshotSave(clidH,clidL,termH,termL,seqH,seqL,0,0,0);
+
+	{ TODO: walk the tree and append a command for each new entry }
+	snapinfo.clidH = clidH;
+	snapinfo.clidL = clidL;
+	snapinfo.termH = termH;
+	snapinfo.termL = termL;
+	snapinfo.seqH = seqH;
+	snapinfo.seqL = seqL;
+	snapinfo.snapOffset = 0;
+	Call SnapsaveKey(snapinfo,0,0);
+	
+	{ final call sets offset=-1 }
+	Syscall RaftSnapshotSave(clidH,clidL,termH,termL,seqH,seqL,0,0,-1);
+	
    End;
 
    Procedure Snapload(clidH : int, clidL : int, len : int, buf : opaque)

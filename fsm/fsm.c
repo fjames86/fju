@@ -404,6 +404,52 @@ int fsm_snapshot_save( uint64_t fsmid, uint64_t seq, struct log_iov *iov, int ni
   return 0;
 }
 
+int fsm_snapshot_append( uint64_t fsmid, uint64_t seq, char *buf, int len, int offset ) {
+  int sts;
+  struct mmf_s mmf;
+  char idstr[64], idstr2[64];
+  char *path;
+  struct snapshot_header hdr;
+
+  sprintf( idstr, "%"PRIx64"-snapshot.dat.new", fsmid );
+  path = mmf_default_path( "fsm", idstr, NULL );
+
+  /* start new file */
+  if( offset == 0 ) mmf_delete_file( path );
+
+  sts = mmf_open( path, &mmf );
+  if( sts ) return sts;
+
+  if( offset == 0 ) {
+    memset( &hdr, 0, sizeof(hdr) );
+    hdr.magic = FSM_SNAPSHOT_MAGIC;
+    hdr.version = FSM_SNAPSHOT_VERSION;
+    hdr.fsmid = fsmid;
+    hdr.seq = seq;
+    hdr.len = len;
+    mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
+  }
+  
+  mmf_write( &mmf, buf, len, offset + sizeof(hdr) );
+
+  /* final block - mark as complete */
+  if( offset == -1 ) {
+    hdr.complete = 1;
+    hdr.when = time( NULL );
+    mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
+  }
+  
+  mmf_close( &mmf );
+  
+  /* rename over top of old */
+  if( offset == -1 ) {
+    sprintf( idstr2, "%"PRIx64"-snapshot.dat", fsmid );
+    mmf_rename( mmf_default_path( "fsm", NULL ), idstr, idstr2 );
+  }
+  
+  return 0;
+}
+
 int fsm_snapshot_load( uint64_t fsmid, struct log_iov *iov, int niov, struct fsm_snapshot_info *info ) {
   int sts;
   struct mmf_s mmf;

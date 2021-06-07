@@ -1826,23 +1826,20 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 64:
-    /* RaftSnapshotSave(clidH,clidL,termH,termL,seqH,seqL,len,buf) */
+    /* RaftSnapshotSave(clidH,clidL,termH,termL,seqH,seqL,len,buf,offset) */
     {
-      uint32_t pars[8];
+      uint32_t pars[9];
       uint64_t clid, term, seq;
       char *buf;
-      struct log_iov iov[1];
       int sts;
       
-      read_pars( state, pars, 8 );
+      read_pars( state, pars, 9 );
       clid = ((uint64_t)pars[0] << 32) | (uint64_t)pars[1];
       term = ((uint64_t)pars[2] << 32) | (uint64_t)pars[3];
       seq = ((uint64_t)pars[4] << 32) | (uint64_t)pars[5];
       buf = fvm_getptr( state, pars[7], pars[6], 0 );
 
-      iov[0].buf = buf;
-      iov[0].len = buf ? 0 : pars[6];
-      sts = raft_snapshot_save( clid, term, seq, iov, 1 );
+      sts = raft_snapshot_append( clid, term, seq, buf, buf ? pars[6] : 0, pars[8] );
     }
     break;
   case 65:
@@ -1913,7 +1910,24 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
 	}
       }
     }
-    break;    
+    break;
+  case 67:
+    /* FregPath(handle,idH,idL,path,len) */
+    {
+      uint32_t pars[5];
+      char *path;
+      struct fvmreg *fvmreg;
+      uint64_t id;
+      
+      read_pars( state, pars, 5 );
+      fvmreg = fvmreg_get( pars[0] );
+      id = ((uint64_t)pars[1] << 32) | (uint64_t)pars[2];
+      path = fvm_getptr( state, pars[3], pars[4], 1 );
+      if( path ) {
+	freg_path( fvmreg ? &fvmreg->reg : NULL, id, path, pars[4] );
+      }      
+    }
+    break;
   case 0xffff:
     /* Cross module call */
     {

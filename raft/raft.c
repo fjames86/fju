@@ -1884,6 +1884,15 @@ int raft_snapshot_save( uint64_t clid, uint64_t term, uint64_t seq, struct log_i
   return fsm_snapshot_save( clid, seq, iov2, niov + 1 );
 }
 
+int raft_snapshot_append( uint64_t clid, uint64_t term, uint64_t seq, char *buf, int len, int offset ) {
+
+  if( offset == 0 ) {
+    fsm_snapshot_append( clid, seq, (char *)&term, sizeof(term), 0 );
+  }
+  
+  return fsm_snapshot_append( clid, seq, buf, len, offset == -1 ? -1 : offset + sizeof(term) );
+}
+
 int raft_snapshot_info( uint64_t clid, struct raft_snapshot_info *info ) {
   struct log_iov iov[1];
   uint64_t term;

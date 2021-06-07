@@ -49,6 +49,7 @@ int freg_subkey( struct freg_s *freg, uint64_t parentid, char *name, uint32_t fl
 int freg_ensure( struct freg_s *freg, uint64_t parentid, char *path, uint32_t flags, char *buf, int len, uint64_t *id );
 
 void freg_register( void );
+char *freg_path( struct freg_s *freg, uint64_t id, char *path, int len );
 
 #endif
 

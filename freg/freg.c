@@ -660,3 +660,27 @@ int freg_ensure( struct freg_s *freg, uint64_t parentid, char *path, uint32_t fl
   return 0;
 }
 
+char *freg_path( struct freg_s *freg, uint64_t id, char *path, int len ) {
+  int sts, l;
+  struct freg_entry entry;
+  
+  strcpy( path, "" );
+  len -= 1;
+  
+  sts = freg_entry_by_id( freg, id, &entry );
+  while( !sts && (len > 0) ) {
+    l = strlen( entry.name );
+    memmove( path + l + 1, path, l + 1 );
+    memcpy( path, entry.name, l );
+    path[l] = '/';
+    len -= l + 1;
+    
+    id = entry.parentid;
+    sts = freg_entry_by_id( freg, id, &entry );
+  }
+  memmove( path + 1, path, 1 );
+  path[0] = '/';
+  len -= 1;
+   
+  return path;    
+}

@@ -765,6 +765,7 @@ static struct {
   int noemit;
   struct proc *refprocs;
   int isincludefile;
+  int parsingsyscall;
 } glob;
 
 static void incrementlinecount( void ) {
@@ -2472,7 +2473,7 @@ static void parseproceduresig( FILE *f, struct param **params, int *nparams, uin
 	p2 = p2->next;
       }
     }
-    if( getglobal( glob.tok.val ) ) usage( "Param %s name clash with global", glob.tok.val );
+    if( getglobal( glob.tok.val ) && !glob.parsingsyscall ) usage( "Param %s name clash with global", glob.tok.val );
 
     p = malloc( sizeof(*p) );
     memset( p, 0, sizeof(*p) );
@@ -2584,8 +2585,10 @@ static void parsedeclaration( FILE *f ) {
     if( glob.tok.type != TOK_NAME ) usage( "Expected procname not %s", gettokname( glob.tok.type ) );
     strcpy( procname, glob.tok.val );
     expecttok( f, TOK_NAME );
-    
+
+    glob.parsingsyscall = 1;
     parseproceduresig( f, &params, &nparams, &siginfo );
+    glob.parsingsyscall = 0;
     expecttok( f, TOK_COLON );
     if( glob.tok.type != TOK_U32 ) usage( "Expected syscall id" );
     addsyscall( procname, params, nparams, siginfo, glob.tok.u32 );

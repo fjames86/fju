@@ -160,10 +160,17 @@ Begin
 
    Procedure Snapload(clidH : int, clidL : int, len : int, buf : opaque)
    Begin
-	{ TODO }
+	var offset : int;
 
 	{ the snapshot consists of a list of entries, each of which is a standard command buffer }
 	Call LogWritef(LogLvlTrace,"ClReg Snapload",0,0,0,0);
+
+	offset = 0;
+	While offset < len Do
+	Begin
+	{ todo }
+	End;
+
    End;
    
    Procedure Init()

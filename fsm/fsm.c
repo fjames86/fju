@@ -411,6 +411,9 @@ int fsm_snapshot_append( uint64_t fsmid, uint64_t seq, char *buf, int len, int o
   char *path;
   struct snapshot_header hdr;
 
+  log_writef( NULL, LOG_LVL_TRACE, "fsm_snapshot_append fsmid=%"PRIx64" seq=%"PRIu64" len=%u offset=%d",
+	      fsmid, seq, len, offset );
+  
   sprintf( idstr, "%"PRIx64"-snapshot.dat.new", fsmid );
   path = mmf_default_path( "fsm", idstr, NULL );
 
@@ -426,17 +429,22 @@ int fsm_snapshot_append( uint64_t fsmid, uint64_t seq, char *buf, int len, int o
     hdr.version = FSM_SNAPSHOT_VERSION;
     hdr.fsmid = fsmid;
     hdr.seq = seq;
-    hdr.len = len;
     mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
   }
   
-  mmf_write( &mmf, buf, len, offset + sizeof(hdr) );
-
   /* final block - mark as complete */
   if( offset == -1 ) {
+    memset( &hdr, 0, sizeof(hdr) );
+    hdr.magic = FSM_SNAPSHOT_MAGIC;
+    hdr.version = FSM_SNAPSHOT_VERSION;
+    hdr.fsmid = fsmid;
+    hdr.seq = seq;
+    hdr.len = mmf.fsize - sizeof(hdr);    
     hdr.complete = 1;
     hdr.when = time( NULL );
     mmf_write( &mmf, (char *)&hdr, sizeof(hdr), 0 );
+  } else {
+    mmf_write( &mmf, buf, len, offset + sizeof(hdr) );
   }
   
   mmf_close( &mmf );

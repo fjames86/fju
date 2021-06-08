@@ -612,7 +612,7 @@ static void raft_send_pings( struct raft_cluster *cl ) {
   sts = raft_snapshot_info( cl->clid, &sinfo );
   if( sts ) {
     struct raft_app *app = raft_app_by_appid( cl->appid );
-    raft_log( LOG_LVL_TRACE, "Requesting snapshot" );
+    raft_log( LOG_LVL_TRACE, "Requesting snapshot because none found" );
     if( app && app->snapsave ) {
       app->snapsave( app, cl, cl->term, cl->appliedseq );
     } else {
@@ -1402,7 +1402,7 @@ static int raft_proc_snapshot( struct rpc_inc *inc ) {
   
   cl = cl_by_id( clid );
   if( cl ) {
-    raft_log( LOG_LVL_INFO, "Requesting snapshot clid=%"PRIx64"", clid );
+    raft_log( LOG_LVL_INFO, "Requesting snapshot from rpc proc clid=%"PRIx64"", clid );
     app = raft_app_by_appid( cl->appid );
     if( app && app->snapsave ) {
       app->snapsave( app, cl, cl->term, cl->appliedseq );

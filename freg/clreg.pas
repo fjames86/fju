@@ -7,7 +7,7 @@
  * - reads can be serviced locally using standard apis? 
 }
 
-Program ClReg(0,0,Init,Exit,Command,Snapsave,Snapload,Put,Subkey,Rem);
+Program ClReg(0,0,Init,Exit,Command,Snapsave,Snapload,Put,Subkey,Rem,Get);
 Begin
    { Includes }
    Include "syscall.pas";
@@ -96,7 +96,7 @@ Begin
      offset = 0;
      Call DecodeCommand(buf,offset,cmd,path,flags,lenp,bufp);
      
-     If cmd = CmdPut && offset > lenp Then
+     If cmd = CmdPut && offset > len Then
      Begin
 	Call LogWritef(LogLvlError,"Clreg Command short buffer",0,0,0,0);
 	Return;
@@ -173,7 +173,8 @@ Begin
 	
 	{ final call sets offset=-1 }
 	Syscall RaftSnapshotSave(clidH,clidL,termH,termL,seqH,seqL,0,0,-1);
-	
+
+	Call LogWritef(LogLvlTrace,"ClReg Snapsave Done",0,0,0,0);
    End;
 
    Procedure Snapload(clidH : int, clidL : int, len : int, buf : opaque)
@@ -260,7 +261,13 @@ Begin
 	Syscall RaftCommand(regclidH,regclidL,offset,bufp);
    End;
 
-
+   Procedure Get(path : string, flags : int, var lenp : int, var bufp : opaque)
+   Begin
+	var buf : opaque[4096];
+	Syscall FregGetByName(regh, 0,0, path, flags, 4096, buf, lenp);
+	bufp = buf;
+   End;
+   
    { constant values }
 
 End.

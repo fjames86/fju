@@ -96,11 +96,12 @@ ${BINDIR}/fjud: ${FJU_DEPS} ${fjud_files}
 
 installer: ${BINDIR}/fju ${BINDIR}/fjud 
 	mkdir -p opt/fju/bin
-	mkdir -p opt/fju/lib
-	mkdir -p opt/fju/fvm 
 	cp ${BINDIR}/fju ${BINDIR}/fjud opt/fju/bin
+	mkdir -p opt/fju/fvm 
 	cp ${BINDIR}/*.fvm opt/fju/fvm
-	cp scripts/freg-defaults.reg opt/fju/freg-defaults.reg 
+	mkdir -p opt/fju/scripts
+	cp scripts/freg-defaults.reg opt/fju/scripts/freg-defaults.reg
+	cp scripts/rc-fjud opt/fju/scripts/rc-fjud 
 	tar czvf fju.tar.gz opt
 	rm -rf opt
 	cat scripts/install.sh fju.tar.gz > bin/install.sh

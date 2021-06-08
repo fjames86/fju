@@ -468,7 +468,7 @@ int fvm_proc_by_handle( uint32_t phandle, struct fvm_module **m, int *procid ) {
 /* --------------- runtime ------------------- */
 
 static int fvm_push( struct fvm_state *state, uint32_t u32 ) {
-  if( state->sp >= FVM_MAX_STACK ) return -1;
+  if( state->sp >= FVM_MAX_STACK - 4 ) return -1;
   memcpy( &state->stack[state->sp], &u32, 4 );
   state->sp += 4;
   return 0;
@@ -477,7 +477,7 @@ static int fvm_push( struct fvm_state *state, uint32_t u32 ) {
 static uint32_t fvm_pop( struct fvm_state *state ) {
   uint32_t u32;
   if( state->sp < 4 ) return -1;
-  state->sp -= 4;  
+  state->sp -= 4;
   memcpy( &u32, &state->stack[state->sp], 4 );
   return u32;
 }
@@ -681,30 +681,32 @@ static int fvm_step( struct fvm_state *state ) {
     break;
   case OP_LDI32:
     u32 = fvm_read_pcu32( state );
-    fvm_push( state, u32 );
+    if( fvm_push( state, u32 ) ) return -1;
     break;
   case OP_LDI16:
     i16 = (int16_t)fvm_read_pcu16( state );
-    fvm_push( state, (uint32_t)(int32_t)i16 );
+    if( fvm_push( state, (uint32_t)(int32_t)i16 ) ) return -1;
     break;    
   case OP_LDIZ:
-    fvm_push( state, 0 );
+    if( fvm_push( state, 0 ) ) return -1;
     break;    
   case OP_LEA:
     i16 = (int16_t)fvm_read_pcu16( state );
-    fvm_push( state, ((int)state->pc) + i16 );
+    if( fvm_push( state, ((int)state->pc) + i16 ) ) return -1;
     break;
   case OP_ADDSP:
     u16 = fvm_read_pcu16( state );
+    if( state->sp + u16 > FVM_MAX_STACK ) return -1;
     state->sp += u16;
     break;
   case OP_SUBSP:
     u16 = fvm_read_pcu16( state );
+    if( state->sp < u16 ) return -1;
     state->sp -= u16;
     break;
   case OP_CALL:
     u16 = fvm_read_pcu16( state );
-    fvm_push( state, state->pc );
+    if( fvm_push( state, state->pc ) ) return -1;
     state->pc = u16;
     state->frame++;
     break;
@@ -724,12 +726,12 @@ static int fvm_step( struct fvm_state *state ) {
     break;
   case OP_LEASP:
     u16 = fvm_read_pcu16( state );
-    fvm_push( state, FVM_ADDR_STACK + state->sp - u16 );    
+    if( fvm_push( state, FVM_ADDR_STACK + state->sp - u16 ) ) return -1;
     break;
   case OP_LDSP:
     u16 = fvm_read_pcu16( state );
     u32 = fvm_read_u32( state, FVM_ADDR_STACK + state->sp - u16 );
-    fvm_push( state, u32 );
+    if( fvm_push( state, u32 ) ) return -1;
     break;
   case OP_STSP:
     u16 = fvm_read_pcu16( state );

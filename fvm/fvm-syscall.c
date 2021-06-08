@@ -55,6 +55,9 @@ static struct fvmlog *fvmlog_get( int handle ) {
 
 static struct fvmlog *fvmlog_open( char *name ) {
   int i;
+  
+  if( !name ) return NULL;
+  
   for( i = 0; i < FVM_MAX_LOGHANDLE; i++ ) {
     if( strcmp( loghandles[i].name, name ) == 0 ) {
       loghandles[i].refcount++;
@@ -1689,6 +1692,7 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       
       if( sts ) memset( &entry, 0, sizeof(entry) );
       fvmreg_entry_write( state, &entry, pars[4] );
+      fvm_write_u32( state, pars[5], sts ? 0 : 1 );
     }
     break;
   case 57:

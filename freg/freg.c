@@ -221,12 +221,22 @@ int freg_entry_by_name( struct freg_s *freg, uint64_t parentid, char *name, stru
     }
     if( !parentid ) parentid = freg->rootid;
 
-    sts = get_subentry( freg, parentid, name, &parentid, tmpname );
-    if( sts ) return sts;
+    if( name && (strcmp( name, "" ) != 0) && (strcmp( name, "/" ) != 0) ) {
+      sts = get_subentry( freg, parentid, name, &parentid, tmpname );
+      if( sts ) return sts;
+    } else {
+      strcpy( tmpname, "/" );
+    }
 
     sts = freg_entry_by_id( freg, parentid, &etry );
     if( sts ) return sts;
     if( (etry.flags & FREG_TYPE_MASK) != FREG_TYPE_KEY ) return -1;
+
+    if( strcmp( tmpname, "/" ) == 0 ) {
+      if( entry ) *entry = etry;
+      if( parentidp ) *parentidp = parentid;
+      return 0;
+    }
     
     nentry = etry.len / sizeof(uint64_t);
     if( nentry < 0 ) return -1;  

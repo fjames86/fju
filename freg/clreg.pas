@@ -261,11 +261,63 @@ Begin
 	Syscall RaftCommand(regclidH,regclidL,offset,bufp);
    End;
 
-   Procedure Get(path : string, flags : int, var lenp : int, var bufp : opaque)
+   Procedure Get(path : string, var result : int, var lenp : int, var bufp : opaque)
    Begin
+	var sts, offset, type, parentH, parentL, u64H, u64L : int;
+	var entry : FregEntry;
 	var buf : opaque[4096];
-	Syscall FregGetByName(regh, 0,0, path, flags, 4096, buf, lenp);
-	bufp = buf;
+	var resbuf : opaque[4096];
+	
+	
+	Syscall FregEntryByName(regh,0,0,path,entry,sts);
+	If !sts Then
+	Begin
+		lenp = 0;
+		bufp = 0;
+		result = 0;
+		Return;
+	End;
+
+	type = entry.flags & FregTypeMask;
+	If type = FregTypeKey Then
+	Begin
+	    offset = 0;
+	    parentH = entry.idH;
+	    parentL = entry.idL;
+	    Syscall FregNext(regh,parentH,parentL,0,0,entry,result);
+	    While result Do
+	    Begin
+		Call XdrEncodeU32(resbuf,offset,1);
+		Call XdrEncodeString(resbuf,offset,entry.name);
+		Call XdrEncodeU32(resbuf,offset,entry.flags);
+		Call XdrEncodeU32(resbuf,offset,entry.len);
+		Syscall FregNext(regh,parentH,parentL,entry.idH,entry.idL,entry,result);
+	    End;
+	    Call XdrEncodeU32(resbuf,offset,0);
+	    bufp = resbuf;
+	    lenp = offset;
+	End Else Begin
+	    Syscall FregGetByName(regh, 0,0, path, entry.flags, 4096, buf, lenp);
+	    offset = 0;
+	    bufp = resbuf;
+	    If type = FregTypeU32 Then Begin
+	       Call Memcpy(&u64h, buf, 4);
+	       Call XdrEncodeU32(resbuf,offset,u64h);
+	       lenp = offset;
+	    End Else If type = FregTypeU64 Then Begin
+	       Call Memcpy(&u64h, buf, 4);
+	       Call Memcpy(&u64l, buf + 4, 4);
+	       Call XdrEncodeU64(resbuf,offset,u64h, u64l);
+	       lenp = offset;
+	    End Else If type = FregTypeString Then Begin
+	       Call XdrEncodeString(resbuf,offset,buf);
+	       lenp = offset;
+	    End Else If type = FregTypeOpaque Then Begin
+   	       bufp = buf;
+	    End;
+	End;
+
+	result = 1;
    End;
    
    { constant values }

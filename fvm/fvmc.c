@@ -2852,6 +2852,7 @@ static void parseprocedure( FILE *f ) {
     expecttok( f, TOK_NAME );
     while( accepttok( f, TOK_COMMA ) ) {
       if( glob.tok.type != TOK_NAME ) usage( "Expected var name not %s", gettokname( glob.tok.type ) );
+      
       nl = malloc( sizeof(*nl) );
       memset( nl, 0, sizeof(*nl) );
       strncpy( nl->name, glob.tok.val, FVM_MAX_NAME - 1 );
@@ -2866,6 +2867,7 @@ static void parseprocedure( FILE *f ) {
     nl = namelist;
     while( nl ) {
       nextnl = nl->next;
+      if( getparam( proc, nl->name ) ) usage( "Local var %s clashes with parameter", nl->name );
       local = addlocal( proc, nl->name, vartype, arraylen );
       local->record = r;
       free( nl );

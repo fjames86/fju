@@ -1129,7 +1129,8 @@ static void fvm_list_results( struct xdr_s *xdr ) {
     xdr_decode_uint32( xdr, &flags );
     xdr_decode_uint32( xdr, &nprocs );
     if( fvmlist_mode == FVMLIST_MODE_NAMES ) {
-      printf( "%s\n", modname );
+      printf( "%-32s ", modname );
+      
     } else if( (fvmlist_mode == FVMLIST_MODE_ALL) ||
 	       ((fvmlist_mode == FVMLIST_MODE_FILTER) && (strcasecmp( fvmlist_modname, modname ) == 0)) ) {
       printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x (%s%s%s)\n",
@@ -1159,9 +1160,11 @@ static void fvm_list_results( struct xdr_s *xdr ) {
 		  "Other" );
 	}
 	printf( ") RunCount=%"PRIu64" NSteps=%"PRIu64"\n", rcount, nsteps );
+      } else if( fvmlist_mode == FVMLIST_MODE_NAMES ) {
+	printf( "%s ", name );
       }
     }
-    if( (fvmlist_mode == FVMLIST_MODE_ALL) ||
+    if( (fvmlist_mode == FVMLIST_MODE_ALL) || (fvmlist_mode == FVMLIST_MODE_NAMES) || 
 	((fvmlist_mode == FVMLIST_MODE_FILTER) && (strcasecmp( fvmlist_modname, modname ) == 0 )) ) {
       printf( "\n" );
     }

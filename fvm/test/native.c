@@ -92,6 +92,6 @@ void test_native_register( void ) {
   mod.procs[4].nativeproc = native_testproc;
   
   mod.timestamp = 1619425897LL;
-  mod.flags = FVM_MODULE_STATIC|FVM_MODULE_NATIVE;
+  mod.flags = FVM_MODULE_NATIVE;
   fvm_module_register( &mod );
 }

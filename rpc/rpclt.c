@@ -103,7 +103,6 @@ static struct clt_info clt_procs[] = {
     { FVM_RPC_PROG, 1, 6, fvm_reload_args, fvm_reload_results, "fvm.reload", "modname" },
     { FVM_RPC_PROG, 1, 7, fvm_reload_args, fvm_data_results, "fvm.data", "modname" },
     { FVM_RPC_PROG, 1, 8, fvm_enable_args, fvm_enable_results, "fvm.enable", "modname=* [enable] [disable]" },
-    { FVM_RPC_PROG, 1, 10, fvm_enable_args, fvm_enable_results, "fvm.static", "modname=* [enable] [disable]" },    
     { DMB_RPC_PROG, 1, 1, dmb_invoke_args, NULL, "dmb.invoke", "msgid=* [seq=*] [flags=*] [buf=base64]" },
     { DMB_RPC_PROG, 1, 3, dmb_publish_args, dmb_publish_results, "dmb.publish", "msgid=* [flags=*] [buf=base64]" },
     { DLM_RPC_PROG, 1, 1, NULL, dlm_list_results, "dlm.list", NULL },
@@ -1133,9 +1132,8 @@ static void fvm_list_results( struct xdr_s *xdr ) {
       printf( "%s\n", modname );
     } else if( (fvmlist_mode == FVMLIST_MODE_ALL) ||
 	       ((fvmlist_mode == FVMLIST_MODE_FILTER) && (strcasecmp( fvmlist_modname, modname ) == 0)) ) {
-      printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x (%s%s%s%s)\n",
+      printf( "%s %u:%u Data=%u Text=%u Timestamp=%s Flags=0x%x (%s%s%s)\n",
 	      modname, progid, versid, datasize, textsize, sec_timestr( timestamp, timestr ), flags,
-	      flags & FVM_MODULE_STATIC ? "Static " : "",
 	      flags & FVM_MODULE_NATIVE ? "Native " : "",
 	      flags & FVM_MODULE_DISABLED ? "Disabled " : "",
 	      flags & FVM_MODULE_DYNAMIC ? "Dynamic" : "" );

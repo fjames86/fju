@@ -354,14 +354,9 @@ int fvm_module_unload( char *modname ) {
     if( strcasecmp( m->name, modname ) == 0 ) {
       fvm_log( LOG_LVL_INFO, "fvm_module_unload %s", modname );
 
-      if( m->flags & FVM_MODULE_STATIC ) {
-	fvm_log( LOG_LVL_ERROR, "Attempt to unload static module" );
-	return -1;
-      }
-
       fvm_module_unregister( m );
 
-      if( m->flags & FVM_MODULE_DYNAMIC)  {
+      if( m->flags & FVM_MODULE_DYNAMIC ) {
 	free( m );
       }
       
@@ -1444,25 +1439,6 @@ static int fvm_proc_getprocinfo( struct rpc_inc *inc ) {
   return 0;
 }
 
-static int fvm_proc_setstatic( struct rpc_inc *inc ) {
-  int handle, sts;
-  int enable, prev;
-  char modname[FVM_MAX_NAME];
-
-  sts = xdr_decode_string( &inc->xdr, modname, sizeof(modname) );
-  if( !sts ) sts = xdr_decode_boolean( &inc->xdr, &enable );
-  if( sts ) return rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_GARBAGE_ARGS, NULL, NULL );
-
-  sts = fvm_module_setstatic( modname, enable, &prev );
-
-  rpc_init_accept_reply( inc, inc->msg.xid, RPC_ACCEPT_SUCCESS, NULL, &handle );
-  xdr_encode_boolean( &inc->xdr, sts ? 0 : 1 );
-  if( !sts ) xdr_encode_boolean( &inc->xdr, prev );
-  rpc_complete_accept_reply( inc, handle );
-
-  return 0;
-}
-
 static struct rpc_proc fvm_procs[] = {
   { 0, fvm_proc_null },
   { 1, fvm_proc_list },
@@ -1474,7 +1450,6 @@ static struct rpc_proc fvm_procs[] = {
   { 7, fvm_proc_data },
   { 8, fvm_proc_enable },
   { 9, fvm_proc_getprocinfo },
-  { 10, fvm_proc_setstatic },
   
   { 0, NULL }
 };
@@ -1633,22 +1608,6 @@ int fvm_module_enable( char *modname, int enable, int *prev ) {
 
   /* set/clear disabled flag */
   m->flags = (m->flags & ~FVM_MODULE_DISABLED) | (enable ? 0 : FVM_MODULE_DISABLED);
-  return 0;
-}
-
-int fvm_module_setstatic( char *modname, int s, int *prev ) {
-  struct fvm_module *m;
-
-  m = fvm_module_by_name( modname );
-  if( !m ) return -1;
-
-  if( m->flags & FVM_MODULE_NATIVE ) return -1;
-  
-  if( prev ) {
-    *prev = (m->flags & FVM_MODULE_STATIC) ? 0 : 1;
-  }
-
-  m->flags = (m->flags & ~FVM_MODULE_STATIC) | (s ? FVM_MODULE_STATIC : 0);
   return 0;
 }
 

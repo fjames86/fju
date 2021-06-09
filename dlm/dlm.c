@@ -964,7 +964,7 @@ static struct fvm_module dlmmod =
    0,
    0,
    0,
-   FVM_MODULE_STATIC|FVM_MODULE_NATIVE
+   FVM_MODULE_NATIVE
   };
 
 int dlm_open( void ) {

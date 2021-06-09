@@ -76,7 +76,7 @@ void testaio_register( void ) {
   FVM_MODULE_ADDPROC(mod,"Write",0x400000000000010LL,testaio_write);
   
   mod.timestamp = time( NULL );
-  mod.flags = FVM_MODULE_STATIC|FVM_MODULE_NATIVE;
+  mod.flags = FVM_MODULE_NATIVE;
   fvm_module_register( &mod );
   
 }

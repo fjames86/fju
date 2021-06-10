@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <inttypes.h>
+#include <ctype.h>
 
 #include <fju/rpc.h>
 #include <fju/sec.h>
@@ -13,8 +14,9 @@ static void decodeformat( struct xdr_s *xdr, char *fmt );
 static void usage( char *fmt, ... ) {
   va_list args;
   
-  printf( "Usage: xdru encode [u32=*] [u64=*] [str=*] [opaque=*] [fixed=*]\n"
+  printf( "Usage: xdru encode [u32=*] [u64=*] [str=*] [opaque=*] [fixed=*] [xstr=*]\n"
 	  "            decode format [base64]\n"
+	  "            hd base64\n"
 	  "    Decode format:\n"
 	  "        u|x      u32\n"
 	  "        i        i32\n"
@@ -88,6 +90,12 @@ int xdr_main( int argc, char **argv ) {
 	xdr_encode_uint64( &xdr, u64 );
       } else if( strcmp( argname, "str" ) == 0 ) {
 	xdr_encode_string( &xdr, argval );
+      } else if( strcmp( argname, "xstr" ) == 0 ) {
+	int len;
+	len = strlen( argval ) + 1;
+	memcpy( xdr.buf + xdr.offset, argval, len );
+	xdr.offset += len;
+	if( len % 4 ) xdr.offset += 4 - (len % 4);
       } else if( strcmp( argname, "opaque" ) == 0 ) {
 	sts = base64_decode( (char *)(xdr.buf + xdr.offset + 4), xdr.count - xdr.offset - 4, argval );
 	if( sts < 0 ) usage( "Failed to parse base64 opaque %s", argval );
@@ -133,16 +141,31 @@ int xdr_main( int argc, char **argv ) {
       printf( "Remaining: %s\n", bufstr );
     }
   } else if( strcmp( argv[i], "hd" ) == 0 ) {
+    int j;
+    
     i++;
     if( i >= argc ) usage( NULL );
     sts = base64_decode( buf, sizeof(buf), argv[i] );
     if( sts < 0 ) usage( "Failed to decode base64" );
-    for( i = 0; i < sts; i++ ) {
-      if( i % 16 == 0 ) printf( "%04o  ", i );
-      printf( "%02x ", (uint32_t)(uint8_t)buf[i] );
-      if( i && (i % 16 == 0) ) printf( "\n" );
+    for( i = 0; i < sts; i+= 16 ) {
+      printf( "%04o  ", i );
+      for( j = 0; j < 16; j++ ) {
+	if( (i + j) < sts ) {
+	  printf( "%02x ", (uint32_t)(uint8_t)buf[i + j] );
+	} else {
+	  printf( "   " );
+	}
+      }
+      printf( "    " );
+      for( j = 0; j < 16; j++ ) {
+	if( (i + j) < sts ) {
+	  printf( "%c", isalnum( buf[i + j] ) ? buf[i + j] : '.' );
+	} else {
+	  printf( " " );
+	}
+      }
+      printf( "\n" );
     }
-    printf( "\n" );
   } else usage( NULL );
   
   return 0;

@@ -23,13 +23,10 @@ static void usage( char *fmt, ... ) {
   va_list args;
 
   if( fmt == NULL ) {
-    printf( "fvm OPTIONS file...\n"
+    printf( "fvm OPTIONS file... module/proc args...\n"
 	    "\n"
 	    "\n OPTIONS:\n"
-	    "   -m            module\n"
-	    "   -p            proc name\n"
 	    "   -v            Verbose\n"
-	    "   --args base64 Set argument buffer\n" 
 	    "\n" );
   }
   
@@ -47,7 +44,7 @@ static void usage( char *fmt, ... ) {
 static uint8_t argbuf[FVM_MAX_STACK];
 
 int fvm_main( int argc, char **argv ) {
-  int i, sts;
+  int i, sts, nargs, j;
   char mname[64], pname[64];
   int procid;
   struct xdr_s argxdr, resxdr;
@@ -55,6 +52,7 @@ int fvm_main( int argc, char **argv ) {
   int verbose = 0;
   uint64_t start, end;
   uint64_t siginfo;
+  int rawargs = 0;
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
@@ -69,47 +67,54 @@ int fvm_main( int argc, char **argv ) {
       usage( NULL );
     } else if( strcmp( argv[i], "--help" ) == 0 ) {
       usage( NULL );
-    } else if( strcmp( argv[i], "-m" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      strncpy( mname, argv[i], 63 );
-    } else if( strcmp( argv[i], "-p" ) == 0 ) {
-      i++;
-      if( i >= argc ) usage( NULL );
-      strncpy( pname, argv[i], 63 );
     } else if( strcmp( argv[i], "-v" ) == 0 ) {
       verbose = 1;
       fvm_setdebug( 1 );
+    } else if( strcmp( argv[i], "-m" ) == 0 ) {
+      i++;
+      if( i >= argc ) usage( NULL );
+      sts = fvm_module_load_file( argv[i], 0, &module );
+      if( sts ) usage( "Failed to load module file \"%s\"", argv[i] );
+
+      if( !mname[0] ) strcpy( mname, module->name );
+      if( !pname[0] ) strcpy( pname, module->procs[0].name );
     } else if( strcmp( argv[i], "--args" ) == 0 ) {
       i++;
       if( i >= argc ) usage( NULL );
+      
       xdr_reset( &argxdr );
       sts = base64_decode( (char *)argxdr.buf, argxdr.count, argv[i] );
       if( sts < 0 ) usage( "Bad base64" );
+      if( sts % 4 ) usage( "Base64 length %d not a multiple of 4", sts );
       argxdr.offset = sts;
-      if( sts % 4 ) argxdr.offset += 4 - (sts % 4);
+      rawargs = 1;
     } else break;
     
     i++;
   }
-  
-  while( i < argc ) {
 
-    sts = fvm_module_load_file( argv[i], 0, &module );
-    if( sts ) usage( "Failed to load module \"%s\"", argv[i] );
-    if( strcmp( mname, "" ) == 0 ) {
-      strcpy( mname, module->name );
+  /* parse module/proc */
+  if( i < argc ) {
+    char *p, *q;
+    
+    p = strchr( argv[i], '/' );
+    if( !p ) usage( "Expected modname/procname not %s", argv[i] );
+    
+    p = argv[i];
+    q = mname;
+    while( *p != '0' && *p != '/' ) {
+      *q = *p;
+      p++;
+      q++;
     }
-    if( strcmp( pname, "" ) == 0 ) {
-      strcpy( pname, module->procs[0].name );
-    }
+    *q = '\0';
+    strncpy( pname, p + 1, FVM_MAX_NAME - 1 );
+
     i++;
   }
 
-  freg_open( NULL, NULL );
-  hostreg_open();
-  dmb_open();
-  
+  if( !mname[0] || !pname[0] ) usage( NULL );
+
   module = fvm_module_by_name( mname );
   if( !module ) usage( "Unknown module %s", mname );
   procid = fvm_procid_by_name( module, pname );
@@ -117,6 +122,65 @@ int fvm_main( int argc, char **argv ) {
 
   siginfo = module->procs[procid].siginfo;
 
+  if( rawargs == 0 ) {
+    nargs = 0;
+    for( j = 0; j < FVM_SIGINFO_NARGS( siginfo ); j++ ) {
+      if( !FVM_SIGINFO_ISVAR( siginfo, j ) ) {
+	if( (j != (FVM_SIGINFO_NARGS( siginfo ) - 1)) &&
+	    (FVM_SIGINFO_VARTYPE( siginfo, j + 1) == FVM_VARTYPE_OPAQUE) ) {
+	} else {
+	  nargs++;
+	}
+      }
+    }
+    
+    if( (i + nargs) != argc ) usage( "Expected %d args, got %d", nargs, argc - i );
+    
+    for( j = 0; j < FVM_SIGINFO_NARGS( siginfo ); j++ ) {
+      if( FVM_SIGINFO_ISVAR( siginfo, j ) ) continue;
+      
+      switch( FVM_SIGINFO_VARTYPE( siginfo, j ) ) {
+      case FVM_VARTYPE_INT:
+	if( ((j + 1) < FVM_SIGINFO_NARGS( siginfo )) &&
+	    (FVM_SIGINFO_VARTYPE( siginfo, j + 1 ) == FVM_VARTYPE_OPAQUE ) ) {
+	  /* do nothing - next arg is opaque */
+	} else {
+	  uint32_t u32;
+	  char *term;
+	  
+	  u32 = strtol( argv[i], &term, 0 );
+	  if( *term ) {
+	    u32 = strtoll( argv[i], &term, 16 );
+	    if( *term ) usage( "Failed to parse int %s", argv[i] );
+	  }
+	  xdr_encode_uint32( &argxdr, u32 );
+	  i++;
+	}
+	break;
+      case FVM_VARTYPE_STRING:
+	xdr_encode_string( &argxdr, argv[i] );
+	i++;
+	break;
+      case FVM_VARTYPE_OPAQUE:
+	sts = base64_decode( (char *)argxdr.buf + argxdr.offset + 4,
+			     argxdr.count - argxdr.offset - 4,
+			     argv[i] );
+	if( sts < 0 ) usage( "Failed to parse base64 %s", argv[i] );
+	xdr_encode_uint32( &argxdr, sts );
+	argxdr.offset += sts;
+	if( sts % 4 ) argxdr.offset += 4 - (sts % 4);
+	
+	i++;
+	break;
+      }
+      
+    }
+  }
+  
+  freg_open( NULL, NULL );
+  hostreg_open();
+  dmb_open();
+  
   xdr_init( &resxdr, argbuf, sizeof(argbuf) );
   argxdr.count = argxdr.offset;
   argxdr.offset = 0;
@@ -127,7 +191,7 @@ int fvm_main( int argc, char **argv ) {
   if( verbose ) printf( "Runtime: %ums\n", (uint32_t)(end - start) );
   
   {
-    int nargs, vartype, isvar;
+    int vartype, isvar;
     uint64_t siginfo;
     uint32_t u32;
     char str[4096];

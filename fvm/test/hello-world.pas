@@ -1,7 +1,7 @@
 
 { -*- mode: fvm -*- }
 
-Program HelloWorld(0,0,Hello,GetHello,GetInt);
+Program HelloWorld(0,0,Hello,GetHello,GetInt,PutHello);
 Begin
 
    Include "syscall.pas";
@@ -24,5 +24,11 @@ Begin
 	x = x + 1;
 	r = xx;
    End;
-	
+
+   Procedure PutHello(str : string, y : int, var x : int, l : int, op : opaque)
+   Begin
+	Syscall Puts(str);
+	x = y + l;
+   End;
+   
 End.

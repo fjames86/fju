@@ -2,11 +2,11 @@
 
 echo "----- Hello World ----------"
 
-fju fvm bin/hello-world.fvm
+fju fvm -m bin/hello-world.fvm 
 
 echo "------- Test ---------------"
 
-fju fvm bin/test.fvm
+fju fvm -m bin/test.fvm 
 
 echo "----- TestDmb --------------"
 
@@ -30,7 +30,7 @@ if [ -e /opt/fju/test.txt ]; then
     rm /opt/fju/test.txt
 fi
 
-fju fvm -p TestProc --args $(fju xdr encode str=test.txt) bin/test-file.fvm
+fju fvm -m bin/test-file.fvm TestFile/TestProc test.txt
 if [ -e /opt/fju/test.txt ]; then
     echo "Success"
 else
@@ -40,11 +40,12 @@ rm /opt/fju/test.txt
 
 echo "-------- TestSha1 ----------"
 
-result=$(fju fvm -p TestHash --args $(fju xdr encode str=a) bin/test-sec.fvm | awk '{print $3}')
+result=$(fju fvm -m bin/test-sec.fvm --args $(fju xdr encode str=a) TestSec/TestHash | awk '{print $3}')
 result=$(fju xdr decode 'xxxxx' $result | tr -d '\n')
 
-# test sha1("a") gives correct result 
-if [ "$result" = "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8" ]; then
+# test sha1("a") gives correct result
+correct="86f7e437faa5a7fce15d1ddcb9eaeaea377667b8"
+if [ "$result" = "$correct" ]; then
     echo "Success"
 else
     echo "Failure $result != $correct"
@@ -52,12 +53,12 @@ fi
 
 echo "---------- LHT --------------"
 
-fju fvm -p Put --args $(fju xdr encode str=testkey str=testval) bin/lht.fvm
+fju fvm -m bin/lht.fvm Lht/Put $(fju xdr encode str=testkey) $(fju xdr encode str=testval)
 echo "Should succeed:"
-fju fvm -p Get --args $(fju xdr encode str=testkey) bin/lht.fvm
+fju fvm -m bin/lht.fvm Lht/Get $(fju xdr encode str=testkey) 
 echo "Should fail:"
-fju fvm -p Rem --args $(fju xdr encode str=testkey) bin/lht.fvm
-fju fvm -p Get --args $(fju xdr encode str=testkey) bin/lht.fvm
+fju fvm -m bin/lht.fvm Lht/Rem $(fju xdr encode str=testkey)
+fju fvm -m bin/lht.fvm Lht/Get $(fju xdr encode str=testkey) 
 
 echo "---------- Log ------------"
 

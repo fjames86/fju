@@ -1530,6 +1530,8 @@ static int fvm_init_module( char *modname ) {
   int sts;
   struct freg_entry entry;
   struct fvm_module *m;
+  char *textp;
+  int lenp;
   
   /* unload if already existing */
   if( fvm_module_by_name( modname) ) {
@@ -1548,15 +1550,93 @@ static int fvm_init_module( char *modname ) {
   }
 
   sts = freg_get_by_name( NULL, entry.id, "path", FREG_TYPE_STRING, path, sizeof(path), NULL );
+  if( !sts ) {
+    sts = fvm_module_load_file( path, 0, &m );
+    if( sts ) {
+      fvm_log( LOG_LVL_ERROR, "Failed to load module file %s", path );
+      return -1;
+    }
+  } else {
+    sts = freg_get_by_name( NULL, entry.id, "text", FREG_TYPE_OPAQUE, NULL, 0, &lenp );
+    if( !sts ) {
+      textp = malloc( lenp );
+      if( !textp ) return -1;
+      sts = freg_get_by_name( NULL, entry.id, "text", FREG_TYPE_OPAQUE, textp, lenp, &lenp );
+      if( sts ) {
+	fvm_log( LOG_LVL_ERROR, "Unexpected failure to load text segment from freg" );
+	free( textp );
+	return -1;
+      }
+      
+      sts = fvm_module_load( textp, lenp, 0, &m );
+      
+      free( textp );
+      
+      if( sts ) {
+	fvm_log( LOG_LVL_ERROR, "Failed to load module from freg" );
+	return -1;
+      }
+    } else {
+      fvm_log( LOG_LVL_ERROR, "Failed to find path or text entry for module %s", modname );
+      return -1;
+    }
+  }
+  
+  sts = freg_get_by_name( NULL, entry.id, "data", FREG_TYPE_OPAQUE, NULL, 0, &lenp );
+  if( !sts ) {
+    if( lenp != m->datasize ) {
+      fvm_log( LOG_LVL_ERROR, "Module datasize len %d mismatch against freg data %d", m->datasize, lenp );
+    } else {
+      sts = freg_get_by_name( NULL, entry.id, "data", FREG_TYPE_OPAQUE, m->data, m->datasize, &lenp );
+      if( sts ) {
+	fvm_log( LOG_LVL_ERROR, "Failed to load module data segment from freg" );
+      }
+    }
+  }
+  
+  return 0;
+}
+
+int fvm_module_savedata( char *modname ) {
+  struct fvm_module *m;
+  int sts;
+  char path[256];
+  struct freg_entry entry;
+  
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  sprintf( path, "/fju/fvm/modules/%s", modname );
+  sts = freg_entry_by_name( NULL, 0, path, &entry, NULL );
   if( sts ) {
-    fvm_log( LOG_LVL_ERROR, "No module path configured" );
+    sts = freg_subkey( NULL, 0, path, FREG_CREATE, NULL );
+    if( sts ) return -1;
+  }
+  
+  sts = freg_put( NULL, entry.id, "data", FREG_TYPE_OPAQUE, m->data, m->datasize, NULL );
+  if( sts ) {
+    fvm_log( LOG_LVL_ERROR, "Failed to save datasegment for module %s", modname );
     return -1;
   }
-  sts = fvm_module_load_file( path, 0, &m );
-  if( sts ) {
-    fvm_log( LOG_LVL_ERROR, "Failed to load module file %s", path );
-    return -1;
-  }
+
+  return 0;
+}
+
+int fvm_module_loaddata( char *modname ) {
+  struct fvm_module *m;
+  int sts, lenp;
+  char path[256];
+  
+  m = fvm_module_by_name( modname );
+  if( !m ) return -1;
+
+  sprintf( path, "/fju/fvm/modules/%s/data", modname );
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, NULL, 0, &lenp );
+  if( sts ) return -1;
+
+  if( lenp != m->datasize ) return -1;
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, m->data, m->datasize, &lenp );
+  if( sts ) return -1;
 
   return 0;
 }

@@ -1932,6 +1932,26 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       }      
     }
     break;
+  case 68:
+    /* FvmSaveData( var result ) */
+    {
+      uint32_t pars[1];
+      int sts;
+      read_pars( state, pars, 1 );
+      sts = fvm_module_savedata( state->module->name );
+      fvm_write_u32( state, pars[0], sts ? 0 : 1 );
+    }
+    break;
+  case 69:
+    /* FvmLoadData() */
+    {
+      uint32_t pars[1];
+      int sts;
+      read_pars( state, pars, 1 );
+      sts = fvm_module_loaddata( state->module->name );
+      fvm_write_u32( state, pars[0], sts ? 0 : 1 );
+    }
+    break;
   case 0xffff:
     /* Cross module call */
     {

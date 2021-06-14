@@ -5,14 +5,16 @@ modpath=""
 serviceproc=""
 initproc=""
 regprog=""
+regtext=""
 
-while getopts 'p:s:i:r' c
+while getopts 'p:s:i:rt' c
 do
     case $c in
 	p) modpath=$OPTARG ;;
 	s) serviceproc=$OPTARG ;;
 	i) initproc=$OPTARG ;;
 	r) regprog="y" ;;
+	t) regtext="y" ;;
     esac
 done
 
@@ -31,7 +33,11 @@ fi
 fju reg put /fju/fvm key
 fju reg put /fju/fvm/modules key 
 fju reg put /fju/fvm/modules/$progname key
-fju reg put /fju/fvm/modules/$progname/path str $modpath
+if [ $regtext ]; then
+    fju reg put /fju/fvm/modules/$progname/text opaque-file $modpath
+else
+    fju reg put /fju/fvm/modules/$progname/path str $modpath
+fi
 
 # set init routine
 if [ $initproc ]; then

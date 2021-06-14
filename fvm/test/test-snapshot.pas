@@ -6,7 +6,7 @@
  * can later restore it from the file. 
 }
 
-Program TestSnapshot(0,0,Init,Exit,GetString,SetString,Save,Load,MsgLoad,Publish);
+Program TestSnapshot(0,0,Init,Exit,GetString,SetString,Save,Load,MsgLoad,Publish,SaveData,LoadData);
 Begin
    { Includes }
    Include "syscall.pas";
@@ -93,6 +93,16 @@ Begin
 	var seqh, seql : int;
 
 	Syscall DmbPublish(MsgIdLoad, DmbRemote, &gend - &gstart, &gstart, seqh, seql);
+   End;
+
+   Procedure SaveData()
+   Begin
+	Syscall FvmSaveData(0);
+   End;
+
+   Procedure LoadData()
+   Begin
+	Syscall FvmLoadData(0);
    End;
    
    { constant values }

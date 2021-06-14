@@ -102,7 +102,6 @@ void fvm_rpc_register( void );
 
 /* enable/disable the module */
 int fvm_module_enable( char *modname, int enable, int *prev );
-int fvm_module_setstatic( char *modname, int s, int *prev );
 
 /* dynamically registering syscalls */
 struct fvm_state;
@@ -118,6 +117,10 @@ int fvm_syscall_register( struct fvm_syscall *sc );
   mod.procs[mod.nprocs].siginfo = sinfo; \
   mod.procs[mod.nprocs].nativeproc = cb; \
   mod.nprocs++
+
+
+int fvm_module_savedata( char *modname );
+int fvm_module_loaddata( char *modname );
 
 #endif
 

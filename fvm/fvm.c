@@ -160,10 +160,9 @@ static void fvm_module_postload( struct fvm_module *module ) {
   }
 }
 
-int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep ) {
+static int fvm_parse_module( char *buf, int size, struct fvm_headerinfo *hdrp, char **textp ) {
   /* parse header, load data and text segments */
   struct fvm_headerinfo hdr;
-  struct fvm_module *module;
   int i, sts;
   struct xdr_s xdr;
   
@@ -221,6 +220,20 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
     }
   }
 
+  *hdrp = hdr;
+  *textp = (char *)xdr.buf + xdr.offset;
+  return 0;
+}
+
+int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **modulep ) {
+  /* parse header, load data and text segments */
+  struct fvm_headerinfo hdr;
+  struct fvm_module *module;
+  int i, sts;
+  char *textp;
+  
+  sts = fvm_parse_module( buf, size, &hdr, &textp );
+  if( sts ) return sts;
   
   if( fvm_module_by_name( hdr.name ) ) {
     if( flags & FVM_RELOAD ) {
@@ -253,7 +266,7 @@ int fvm_module_load( char *buf, int size, uint32_t flags, struct fvm_module **mo
   module->timestamp = hdr.timestamp;
   module->flags = FVM_MODULE_DYNAMIC;
   memset( module->data, 0, hdr.datasize );
-  memcpy( module->text, xdr.buf + xdr.offset, hdr.textsize );
+  memcpy( module->text, textp, hdr.textsize );
 
   {
     char timestr[64];

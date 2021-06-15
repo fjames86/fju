@@ -23,7 +23,7 @@ static void usage( char *fmt, ... ) {
   va_list args;
 
   if( fmt == NULL ) {
-    printf( "fvm OPTIONS file... module/proc args...\n"
+    printf( "fvm OPTIONS -m file|modname ... module/proc args...\n"
 	    "\n"
 	    "\n OPTIONS:\n"
 	    "   -v            Verbose\n"
@@ -53,6 +53,8 @@ int fvm_main( int argc, char **argv ) {
   uint64_t start, end;
   uint64_t siginfo;
   int rawargs = 0;
+
+  freg_open( NULL, NULL );
   
   xdr_init( &argxdr, argbuf, sizeof(argbuf) );
   
@@ -74,7 +76,29 @@ int fvm_main( int argc, char **argv ) {
       i++;
       if( i >= argc ) usage( NULL );
       sts = fvm_module_load_file( argv[i], 0, &module );
-      if( sts ) usage( "Failed to load module file \"%s\"", argv[i] );
+      if( sts ) {
+	char path[256];
+	char *textp;
+	int lenp;
+
+	sprintf( path, "/fju/fvm/modules/%s/path", argv[i] );
+	sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_STRING, path, sizeof(path), &lenp );
+	if( !sts ) {
+	  sts = fvm_module_load_file( path, 0, &module );
+	  if( sts ) usage( "Failed to load module from path %s", path );
+	} else {
+	  sprintf( path, "/fju/fvm/modules/%s/text", argv[i] );
+	  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, NULL, 0, &lenp );
+	  if( sts ) usage( "Failed to load module %s from file or freg", argv[i] );
+	  
+	  textp = malloc( lenp );
+	  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, textp, lenp , &lenp );
+	  if( sts ) usage( "Unexpected failure to load text segment" );
+	  sts = fvm_module_load( textp, lenp, 0, &module );
+	  if( sts ) usage( "Failed to load from freg module %s", path );
+	  free( textp );
+	}
+      }
 
       if( !mname[0] ) strcpy( mname, module->name );
       if( !pname[0] ) strcpy( pname, module->procs[0].name );

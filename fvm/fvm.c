@@ -136,6 +136,9 @@ static void fvm_module_postload( struct fvm_module *module ) {
   int sts;
   char procname[FVM_MAX_NAME];
 
+  /* possibly load initial data segment */
+  fvm_module_loaddata( module->name );
+  
   /* Run init proc */
   sts = get_init_proc( module, procname );
   if( !sts ) {
@@ -1594,19 +1597,7 @@ static int fvm_init_module( char *modname ) {
       return -1;
     }
   }
-  
-  sts = freg_get_by_name( NULL, entry.id, "data", FREG_TYPE_OPAQUE, NULL, 0, &lenp );
-  if( !sts ) {
-    if( lenp != m->datasize ) {
-      fvm_log( LOG_LVL_ERROR, "Module datasize len %d mismatch against freg data %d", m->datasize, lenp );
-    } else {
-      sts = freg_get_by_name( NULL, entry.id, "data", FREG_TYPE_OPAQUE, m->data, m->datasize, &lenp );
-      if( sts ) {
-	fvm_log( LOG_LVL_ERROR, "Failed to load module data segment from freg" );
-      }
-    }
-  }
-  
+    
   return 0;
 }
 

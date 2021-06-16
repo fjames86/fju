@@ -1605,32 +1605,29 @@ int fvm_module_savedata( char *modname, int id, int *saveidp ) {
   struct fvm_module *m;
   int sts;
   char path[256];
-  struct freg_entry entry;
+  uint64_t parentid;
   
   m = fvm_module_by_name( modname );
   if( !m ) return -1;
 
-  sprintf( path, "/fju/fvm/modules/%s", modname );
-  sts = freg_entry_by_name( NULL, 0, path, &entry, NULL );
-  if( sts ) {
-    sts = freg_subkey( NULL, 0, path, FREG_CREATE, NULL );
-    if( sts ) return -1;
-  }
+  sprintf( path, "/fju/fvm/modules/%s", m->name );
+  sts = freg_subkey( NULL, 0, path, FREG_CREATE, &parentid );
+  if( sts ) return -1;
 
   /* select an unused id if id=-1 */
   if( id < 0 ) {
     id = 0;
-    if( freg_entry_by_name( NULL, entry.id, "data", NULL, NULL ) == 0 ) {
+    if( freg_entry_by_name( NULL, parentid, "data", NULL, NULL ) == 0 ) {
       do {
 	id++;
 	sprintf( path, "data%d", id );
-      } while( freg_entry_by_name( NULL, entry.id, path, NULL, NULL ) == 0 );
+      } while( freg_entry_by_name( NULL, parentid, path, NULL, NULL ) == 0 );
     }
   }
   
   if( id > 0 ) sprintf( path, "data%d", id );
   else sprintf( path, "data" );
-  sts = freg_put( NULL, entry.id, path, FREG_TYPE_OPAQUE, m->data, m->datasize, NULL );
+  sts = freg_put( NULL, parentid, path, FREG_TYPE_OPAQUE, m->data, m->datasize, NULL );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "Failed to save datasegment for module %s", modname );
     return -1;
@@ -1694,6 +1691,25 @@ int fvm_module_getdata( char *modname, int id, char *buf, int len, int *lenp ) {
   sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, buf, len, &lp );
   if( sts ) return -1;
   if( lenp ) *lenp = lp;
+  
+  return 0;
+}
+
+int fvm_module_savetext( char *modname ) {
+  int sts;
+  char path[256];
+  struct fvm_module *m;
+  uint64_t parentid;
+  
+  m = fvm_module_by_name( modname );
+  if( !m  ) return -1;
+  
+  sprintf( path, "/fju/fvm/modules/%s", m->name );
+  sts = freg_subkey( NULL, 0, path, FREG_CREATE, &parentid );
+  if( sts ) return -1;
+
+  sts = freg_put( NULL, parentid, "text", FREG_TYPE_OPAQUE, m->text, m->textsize, NULL );
+  if( sts ) return -1;
   
   return 0;
 }

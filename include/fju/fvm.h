@@ -123,6 +123,7 @@ int fvm_module_savedata( char *modname, int id, int *saveidp );
 int fvm_module_loaddata( char *modname, int id );
 int fvm_module_remdata( char *modname, int id );
 int fvm_module_getdata( char *modname, int id, char *buf, int len, int *lenp );
+int fvm_module_savetext( char *modname );
 
 #endif
 

@@ -137,7 +137,7 @@ static void fvm_module_postload( struct fvm_module *module ) {
   char procname[FVM_MAX_NAME];
 
   /* possibly load initial data segment */
-  fvm_module_loaddata( module->name );
+  fvm_module_loaddata( module->name, 0 );
   
   /* Run init proc */
   sts = get_init_proc( module, procname );
@@ -1601,7 +1601,7 @@ static int fvm_init_module( char *modname ) {
   return 0;
 }
 
-int fvm_module_savedata( char *modname ) {
+int fvm_module_savedata( char *modname, int id, int *saveidp ) {
   struct fvm_module *m;
   int sts;
   char path[256];
@@ -1616,17 +1616,32 @@ int fvm_module_savedata( char *modname ) {
     sts = freg_subkey( NULL, 0, path, FREG_CREATE, NULL );
     if( sts ) return -1;
   }
+
+  /* select an unused id if id=-1 */
+  if( id < 0 ) {
+    id = 0;
+    if( freg_entry_by_name( NULL, entry.id, "data", NULL, NULL ) == 0 ) {
+      do {
+	id++;
+	sprintf( path, "data%d", id );
+      } while( freg_entry_by_name( NULL, entry.id, path, NULL, NULL ) == 0 );
+    }
+  }
   
-  sts = freg_put( NULL, entry.id, "data", FREG_TYPE_OPAQUE, m->data, m->datasize, NULL );
+  if( id > 0 ) sprintf( path, "data%d", id );
+  else sprintf( path, "data" );
+  sts = freg_put( NULL, entry.id, path, FREG_TYPE_OPAQUE, m->data, m->datasize, NULL );
   if( sts ) {
     fvm_log( LOG_LVL_ERROR, "Failed to save datasegment for module %s", modname );
     return -1;
   }
 
+  if( saveidp ) *saveidp = id;
+  
   return 0;
 }
 
-int fvm_module_loaddata( char *modname ) {
+int fvm_module_loaddata( char *modname, int id ) {
   struct fvm_module *m;
   int sts, lenp;
   char path[256];
@@ -1635,13 +1650,51 @@ int fvm_module_loaddata( char *modname ) {
   if( !m ) return -1;
 
   sprintf( path, "/fju/fvm/modules/%s/data", modname );
+  if( id > 0 ) sprintf( path + strlen( path ), "%d", id );
+  
   sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, NULL, 0, &lenp );
-  if( sts ) return -1;
+  if( sts ) {
+    /* if no entry found for id=0 then pretend it is all zero */
+    if( id == 0 ) {
+      memset( m->data, 0, m->datasize );
+      return 0;
+    }
+    
+    return -1;
+  }
 
   if( lenp != m->datasize ) return -1;
   sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, m->data, m->datasize, &lenp );
   if( sts ) return -1;
 
+  return 0;
+}
+
+int fvm_module_remdata( char *modname, int id ) {
+  int sts;
+  char path[256];
+  uint64_t idp;
+  
+  sprintf( path, "/fju/fvm/modules/%s/data", modname );
+  if( id > 0 ) sprintf( path + strlen( path ), "%d", id );
+
+  idp = freg_id_by_name( NULL, path, NULL );
+  if( !idp ) return -1;
+  sts = freg_rem( NULL, idp );
+  
+  return sts;
+}
+
+int fvm_module_getdata( char *modname, int id, char *buf, int len, int *lenp ) {
+  int sts, lp;
+  char path[256];
+  
+  sprintf( path, "/fju/fvm/modules/%s/data", modname );
+  if( id > 0 ) sprintf( path + strlen( path ), "%d", id );
+  sts = freg_get_by_name( NULL, 0, path, FREG_TYPE_OPAQUE, buf, len, &lp );
+  if( sts ) return -1;
+  if( lenp ) *lenp = lp;
+  
   return 0;
 }
 

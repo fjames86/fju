@@ -1933,23 +1933,34 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
     }
     break;
   case 68:
-    /* FvmSaveData( var result ) */
+    /* FvmSaveData( id, var idp, var result ) */
     {
-      uint32_t pars[1];
-      int sts;
-      read_pars( state, pars, 1 );
-      sts = fvm_module_savedata( state->module->name );
-      fvm_write_u32( state, pars[0], sts ? 0 : 1 );
+      uint32_t pars[3];
+      int sts, saveid;
+      read_pars( state, pars, 3 );
+      sts = fvm_module_savedata( state->module->name, pars[0], &saveid );
+      fvm_write_u32( state, pars[1], saveid );
+      fvm_write_u32( state, pars[2], sts ? 0 : 1 );
     }
     break;
   case 69:
-    /* FvmLoadData() */
+    /* FvmLoadData(id,var result) */
     {
-      uint32_t pars[1];
+      uint32_t pars[2];
       int sts;
-      read_pars( state, pars, 1 );
-      sts = fvm_module_loaddata( state->module->name );
-      fvm_write_u32( state, pars[0], sts ? 0 : 1 );
+      read_pars( state, pars, 2 );
+      sts = fvm_module_loaddata( state->module->name, pars[0] );
+      fvm_write_u32( state, pars[1], sts ? 0 : 1 );
+    }
+    break;
+  case 70:
+    /* FvmRemoveData(id, var result) */
+    {
+      uint32_t pars[2];
+      int sts;
+      read_pars( state, pars, 2 );
+      sts = fvm_module_remdata( state->module->name, pars[0] );
+      fvm_write_u32( state, pars[1], sts ? 0 : 1 );
     }
     break;
   case 0xffff:

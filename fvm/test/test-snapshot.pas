@@ -97,12 +97,12 @@ Begin
 
    Procedure SaveData()
    Begin
-	Syscall FvmSaveData(0);
+	Syscall FvmSaveData(0,0,0);
    End;
 
    Procedure LoadData()
    Begin
-	Syscall FvmLoadData(0);
+	Syscall FvmLoadData(0,0);
    End;
    
    { constant values }

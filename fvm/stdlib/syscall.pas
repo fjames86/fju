@@ -149,6 +149,6 @@ Declare Syscall RaftSnapshotSave(clidH : int, clidL : int, termH : int, term : i
 Declare Syscall RaftClusterAddMember(clidH : int, clidL : int, hostH : int, hostL : int) : 65;
 Declare Syscall RaftClusterRemMember(clidH : int, clidL : int, hostH : int, hostL : int) : 66;
 Declare Syscall FregPath(regh : int, idH : int, idL : int, path : string, len : int ) : 67;
-Declare Syscall FvmSaveData( var result : int ) : 68;
-Declare Syscall FvmLoadData( var result : int ) : 69;
-
+Declare Syscall FvmSaveData( id : int, var saveid : int, var result : int ) : 68;
+Declare Syscall FvmLoadData( id : int, var result : int ) : 69;
+Declare Syscall FvmRemoveData( id : int, var result : int ) : 70;

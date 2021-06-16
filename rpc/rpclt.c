@@ -96,7 +96,7 @@ static struct clt_info clt_procs[] = {
     { RAFT_RPC_PROG, 1, 8, NULL, raft_applist_results, "raft.applist", NULL },
     { RAFT_RPC_PROG, 1, 7, NULL, raft_list_results, "raft.list", NULL },
     { RAFT_RPC_PROG, 1, 9, raft_remove_args, raft_remove_results, "raft.remove", "clid" },
-    { FVM_RPC_PROG, 1, 1, fvm_list_args, fvm_list_results, "fvm.list", "[modname=*] [all]" },
+    { FVM_RPC_PROG, 1, 1, fvm_list_args, fvm_list_results, "fvm.list", "modname | -a" },
     { FVM_RPC_PROG, 1, 2, fvm_load_args, fvm_load_results, "fvm.load", "filename=* [reload]" },
     { FVM_RPC_PROG, 1, 3, fvm_unload_args, fvm_unload_results, "fvm.unload", "name=*" },
     { FVM_RPC_PROG, 1, 4, fvm_run_args, fvm_run_results, "fvm.run", "modname/procname [args]" },
@@ -1092,20 +1092,17 @@ static int fvmlist_mode;
 static char fvmlist_modname[FVM_MAX_NAME];
 
 static void fvm_list_args( int argc, char **argv, int i, struct xdr_s *xdr ) {
-  char argname[64], *argval;
-  
-  while( i < argc ) {
-    argval_split( argv[i], argname, &argval );
-    if( strcmp( argname, "modname" ) == 0 ) {
-      strncpy( fvmlist_modname, argval, sizeof(fvmlist_modname) );
-      fvmlist_mode = FVMLIST_MODE_FILTER;
-    } else if( strcmp( argname, "all" ) == 0 ) {
+
+  if( i < argc ) {
+    if( strcmp( argv[i], "-a" ) == 0 ) {
       fvmlist_mode = FVMLIST_MODE_ALL;
-    } else usage( NULL );
-    
+    } else {
+      strncpy( fvmlist_modname, argv[i], sizeof(fvmlist_modname) );
+      fvmlist_mode = FVMLIST_MODE_FILTER;
+    }
     i++;
   }
-
+  
 }
 
 

@@ -79,6 +79,7 @@ Record RpcCallInfo =
        Proc : int;
        Timeout : int;
 End;
+{ resultproc has signature (len : int,buf : opaque,private : int) }
 Declare Syscall RpcCall(info : int, len : int, buf : opaque, resultprocaddr : int, private : int) : 37;
 Declare Syscall Sleep(timeout : int, cbaddr : int, private : int) : 38;
 

@@ -169,7 +169,7 @@ typedef enum {
     TOK_DIV,       /* / */
     TOK_MOD,       /* % */
     TOK_EQ,        /* = */
-    TOK_NEQ,       /* <> */
+    TOK_NEQ,       /* <> or != */
     TOK_GT,        /* > */
     TOK_GTE,       /* >= */
     TOK_LT,        /* < */
@@ -470,7 +470,13 @@ static int getnexttok( FILE *f, struct token *tok ) {
   } else if( c == ']' ) {
     tok->type = TOK_CARRAY;
   } else if( c == '!' ) {
-    tok->type = TOK_NOT;
+    c2 = fgetc( f );
+    if( c2 == '=' ) {
+      tok->type = TOK_NEQ;
+    } else {
+      ungetc( c2, f );
+      tok->type = TOK_NOT;
+    }
   } else if( c == '^' ) {
     tok->type = TOK_XOR;
   } else if( c == '\'' ) {

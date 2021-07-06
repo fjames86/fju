@@ -1,0 +1,7 @@
+
+Notes on using golang
+
+1. install and setup go
+2. set GOPATH to `pwd`/fju/go
+3. setup emacs go-mode
+

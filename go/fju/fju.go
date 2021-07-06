@@ -8,7 +8,7 @@
 package fju
 
 // #cgo CFLAGS: -I../../include
-// #cgo LDFLAGS: -L../../lib -lfju
+// #cgo LDFLAGS: -L../../lib -lsec -lcrypto
 // #include "fju/sec.h"
 import "C"
 

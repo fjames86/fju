@@ -2,6 +2,19 @@
 Notes on using golang
 
 1. install and setup go
+ - download from website and extra to /usr/local
 2. set GOPATH to `pwd`/fju/go
-3. setup emacs go-mode
+3. setup emacs go-mode 
+ - download from github/dominikh/go-mode
+ - follow install instructions
 
+;; ---------------------
+
+What do we want to achieve?
+ - xdr/rpc implementation (just write native go implementation rather than calling into the C one)
+ - wrappers to some fju apis e.g. log, freg,
+ - statically link to liblog, libfreg etc rather than dynamically to libfju.so
+
+want:
+ - single module for fju library (combination of native go routines and wrappers to libfju)
+ - 

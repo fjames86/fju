@@ -153,3 +153,5 @@ Declare Syscall FregPath(regh : int, idH : int, idL : int, path : string, len : 
 Declare Syscall FvmSaveData( id : int, var saveid : int, var result : int ) : 68;
 Declare Syscall FvmLoadData( id : int, var result : int ) : 69;
 Declare Syscall FvmRemoveData( id : int, var result : int ) : 70;
+Declare Syscall ProcHandle(addr : int, var handle : int ) : 71;
+

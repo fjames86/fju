@@ -1963,6 +1963,20 @@ int fvm_syscall( struct fvm_state *state, uint16_t syscallid ) {
       fvm_write_u32( state, pars[1], sts ? 0 : 1 );
     }
     break;
+  case 71:
+    /* ProcHandle(addr : int, var hd : int ) */
+    {
+      uint32_t pars[2];
+      int procid;
+      uint32_t ph;
+      
+      read_pars( state, pars, 2 );
+      procid = fvm_procid_by_addr( state->module, pars[0] );
+      ph = 0;
+      fvm_handle_by_procid( state->module->name, procid, &ph );
+      fvm_write_u32( state, pars[1], ph );
+    }
+    break;
   case 0xffff:
     /* Cross module call */
     {

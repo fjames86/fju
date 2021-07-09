@@ -16,11 +16,19 @@ import "C"
 import "unsafe"
 import "os"
 
-var g_evtcb func(int);
+var g_evtcb func(int,interface{});
+var g_evtcxt interface{}
 
-func RpcdMain(evtcb func(int)) {
-	g_evtcb = evtcb;
+const (
+	EventInit = 0
+	EventClose = 1
+	EventSignal = 2
+)
 
+func RpcdMain(evtcb func(int, interface{}), cxt interface{}) {
+	g_evtcb = evtcb
+	g_evtcxt = cxt
+	
 	argc := len(os.Args)
 	var argv **C.char
 	argv = (**C.char)(C.malloc(C.ulong(unsafe.Sizeof(*argv)) * C.ulong(argc)))
@@ -35,7 +43,7 @@ func RpcdMain(evtcb func(int)) {
 
 func runEvtCb(evt int) {
 	if g_evtcb != nil {
-		g_evtcb( evt )
+		g_evtcb( evt, g_evtcxt )
 	}
 }
 

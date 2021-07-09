@@ -46,10 +46,20 @@ func main() {
 	}
 
 
-	rpc.RpcdMain(evtcb)
+	rpc.RpcdMain(evtcb, nil)
 	fmt.Println("end")
 }
 
-func evtcb(evt int) {
-	fmt.Println("got to evtcb")
+func evtcb(evt int, cxt interface{}) {
+	var msg string
+	
+	switch evt {
+	case rpc.EventInit:
+		msg = "Init"
+	case rpc.EventClose:
+		msg = "Close"
+	default:
+	}
+	
+	fmt.Printf("got to evtcb with event %s\n", msg)
 }

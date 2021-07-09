@@ -14,6 +14,12 @@ package rpc
    sinp->sin_family = AF_INET;
    sinp->sin_len = sizeof(*sinp);
    }
+
+   extern void GoRpcIterCb(int id);
+   void gorpc_iter_cb( struct rpc_iterator *iter ) {
+       // call back into go
+       GoRpcIterCb((int)iter->cxt);
+   }
  */
 import "C"
 import "unsafe"
@@ -72,4 +78,48 @@ func CallUdp(pars CallPars, args []byte) []byte {
 	return resbuf
 }
 
+type iterEntry struct {
+	id int
+	cb func()
+	ptr *C.struct_rpc_iterator
+}
+
+var iterid = 0 
+var itermap = make(map[int]iterEntry)
+
+func iterCbById(id int) func() {
+	e, ok := itermap[id]
+	if ok {
+		return e.cb
+	}
+	return nil
+}
+
+func ScheduleIterator(id int) {
+	entry, ok := itermap[id]
+	if ok {
+		entry.ptr.timeout = 0
+	}
+}
+
+func RegisterIterator(cb func(), period int) int {
+	var iter *C.struct_rpc_iterator
+	iter = (*C.struct_rpc_iterator)(C.malloc(C.ulong(unsafe.Sizeof(*iter))))
+	iter.next = nil
+	iter.timeout = 0
+	iter.period = C.int(period)
+	iter.cb = (C.rpc_iterator_t)(unsafe.Pointer(C.gorpc_iter_cb))
+	iter.cxt = unsafe.Pointer((uintptr)(iterid))
+
+	entry := new(iterEntry)
+	entry.id = iterid
+	entry.cb = cb
+	entry.ptr = iter
+	itermap[iterid] = *entry
+	iterid += 1
 	
+	C.rpc_iterator_register(iter)
+	return entry.id
+}
+
+

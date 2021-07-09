@@ -1,4 +1,10 @@
 
+/*
+ * This provides an interface to the rpcd_main routine
+ * from librpc. This runs the main event loop for fjud.
+ */
+
+
 package rpc
 
 // #cgo CFLAGS: -I../../../include
@@ -25,6 +31,7 @@ const (
 	EventSignal = 2
 )
 
+// RpcdMain run the event loop. evtcb is a callback invoked to indicate initialization etc 
 func RpcdMain(evtcb func(int, interface{}), cxt interface{}) {
 	g_evtcb = evtcb
 	g_evtcxt = cxt
@@ -41,6 +48,7 @@ func RpcdMain(evtcb func(int, interface{}), cxt interface{}) {
 	C.rpcd_main(C.int(argc),argv, (C.rpcd_main_t)(unsafe.Pointer(C.gorpcd_maincb)), nil)
 }
 
+// runEvtCb run the event callback 
 func runEvtCb(evt int) {
 	if g_evtcb != nil {
 		g_evtcb( evt, g_evtcxt )

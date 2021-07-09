@@ -1,4 +1,4 @@
-module test
+module gfjud 
 
 go 1.16
 

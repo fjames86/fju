@@ -44,6 +44,12 @@ func main() {
 	} else {
 		fmt.Println("CallUDp result %v", resbuf)
 	}
-	
+
+
+	rpc.RpcdMain(evtcb)
 	fmt.Println("end")
+}
+
+func evtcb(evt int) {
+	fmt.Println("got to evtcb")
 }

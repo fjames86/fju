@@ -18,6 +18,7 @@ fvmprogs += fvm/modules/stateseq.fvm
 fvmprogs += fvm/test/test-xcall.fvm
 fvmprogs += fvm/test/test-reg.fvm
 fvmprogs += fvm/test/test-savedata.fvm
+fvmprogs += fvm/modules/watchdog.fvm
 
 fvm: ${LIBDIR}/libfvm.a ${fvmprogs} fvm/modules/fvm-cluster.c
 

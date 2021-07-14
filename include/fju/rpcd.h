@@ -138,6 +138,15 @@ typedef void (*rpcd_main_t)( rpcd_evt_t evt, void *arg, void *cxt );
 int rpcd_main( int argc, char **argv, rpcd_main_t cb, void *cxt );
 struct rpc_listen *rpcd_listen_by_type( rpc_listen_t type );
 
+/* register to listen on these protocols/ports. these functions may only be called from within a maincb init routine */
+int rpcd_listen_tcp( int port );
+int rpcd_listen_tcp6( int port );
+int rpcd_listen_udp( int port );
+int rpcd_listen_udp6( int port );
+#ifndef WIN32
+int rpcd_listen_unix( char *path );
+#endif
+
 int rpc_connect( struct sockaddr *addr, socklen_t alen, rpc_conn_cb_t cb, void *cxt, uint64_t *connid );
 int rpc_send( struct rpc_conn *c, int count );
 struct rpc_conn *rpc_conn_acquire( void );

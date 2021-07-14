@@ -15,7 +15,7 @@ Begin
    
    { constants }
    Const servicePeriod = 1000;
-   Const warnLag = servicePeriod + 50;
+   Const warnLag = 50;
 
    { declarations }
 
